@@ -3,5 +3,5 @@ package main
 import "fmt"
 
 func main() {
-	fmt.Println("Welcome to connet-server")
+	fmt.Println("Welcome to connet")
 }
