@@ -2,15 +2,9 @@ package main
 
 import (
 	"context"
-	"crypto/ed25519"
-	"crypto/rand"
 	"crypto/tls"
-	"crypto/x509"
-	"crypto/x509/pkix"
-	"encoding/pem"
 	"errors"
 	"fmt"
-	"math/big"
 	"net"
 	"os"
 	"sync"
@@ -18,6 +12,7 @@ import (
 
 	"github.com/klev-dev/kleverr"
 	"github.com/quic-go/quic-go"
+	"go.connet.dev/lib/certc"
 	"go.connet.dev/lib/netc"
 	"go.connet.dev/lib/protocol"
 )
@@ -33,7 +28,7 @@ func main() {
 }
 
 func run(ctx context.Context) error {
-	cert, err := createCert()
+	cert, err := certc.SelfSigned()
 	if err != nil {
 		return err
 	}
