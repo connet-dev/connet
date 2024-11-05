@@ -85,6 +85,26 @@ func run(ctx context.Context) error {
 }
 
 func handleConn(ctx context.Context, conn quic.Connection) error {
+	authStream, err := conn.AcceptStream(ctx)
+	if err != nil {
+		return kleverr.Ret(err)
+	}
+	defer authStream.Close()
+
+	req, auth, err := protocol.ReadRequest(authStream)
+	switch {
+	case err != nil:
+		return kleverr.Ret(err)
+	case req != protocol.RequestAuth:
+		return protocol.ResponseAuthExpected.Write(authStream, fmt.Sprintf("expected auth, but got %v", req))
+	case auth != "abc":
+		return protocol.ResponseAuthInvalid.Write(authStream, "invalid token")
+	default:
+		if err := protocol.ResponseOk.Write(authStream, "ok"); err != nil {
+			return kleverr.Ret(err)
+		}
+	}
+
 	defer func() {
 		addrsMu.Lock()
 		defer addrsMu.Unlock()
@@ -116,7 +136,7 @@ func handleStream(ctx context.Context, conn quic.Connection, stream quic.Stream)
 	fmt.Printf("request %v: %s\n", req, addr)
 
 	switch req {
-	case 1: // listen
+	case protocol.RequestListen:
 		addrsMu.Lock()
 		addrs[addr] = conn
 		addrsMu.Unlock()
@@ -125,7 +145,7 @@ func handleStream(ctx context.Context, conn quic.Connection, stream quic.Stream)
 			return err
 		}
 		return stream.Close()
-	case 2: // connect
+	case protocol.RequestConnect:
 		addrsMu.RLock()
 		otherConn, ok := addrs[addr]
 		addrsMu.RUnlock()
@@ -150,7 +170,7 @@ func handleStream(ctx context.Context, conn quic.Connection, stream quic.Stream)
 		}
 		return netc.Join(ctx, stream, otherStream)
 	default:
-		if err := protocol.ResponseInvalidRequest.Write(stream, fmt.Sprintf("%d is not valid request", req)); err != nil {
+		if err := protocol.ResponseRequestInvalid.Write(stream, fmt.Sprintf("%d is not valid request", req)); err != nil {
 			return err
 		}
 		return stream.Close()

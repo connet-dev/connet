@@ -9,9 +9,11 @@ type ResponseType int32
 
 const (
 	ResponseOk              ResponseType = 0
-	ResponseInvalidRequest  ResponseType = 1
-	ResponseListenNotFound  ResponseType = 2
-	ResponseListenNotDialed ResponseType = 3
+	ResponseAuthExpected    ResponseType = 1
+	ResponseAuthInvalid     ResponseType = 2
+	ResponseRequestInvalid  ResponseType = 3
+	ResponseListenNotFound  ResponseType = 4
+	ResponseListenNotDialed ResponseType = 5
 )
 
 func (t ResponseType) Write(w io.Writer, s string) error {

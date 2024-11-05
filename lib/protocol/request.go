@@ -5,6 +5,7 @@ import "io"
 type RequestType uint32
 
 const (
+	RequestAuth    RequestType = 0
 	RequestListen  RequestType = 1
 	RequestConnect RequestType = 2
 )

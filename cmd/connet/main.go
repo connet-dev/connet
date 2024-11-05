@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"net"
 	"os"
+	"time"
 
 	"github.com/klev-dev/kleverr"
 	"github.com/quic-go/quic-go"
@@ -14,6 +15,7 @@ import (
 	"go.connet.dev/lib/protocol"
 )
 
+var auth = flag.String("auth", "", "authentication token")
 var listenName = flag.String("listen-name", "", "name to listen on")
 var listenTarget = flag.String("listen-target", "", "target to forward to")
 var connectName = flag.String("connect-name", "", "name to connect to")
@@ -42,16 +44,38 @@ func main() {
 }
 
 func open(ctx context.Context) (quic.Connection, error) {
-	return quic.DialAddr(ctx, "127.0.0.1:8443", &tls.Config{
+	conn, err := quic.DialAddr(ctx, "127.0.0.1:8443", &tls.Config{
 		InsecureSkipVerify: true,
 		NextProtos:         []string{"quic-connet"},
-	}, &quic.Config{})
+	}, &quic.Config{
+		KeepAlivePeriod: 25 * time.Second,
+	})
+	if err != nil {
+		return nil, kleverr.Ret(err)
+	}
+
+	authStream, err := conn.OpenStreamSync(ctx)
+	if err != nil {
+		return nil, kleverr.Ret(err)
+	}
+	defer authStream.Close()
+
+	if err := protocol.RequestAuth.Write(authStream, *auth); err != nil {
+		return nil, kleverr.Ret(err)
+	}
+	authResp, err := protocol.ReadResponse(authStream)
+	if err != nil {
+		return nil, kleverr.Ret(err)
+	}
+	fmt.Println("authenticated:", authResp)
+
+	return conn, nil
 }
 
 func listen(ctx context.Context, name string, target string) error {
 	conn, err := open(ctx)
 	if err != nil {
-		return kleverr.Ret(err)
+		return err
 	}
 
 	cmdStream, err := conn.OpenStreamSync(ctx)
@@ -66,7 +90,7 @@ func listen(ctx context.Context, name string, target string) error {
 	if err != nil {
 		return kleverr.Ret(err)
 	}
-	fmt.Printf("register %s: %s", name, result)
+	fmt.Printf("register %s: %s\n", name, result)
 
 	for {
 		stream, err := conn.AcceptStream(ctx)
