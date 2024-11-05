@@ -5,14 +5,13 @@ import (
 	"crypto/tls"
 	"flag"
 	"fmt"
-	"io"
 	"net"
 	"os"
 
 	"github.com/klev-dev/kleverr"
 	"github.com/quic-go/quic-go"
+	"go.connet.dev/lib/netc"
 	"go.connet.dev/lib/protocol"
-	"golang.org/x/sync/errgroup"
 )
 
 var listenName = flag.String("listen-name", "", "name to listen on")
@@ -60,14 +59,14 @@ func listen(ctx context.Context, name string, target string) error {
 		return kleverr.Ret(err)
 	}
 
-	if err := protocol.WriteCmd(cmdStream, 1, name); err != nil {
+	if err := protocol.RequestListen.Write(cmdStream, name); err != nil {
 		return kleverr.Ret(err)
 	}
-	status, statusText, err := protocol.ReadCmd(cmdStream)
+	status, statusText, err := protocol.ReadResponse(cmdStream)
 	switch {
 	case err != nil:
 		return kleverr.Ret(err)
-	case status > 0:
+	case status != protocol.ResponseOk:
 		return kleverr.Newf("%d: %s", status, statusText)
 	}
 
@@ -83,7 +82,7 @@ func listen(ctx context.Context, name string, target string) error {
 		}
 
 		go func() {
-			if err := join(ctx, stream, conn); err != nil {
+			if err := netc.Join(ctx, stream, conn); err != nil {
 				fmt.Fprintf(os.Stderr, "%s\n", err.Error())
 			}
 		}()
@@ -112,37 +111,22 @@ func connect(ctx context.Context, name string, target string) error {
 		if err != nil {
 			return kleverr.Ret(err)
 		}
-		if err := protocol.WriteCmd(stream, 2, name); err != nil {
+		if err := protocol.RequestConnect.Write(stream, name); err != nil {
 			return kleverr.Ret(err)
 		}
-		status, statusText, err := protocol.ReadCmd(stream)
+		status, statusText, err := protocol.ReadResponse(stream)
 		switch {
 		case err != nil:
 			return kleverr.Ret(err)
-		case status > 0:
+		case status != protocol.ResponseOk:
 			return kleverr.Newf("%d: %s", status, statusText)
 		}
 		fmt.Println("connected to server:", statusText)
 
 		go func() {
-			if err := join(ctx, stream, srcConn); err != nil {
+			if err := netc.Join(ctx, stream, srcConn); err != nil {
 				fmt.Fprintf(os.Stderr, "%s\n", err.Error())
 			}
 		}()
 	}
-}
-
-func join(ctx context.Context, l quic.Stream, r net.Conn) error {
-	eg, ctx := errgroup.WithContext(ctx)
-	eg.Go(func() error {
-		defer l.Close()
-		_, err := io.Copy(l, r)
-		return err
-	})
-	eg.Go(func() error {
-		defer r.Close()
-		_, err := io.Copy(r, l)
-		return err
-	})
-	return eg.Wait()
 }

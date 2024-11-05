@@ -10,7 +10,6 @@ import (
 	"encoding/pem"
 	"errors"
 	"fmt"
-	"io"
 	"math/big"
 	"net"
 	"os"
@@ -19,8 +18,8 @@ import (
 
 	"github.com/klev-dev/kleverr"
 	"github.com/quic-go/quic-go"
+	"go.connet.dev/lib/netc"
 	"go.connet.dev/lib/protocol"
-	"golang.org/x/sync/errgroup"
 )
 
 var addrs = map[string]quic.Connection{}
@@ -110,19 +109,19 @@ func handleConn(ctx context.Context, conn quic.Connection) error {
 }
 
 func handleStream(ctx context.Context, conn quic.Connection, stream quic.Stream) error {
-	cmd, addr, err := protocol.ReadCmd(stream)
+	req, addr, err := protocol.ReadRequest(stream)
 	if err != nil {
 		return err
 	}
-	fmt.Printf("request %d: %s\n", cmd, addr)
+	fmt.Printf("request %d: %s\n", req, addr)
 
-	switch cmd {
+	switch req {
 	case 1: // listen
 		addrsMu.Lock()
 		addrs[addr] = conn
 		addrsMu.Unlock()
 
-		if err := protocol.WriteCmd(stream, 0, "ok"); err != nil {
+		if err := protocol.ResponseOk.Write(stream, "ok"); err != nil {
 			return err
 		}
 		return stream.Close()
@@ -132,7 +131,7 @@ func handleStream(ctx context.Context, conn quic.Connection, stream quic.Stream)
 		addrsMu.RUnlock()
 
 		if !ok {
-			if err := protocol.WriteCmd(stream, 2, "name-not-found"); err != nil {
+			if err := protocol.ResponseListenNotFound.Write(stream, fmt.Sprintf("%s is not known to this server", addr)); err != nil {
 				return err
 			}
 			return stream.Close()
@@ -140,37 +139,22 @@ func handleStream(ctx context.Context, conn quic.Connection, stream quic.Stream)
 
 		otherStream, err := otherConn.OpenStream()
 		if err != nil {
-			if err := protocol.WriteCmd(stream, 3, "name-not-connect"); err != nil {
+			if err := protocol.ResponseListenNotDialed.Write(stream, fmt.Sprintf("%s dial failed: %v", addr, err)); err != nil {
 				return err
 			}
 			return stream.Close()
 		}
 
-		if err := protocol.WriteCmd(stream, 0, "ok"); err != nil {
+		if err := protocol.ResponseOk.Write(stream, "ok"); err != nil {
 			return err
 		}
-		return join(ctx, stream, otherStream)
+		return netc.Join(ctx, stream, otherStream)
 	default:
-		if err := protocol.WriteCmd(stream, 1, "cmd-not-found"); err != nil {
+		if err := protocol.ResponseInvalidRequest.Write(stream, fmt.Sprintf("%d is not valid request", req)); err != nil {
 			return err
 		}
 		return stream.Close()
 	}
-}
-
-func join(ctx context.Context, l quic.Stream, r quic.Stream) error {
-	eg, ctx := errgroup.WithContext(ctx)
-	eg.Go(func() error {
-		defer l.Close()
-		_, err := io.Copy(l, r)
-		return err
-	})
-	eg.Go(func() error {
-		defer r.Close()
-		_, err := io.Copy(r, l)
-		return err
-	})
-	return eg.Wait()
 }
 
 func createCert() (tls.Certificate, error) {
