@@ -1,6 +1,9 @@
 package protocol
 
-import "io"
+import (
+	"fmt"
+	"io"
+)
 
 type ResponseType int32
 
@@ -15,7 +18,18 @@ func (t ResponseType) Write(w io.Writer, s string) error {
 	return writeResponse(w, t, s)
 }
 
-func ReadResponse(r io.Reader) (ResponseType, string, error) {
+func ReadResponse(r io.Reader) (string, error) {
+	switch t, s, err := readResponse(r); {
+	case err != nil:
+		return "", err
+	case t == ResponseOk:
+		return s, nil
+	default:
+		return "", fmt.Errorf("error %d: %s", t, s)
+	}
+}
+
+func readResponse(r io.Reader) (ResponseType, string, error) {
 	t, err := readUint32(r)
 	if err != nil {
 		return 0, "", err

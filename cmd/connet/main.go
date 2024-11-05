@@ -54,7 +54,7 @@ func listen(ctx context.Context, name string, target string) error {
 		return kleverr.Ret(err)
 	}
 
-	cmdStream, err := conn.OpenStream()
+	cmdStream, err := conn.OpenStreamSync(ctx)
 	if err != nil {
 		return kleverr.Ret(err)
 	}
@@ -62,13 +62,11 @@ func listen(ctx context.Context, name string, target string) error {
 	if err := protocol.RequestListen.Write(cmdStream, name); err != nil {
 		return kleverr.Ret(err)
 	}
-	status, statusText, err := protocol.ReadResponse(cmdStream)
-	switch {
-	case err != nil:
+	result, err := protocol.ReadResponse(cmdStream)
+	if err != nil {
 		return kleverr.Ret(err)
-	case status != protocol.ResponseOk:
-		return kleverr.Newf("%d: %s", status, statusText)
 	}
+	fmt.Printf("register %s: %s", name, result)
 
 	for {
 		stream, err := conn.AcceptStream(ctx)
@@ -114,14 +112,11 @@ func connect(ctx context.Context, name string, target string) error {
 		if err := protocol.RequestConnect.Write(stream, name); err != nil {
 			return kleverr.Ret(err)
 		}
-		status, statusText, err := protocol.ReadResponse(stream)
-		switch {
-		case err != nil:
+		result, err := protocol.ReadResponse(stream)
+		if err != nil {
 			return kleverr.Ret(err)
-		case status != protocol.ResponseOk:
-			return kleverr.Newf("%d: %s", status, statusText)
 		}
-		fmt.Println("connected to server:", statusText)
+		fmt.Println("connected to server:", result)
 
 		go func() {
 			if err := netc.Join(ctx, stream, srcConn); err != nil {

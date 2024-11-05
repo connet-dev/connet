@@ -113,7 +113,7 @@ func handleStream(ctx context.Context, conn quic.Connection, stream quic.Stream)
 	if err != nil {
 		return err
 	}
-	fmt.Printf("request %d: %s\n", req, addr)
+	fmt.Printf("request %v: %s\n", req, addr)
 
 	switch req {
 	case 1: // listen
@@ -137,7 +137,7 @@ func handleStream(ctx context.Context, conn quic.Connection, stream quic.Stream)
 			return stream.Close()
 		}
 
-		otherStream, err := otherConn.OpenStream()
+		otherStream, err := otherConn.OpenStreamSync(ctx)
 		if err != nil {
 			if err := protocol.ResponseListenNotDialed.Write(stream, fmt.Sprintf("%s dial failed: %v", addr, err)); err != nil {
 				return err
