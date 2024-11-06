@@ -243,7 +243,31 @@ func (s *ServerStream) connect(ctx context.Context, addr string) {
 		return
 	}
 
-	if err := protocol.ResponseOk.Write(s.stream, "ok"); err != nil {
+	if err := protocol.RequestConnect.Write(otherStream, addr); err != nil {
+		// TODO better error response
+		s.logger.Debug("could not write connect request", "addr", addr, "err", err)
+		if err := protocol.ResponseListenNotDialed.Write(s.stream, fmt.Sprintf("%s dial failed: %v", addr, err)); err != nil {
+			return
+		}
+		if err := s.stream.Close(); err != nil {
+			return // err
+		}
+		return
+	}
+
+	otherResp, err := protocol.ReadResponse(otherStream)
+	if err != nil {
+		s.logger.Debug("could not join", "addr", addr, "err", err)
+		if err := protocol.ResponseListenNotDialed.Write(s.stream, fmt.Sprintf("%s dial failed: %v", addr, err)); err != nil {
+			return
+		}
+		if err := s.stream.Close(); err != nil {
+			return // err
+		}
+		return
+	}
+
+	if err := protocol.ResponseOk.Write(s.stream, otherResp); err != nil {
 		return // err
 	}
 
