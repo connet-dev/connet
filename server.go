@@ -271,10 +271,9 @@ func (s *ServerStream) connect(ctx context.Context, addr string) {
 		return // err
 	}
 
-	s.logger.Info("joining", "addr", addr)
-	if err := netc.Join(ctx, s.stream, otherStream); err != nil {
-		return // err
-	}
+	s.logger.Info("joining conns", "addr", addr)
+	err = netc.Join(ctx, s.stream, otherStream)
+	s.logger.Info("disconnected conns", "addr", addr, "err", err)
 }
 
 func (s *ServerStream) unknown(ctx context.Context, req protocol.RequestType, addr string) {

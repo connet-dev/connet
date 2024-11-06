@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"log/slog"
 	"net"
-	"os"
 	"time"
 
 	"github.com/keihaya-com/connet/lib/netc"
@@ -174,10 +173,10 @@ func (s *ClientSession) runIncoming(ctx context.Context) error {
 					if err := protocol.ResponseOk.Write(stream, fmt.Sprintf("connected to %s", name)); err != nil {
 						return err
 					}
+					s.logger.Debug("joining from server", "name", name)
 					go func() {
-						if err := netc.Join(ctx, stream, conn); err != nil {
-							fmt.Fprintf(os.Stderr, "%s\n", err.Error())
-						}
+						err := netc.Join(ctx, stream, conn)
+						s.logger.Debug("disconnected from server", "name", name, "err", err)
 					}()
 				}
 			} else {
@@ -215,12 +214,11 @@ func (s *ClientSession) runOutgoing(ctx context.Context, addr, name string) erro
 		if err != nil {
 			return kleverr.Ret(err)
 		}
-		s.logger.Debug("joining conn", "name", name, "result", result)
+		s.logger.Debug("joining to server", "name", name, "result", result)
 
 		go func() {
-			if err := netc.Join(ctx, stream, srcConn); err != nil {
-				fmt.Fprintf(os.Stderr, "%s\n", err.Error())
-			}
+			err := netc.Join(ctx, stream, srcConn)
+			s.logger.Debug("disconnected to server", "name", name, "err", err)
 		}()
 	}
 }
