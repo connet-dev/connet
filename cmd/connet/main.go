@@ -6,7 +6,7 @@ import (
 	"fmt"
 	"os"
 
-	connet "go.connet.dev"
+	"github.com/keihaya-com/connet"
 )
 
 var server = flag.String("server", "127.0.0.1:8443", "target server")

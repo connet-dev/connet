@@ -9,11 +9,11 @@ import (
 	"os"
 	"time"
 
+	"github.com/keihaya-com/connet/lib/netc"
+	"github.com/keihaya-com/connet/lib/protocol"
 	"github.com/klev-dev/kleverr"
 	"github.com/quic-go/quic-go"
 	"github.com/segmentio/ksuid"
-	"go.connet.dev/lib/netc"
-	"go.connet.dev/lib/protocol"
 	"golang.org/x/sync/errgroup"
 )
 

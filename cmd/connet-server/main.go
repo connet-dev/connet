@@ -5,8 +5,8 @@ import (
 	"fmt"
 	"os"
 
-	connet "go.connet.dev"
-	"go.connet.dev/lib/authc"
+	"github.com/keihaya-com/connet"
+	"github.com/keihaya-com/connet/lib/authc"
 )
 
 func main() {
