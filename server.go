@@ -171,6 +171,7 @@ func (c *ServerClient) authenticate(ctx context.Context) (authc.Authentication, 
 		return retAuth(err)
 	}
 
+	c.logger.Debug("authentication completed", "realms", auth.Realms)
 	return auth, nil
 }
 
@@ -186,7 +187,7 @@ func (s *ServerStream) Run(ctx context.Context) {
 	if err != nil {
 		return //err
 	}
-	fmt.Printf("request %v: %s\n", req, addr)
+	s.logger.Debug("incomming request", "req", req, "addr", addr)
 
 	switch req {
 	case protocol.RequestListen:
@@ -203,6 +204,8 @@ func (s *ServerStream) listen(ctx context.Context, addr string) {
 	s.client.server.addrs[addr] = s.client
 	s.client.server.addrsMu.Unlock()
 
+	s.logger.Info("registered listener", "addr", addr)
+
 	if err := protocol.ResponseOk.Write(s.stream, "ok"); err != nil {
 		return //err
 	}
@@ -212,11 +215,13 @@ func (s *ServerStream) listen(ctx context.Context, addr string) {
 }
 
 func (s *ServerStream) connect(ctx context.Context, addr string) {
+	s.logger.Debug("lookup listener", "addr", addr)
 	s.client.server.addrsMu.RLock()
 	otherConn, ok := s.client.server.addrs[addr]
 	s.client.server.addrsMu.RUnlock()
 
 	if !ok {
+		s.logger.Debug("listener not found", "addr", addr)
 		if err := protocol.ResponseListenNotFound.Write(s.stream, fmt.Sprintf("%s is not known to this server", addr)); err != nil {
 			return // err
 		}
@@ -228,6 +233,7 @@ func (s *ServerStream) connect(ctx context.Context, addr string) {
 
 	otherStream, err := otherConn.conn.OpenStreamSync(ctx)
 	if err != nil {
+		s.logger.Debug("listener not connected", "addr", addr, "err", err)
 		if err := protocol.ResponseListenNotDialed.Write(s.stream, fmt.Sprintf("%s dial failed: %v", addr, err)); err != nil {
 			return // err
 		}
@@ -241,6 +247,7 @@ func (s *ServerStream) connect(ctx context.Context, addr string) {
 		return // err
 	}
 
+	s.logger.Info("joining", "addr", addr)
 	if err := netc.Join(ctx, s.stream, otherStream); err != nil {
 		return // err
 	}
@@ -279,6 +286,13 @@ func ServerSelfSigned() ServerOption {
 			cfg.certificate = &cert
 			return nil
 		}
+	}
+}
+
+func ServerLogger(logger *slog.Logger) ServerOption {
+	return func(cfg *serverConfig) error {
+		cfg.logger = logger
+		return nil
 	}
 }
 

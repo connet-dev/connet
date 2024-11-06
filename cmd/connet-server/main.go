@@ -10,7 +10,13 @@ import (
 )
 
 func main() {
-	srv, err := connet.NewServer(connet.ServerSelfSigned(), connet.ServerAuthenticator(authc.NewStatic("abc")))
+	srv, err := connet.NewServer(
+		connet.ServerSelfSigned(),
+		connet.ServerAuthenticator(authc.NewStatic("abc")),
+		// connet.ServerLogger(slog.New(slog.NewTextHandler(os.Stdout, &slog.HandlerOptions{
+		// 	Level: slog.LevelDebug,
+		// }))),
+	)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "could not start server: %v\n", err)
 		os.Exit(1)
