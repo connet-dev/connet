@@ -4,11 +4,13 @@ import (
 	"context"
 	"flag"
 	"fmt"
+	"log/slog"
 	"os"
 
 	"github.com/keihaya-com/connet"
 )
 
+var debug = flag.Bool("debug", false, "turn on debug logging")
 var server = flag.String("server", "127.0.0.1:8443", "target server")
 var auth = flag.String("auth", "", "authentication token")
 var listenName = flag.String("listen-name", "", "name to listen on")
@@ -34,6 +36,14 @@ func main() {
 
 	if *connectName != "" {
 		opts = append(opts, connet.ClientSource(*connectSource, *connectName))
+	}
+
+	if *debug {
+		opts = append(opts,
+			connet.ClientLogger(slog.New(slog.NewTextHandler(os.Stdout, &slog.HandlerOptions{
+				Level: slog.LevelDebug,
+			}))),
+		)
 	}
 
 	c, err := connet.NewClient(opts...)

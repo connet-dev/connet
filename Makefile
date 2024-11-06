@@ -12,10 +12,10 @@ test:
 
 .PHONY: run-server run-client
 run-server: all
-	connet-server
+	connet-server -debug
 
 run-client: all
-	connet -auth abc -listen-name vvv -listen-target ":9999" -connect-name vvv -connect-source ":9998"
+	connet -debug -auth abc -listen-name vvv -listen-target ":9999" -connect-name vvv -connect-source ":9998"
 
 .PHONY: update-go update-nix
 

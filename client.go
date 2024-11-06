@@ -268,3 +268,10 @@ func ClientDestination(name, addr string) ClientOption {
 		return nil
 	}
 }
+
+func ClientLogger(logger *slog.Logger) ClientOption {
+	return func(cfg *clientConfig) error {
+		cfg.logger = logger
+		return nil
+	}
+}
