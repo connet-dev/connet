@@ -17,9 +17,9 @@ import (
 
 var auth = flag.String("auth", "", "authentication token")
 var listenName = flag.String("listen-name", "", "name to listen on")
-var listenTarget = flag.String("listen-target", "", "target to forward to")
+var listenTarget = flag.String("listen-target", "", "forward incoming conns to")
 var connectName = flag.String("connect-name", "", "name to connect to")
-var connectTarget = flag.String("connect-target", "", "port to listen for conns")
+var connectSource = flag.String("connect-source", "", "listen for incoming conns")
 
 func main() {
 	flag.Parse()
@@ -33,7 +33,7 @@ func main() {
 	}
 
 	if *connectName != "" {
-		if err := connect(context.Background(), *connectName, *connectTarget); err != nil {
+		if err := connect(context.Background(), *connectName, *connectSource); err != nil {
 			fmt.Fprintf(os.Stderr, "error while running: %v\n", err)
 			os.Exit(1)
 		}
