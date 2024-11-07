@@ -25,6 +25,8 @@
               opentofu
               go
               gopls
+              static-web-server
+              process-compose
             ];
           };
         });
