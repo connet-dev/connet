@@ -217,7 +217,7 @@ func (s *ClientSession) runOutgoing(ctx context.Context, addr, name string) erro
 		s.logger.Debug("joining to server", "name", name, "result", result)
 
 		go func() {
-			err := netc.Join(ctx, stream, srcConn)
+			err := netc.Join(ctx, srcConn, stream)
 			s.logger.Debug("disconnected to server", "name", name, "err", err)
 		}()
 	}

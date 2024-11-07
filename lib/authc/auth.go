@@ -8,6 +8,7 @@ type Authentication struct {
 }
 
 type Authenticator interface {
+	Realms() []string
 	Authenticate(token string) (Authentication, error)
 }
 
@@ -21,6 +22,10 @@ func NewStatic(tokens ...string) Authenticator {
 
 type staticAuthenticator struct {
 	tokens map[string]struct{}
+}
+
+func (s *staticAuthenticator) Realms() []string {
+	return []string{"local"}
 }
 
 func (s *staticAuthenticator) Authenticate(token string) (Authentication, error) {

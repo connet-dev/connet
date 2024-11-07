@@ -7,6 +7,8 @@ import (
 	"fmt"
 	"log/slog"
 	"net"
+	"slices"
+	"strings"
 	"sync"
 	"time"
 
@@ -22,8 +24,7 @@ import (
 type Server struct {
 	serverConfig
 
-	addrs   map[string]*ServerClient
-	addrsMu sync.RWMutex
+	realms map[string]*realmClients
 }
 
 func NewServer(opts ...ServerOption) (*Server, error) {
@@ -37,9 +38,17 @@ func NewServer(opts ...ServerOption) (*Server, error) {
 		}
 	}
 
+	if len(cfg.auth.Realms()) == 0 {
+		return nil, kleverr.New("no realms defined")
+	}
+	realms := map[string]*realmClients{}
+	for _, r := range cfg.auth.Realms() {
+		realms[r] = &realmClients{name: r, targets: map[string]*ServerClient{}}
+	}
+
 	return &Server{
 		serverConfig: *cfg,
-		addrs:        map[string]*ServerClient{},
+		realms:       realms,
 	}, nil
 }
 
@@ -93,6 +102,84 @@ func (s *Server) Run(ctx context.Context) error {
 	}
 }
 
+func (s *Server) register(auth authc.Authentication, name string, c *ServerClient) error {
+	localName, realmName, found := strings.Cut(name, "@")
+	if found {
+		if !slices.Contains(auth.Realms, realmName) {
+			return kleverr.Newf("realm not accessible: %s", realmName)
+		}
+	} else {
+		realmName = auth.SelfRealm
+	}
+
+	realm, ok := s.realms[realmName]
+	if !ok {
+		return kleverr.Newf("realm not found: %s", realmName)
+	}
+	realm.register(localName, c)
+	return nil
+}
+
+func (s *Server) find(auth authc.Authentication, name string) (*ServerClient, error) {
+	localName, realmName, found := strings.Cut(name, "@")
+	if found {
+		if !slices.Contains(auth.Realms, realmName) {
+			return nil, kleverr.Newf("realm not accessible: %s", realmName)
+		}
+	} else {
+		realmName = auth.SelfRealm
+	}
+
+	realm, ok := s.realms[realmName]
+	if !ok {
+		return nil, kleverr.Newf("realm not found: %s", realmName)
+	}
+	return realm.find(localName)
+}
+
+func (s *Server) deregister(c *ServerClient) {
+	for _, realm := range s.realms {
+		realm.deregister(c)
+	}
+}
+
+type realmClients struct {
+	name    string
+	targets map[string]*ServerClient
+	mu      sync.RWMutex
+}
+
+func (r *realmClients) register(name string, c *ServerClient) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+
+	r.targets[name] = c
+	// TODO last register wins?
+	// TODO multiple targets
+}
+
+func (r *realmClients) find(name string) (*ServerClient, error) {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+
+	c, ok := r.targets[name]
+	if !ok {
+		return nil, kleverr.Newf("target %s not found in %s realm", name, r.name)
+	}
+	return c, nil
+}
+
+func (r *realmClients) deregister(c *ServerClient) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+
+	for k, v := range r.targets {
+		if v.id == c.id {
+			delete(r.targets, k)
+		}
+	}
+}
+
 type ServerClient struct {
 	server *Server
 	id     ksuid.KSUID
@@ -110,16 +197,7 @@ func (c *ServerClient) Run(ctx context.Context) {
 	}
 	c.auth = auth
 
-	defer func() {
-		c.server.addrsMu.Lock()
-		defer c.server.addrsMu.Unlock()
-
-		for k, v := range c.server.addrs {
-			if c.id == v.id {
-				delete(c.server.addrs, k)
-			}
-		}
-	}()
+	defer c.server.deregister(c)
 
 	for {
 		stream, err := c.conn.AcceptStream(ctx)
@@ -183,28 +261,28 @@ type ServerStream struct {
 }
 
 func (s *ServerStream) Run(ctx context.Context) {
-	req, addr, err := protocol.ReadRequest(s.stream)
+	req, name, err := protocol.ReadRequest(s.stream)
 	if err != nil {
 		return //err
 	}
-	s.logger.Debug("incomming request", "req", req, "addr", addr)
+	s.logger.Debug("incomming request", "req", req, "addr", name)
 
 	switch req {
 	case protocol.RequestListen:
-		s.listen(ctx, addr)
+		s.listen(ctx, name)
 	case protocol.RequestConnect:
-		s.connect(ctx, addr)
+		s.connect(ctx, name)
 	default:
-		s.unknown(ctx, req, addr)
+		s.unknown(ctx, req, name)
 	}
 }
 
-func (s *ServerStream) listen(ctx context.Context, addr string) {
-	s.client.server.addrsMu.Lock()
-	s.client.server.addrs[addr] = s.client
-	s.client.server.addrsMu.Unlock()
+func (s *ServerStream) listen(ctx context.Context, name string) {
+	if err := s.client.server.register(s.client.auth, name, s.client); err != nil {
+		return // TODO
+	}
 
-	s.logger.Info("registered listener", "addr", addr)
+	s.logger.Info("registered listener", "name", name)
 
 	if err := protocol.ResponseOk.Write(s.stream, "ok"); err != nil {
 		return //err
@@ -214,15 +292,12 @@ func (s *ServerStream) listen(ctx context.Context, addr string) {
 	}
 }
 
-func (s *ServerStream) connect(ctx context.Context, addr string) {
-	s.logger.Debug("lookup listener", "addr", addr)
-	s.client.server.addrsMu.RLock()
-	otherConn, ok := s.client.server.addrs[addr]
-	s.client.server.addrsMu.RUnlock()
-
-	if !ok {
-		s.logger.Debug("listener not found", "addr", addr)
-		if err := protocol.ResponseListenNotFound.Write(s.stream, fmt.Sprintf("%s is not known to this server", addr)); err != nil {
+func (s *ServerStream) connect(ctx context.Context, name string) {
+	s.logger.Debug("lookup listener", "name", name)
+	otherConn, err := s.client.server.find(s.client.auth, name)
+	if err != nil {
+		s.logger.Debug("listener lookup failed", "name", name, "err", err)
+		if err := protocol.ResponseListenNotFound.Write(s.stream, err.Error()); err != nil {
 			return // err
 		}
 		if err := s.stream.Close(); err != nil {
@@ -233,8 +308,8 @@ func (s *ServerStream) connect(ctx context.Context, addr string) {
 
 	otherStream, err := otherConn.conn.OpenStreamSync(ctx)
 	if err != nil {
-		s.logger.Debug("listener not connected", "addr", addr, "err", err)
-		if err := protocol.ResponseListenNotDialed.Write(s.stream, fmt.Sprintf("%s dial failed: %v", addr, err)); err != nil {
+		s.logger.Debug("listener not connected", "name", name, "err", err)
+		if err := protocol.ResponseListenNotDialed.Write(s.stream, fmt.Sprintf("%s dial failed: %v", name, err)); err != nil {
 			return // err
 		}
 		if err := s.stream.Close(); err != nil {
@@ -243,10 +318,10 @@ func (s *ServerStream) connect(ctx context.Context, addr string) {
 		return
 	}
 
-	if err := protocol.RequestConnect.Write(otherStream, addr); err != nil {
+	if err := protocol.RequestConnect.Write(otherStream, name); err != nil {
 		// TODO better error response
-		s.logger.Debug("could not write connect request", "addr", addr, "err", err)
-		if err := protocol.ResponseListenNotDialed.Write(s.stream, fmt.Sprintf("%s dial failed: %v", addr, err)); err != nil {
+		s.logger.Debug("could not write connect request", "name", name, "err", err)
+		if err := protocol.ResponseListenNotDialed.Write(s.stream, fmt.Sprintf("%s dial failed: %v", name, err)); err != nil {
 			return
 		}
 		if err := s.stream.Close(); err != nil {
@@ -257,8 +332,8 @@ func (s *ServerStream) connect(ctx context.Context, addr string) {
 
 	otherResp, err := protocol.ReadResponse(otherStream)
 	if err != nil {
-		s.logger.Debug("could not join", "addr", addr, "err", err)
-		if err := protocol.ResponseListenNotDialed.Write(s.stream, fmt.Sprintf("%s dial failed: %v", addr, err)); err != nil {
+		s.logger.Debug("could not join", "name", name, "err", err)
+		if err := protocol.ResponseListenNotDialed.Write(s.stream, fmt.Sprintf("%s dial failed: %v", name, err)); err != nil {
 			return
 		}
 		if err := s.stream.Close(); err != nil {
@@ -271,9 +346,9 @@ func (s *ServerStream) connect(ctx context.Context, addr string) {
 		return // err
 	}
 
-	s.logger.Info("joining conns", "addr", addr)
+	s.logger.Info("joining conns", "name", name)
 	err = netc.Join(ctx, s.stream, otherStream)
-	s.logger.Info("disconnected conns", "addr", addr, "err", err)
+	s.logger.Info("disconnected conns", "name", name, "err", err)
 }
 
 func (s *ServerStream) unknown(ctx context.Context, req protocol.RequestType, addr string) {
