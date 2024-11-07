@@ -393,6 +393,17 @@ func ServerSelfSigned() ServerOption {
 	}
 }
 
+func ServerCertificate(cert, key string) ServerOption {
+	return func(cfg *serverConfig) error {
+		if cert, err := certc.Load(cert, key); err != nil {
+			return err
+		} else {
+			cfg.certificate = &cert
+			return nil
+		}
+	}
+}
+
 func ServerLogger(logger *slog.Logger) ServerOption {
 	return func(cfg *serverConfig) error {
 		cfg.logger = logger

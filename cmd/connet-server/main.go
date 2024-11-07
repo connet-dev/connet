@@ -12,6 +12,8 @@ import (
 )
 
 var debug = flag.Bool("debug", false, "turn on debug logging")
+var serverCert = flag.String("server-cert", "", "cert file to use")
+var serverKey = flag.String("server-key", "", "key file to use")
 
 func main() {
 	if err := flag.CommandLine.Parse(os.Args[1:]); err != nil {
@@ -21,8 +23,13 @@ func main() {
 	}
 
 	opts := []connet.ServerOption{
-		connet.ServerSelfSigned(),
 		connet.ServerAuthenticator(authc.NewStatic("abc")),
+	}
+
+	if *serverCert != "" {
+		opts = append(opts, connet.ServerCertificate(*serverCert, *serverKey))
+	} else {
+		opts = append(opts, connet.ServerSelfSigned())
 	}
 
 	if *debug {

@@ -3,11 +3,13 @@ package connet
 import (
 	"context"
 	"crypto/tls"
+	"crypto/x509"
 	"fmt"
 	"log/slog"
 	"net"
 	"time"
 
+	"github.com/keihaya-com/connet/lib/certc"
 	"github.com/keihaya-com/connet/lib/netc"
 	"github.com/keihaya-com/connet/lib/protocol"
 	"github.com/klev-dev/kleverr"
@@ -62,7 +64,8 @@ func (c *Client) Run(ctx context.Context) error {
 func (c *Client) connect(ctx context.Context) (quic.Connection, error) {
 	c.logger.Debug("dialing target", "addr", c.address)
 	conn, err := quic.DialAddr(ctx, c.address, &tls.Config{
-		InsecureSkipVerify: true,
+		RootCAs:            c.cas,
+		InsecureSkipVerify: c.insecure,
 		NextProtos:         []string{"quic-connet"},
 	}, &quic.Config{
 		KeepAlivePeriod: 25 * time.Second,
@@ -251,6 +254,8 @@ type clientConfig struct {
 	token        string
 	sources      map[string]string
 	destinations map[string]string
+	cas          *x509.CertPool
+	insecure     bool
 	logger       *slog.Logger
 }
 
@@ -286,6 +291,26 @@ func ClientDestination(name, addr string) ClientOption {
 			cfg.destinations = map[string]string{}
 		}
 		cfg.destinations[name] = addr
+		return nil
+	}
+}
+
+func ClientCA(certFile string, keyFile string) ClientOption {
+	return func(cfg *clientConfig) error {
+		if cert, err := certc.Load(certFile, keyFile); err != nil {
+			return err
+		} else {
+			pool := x509.NewCertPool()
+			pool.AddCert(cert.Leaf)
+			cfg.cas = pool
+			return nil
+		}
+	}
+}
+
+func ClientInsecure() ClientOption {
+	return func(cfg *clientConfig) error {
+		cfg.insecure = true
 		return nil
 	}
 }

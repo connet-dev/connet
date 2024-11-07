@@ -27,6 +27,12 @@
               gopls
               static-web-server
               process-compose
+              (pkgs.writeShellScriptBin "gen-local-certs" ''
+                set -euo pipefail
+                cd .direnv
+                ${minica}/bin/minica -domains localhost -ip-addresses 127.0.0.1
+                cd ..
+              '')
             ];
           };
         });

@@ -12,10 +12,10 @@ test:
 
 .PHONY: run-server run-client run-sws
 run-server: all
-	connet-server -debug
+	connet-server -debug -server-cert .direnv/localhost/cert.pem -server-key .direnv/localhost/key.pem
 
 run-client: all
-	connet -debug -auth abc -listen-name sws -listen-target ":9999" -connect-name sws -connect-source ":9998"
+	connet -debug -ca-cert .direnv/minica.pem -ca-key .direnv/minica-key.pem -auth abc -listen-name sws -listen-target ":9999" -connect-name sws -connect-source ":9998"
 
 run-sws:
 	static-web-server --port 9999 --root . --directory-listing

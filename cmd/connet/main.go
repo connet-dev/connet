@@ -17,6 +17,8 @@ var listenName = flag.String("listen-name", "", "name to listen on")
 var listenTarget = flag.String("listen-target", "", "forward incoming conns to")
 var connectName = flag.String("connect-name", "", "name to connect to")
 var connectSource = flag.String("connect-source", "", "listen for incoming conns")
+var caCert = flag.String("ca-cert", "", "ca cert file to use")
+var caKey = flag.String("ca-key", "", "ca key file to use")
 
 func main() {
 	if err := flag.CommandLine.Parse(os.Args[1:]); err != nil {
@@ -28,6 +30,10 @@ func main() {
 	var opts = []connet.ClientOption{
 		connet.ClientServer(*server),
 		connet.ClientAuthentication(*auth),
+	}
+
+	if *caCert != "" {
+		opts = append(opts, connet.ClientCA(*caCert, *caKey))
 	}
 
 	if *listenName != "" {
