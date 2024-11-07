@@ -213,30 +213,37 @@ func (s *ClientSession) runSource(ctx context.Context, addr, name string) error 
 	}
 
 	for {
-		srcConn, err := l.Accept()
+		conn, err := l.Accept()
 		if err != nil {
 			return kleverr.Ret(err)
 		}
-		s.logger.Debug("received conn", "local", srcConn.LocalAddr(), "remote", srcConn.RemoteAddr())
 
-		stream, err := s.conn.OpenStreamSync(ctx)
-		if err != nil {
-			return kleverr.Ret(err)
-		}
-		if err := protocol.RequestConnect.Write(stream, name); err != nil {
-			return kleverr.Ret(err)
-		}
-		result, err := protocol.ReadResponse(stream)
-		if err != nil {
-			return kleverr.Ret(err)
-		}
-		s.logger.Debug("joining to server", "name", name, "result", result)
-
-		go func() {
-			err := netc.Join(ctx, srcConn, stream)
-			s.logger.Debug("disconnected to server", "name", name, "err", err)
-		}()
+		go s.runSourceConn(ctx, name, conn)
 	}
+}
+
+func (s *ClientSession) runSourceConn(ctx context.Context, name string, conn net.Conn) {
+	defer conn.Close()
+
+	s.logger.Debug("received conn", "name", name, "remote", conn.RemoteAddr())
+	stream, err := s.conn.OpenStreamSync(ctx)
+	if err != nil {
+		s.logger.Warn("failed to open server stream", "name", name, "err", err)
+		return
+	}
+	if err := protocol.RequestConnect.Write(stream, name); err != nil {
+		s.logger.Warn("failed to request connection", "name", name, "err", err)
+		return
+	}
+	result, err := protocol.ReadResponse(stream)
+	if err != nil {
+		s.logger.Warn("failed to response connection", "name", name, "err", err)
+		return
+	}
+
+	s.logger.Debug("joining to server", "name", name, "result", result)
+	err = netc.Join(ctx, conn, stream)
+	s.logger.Debug("disconnected to server", "name", name, "err", err)
 }
 
 type clientConfig struct {
