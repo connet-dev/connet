@@ -8,16 +8,26 @@ import (
 type ResponseType int32
 
 const (
-	ResponseOk                     ResponseType = 0
-	ResponseAuthenticationExpected ResponseType = 1
-	ResponseAuthenticationFailed   ResponseType = 2
-	ResponseRequestUnknown         ResponseType = 3
-	ResponseRegistrationNotFound   ResponseType = 4
-	ResponseClientDialError        ResponseType = 5
-	ResponseClientRequestError     ResponseType = 6
-	ResponseClientResponseError    ResponseType = 7
-	ResponseDestinationNotFound    ResponseType = 8
-	ResponseDestinationDialError   ResponseType = 9
+	// Generic errors
+	ResponseOk             ResponseType = 0
+	ResponseRequestUnknown ResponseType = 1
+
+	// Authentication errors
+	ResponseAuthenticationExpected ResponseType = 100
+	ResponseAuthenticationFailed   ResponseType = 101
+
+	// Registration errors
+	ResponseRegistrationNotFound ResponseType = 200
+	ResponseRegistrationFailed   ResponseType = 201
+
+	// Client errors
+	ResponseClientDialError     ResponseType = 300
+	ResponseClientRequestError  ResponseType = 301
+	ResponseClientResponseError ResponseType = 302
+
+	// Destination errors
+	ResponseDestinationNotFound  ResponseType = 400
+	ResponseDestinationDialError ResponseType = 401
 )
 
 func (t ResponseType) Write(w io.Writer, s string) error {

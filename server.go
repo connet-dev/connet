@@ -279,16 +279,22 @@ func (s *ServerStream) Run(ctx context.Context) {
 
 func (s *ServerStream) listen(ctx context.Context, name string) {
 	if err := s.client.server.register(s.client.auth, name, s.client); err != nil {
-		return // TODO
+		if err := protocol.ResponseRegistrationFailed.Write(s.stream, fmt.Sprintf("could not register: %v", err)); err != nil {
+			return
+		}
+		if err := s.stream.Close(); err != nil {
+			return
+		}
+		return
 	}
 
 	s.logger.Info("registered listener", "name", name)
 
 	if err := protocol.ResponseOk.Write(s.stream, "ok"); err != nil {
-		return //err
+		return
 	}
 	if err := s.stream.Close(); err != nil {
-		return //err
+		return
 	}
 }
 
@@ -332,7 +338,7 @@ func (s *ServerStream) connect(ctx context.Context, name string) {
 
 	otherResp, err := protocol.ReadResponse(otherStream)
 	if err != nil {
-		s.logger.Debug("could not join", "name", name, "err", err)
+		s.logger.Debug("error while reading response", "name", name, "err", err)
 		if err := protocol.ResponseClientResponseError.Write(s.stream, fmt.Sprintf("%s dial failed: %v", name, err)); err != nil {
 			return
 		}
