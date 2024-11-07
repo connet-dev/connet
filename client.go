@@ -119,12 +119,12 @@ func (s *ClientSession) Run(ctx context.Context) error {
 	g, ctx := errgroup.WithContext(ctx)
 
 	g.Go(func() error {
-		return s.runIncoming(ctx)
+		return s.runDestinations(ctx)
 	})
 
 	for addr, name := range s.client.sources {
 		g.Go(func() error {
-			return s.runOutgoing(ctx, addr, name)
+			return s.runSource(ctx, addr, name)
 		})
 	}
 
@@ -137,7 +137,7 @@ func (s *ClientSession) registerDestination(ctx context.Context, name, addr stri
 		return kleverr.Ret(err)
 	}
 
-	if err := protocol.RequestListen.Write(cmdStream, name); err != nil {
+	if err := protocol.RequestRegister.Write(cmdStream, name); err != nil {
 		return kleverr.Ret(err)
 	}
 	result, err := protocol.ReadResponse(cmdStream)
@@ -148,49 +148,65 @@ func (s *ClientSession) registerDestination(ctx context.Context, name, addr stri
 	return nil
 }
 
-func (s *ClientSession) runIncoming(ctx context.Context) error {
+func (s *ClientSession) runDestinations(ctx context.Context) error {
 	for {
 		stream, err := s.conn.AcceptStream(ctx)
 		if err != nil {
 			return kleverr.Ret(err)
 		}
+		go s.runDestinationRequest(ctx, stream)
+	}
+}
 
-		req, name, err := protocol.ReadRequest(stream)
-		if err != nil {
-			return kleverr.Ret(err)
-		}
+func (s *ClientSession) runDestinationRequest(ctx context.Context, stream quic.Stream) {
+	req, name, err := protocol.ReadRequest(stream)
+	if err != nil {
+		return
+	}
 
-		switch req {
-		case protocol.RequestConnect:
-			addr, ok := s.client.destinations[name]
-			if ok {
-				if conn, err := net.Dial("tcp", addr); err != nil {
-					if err := protocol.ResponseListenNotDialed.Write(stream, fmt.Sprintf("%s not connected", name)); err != nil {
-						return err
-					}
-					// TODO
-				} else {
-					if err := protocol.ResponseOk.Write(stream, fmt.Sprintf("connected to %s", name)); err != nil {
-						return err
-					}
-					s.logger.Debug("joining from server", "name", name)
-					go func() {
-						err := netc.Join(ctx, stream, conn)
-						s.logger.Debug("disconnected from server", "name", name, "err", err)
-					}()
+	switch req {
+	case protocol.RequestConnect:
+		addr, ok := s.client.destinations[name]
+		if ok {
+			if conn, err := net.Dial("tcp", addr); err != nil {
+				if err := protocol.ResponseDestinationDialError.Write(stream, fmt.Sprintf("%s not connected", name)); err != nil {
+					return
+				}
+				if err := stream.Close(); err != nil {
+					return
 				}
 			} else {
-				if err := protocol.ResponseListenNotDialed.Write(stream, fmt.Sprintf("%s not found", name)); err != nil {
-					return err
+				if err := protocol.ResponseOk.Write(stream, fmt.Sprintf("connected to %s", name)); err != nil {
+					return
 				}
-				// TODO
+
+				s.logger.Debug("joining from server", "name", name)
+				go func() {
+					err := netc.Join(ctx, stream, conn)
+					s.logger.Debug("disconnected from server", "name", name, "err", err)
+				}()
 			}
+		} else {
+			if err := protocol.ResponseDestinationNotFound.Write(stream, fmt.Sprintf("%s not found", name)); err != nil {
+				return
+			}
+			if err := stream.Close(); err != nil {
+				return
+			}
+		}
+	default:
+		// TODO logging?
+		if err := protocol.ResponseRequestUnknown.Write(stream, fmt.Sprintf("unknown request")); err != nil {
+			return
+		}
+		if err := stream.Close(); err != nil {
+			return
 		}
 	}
 }
 
-func (s *ClientSession) runOutgoing(ctx context.Context, addr, name string) error {
-	s.logger.Debug("listening for conns", "addr", addr)
+func (s *ClientSession) runSource(ctx context.Context, addr, name string) error {
+	s.logger.Debug("listening for conns", "name", name, "addr", addr)
 	l, err := net.Listen("tcp", addr)
 	if err != nil {
 		return kleverr.Ret(err)

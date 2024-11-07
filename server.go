@@ -234,14 +234,14 @@ func (c *ServerClient) authenticate(ctx context.Context) (authc.Authentication, 
 		return retAuth(err)
 	case req != protocol.RequestAuth:
 		err := fmt.Errorf("expected auth request, but got %v", req)
-		protocol.ResponseAuthExpected.Write(authStream, err.Error())
+		protocol.ResponseAuthenticationExpected.Write(authStream, err.Error())
 		return retAuth(err)
 	}
 
 	auth, err := c.server.auth.Authenticate(authToken)
 	if err != nil {
 		err := fmt.Errorf("invalid token: %w", err)
-		protocol.ResponseAuthInvalid.Write(authStream, err.Error())
+		protocol.ResponseAuthenticationFailed.Write(authStream, err.Error())
 		return retAuth(err)
 	}
 
@@ -268,7 +268,7 @@ func (s *ServerStream) Run(ctx context.Context) {
 	s.logger.Debug("incomming request", "req", req, "addr", name)
 
 	switch req {
-	case protocol.RequestListen:
+	case protocol.RequestRegister:
 		s.listen(ctx, name)
 	case protocol.RequestConnect:
 		s.connect(ctx, name)
@@ -297,7 +297,7 @@ func (s *ServerStream) connect(ctx context.Context, name string) {
 	otherConn, err := s.client.server.find(s.client.auth, name)
 	if err != nil {
 		s.logger.Debug("listener lookup failed", "name", name, "err", err)
-		if err := protocol.ResponseListenNotFound.Write(s.stream, err.Error()); err != nil {
+		if err := protocol.ResponseRegistrationNotFound.Write(s.stream, err.Error()); err != nil {
 			return // err
 		}
 		if err := s.stream.Close(); err != nil {
@@ -309,11 +309,11 @@ func (s *ServerStream) connect(ctx context.Context, name string) {
 	otherStream, err := otherConn.conn.OpenStreamSync(ctx)
 	if err != nil {
 		s.logger.Debug("listener not connected", "name", name, "err", err)
-		if err := protocol.ResponseListenNotDialed.Write(s.stream, fmt.Sprintf("%s dial failed: %v", name, err)); err != nil {
-			return // err
+		if err := protocol.ResponseClientDialError.Write(s.stream, fmt.Sprintf("%s dial failed: %v", name, err)); err != nil {
+			return
 		}
 		if err := s.stream.Close(); err != nil {
-			return // err
+			return
 		}
 		return
 	}
@@ -321,11 +321,11 @@ func (s *ServerStream) connect(ctx context.Context, name string) {
 	if err := protocol.RequestConnect.Write(otherStream, name); err != nil {
 		// TODO better error response
 		s.logger.Debug("could not write connect request", "name", name, "err", err)
-		if err := protocol.ResponseListenNotDialed.Write(s.stream, fmt.Sprintf("%s dial failed: %v", name, err)); err != nil {
+		if err := protocol.ResponseClientRequestError.Write(s.stream, fmt.Sprintf("%s dial failed: %v", name, err)); err != nil {
 			return
 		}
 		if err := s.stream.Close(); err != nil {
-			return // err
+			return
 		}
 		return
 	}
@@ -333,17 +333,17 @@ func (s *ServerStream) connect(ctx context.Context, name string) {
 	otherResp, err := protocol.ReadResponse(otherStream)
 	if err != nil {
 		s.logger.Debug("could not join", "name", name, "err", err)
-		if err := protocol.ResponseListenNotDialed.Write(s.stream, fmt.Sprintf("%s dial failed: %v", name, err)); err != nil {
+		if err := protocol.ResponseClientResponseError.Write(s.stream, fmt.Sprintf("%s dial failed: %v", name, err)); err != nil {
 			return
 		}
 		if err := s.stream.Close(); err != nil {
-			return // err
+			return
 		}
 		return
 	}
 
 	if err := protocol.ResponseOk.Write(s.stream, otherResp); err != nil {
-		return // err
+		return
 	}
 
 	s.logger.Info("joining conns", "name", name)
@@ -351,8 +351,8 @@ func (s *ServerStream) connect(ctx context.Context, name string) {
 	s.logger.Info("disconnected conns", "name", name, "err", err)
 }
 
-func (s *ServerStream) unknown(ctx context.Context, req protocol.RequestType, addr string) {
-	if err := protocol.ResponseRequestInvalid.Write(s.stream, fmt.Sprintf("%d is not valid request", req)); err != nil {
+func (s *ServerStream) unknown(ctx context.Context, req protocol.RequestType, name string) {
+	if err := protocol.ResponseRequestUnknown.Write(s.stream, fmt.Sprintf("%d is not valid request: %s", req, name)); err != nil {
 		return //err
 	}
 	if err := s.stream.Close(); err != nil {

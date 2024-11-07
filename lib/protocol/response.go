@@ -8,12 +8,16 @@ import (
 type ResponseType int32
 
 const (
-	ResponseOk              ResponseType = 0
-	ResponseAuthExpected    ResponseType = 1
-	ResponseAuthInvalid     ResponseType = 2
-	ResponseRequestInvalid  ResponseType = 3
-	ResponseListenNotFound  ResponseType = 4
-	ResponseListenNotDialed ResponseType = 5
+	ResponseOk                     ResponseType = 0
+	ResponseAuthenticationExpected ResponseType = 1
+	ResponseAuthenticationFailed   ResponseType = 2
+	ResponseRequestUnknown         ResponseType = 3
+	ResponseRegistrationNotFound   ResponseType = 4
+	ResponseClientDialError        ResponseType = 5
+	ResponseClientRequestError     ResponseType = 6
+	ResponseClientResponseError    ResponseType = 7
+	ResponseDestinationNotFound    ResponseType = 8
+	ResponseDestinationDialError   ResponseType = 9
 )
 
 func (t ResponseType) Write(w io.Writer, s string) error {
