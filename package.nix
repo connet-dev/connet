@@ -21,5 +21,4 @@ lib.fileset.trace sourceFiles
   };
   vendorHash = "sha256-u+wh34KCoC1Rh/aULIf4U4WP/bRDndl05BGrGrj1qgI=";
   subPackages = [ "cmd/connet" "cmd/connet-server" ];
-  # doCheck = false;
 }
