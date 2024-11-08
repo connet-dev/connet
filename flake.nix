@@ -15,7 +15,8 @@
       in
       {
         formatter = pkgs.nixpkgs-fmt;
-        devShell = pkgs.mkShellNoCC {
+        packages.default = pkgs.callPackage ./package.nix { };
+        devShells.default = pkgs.mkShellNoCC {
           buildInputs = with pkgs; [
             go
             gopls
