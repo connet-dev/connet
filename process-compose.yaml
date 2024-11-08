@@ -5,12 +5,12 @@ processes:
     command: gen-local-certs
   server:
     command: connet-server -debug -server-cert .direnv/localhost/cert.pem -server-key .direnv/localhost/key.pem
-    dependsOn:
+    depends_on:
       certs:
         condition: process_completed
   client:
     command: connet -debug -ca-cert .direnv/minica.pem -ca-key .direnv/minica-key.pem -auth abc -listen-name sws -listen-target ":9999" -connect-name sws -connect-source ":9998"
-    dependsOn:
+    depends_on:
       certs:
         condition: process_completed
   upstream:
