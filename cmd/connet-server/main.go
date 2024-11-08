@@ -12,6 +12,7 @@ import (
 )
 
 var debug = flag.Bool("debug", false, "turn on debug logging")
+var auth = flag.String("auth", "", "authentication token")
 var serverCert = flag.String("server-cert", "", "cert file to use")
 var serverKey = flag.String("server-key", "", "key file to use")
 
@@ -22,8 +23,14 @@ func main() {
 		os.Exit(1)
 	}
 
+	if *auth == "" {
+		fmt.Fprintf(os.Stderr, "auth is required")
+		flag.PrintDefaults()
+		os.Exit(1)
+	}
+
 	opts := []connet.ServerOption{
-		connet.ServerAuthenticator(authc.NewStatic("abc")),
+		connet.ServerAuthenticator(authc.NewStatic(*auth)),
 	}
 
 	if *serverCert != "" {
