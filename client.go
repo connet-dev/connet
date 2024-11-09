@@ -9,9 +9,9 @@ import (
 	"net"
 	"time"
 
-	"github.com/keihaya-com/connet/lib/certc"
-	"github.com/keihaya-com/connet/lib/netc"
+	"github.com/keihaya-com/connet/certc"
 	"github.com/keihaya-com/connet/lib/protocol"
+	"github.com/keihaya-com/connet/netc"
 	"github.com/klev-dev/kleverr"
 	"github.com/quic-go/quic-go"
 	"github.com/segmentio/ksuid"

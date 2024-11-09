@@ -8,7 +8,7 @@ import (
 	"os"
 
 	"github.com/keihaya-com/connet"
-	"github.com/keihaya-com/connet/lib/authc"
+	"github.com/keihaya-com/connet/authc"
 )
 
 var debug = flag.Bool("debug", false, "turn on debug logging")
