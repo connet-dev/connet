@@ -1,0 +1,31 @@
+syntax = "proto3";
+package server;
+
+import "shared.proto";
+
+option go_package = "github.com/keihaya-com/connet/pbs";
+
+message Authenticate {
+  string token = 1;
+}
+
+message AuthenticateResp {
+  shared.Error error = 1;
+}
+
+message Request {
+  // Soft one-of
+  Register register = 1;
+  Connect connect = 2;
+
+  message Register {
+    string name = 1;
+  }
+  message Connect {
+    string name = 1;
+  }
+}
+
+message Response {
+  shared.Error error = 1;
+}

@@ -4,14 +4,15 @@ import (
 	"context"
 	"crypto/tls"
 	"crypto/x509"
-	"fmt"
 	"log/slog"
 	"net"
 	"time"
 
 	"github.com/keihaya-com/connet/certc"
-	"github.com/keihaya-com/connet/lib/protocol"
 	"github.com/keihaya-com/connet/netc"
+	"github.com/keihaya-com/connet/pb"
+	"github.com/keihaya-com/connet/pbc"
+	"github.com/keihaya-com/connet/pbs"
 	"github.com/klev-dev/kleverr"
 	"github.com/quic-go/quic-go"
 	"github.com/segmentio/ksuid"
@@ -81,14 +82,21 @@ func (c *Client) connect(ctx context.Context) (quic.Connection, error) {
 	}
 	defer authStream.Close()
 
-	if err := protocol.RequestAuth.Write(authStream, c.token); err != nil {
+	if err := pb.Write(authStream, &pbs.Authenticate{
+		Token: c.token,
+	}); err != nil {
 		return nil, kleverr.Ret(err)
 	}
-	authResp, err := protocol.ReadResponse(authStream)
-	if err != nil {
+
+	resp := &pbs.AuthenticateResp{}
+	if err := pb.Read(authStream, resp); err != nil {
 		return nil, kleverr.Ret(err)
 	}
-	c.logger.Info("authenticated: ", "resp", authResp)
+	if resp.Error != nil {
+		return nil, kleverr.Ret(resp.Error)
+	}
+
+	c.logger.Info("authenticated")
 
 	return conn, nil
 }
@@ -139,15 +147,21 @@ func (s *ClientSession) registerDestination(ctx context.Context, name, addr stri
 	if err != nil {
 		return kleverr.Ret(err)
 	}
+	defer cmdStream.Close()
 
-	if err := protocol.RequestRegister.Write(cmdStream, name); err != nil {
+	if err := pb.Write(cmdStream, &pbs.Request{
+		Register: &pbs.Request_Register{
+			Name: name,
+		},
+	}); err != nil {
 		return kleverr.Ret(err)
 	}
-	result, err := protocol.ReadResponse(cmdStream)
-	if err != nil {
+
+	if _, err := pbs.ReadResponse(cmdStream); err != nil {
 		return kleverr.Ret(err)
 	}
-	s.logger.Info("registered destination", "name", name, "addr", addr, "result", result)
+
+	s.logger.Info("registered destination", "name", name, "addr", addr)
 	return nil
 }
 
@@ -162,49 +176,55 @@ func (s *ClientSession) runDestinations(ctx context.Context) error {
 }
 
 func (s *ClientSession) runDestinationRequest(ctx context.Context, stream quic.Stream) {
-	req, name, err := protocol.ReadRequest(stream)
+	defer stream.Close()
+
+	req, err := pbc.ReadRequest(stream)
 	if err != nil {
 		return
 	}
 
-	switch req {
-	case protocol.RequestConnect:
-		addr, ok := s.client.destinations[name]
-		if ok {
-			if conn, err := net.Dial("tcp", addr); err != nil {
-				if err := protocol.ResponseDestinationDialError.Write(stream, fmt.Sprintf("%s not connected", name)); err != nil {
-					return
-				}
-				if err := stream.Close(); err != nil {
-					return
-				}
-			} else {
-				if err := protocol.ResponseOk.Write(stream, fmt.Sprintf("connected to %s", name)); err != nil {
-					return
-				}
-
-				s.logger.Debug("joining from server", "name", name)
-				go func() {
-					err := netc.Join(ctx, stream, conn)
-					s.logger.Debug("disconnected from server", "name", name, "err", err)
-				}()
-			}
-		} else {
-			if err := protocol.ResponseDestinationNotFound.Write(stream, fmt.Sprintf("%s not found", name)); err != nil {
-				return
-			}
-			if err := stream.Close(); err != nil {
-				return
-			}
-		}
+	switch {
+	case req.Connect != nil:
+		s.destinationConnect(ctx, stream, req.Connect.Name)
 	default:
-		// TODO logging?
-		if err := protocol.ResponseRequestUnknown.Write(stream, fmt.Sprintf("unknown request")); err != nil {
-			return
+		s.unknown(ctx, stream, req)
+	}
+}
+
+func (s *ClientSession) destinationConnect(ctx context.Context, stream quic.Stream, name string) {
+	addr, ok := s.client.destinations[name]
+	if !ok {
+		err := pb.NewError(pb.Error_DestinationNotFound, "%s not found on this client", name)
+		if err := pb.Write(stream, &pbc.Response{Error: err}); err != nil {
+			s.logger.Warn("could not write response", "name", name, "addr", addr, "err", err)
 		}
-		if err := stream.Close(); err != nil {
-			return
+		return
+	}
+
+	conn, err := net.Dial("tcp", addr)
+	if err != nil {
+		err := pb.NewError(pb.Error_DestinationDialFailed, "%s could not be dialed: %v", name, err)
+		if err := pb.Write(stream, &pbc.Response{Error: err}); err != nil {
+			s.logger.Warn("could not write response", "name", name, "addr", addr, "err", err)
 		}
+		return
+	}
+
+	if err := pb.Write(stream, &pbc.Response{}); err != nil {
+		s.logger.Warn("could not write response", "name", name, "addr", addr, "err", err)
+		return
+	}
+
+	s.logger.Debug("joining from server", "name", name)
+	err = netc.Join(ctx, stream, conn)
+	s.logger.Debug("disconnected from server", "name", name, "err", err)
+}
+
+func (s *ClientSession) unknown(ctx context.Context, stream quic.Stream, req *pbc.Request) {
+	s.logger.Error("unknown request", "req", req)
+	err := pb.NewError(pb.Error_RequestUnknown, "unknown request: %v", req)
+	if err := pb.Write(stream, &pbc.Response{Error: err}); err != nil {
+		s.logger.Warn("could not write response", "err", err)
 	}
 }
 
@@ -234,17 +254,21 @@ func (s *ClientSession) runSourceConn(ctx context.Context, name string, conn net
 		s.logger.Warn("failed to open server stream", "name", name, "err", err)
 		return
 	}
-	if err := protocol.RequestConnect.Write(stream, name); err != nil {
+	if err := pb.Write(stream, &pbs.Request{
+		Connect: &pbs.Request_Connect{
+			Name: name,
+		},
+	}); err != nil {
 		s.logger.Warn("failed to request connection", "name", name, "err", err)
 		return
 	}
-	result, err := protocol.ReadResponse(stream)
-	if err != nil {
+
+	if _, err := pbs.ReadResponse(stream); err != nil {
 		s.logger.Warn("failed to response connection", "name", name, "err", err)
 		return
 	}
 
-	s.logger.Debug("joining to server", "name", name, "result", result)
+	s.logger.Debug("joining to server", "name", name)
 	err = netc.Join(ctx, conn, stream)
 	s.logger.Debug("disconnected to server", "name", name, "err", err)
 }

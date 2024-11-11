@@ -1,0 +1,31 @@
+syntax = "proto3";
+package shared;
+
+option go_package = "github.com/keihaya-com/connet/pb";
+
+message Error {
+  Code code = 1;
+  string message = 2;
+
+  enum Code {
+    // Generic
+    Unknown = 0;
+    RequestUnknown = 1;
+
+    // Authentication
+    AuthenticationFailed = 100;
+
+    // Register codes
+    RegistrationFailed = 200;
+
+    // Server connect codes
+    ListenerNotFound = 300;
+    ListenerNotConnected = 301;
+    ListenerRequestFailed = 302;
+    ListenerResponseFailed = 303;
+
+    // Client connect codes
+    DestinationNotFound = 400;
+    DestinationDialFailed = 401;
+  }
+}

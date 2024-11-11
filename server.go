@@ -4,7 +4,6 @@ import (
 	"context"
 	"crypto/tls"
 	"errors"
-	"fmt"
 	"log/slog"
 	"net"
 	"slices"
@@ -14,8 +13,10 @@ import (
 
 	"github.com/keihaya-com/connet/authc"
 	"github.com/keihaya-com/connet/certc"
-	"github.com/keihaya-com/connet/lib/protocol"
 	"github.com/keihaya-com/connet/netc"
+	"github.com/keihaya-com/connet/pb"
+	"github.com/keihaya-com/connet/pbc"
+	"github.com/keihaya-com/connet/pbs"
 	"github.com/klev-dev/kleverr"
 	"github.com/quic-go/quic-go"
 	"github.com/segmentio/ksuid"
@@ -228,24 +229,21 @@ func (c *ServerClient) authenticate(ctx context.Context) (authc.Authentication, 
 	}
 	defer authStream.Close()
 
-	req, authToken, err := protocol.ReadRequest(authStream)
-	switch {
-	case err != nil:
-		return retAuth(err)
-	case req != protocol.RequestAuth:
-		err := fmt.Errorf("expected auth request, but got %v", req)
-		protocol.ResponseAuthenticationExpected.Write(authStream, err.Error())
+	req := &pbs.Authenticate{}
+	if err := pb.Read(authStream, req); err != nil {
 		return retAuth(err)
 	}
 
-	auth, err := c.server.auth.Authenticate(authToken)
+	auth, err := c.server.auth.Authenticate(req.Token)
 	if err != nil {
-		err := fmt.Errorf("invalid token: %w", err)
-		protocol.ResponseAuthenticationFailed.Write(authStream, err.Error())
+		err := pb.NewError(pb.Error_AuthenticationFailed, "Invalid or unknown token")
+		if err := pb.Write(authStream, &pbs.AuthenticateResp{Error: err}); err != nil {
+			return retAuth(err)
+		}
 		return retAuth(err)
 	}
 
-	if err := protocol.ResponseOk.Write(authStream, "ok"); err != nil {
+	if err := pb.Write(authStream, &pbs.AuthenticateResp{}); err != nil {
 		return retAuth(err)
 	}
 
@@ -261,40 +259,38 @@ type ServerStream struct {
 }
 
 func (s *ServerStream) Run(ctx context.Context) {
-	req, name, err := protocol.ReadRequest(s.stream)
-	if err != nil {
-		return //err
-	}
-	s.logger.Debug("incomming request", "req", req, "addr", name)
+	defer s.stream.Close()
 
-	switch req {
-	case protocol.RequestRegister:
-		s.listen(ctx, name)
-	case protocol.RequestConnect:
-		s.connect(ctx, name)
+	req, err := pbs.ReadRequest(s.stream)
+	if err != nil {
+		// TODO error
+		return
+	}
+	s.logger.Debug("incomming request", "req", req)
+
+	switch {
+	case req.Register != nil:
+		s.register(ctx, req.Register.Name)
+	case req.Connect != nil:
+		s.connect(ctx, req.Connect.Name)
 	default:
-		s.unknown(ctx, req, name)
+		s.unknown(ctx, req)
 	}
 }
 
-func (s *ServerStream) listen(ctx context.Context, name string) {
+func (s *ServerStream) register(ctx context.Context, name string) {
 	if err := s.client.server.register(s.client.auth, name, s.client); err != nil {
-		if err := protocol.ResponseRegistrationFailed.Write(s.stream, fmt.Sprintf("could not register: %v", err)); err != nil {
-			return
-		}
-		if err := s.stream.Close(); err != nil {
-			return
+		// TODO better errors, codes from below
+		err := pb.NewError(pb.Error_RegistrationFailed, "registration failed: %v", err)
+		if err := pb.Write(s.stream, &pbs.Response{Error: err}); err != nil {
+			s.logger.Warn("cannot write register response", "err", err)
 		}
 		return
 	}
-
 	s.logger.Info("registered listener", "name", name)
 
-	if err := protocol.ResponseOk.Write(s.stream, "ok"); err != nil {
-		return
-	}
-	if err := s.stream.Close(); err != nil {
-		return
+	if err := pb.Write(s.stream, &pbs.Response{}); err != nil {
+		s.logger.Warn("cannot write register response", "err", err)
 	}
 }
 
@@ -303,11 +299,9 @@ func (s *ServerStream) connect(ctx context.Context, name string) {
 	otherConn, err := s.client.server.find(s.client.auth, name)
 	if err != nil {
 		s.logger.Debug("listener lookup failed", "name", name, "err", err)
-		if err := protocol.ResponseRegistrationNotFound.Write(s.stream, err.Error()); err != nil {
-			return // err
-		}
-		if err := s.stream.Close(); err != nil {
-			return // err
+		err := pb.NewError(pb.Error_ListenerNotFound, "failed to lookup registration: %v", err)
+		if err := pb.Write(s.stream, &pbs.Response{Error: err}); err != nil {
+			s.logger.Warn("failed to write response", "err", err)
 		}
 		return
 	}
@@ -315,40 +309,40 @@ func (s *ServerStream) connect(ctx context.Context, name string) {
 	otherStream, err := otherConn.conn.OpenStreamSync(ctx)
 	if err != nil {
 		s.logger.Debug("listener not connected", "name", name, "err", err)
-		if err := protocol.ResponseClientDialError.Write(s.stream, fmt.Sprintf("%s dial failed: %v", name, err)); err != nil {
-			return
-		}
-		if err := s.stream.Close(); err != nil {
-			return
+		err := pb.NewError(pb.Error_ListenerNotConnected, "failed to connect listener: %v", err)
+		if err := pb.Write(s.stream, &pbs.Response{Error: err}); err != nil {
+			s.logger.Warn("failed to write response", "err", err)
 		}
 		return
 	}
 
-	if err := protocol.RequestConnect.Write(otherStream, name); err != nil {
-		// TODO better error response
-		s.logger.Debug("could not write connect request", "name", name, "err", err)
-		if err := protocol.ResponseClientRequestError.Write(s.stream, fmt.Sprintf("%s dial failed: %v", name, err)); err != nil {
-			return
-		}
-		if err := s.stream.Close(); err != nil {
-			return
-		}
-		return
-	}
-
-	otherResp, err := protocol.ReadResponse(otherStream)
-	if err != nil {
-		s.logger.Debug("error while reading response", "name", name, "err", err)
-		if err := protocol.ResponseClientResponseError.Write(s.stream, fmt.Sprintf("%s dial failed: %v", name, err)); err != nil {
-			return
-		}
-		if err := s.stream.Close(); err != nil {
-			return
+	if err := pb.Write(otherStream, &pbc.Request{
+		Connect: &pbc.Request_Connect{
+			Name: name,
+		},
+	}); err != nil {
+		s.logger.Warn("error while writing request", "name", name, "err", err)
+		err := pb.NewError(pb.Error_ListenerRequestFailed, "failed to write client request: %v", err)
+		if err := pb.Write(s.stream, &pbs.Response{Error: err}); err != nil {
+			s.logger.Warn("failed to write response", "err", err)
 		}
 		return
 	}
 
-	if err := protocol.ResponseOk.Write(s.stream, otherResp); err != nil {
+	if _, err := pbc.ReadResponse(otherStream); err != nil {
+		s.logger.Warn("error while reading response", "name", name, "err", err)
+		var respErr *pb.Error
+		if !errors.As(err, &respErr) {
+			respErr = pb.NewError(pb.Error_ListenerResponseFailed, "failed to read client response: %v", err)
+		}
+		if err := pb.Write(s.stream, &pbs.Response{Error: respErr}); err != nil {
+			s.logger.Warn("failed to write response", "err", err)
+		}
+		return
+	}
+
+	if err := pb.Write(s.stream, &pbs.Response{}); err != nil {
+		s.logger.Warn("failed to write response", "err", err)
 		return
 	}
 
@@ -357,12 +351,11 @@ func (s *ServerStream) connect(ctx context.Context, name string) {
 	s.logger.Info("disconnected conns", "name", name, "err", err)
 }
 
-func (s *ServerStream) unknown(ctx context.Context, req protocol.RequestType, name string) {
-	if err := protocol.ResponseRequestUnknown.Write(s.stream, fmt.Sprintf("%d is not valid request: %s", req, name)); err != nil {
-		return //err
-	}
-	if err := s.stream.Close(); err != nil {
-		return //err
+func (s *ServerStream) unknown(ctx context.Context, req *pbs.Request) {
+	s.logger.Error("unknown request", "req", req)
+	err := pb.NewError(pb.Error_RequestUnknown, "unknown request: %v", req)
+	if err := pb.Write(s.stream, &pbc.Response{Error: err}); err != nil {
+		s.logger.Warn("could not write response", "err", err)
 	}
 }
 

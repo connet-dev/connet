@@ -1,0 +1,19 @@
+syntax = "proto3";
+package client;
+
+import "shared.proto";
+
+option go_package = "github.com/keihaya-com/connet/pbc";
+
+message Request {
+  // Soft one-of
+  Connect connect = 1;
+
+  message Connect {
+    string name = 1;
+  }
+}
+
+message Response {
+  shared.Error error = 1;
+}
