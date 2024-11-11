@@ -15,10 +15,19 @@ lib.fileset.trace sourceFiles
   pkgs.buildGoModule
 {
   name = "connet";
+
   src = lib.fileset.toSource {
     root = ./.;
     fileset = sourceFiles;
   };
+
   vendorHash = "sha256-9XSbflojcaqcyZDFH8gMtI5V4vXKedSmmjSqXzztYck=";
   subPackages = [ "cmd/connet" "cmd/connet-server" ];
+
+  meta = with lib; {
+    description = "A reverse proxy, written in Golang";
+    homepage = "https://github.com/keihaya-com/connet";
+    license = licenses.asl20;
+    mainProgram = "connet";
+  };
 }
