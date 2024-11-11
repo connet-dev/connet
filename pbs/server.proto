@@ -28,4 +28,13 @@ message Request {
 
 message Response {
   shared.Error error = 1;
+
+  Register register = 2;
+  Connect connect = 3;
+
+  message Register {
+  }
+  message Connect {
+    repeated string direct_addresses = 4;
+  }
 }

@@ -6,6 +6,7 @@ import (
 	"errors"
 	"log/slog"
 	"net"
+	"net/netip"
 	"slices"
 	"strings"
 	"sync"
@@ -30,7 +31,7 @@ type Server struct {
 
 func NewServer(opts ...ServerOption) (*Server, error) {
 	cfg := &serverConfig{
-		address: "0.0.0.0:8443",
+		address: "0.0.0.0:19190",
 		logger:  slog.Default(),
 	}
 	for _, opt := range opts {
@@ -44,7 +45,7 @@ func NewServer(opts ...ServerOption) (*Server, error) {
 	}
 	realms := map[string]*realmClients{}
 	for _, r := range cfg.auth.Realms() {
-		realms[r] = &realmClients{name: r, targets: map[string]*ServerClient{}}
+		realms[r] = &realmClients{name: r, targets: map[string]*serverClient{}}
 	}
 
 	return &Server{
@@ -93,17 +94,17 @@ func (s *Server) Run(ctx context.Context) error {
 		}
 
 		scID := ksuid.New()
-		sc := &ServerClient{
+		sc := &serverClient{
 			server: s,
 			id:     scID,
 			conn:   conn,
 			logger: s.logger.With("client-id", scID),
 		}
-		go sc.Run(ctx)
+		go sc.run(ctx)
 	}
 }
 
-func (s *Server) register(auth authc.Authentication, name string, c *ServerClient) error {
+func (s *Server) register(auth authc.Authentication, name string, c *serverClient) error {
 	localName, realmName, found := strings.Cut(name, "@")
 	if found {
 		if !slices.Contains(auth.Realms, realmName) {
@@ -121,7 +122,7 @@ func (s *Server) register(auth authc.Authentication, name string, c *ServerClien
 	return nil
 }
 
-func (s *Server) find(auth authc.Authentication, name string) (*ServerClient, error) {
+func (s *Server) find(auth authc.Authentication, name string) (*serverClient, error) {
 	localName, realmName, found := strings.Cut(name, "@")
 	if found {
 		if !slices.Contains(auth.Realms, realmName) {
@@ -138,7 +139,7 @@ func (s *Server) find(auth authc.Authentication, name string) (*ServerClient, er
 	return realm.find(localName)
 }
 
-func (s *Server) deregister(c *ServerClient) {
+func (s *Server) deregister(c *serverClient) {
 	for _, realm := range s.realms {
 		realm.deregister(c)
 	}
@@ -146,11 +147,11 @@ func (s *Server) deregister(c *ServerClient) {
 
 type realmClients struct {
 	name    string
-	targets map[string]*ServerClient
+	targets map[string]*serverClient
 	mu      sync.RWMutex
 }
 
-func (r *realmClients) register(name string, c *ServerClient) {
+func (r *realmClients) register(name string, c *serverClient) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 
@@ -159,7 +160,7 @@ func (r *realmClients) register(name string, c *ServerClient) {
 	// TODO multiple targets
 }
 
-func (r *realmClients) find(name string) (*ServerClient, error) {
+func (r *realmClients) find(name string) (*serverClient, error) {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
 
@@ -170,7 +171,7 @@ func (r *realmClients) find(name string) (*ServerClient, error) {
 	return c, nil
 }
 
-func (r *realmClients) deregister(c *ServerClient) {
+func (r *realmClients) deregister(c *serverClient) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 
@@ -181,7 +182,7 @@ func (r *realmClients) deregister(c *ServerClient) {
 	}
 }
 
-type ServerClient struct {
+type serverClient struct {
 	server *Server
 	id     ksuid.KSUID
 	conn   quic.Connection
@@ -189,7 +190,7 @@ type ServerClient struct {
 	auth   authc.Authentication
 }
 
-func (c *ServerClient) Run(ctx context.Context) {
+func (c *serverClient) run(ctx context.Context) {
 	auth, err := c.authenticate(ctx)
 	if err != nil {
 		c.logger.Error("authentication failed", "err", err)
@@ -209,23 +210,23 @@ func (c *ServerClient) Run(ctx context.Context) {
 		}
 
 		ssID := ksuid.New()
-		ss := &ServerStream{
+		ss := &serverStream{
 			client: c,
 			id:     ssID,
 			stream: stream,
 			logger: c.logger.With("stream-id", ssID),
 		}
-		go ss.Run(ctx)
+		go ss.run(ctx)
 	}
 }
 
 var retAuth = kleverr.Ret1[authc.Authentication]
 
-func (c *ServerClient) authenticate(ctx context.Context) (authc.Authentication, error) {
+func (c *serverClient) authenticate(ctx context.Context) (authc.Authentication, error) {
 	c.logger.Debug("waiting for authentication")
 	authStream, err := c.conn.AcceptStream(ctx)
 	if err != nil {
-		return authc.Authentication{}, err
+		return retAuth(err)
 	}
 	defer authStream.Close()
 
@@ -251,14 +252,14 @@ func (c *ServerClient) authenticate(ctx context.Context) (authc.Authentication, 
 	return auth, nil
 }
 
-type ServerStream struct {
-	client *ServerClient
+type serverStream struct {
+	client *serverClient
 	id     ksuid.KSUID
 	stream quic.Stream
 	logger *slog.Logger
 }
 
-func (s *ServerStream) Run(ctx context.Context) {
+func (s *serverStream) run(ctx context.Context) {
 	defer s.stream.Close()
 
 	req, err := pbs.ReadRequest(s.stream)
@@ -278,7 +279,7 @@ func (s *ServerStream) Run(ctx context.Context) {
 	}
 }
 
-func (s *ServerStream) register(ctx context.Context, name string) {
+func (s *serverStream) register(ctx context.Context, name string) {
 	if err := s.client.server.register(s.client.auth, name, s.client); err != nil {
 		// TODO better errors, codes from below
 		err := pb.NewError(pb.Error_RegistrationFailed, "registration failed: %v", err)
@@ -294,7 +295,7 @@ func (s *ServerStream) register(ctx context.Context, name string) {
 	}
 }
 
-func (s *ServerStream) connect(ctx context.Context, name string) {
+func (s *serverStream) connect(ctx context.Context, name string) {
 	s.logger.Debug("lookup listener", "name", name)
 	otherConn, err := s.client.server.find(s.client.auth, name)
 	if err != nil {
@@ -341,7 +342,16 @@ func (s *ServerStream) connect(ctx context.Context, name string) {
 		return
 	}
 
-	if err := pb.Write(s.stream, &pbs.Response{}); err != nil {
+	var directAddrs []string
+	otherAddrPort, err := netip.ParseAddrPort(otherConn.conn.RemoteAddr().String())
+	if err == nil {
+		directAddrs = append(directAddrs, otherAddrPort.Addr().String())
+	}
+	if err := pb.Write(s.stream, &pbs.Response{
+		Connect: &pbs.Response_Connect{
+			DirectAddresses: directAddrs,
+		},
+	}); err != nil {
 		s.logger.Warn("failed to write response", "err", err)
 		return
 	}
@@ -351,7 +361,7 @@ func (s *ServerStream) connect(ctx context.Context, name string) {
 	s.logger.Info("disconnected conns", "name", name, "err", err)
 }
 
-func (s *ServerStream) unknown(ctx context.Context, req *pbs.Request) {
+func (s *serverStream) unknown(ctx context.Context, req *pbs.Request) {
 	s.logger.Error("unknown request", "req", req)
 	err := pb.NewError(pb.Error_RequestUnknown, "unknown request: %v", req)
 	if err := pb.Write(s.stream, &pbc.Response{Error: err}); err != nil {

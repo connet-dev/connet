@@ -25,7 +25,8 @@ type Client struct {
 
 func NewClient(opts ...ClientOption) (*Client, error) {
 	cfg := &clientConfig{
-		logger: slog.Default(),
+		address: "127.0.0.1:19190",
+		logger:  slog.Default(),
 	}
 	for _, opt := range opts {
 		if err := opt(cfg); err != nil {
@@ -46,13 +47,13 @@ func (c *Client) Run(ctx context.Context) error {
 
 	for {
 		sid := ksuid.New()
-		s := &ClientSession{
+		s := &clientSession{
 			client: c,
 			id:     sid,
 			conn:   conn,
 			logger: c.logger.With("connection-id", sid),
 		}
-		if err := s.Run(ctx); err != nil {
+		if err := s.run(ctx); err != nil {
 			return err
 		}
 
@@ -113,14 +114,14 @@ func (c *Client) reconnect(ctx context.Context) (quic.Connection, error) {
 	}
 }
 
-type ClientSession struct {
+type clientSession struct {
 	client *Client
 	id     ksuid.KSUID
 	conn   quic.Connection
 	logger *slog.Logger
 }
 
-func (s *ClientSession) Run(ctx context.Context) error {
+func (s *clientSession) run(ctx context.Context) error {
 	for name, addr := range s.client.destinations {
 		if err := s.registerDestination(ctx, name, addr); err != nil {
 			return err
@@ -135,14 +136,20 @@ func (s *ClientSession) Run(ctx context.Context) error {
 
 	for addr, name := range s.client.sources {
 		g.Go(func() error {
-			return s.runSource(ctx, addr, name)
+			src := &clientSource{
+				sess:            s,
+				localAddr:       addr,
+				destinationName: name,
+				logger:          s.logger.With("addr", addr, "name", name),
+			}
+			return src.run(ctx)
 		})
 	}
 
 	return g.Wait()
 }
 
-func (s *ClientSession) registerDestination(ctx context.Context, name, addr string) error {
+func (s *clientSession) registerDestination(ctx context.Context, name, addr string) error {
 	cmdStream, err := s.conn.OpenStreamSync(ctx)
 	if err != nil {
 		return kleverr.Ret(err)
@@ -165,7 +172,7 @@ func (s *ClientSession) registerDestination(ctx context.Context, name, addr stri
 	return nil
 }
 
-func (s *ClientSession) runDestinations(ctx context.Context) error {
+func (s *clientSession) runDestinations(ctx context.Context) error {
 	for {
 		stream, err := s.conn.AcceptStream(ctx)
 		if err != nil {
@@ -175,7 +182,7 @@ func (s *ClientSession) runDestinations(ctx context.Context) error {
 	}
 }
 
-func (s *ClientSession) runDestinationRequest(ctx context.Context, stream quic.Stream) {
+func (s *clientSession) runDestinationRequest(ctx context.Context, stream quic.Stream) {
 	defer stream.Close()
 
 	req, err := pbc.ReadRequest(stream)
@@ -191,7 +198,7 @@ func (s *ClientSession) runDestinationRequest(ctx context.Context, stream quic.S
 	}
 }
 
-func (s *ClientSession) destinationConnect(ctx context.Context, stream quic.Stream, name string) {
+func (s *clientSession) destinationConnect(ctx context.Context, stream quic.Stream, name string) {
 	addr, ok := s.client.destinations[name]
 	if !ok {
 		err := pb.NewError(pb.Error_DestinationNotFound, "%s not found on this client", name)
@@ -220,7 +227,7 @@ func (s *ClientSession) destinationConnect(ctx context.Context, stream quic.Stre
 	s.logger.Debug("disconnected from server", "name", name, "err", err)
 }
 
-func (s *ClientSession) unknown(ctx context.Context, stream quic.Stream, req *pbc.Request) {
+func (s *clientSession) unknown(ctx context.Context, stream quic.Stream, req *pbc.Request) {
 	s.logger.Error("unknown request", "req", req)
 	err := pb.NewError(pb.Error_RequestUnknown, "unknown request: %v", req)
 	if err := pb.Write(stream, &pbc.Response{Error: err}); err != nil {
@@ -228,9 +235,16 @@ func (s *ClientSession) unknown(ctx context.Context, stream quic.Stream, req *pb
 	}
 }
 
-func (s *ClientSession) runSource(ctx context.Context, addr, name string) error {
-	s.logger.Debug("listening for conns", "name", name, "addr", addr)
-	l, err := net.Listen("tcp", addr)
+type clientSource struct {
+	sess            *clientSession
+	localAddr       string
+	destinationName string
+	logger          *slog.Logger
+}
+
+func (s *clientSource) run(ctx context.Context) error {
+	s.logger.Debug("listening for conns")
+	l, err := net.Listen("tcp", s.localAddr)
 	if err != nil {
 		return kleverr.Ret(err)
 	}
@@ -241,36 +255,37 @@ func (s *ClientSession) runSource(ctx context.Context, addr, name string) error 
 			return kleverr.Ret(err)
 		}
 
-		go s.runSourceConn(ctx, name, conn)
+		go s.runConn(ctx, conn)
 	}
 }
 
-func (s *ClientSession) runSourceConn(ctx context.Context, name string, conn net.Conn) {
+func (s *clientSource) runConn(ctx context.Context, conn net.Conn) {
 	defer conn.Close()
 
-	s.logger.Debug("received conn", "name", name, "remote", conn.RemoteAddr())
-	stream, err := s.conn.OpenStreamSync(ctx)
+	s.logger.Debug("received conn", "remote", conn.RemoteAddr())
+	stream, err := s.sess.conn.OpenStreamSync(ctx)
 	if err != nil {
-		s.logger.Warn("failed to open server stream", "name", name, "err", err)
+		s.logger.Warn("failed to open server stream", "err", err)
 		return
 	}
 	if err := pb.Write(stream, &pbs.Request{
 		Connect: &pbs.Request_Connect{
-			Name: name,
+			Name: s.destinationName,
 		},
 	}); err != nil {
-		s.logger.Warn("failed to request connection", "name", name, "err", err)
+		s.logger.Warn("failed to request connection", "err", err)
 		return
 	}
 
-	if _, err := pbs.ReadResponse(stream); err != nil {
-		s.logger.Warn("failed to response connection", "name", name, "err", err)
+	resp, err := pbs.ReadResponse(stream)
+	if err != nil {
+		s.logger.Warn("failed to response connection", "err", err)
 		return
 	}
 
-	s.logger.Debug("joining to server", "name", name)
+	s.logger.Debug("joining to server", "direct", resp.Connect.DirectAddresses)
 	err = netc.Join(ctx, conn, stream)
-	s.logger.Debug("disconnected to server", "name", name, "err", err)
+	s.logger.Debug("disconnected to server", "err", err)
 }
 
 type clientConfig struct {

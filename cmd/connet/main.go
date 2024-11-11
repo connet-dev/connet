@@ -11,7 +11,7 @@ import (
 )
 
 var debug = flag.Bool("debug", false, "turn on debug logging")
-var server = flag.String("server", "127.0.0.1:8443", "target server")
+var server = flag.String("server", "127.0.0.1:19190", "target server")
 var auth = flag.String("auth", "", "authentication token")
 var listenName = flag.String("listen-name", "", "name to listen on")
 var listenTarget = flag.String("listen-target", "", "forward incoming conns to")

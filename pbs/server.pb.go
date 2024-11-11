@@ -170,7 +170,9 @@ type Response struct {
 	sizeCache     protoimpl.SizeCache
 	unknownFields protoimpl.UnknownFields
 
-	Error *pb.Error `protobuf:"bytes,1,opt,name=error,proto3" json:"error,omitempty"`
+	Error    *pb.Error          `protobuf:"bytes,1,opt,name=error,proto3" json:"error,omitempty"`
+	Register *Response_Register `protobuf:"bytes,2,opt,name=register,proto3" json:"register,omitempty"`
+	Connect  *Response_Connect  `protobuf:"bytes,3,opt,name=connect,proto3" json:"connect,omitempty"`
 }
 
 func (x *Response) Reset() {
@@ -206,6 +208,20 @@ func (*Response) Descriptor() ([]byte, []int) {
 func (x *Response) GetError() *pb.Error {
 	if x != nil {
 		return x.Error
+	}
+	return nil
+}
+
+func (x *Response) GetRegister() *Response_Register {
+	if x != nil {
+		return x.Register
+	}
+	return nil
+}
+
+func (x *Response) GetConnect() *Response_Connect {
+	if x != nil {
+		return x.Connect
 	}
 	return nil
 }
@@ -300,6 +316,87 @@ func (x *Request_Connect) GetName() string {
 	return ""
 }
 
+type Response_Register struct {
+	state         protoimpl.MessageState
+	sizeCache     protoimpl.SizeCache
+	unknownFields protoimpl.UnknownFields
+}
+
+func (x *Response_Register) Reset() {
+	*x = Response_Register{}
+	mi := &file_server_proto_msgTypes[6]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *Response_Register) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*Response_Register) ProtoMessage() {}
+
+func (x *Response_Register) ProtoReflect() protoreflect.Message {
+	mi := &file_server_proto_msgTypes[6]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use Response_Register.ProtoReflect.Descriptor instead.
+func (*Response_Register) Descriptor() ([]byte, []int) {
+	return file_server_proto_rawDescGZIP(), []int{3, 0}
+}
+
+type Response_Connect struct {
+	state         protoimpl.MessageState
+	sizeCache     protoimpl.SizeCache
+	unknownFields protoimpl.UnknownFields
+
+	DirectAddresses []string `protobuf:"bytes,4,rep,name=direct_addresses,json=directAddresses,proto3" json:"direct_addresses,omitempty"`
+}
+
+func (x *Response_Connect) Reset() {
+	*x = Response_Connect{}
+	mi := &file_server_proto_msgTypes[7]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *Response_Connect) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*Response_Connect) ProtoMessage() {}
+
+func (x *Response_Connect) ProtoReflect() protoreflect.Message {
+	mi := &file_server_proto_msgTypes[7]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use Response_Connect.ProtoReflect.Descriptor instead.
+func (*Response_Connect) Descriptor() ([]byte, []int) {
+	return file_server_proto_rawDescGZIP(), []int{3, 1}
+}
+
+func (x *Response_Connect) GetDirectAddresses() []string {
+	if x != nil {
+		return x.DirectAddresses
+	}
+	return nil
+}
+
 var File_server_proto protoreflect.FileDescriptor
 
 var file_server_proto_rawDesc = []byte{
@@ -322,13 +419,24 @@ var file_server_proto_rawDesc = []byte{
 	0x73, 0x74, 0x65, 0x72, 0x12, 0x12, 0x0a, 0x04, 0x6e, 0x61, 0x6d, 0x65, 0x18, 0x01, 0x20, 0x01,
 	0x28, 0x09, 0x52, 0x04, 0x6e, 0x61, 0x6d, 0x65, 0x1a, 0x1d, 0x0a, 0x07, 0x43, 0x6f, 0x6e, 0x6e,
 	0x65, 0x63, 0x74, 0x12, 0x12, 0x0a, 0x04, 0x6e, 0x61, 0x6d, 0x65, 0x18, 0x01, 0x20, 0x01, 0x28,
-	0x09, 0x52, 0x04, 0x6e, 0x61, 0x6d, 0x65, 0x22, 0x2f, 0x0a, 0x08, 0x52, 0x65, 0x73, 0x70, 0x6f,
-	0x6e, 0x73, 0x65, 0x12, 0x23, 0x0a, 0x05, 0x65, 0x72, 0x72, 0x6f, 0x72, 0x18, 0x01, 0x20, 0x01,
-	0x28, 0x0b, 0x32, 0x0d, 0x2e, 0x73, 0x68, 0x61, 0x72, 0x65, 0x64, 0x2e, 0x45, 0x72, 0x72, 0x6f,
-	0x72, 0x52, 0x05, 0x65, 0x72, 0x72, 0x6f, 0x72, 0x42, 0x23, 0x5a, 0x21, 0x67, 0x69, 0x74, 0x68,
-	0x75, 0x62, 0x2e, 0x63, 0x6f, 0x6d, 0x2f, 0x6b, 0x65, 0x69, 0x68, 0x61, 0x79, 0x61, 0x2d, 0x63,
-	0x6f, 0x6d, 0x2f, 0x63, 0x6f, 0x6e, 0x6e, 0x65, 0x74, 0x2f, 0x70, 0x62, 0x73, 0x62, 0x06, 0x70,
-	0x72, 0x6f, 0x74, 0x6f, 0x33,
+	0x09, 0x52, 0x04, 0x6e, 0x61, 0x6d, 0x65, 0x22, 0xdc, 0x01, 0x0a, 0x08, 0x52, 0x65, 0x73, 0x70,
+	0x6f, 0x6e, 0x73, 0x65, 0x12, 0x23, 0x0a, 0x05, 0x65, 0x72, 0x72, 0x6f, 0x72, 0x18, 0x01, 0x20,
+	0x01, 0x28, 0x0b, 0x32, 0x0d, 0x2e, 0x73, 0x68, 0x61, 0x72, 0x65, 0x64, 0x2e, 0x45, 0x72, 0x72,
+	0x6f, 0x72, 0x52, 0x05, 0x65, 0x72, 0x72, 0x6f, 0x72, 0x12, 0x35, 0x0a, 0x08, 0x72, 0x65, 0x67,
+	0x69, 0x73, 0x74, 0x65, 0x72, 0x18, 0x02, 0x20, 0x01, 0x28, 0x0b, 0x32, 0x19, 0x2e, 0x73, 0x65,
+	0x72, 0x76, 0x65, 0x72, 0x2e, 0x52, 0x65, 0x73, 0x70, 0x6f, 0x6e, 0x73, 0x65, 0x2e, 0x52, 0x65,
+	0x67, 0x69, 0x73, 0x74, 0x65, 0x72, 0x52, 0x08, 0x72, 0x65, 0x67, 0x69, 0x73, 0x74, 0x65, 0x72,
+	0x12, 0x32, 0x0a, 0x07, 0x63, 0x6f, 0x6e, 0x6e, 0x65, 0x63, 0x74, 0x18, 0x03, 0x20, 0x01, 0x28,
+	0x0b, 0x32, 0x18, 0x2e, 0x73, 0x65, 0x72, 0x76, 0x65, 0x72, 0x2e, 0x52, 0x65, 0x73, 0x70, 0x6f,
+	0x6e, 0x73, 0x65, 0x2e, 0x43, 0x6f, 0x6e, 0x6e, 0x65, 0x63, 0x74, 0x52, 0x07, 0x63, 0x6f, 0x6e,
+	0x6e, 0x65, 0x63, 0x74, 0x1a, 0x0a, 0x0a, 0x08, 0x52, 0x65, 0x67, 0x69, 0x73, 0x74, 0x65, 0x72,
+	0x1a, 0x34, 0x0a, 0x07, 0x43, 0x6f, 0x6e, 0x6e, 0x65, 0x63, 0x74, 0x12, 0x29, 0x0a, 0x10, 0x64,
+	0x69, 0x72, 0x65, 0x63, 0x74, 0x5f, 0x61, 0x64, 0x64, 0x72, 0x65, 0x73, 0x73, 0x65, 0x73, 0x18,
+	0x04, 0x20, 0x03, 0x28, 0x09, 0x52, 0x0f, 0x64, 0x69, 0x72, 0x65, 0x63, 0x74, 0x41, 0x64, 0x64,
+	0x72, 0x65, 0x73, 0x73, 0x65, 0x73, 0x42, 0x23, 0x5a, 0x21, 0x67, 0x69, 0x74, 0x68, 0x75, 0x62,
+	0x2e, 0x63, 0x6f, 0x6d, 0x2f, 0x6b, 0x65, 0x69, 0x68, 0x61, 0x79, 0x61, 0x2d, 0x63, 0x6f, 0x6d,
+	0x2f, 0x63, 0x6f, 0x6e, 0x6e, 0x65, 0x74, 0x2f, 0x70, 0x62, 0x73, 0x62, 0x06, 0x70, 0x72, 0x6f,
+	0x74, 0x6f, 0x33,
 }
 
 var (
@@ -343,26 +451,30 @@ func file_server_proto_rawDescGZIP() []byte {
 	return file_server_proto_rawDescData
 }
 
-var file_server_proto_msgTypes = make([]protoimpl.MessageInfo, 6)
+var file_server_proto_msgTypes = make([]protoimpl.MessageInfo, 8)
 var file_server_proto_goTypes = []any{
-	(*Authenticate)(nil),     // 0: server.Authenticate
-	(*AuthenticateResp)(nil), // 1: server.AuthenticateResp
-	(*Request)(nil),          // 2: server.Request
-	(*Response)(nil),         // 3: server.Response
-	(*Request_Register)(nil), // 4: server.Request.Register
-	(*Request_Connect)(nil),  // 5: server.Request.Connect
-	(*pb.Error)(nil),         // 6: shared.Error
+	(*Authenticate)(nil),      // 0: server.Authenticate
+	(*AuthenticateResp)(nil),  // 1: server.AuthenticateResp
+	(*Request)(nil),           // 2: server.Request
+	(*Response)(nil),          // 3: server.Response
+	(*Request_Register)(nil),  // 4: server.Request.Register
+	(*Request_Connect)(nil),   // 5: server.Request.Connect
+	(*Response_Register)(nil), // 6: server.Response.Register
+	(*Response_Connect)(nil),  // 7: server.Response.Connect
+	(*pb.Error)(nil),          // 8: shared.Error
 }
 var file_server_proto_depIdxs = []int32{
-	6, // 0: server.AuthenticateResp.error:type_name -> shared.Error
+	8, // 0: server.AuthenticateResp.error:type_name -> shared.Error
 	4, // 1: server.Request.register:type_name -> server.Request.Register
 	5, // 2: server.Request.connect:type_name -> server.Request.Connect
-	6, // 3: server.Response.error:type_name -> shared.Error
-	4, // [4:4] is the sub-list for method output_type
-	4, // [4:4] is the sub-list for method input_type
-	4, // [4:4] is the sub-list for extension type_name
-	4, // [4:4] is the sub-list for extension extendee
-	0, // [0:4] is the sub-list for field type_name
+	8, // 3: server.Response.error:type_name -> shared.Error
+	6, // 4: server.Response.register:type_name -> server.Response.Register
+	7, // 5: server.Response.connect:type_name -> server.Response.Connect
+	6, // [6:6] is the sub-list for method output_type
+	6, // [6:6] is the sub-list for method input_type
+	6, // [6:6] is the sub-list for extension type_name
+	6, // [6:6] is the sub-list for extension extendee
+	0, // [0:6] is the sub-list for field type_name
 }
 
 func init() { file_server_proto_init() }
@@ -376,7 +488,7 @@ func file_server_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: file_server_proto_rawDesc,
 			NumEnums:      0,
-			NumMessages:   6,
+			NumMessages:   8,
 			NumExtensions: 0,
 			NumServices:   0,
 		},
