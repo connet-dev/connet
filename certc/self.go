@@ -48,12 +48,12 @@ func SelfSigned() (tls.Certificate, error) {
 	if err != nil {
 		return tls.Certificate{}, kleverr.Ret(err)
 	}
-	certKeyPEM := pem.EncodeToMemory(&pem.Block{
+	keyPEM := pem.EncodeToMemory(&pem.Block{
 		Type:  "PRIVATE KEY",
 		Bytes: keyData,
 	})
 
-	cert, err := tls.X509KeyPair(certPEM, certKeyPEM)
+	cert, err := tls.X509KeyPair(certPEM, keyPEM)
 	if err != nil {
 		return tls.Certificate{}, kleverr.Ret(err)
 	}

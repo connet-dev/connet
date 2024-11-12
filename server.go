@@ -251,7 +251,18 @@ func (c *serverClient) authenticate(ctx context.Context) (authc.Authentication, 
 		return retAuth(err)
 	}
 
-	if err := pb.Write(authStream, &pbs.AuthenticateResp{}); err != nil {
+	origin, err := pb.NewAddrPort(c.conn.RemoteAddr())
+	if err != nil {
+		err := pb.NewError(pb.Error_AuthenticationFailed, "cannot resolve origin: %v", err)
+		if err := pb.Write(authStream, &pbs.AuthenticateResp{Error: err}); err != nil {
+			return retAuth(err)
+		}
+		return retAuth(err)
+	}
+
+	if err := pb.Write(authStream, &pbs.AuthenticateResp{
+		Origin: origin,
+	}); err != nil {
 		return retAuth(err)
 	}
 

@@ -25,8 +25,9 @@ type Client struct {
 
 func NewClient(opts ...ClientOption) (*Client, error) {
 	cfg := &clientConfig{
-		address: "127.0.0.1:19190",
-		logger:  slog.Default(),
+		serverAddress: "127.0.0.1:19190",
+		localAddress:  "0.0.0.0:19191",
+		logger:        slog.Default(),
 	}
 	for _, opt := range opts {
 		if err := opt(cfg); err != nil {
@@ -40,7 +41,19 @@ func NewClient(opts ...ClientOption) (*Client, error) {
 }
 
 func (c *Client) Run(ctx context.Context) error {
-	conn, err := c.connect(ctx)
+	c.logger.Debug("resolving udp address", "addr", c.localAddress)
+	addr, err := net.ResolveUDPAddr("udp", c.localAddress)
+	if err != nil {
+		return kleverr.Ret(err)
+	}
+	c.logger.Debug("start udp listener", "addr", addr)
+	localConn, err := net.ListenUDP("udp", addr)
+	if err != nil {
+		return kleverr.Ret(err)
+	}
+	defer localConn.Close()
+
+	conn, err := c.connect(ctx, localConn)
 	if err != nil {
 		return err
 	}
@@ -57,15 +70,20 @@ func (c *Client) Run(ctx context.Context) error {
 			return err
 		}
 
-		if conn, err = c.reconnect(ctx); err != nil {
+		if conn, err = c.reconnect(ctx, localConn); err != nil {
 			return err
 		}
 	}
 }
 
-func (c *Client) connect(ctx context.Context) (quic.Connection, error) {
-	c.logger.Debug("dialing target", "addr", c.address)
-	conn, err := quic.DialAddr(ctx, c.address, &tls.Config{
+func (c *Client) connect(ctx context.Context, localConn net.PacketConn) (quic.Connection, error) {
+	serverAddr, err := net.ResolveUDPAddr("udp", c.serverAddress)
+	if err != nil {
+		return nil, kleverr.Ret(err)
+	}
+
+	c.logger.Debug("dialing target", "addr", c.serverAddress)
+	conn, err := quic.Dial(ctx, localConn, serverAddr, &tls.Config{
 		RootCAs:            c.cas,
 		InsecureSkipVerify: c.insecure,
 		NextProtos:         []string{"quic-connet"},
@@ -76,7 +94,7 @@ func (c *Client) connect(ctx context.Context) (quic.Connection, error) {
 		return nil, kleverr.Ret(err)
 	}
 
-	c.logger.Debug("authenticating", "addr", c.address)
+	c.logger.Debug("authenticating", "addr", c.serverAddress)
 	authStream, err := conn.OpenStreamSync(ctx)
 	if err != nil {
 		return nil, kleverr.Ret(err)
@@ -97,16 +115,16 @@ func (c *Client) connect(ctx context.Context) (quic.Connection, error) {
 		return nil, kleverr.Ret(resp.Error)
 	}
 
-	c.logger.Info("authenticated")
+	c.logger.Info("authenticated", "origin", resp.Origin.AsNetip())
 
 	return conn, nil
 }
 
-func (c *Client) reconnect(ctx context.Context) (quic.Connection, error) {
+func (c *Client) reconnect(ctx context.Context, localConn net.PacketConn) (quic.Connection, error) {
 	for {
 		time.Sleep(time.Second) // TODO backoff and such
 
-		if conn, err := c.connect(ctx); err != nil {
+		if conn, err := c.connect(ctx, localConn); err != nil {
 			c.logger.Debug("reconnect failed, retrying", "err", err)
 		} else {
 			return conn, nil
@@ -122,15 +140,18 @@ type clientSession struct {
 }
 
 func (s *clientSession) run(ctx context.Context) error {
-	for name, addr := range s.client.destinations {
-		if err := s.registerDestination(ctx, name, addr); err != nil {
-			return err
-		}
-	}
-
 	g, ctx := errgroup.WithContext(ctx)
 
 	g.Go(func() error {
+		return s.runDirect(ctx)
+	})
+
+	g.Go(func() error {
+		for name, addr := range s.client.destinations {
+			if err := s.registerDestination(ctx, name, addr); err != nil {
+				return err
+			}
+		}
 		return s.runDestinations(ctx)
 	})
 
@@ -235,6 +256,11 @@ func (s *clientSession) unknown(ctx context.Context, stream quic.Stream, req *pb
 	}
 }
 
+func (c *clientSession) runDirect(ctx context.Context) error {
+
+	return nil
+}
+
 type clientSource struct {
 	sess            *clientSession
 	localAddr       string
@@ -289,20 +315,28 @@ func (s *clientSource) runConn(ctx context.Context, conn net.Conn) {
 }
 
 type clientConfig struct {
-	address      string
-	token        string
-	sources      map[string]string
-	destinations map[string]string
-	cas          *x509.CertPool
-	insecure     bool
-	logger       *slog.Logger
+	serverAddress string
+	localAddress  string
+	token         string
+	sources       map[string]string
+	destinations  map[string]string
+	cas           *x509.CertPool
+	insecure      bool
+	logger        *slog.Logger
 }
 
 type ClientOption func(cfg *clientConfig) error
 
-func ClientServer(addr string) ClientOption {
+func ClientServerAddress(addr string) ClientOption {
 	return func(cfg *clientConfig) error {
-		cfg.address = addr
+		cfg.serverAddress = addr
+		return nil
+	}
+}
+
+func ClientLocalAddress(addr string) ClientOption {
+	return func(cfg *clientConfig) error {
+		cfg.localAddress = addr
 		return nil
 	}
 }

@@ -10,8 +10,8 @@ import (
 	"github.com/keihaya-com/connet"
 )
 
-var debug = flag.Bool("debug", false, "turn on debug logging")
-var server = flag.String("server", "127.0.0.1:19190", "target server")
+var serverAddr = flag.String("server-addr", "127.0.0.1:19190", "target server")
+var localAddr = flag.String("listen-addr", "", "the address to listen for direct connections")
 var auth = flag.String("auth", "", "authentication token")
 var listenName = flag.String("listen-name", "", "name to listen on")
 var listenTarget = flag.String("listen-target", "", "forward incoming conns to")
@@ -19,6 +19,7 @@ var connectName = flag.String("connect-name", "", "name to connect to")
 var connectSource = flag.String("connect-source", "", "listen for incoming conns")
 var caCert = flag.String("ca-cert", "", "ca cert file to use")
 var caKey = flag.String("ca-key", "", "ca key file to use")
+var debug = flag.Bool("debug", false, "turn on debug logging")
 
 func main() {
 	if err := flag.CommandLine.Parse(os.Args[1:]); err != nil {
@@ -28,8 +29,12 @@ func main() {
 	}
 
 	var opts = []connet.ClientOption{
-		connet.ClientServer(*server),
+		connet.ClientServerAddress(*serverAddr),
 		connet.ClientAuthentication(*auth),
+	}
+
+	if *localAddr != "" {
+		opts = append(opts, connet.ClientLocalAddress(*localAddr))
 	}
 
 	if *caCert != "" {

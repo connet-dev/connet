@@ -11,6 +11,8 @@ message Authenticate {
 
 message AuthenticateResp {
   shared.Error error = 1;
+
+  shared.AddrPort origin = 2;
 }
 
 message Request {

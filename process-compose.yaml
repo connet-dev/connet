@@ -1,17 +1,25 @@
 version: "0.5"
 
 processes:
+  build:
+    command: make
   certs:
     command: gen-local-certs
   server:
     command: connet-server -debug -auth xxyxx -server-cert .direnv/localhost/cert.pem -server-key .direnv/localhost/key.pem
     depends_on:
+      build:
+        condition: process_completed
       certs:
         condition: process_completed
   client:
-    command: connet -debug -auth xxyxx -listen-name sws -listen-target ":8080" -connect-name sws -connect-source ":9999" -ca-cert .direnv/minica.pem -ca-key .direnv/minica-key.pem
+    command: connet -debug -auth xxyxx -listen-name sws -listen-target ":8081" -connect-name sws -connect-source ":9999" -ca-cert .direnv/minica.pem -ca-key .direnv/minica-key.pem
     depends_on:
+      build:
+        condition: process_completed
       certs:
         condition: process_completed
+      server:
+        condition: process_started
   upstream:
-    command: static-web-server --port 8080 --root . --directory-listing
+    command: static-web-server --port 8081 --root . --directory-listing

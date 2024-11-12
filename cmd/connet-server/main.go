@@ -11,10 +11,11 @@ import (
 	"github.com/keihaya-com/connet/authc"
 )
 
-var debug = flag.Bool("debug", false, "turn on debug logging")
 var auth = flag.String("auth", "", "authentication token")
+var listenAddr = flag.String("listen-addr", "", "the address to listen for connections")
 var serverCert = flag.String("server-cert", "", "cert file to use")
 var serverKey = flag.String("server-key", "", "key file to use")
+var debug = flag.Bool("debug", false, "turn on debug logging")
 
 func main() {
 	if err := flag.CommandLine.Parse(os.Args[1:]); err != nil {
@@ -31,6 +32,10 @@ func main() {
 
 	opts := []connet.ServerOption{
 		connet.ServerAuthenticator(authc.NewStatic(*auth)),
+	}
+
+	if *listenAddr != "" {
+		opts = append(opts, connet.ServerAddress(*listenAddr))
 	}
 
 	if *serverCert != "" {

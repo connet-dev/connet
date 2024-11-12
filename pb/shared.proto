@@ -3,6 +3,16 @@ package shared;
 
 option go_package = "github.com/keihaya-com/connet/pb";
 
+message Addr {
+  bytes v4 = 1;
+  bytes v6 = 2;
+}
+
+message AddrPort {
+  Addr addr = 1;
+  uint32 port = 2; // really uint16, but not a thing in protobuf
+}
+
 message Error {
   Code code = 1;
   string message = 2;
