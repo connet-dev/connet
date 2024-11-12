@@ -26,7 +26,8 @@ import (
 type Server struct {
 	serverConfig
 
-	realms map[string]*realmClients
+	realms   map[string]*realmClients
+	realmsMu sync.RWMutex
 }
 
 func NewServer(opts ...ServerOption) (*Server, error) {
@@ -40,17 +41,9 @@ func NewServer(opts ...ServerOption) (*Server, error) {
 		}
 	}
 
-	if len(cfg.auth.Realms()) == 0 {
-		return nil, kleverr.New("no realms defined")
-	}
-	realms := map[string]*realmClients{}
-	for _, r := range cfg.auth.Realms() {
-		realms[r] = &realmClients{name: r, targets: map[string]*serverClient{}}
-	}
-
 	return &Server{
 		serverConfig: *cfg,
-		realms:       realms,
+		realms:       map[string]*realmClients{},
 	}, nil
 }
 
@@ -104,6 +97,28 @@ func (s *Server) Run(ctx context.Context) error {
 	}
 }
 
+func (s *Server) getRealm(name string) *realmClients {
+	s.realmsMu.RLock()
+	realm := s.realms[name]
+	s.realmsMu.RUnlock()
+	if realm != nil {
+		return realm
+	}
+
+	s.realmsMu.Lock()
+	defer s.realmsMu.Unlock()
+	if realm := s.realms[name]; realm != nil {
+		return realm
+	}
+
+	realm = &realmClients{
+		name:    name,
+		targets: map[string]*serverClient{},
+	}
+	s.realms[name] = realm
+	return realm
+}
+
 func (s *Server) register(auth authc.Authentication, name string, c *serverClient) error {
 	localName, realmName, found := strings.Cut(name, "@")
 	if found {
@@ -114,12 +129,7 @@ func (s *Server) register(auth authc.Authentication, name string, c *serverClien
 		realmName = auth.SelfRealm
 	}
 
-	realm, ok := s.realms[realmName]
-	if !ok {
-		return kleverr.Newf("realm not found: %s", realmName)
-	}
-	realm.register(localName, c)
-	return nil
+	return s.getRealm(realmName).register(localName, c)
 }
 
 func (s *Server) find(auth authc.Authentication, name string) (*serverClient, error) {
@@ -132,16 +142,12 @@ func (s *Server) find(auth authc.Authentication, name string) (*serverClient, er
 		realmName = auth.SelfRealm
 	}
 
-	realm, ok := s.realms[realmName]
-	if !ok {
-		return nil, kleverr.Newf("realm not found: %s", realmName)
-	}
-	return realm.find(localName)
+	return s.getRealm(realmName).find(localName)
 }
 
 func (s *Server) deregister(c *serverClient) {
-	for _, realm := range s.realms {
-		realm.deregister(c)
+	for _, realmName := range c.auth.Realms {
+		s.getRealm(realmName).deregister(c)
 	}
 }
 
@@ -151,13 +157,14 @@ type realmClients struct {
 	mu      sync.RWMutex
 }
 
-func (r *realmClients) register(name string, c *serverClient) {
+func (r *realmClients) register(name string, c *serverClient) error {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 
 	r.targets[name] = c
 	// TODO last register wins?
 	// TODO multiple targets
+	return nil
 }
 
 func (r *realmClients) find(name string) (*serverClient, error) {
