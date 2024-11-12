@@ -82,8 +82,14 @@ func (c *Client) connect(ctx context.Context, localConn net.PacketConn) (quic.Co
 		return nil, kleverr.Ret(err)
 	}
 
+	serverName, _, err := net.SplitHostPort(c.serverAddress)
+	if err != nil {
+		serverName = c.serverAddress
+	}
+
 	c.logger.Debug("dialing target", "addr", c.serverAddress)
 	conn, err := quic.Dial(ctx, localConn, serverAddr, &tls.Config{
+		ServerName:         serverName,
 		RootCAs:            c.cas,
 		InsecureSkipVerify: c.insecure,
 		NextProtos:         []string{"quic-connet"},
