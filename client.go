@@ -4,8 +4,11 @@ import (
 	"context"
 	"crypto/tls"
 	"crypto/x509"
+	"errors"
 	"log/slog"
 	"net"
+	"net/netip"
+	"sync"
 	"time"
 
 	"github.com/keihaya-com/connet/certc"
@@ -53,30 +56,23 @@ func (c *Client) Run(ctx context.Context) error {
 	}
 	defer localConn.Close()
 
-	conn, err := c.connect(ctx, localConn)
+	sess, err := c.connect(ctx, localConn)
 	if err != nil {
 		return err
 	}
 
 	for {
-		sid := ksuid.New()
-		s := &clientSession{
-			client: c,
-			id:     sid,
-			conn:   conn,
-			logger: c.logger.With("connection-id", sid),
-		}
-		if err := s.run(ctx); err != nil {
+		if err := sess.run(ctx); err != nil {
 			return err
 		}
 
-		if conn, err = c.reconnect(ctx, localConn); err != nil {
+		if sess, err = c.reconnect(ctx, localConn); err != nil {
 			return err
 		}
 	}
 }
 
-func (c *Client) connect(ctx context.Context, localConn net.PacketConn) (quic.Connection, error) {
+func (c *Client) connect(ctx context.Context, localConn net.PacketConn) (*clientSession, error) {
 	serverAddr, err := net.ResolveUDPAddr("udp", c.serverAddress)
 	if err != nil {
 		return nil, kleverr.Ret(err)
@@ -121,28 +117,36 @@ func (c *Client) connect(ctx context.Context, localConn net.PacketConn) (quic.Co
 		return nil, kleverr.Ret(resp.Error)
 	}
 
-	c.logger.Info("authenticated", "origin", resp.Origin.AsNetip())
+	c.logger.Info("authenticated", "origin", resp.Public.AsNetip())
 
-	return conn, nil
+	sid := ksuid.New()
+	return &clientSession{
+		client:     c,
+		id:         sid,
+		conn:       conn,
+		directAddr: resp.Public.AsNetip(),
+		logger:     c.logger.With("connection-id", sid),
+	}, nil
 }
 
-func (c *Client) reconnect(ctx context.Context, localConn net.PacketConn) (quic.Connection, error) {
+func (c *Client) reconnect(ctx context.Context, localConn net.PacketConn) (*clientSession, error) {
 	for {
 		time.Sleep(time.Second) // TODO backoff and such
 
-		if conn, err := c.connect(ctx, localConn); err != nil {
+		if sess, err := c.connect(ctx, localConn); err != nil {
 			c.logger.Debug("reconnect failed, retrying", "err", err)
 		} else {
-			return conn, nil
+			return sess, nil
 		}
 	}
 }
 
 type clientSession struct {
-	client *Client
-	id     ksuid.KSUID
-	conn   quic.Connection
-	logger *slog.Logger
+	client     *Client
+	id         ksuid.KSUID
+	conn       quic.Connection
+	directAddr netip.AddrPort // TODO these should be multiple, not only from server pov
+	logger     *slog.Logger
 }
 
 func (s *clientSession) run(ctx context.Context) error {
@@ -168,6 +172,7 @@ func (s *clientSession) run(ctx context.Context) error {
 				localAddr:       addr,
 				destinationName: name,
 				logger:          s.logger.With("addr", addr, "name", name),
+				defaultRoute:    s.conn,
 			}
 			return src.run(ctx)
 		})
@@ -185,7 +190,8 @@ func (s *clientSession) registerDestination(ctx context.Context, name, addr stri
 
 	if err := pb.Write(cmdStream, &pbs.Request{
 		Register: &pbs.Request_Register{
-			Name: name,
+			Name:   name,
+			Direct: []*pb.AddrPort{pb.AddrPortFromNetip(s.directAddr)},
 		},
 	}); err != nil {
 		return kleverr.Ret(err)
@@ -243,6 +249,7 @@ func (s *clientSession) destinationConnect(ctx context.Context, stream quic.Stre
 		}
 		return
 	}
+	defer conn.Close()
 
 	if err := pb.Write(stream, &pbc.Response{}); err != nil {
 		s.logger.Warn("could not write response", "name", name, "addr", addr, "err", err)
@@ -272,9 +279,24 @@ type clientSource struct {
 	localAddr       string
 	destinationName string
 	logger          *slog.Logger
+
+	defaultRoute quic.Connection
+	routes       []quic.Connection
+	routesMu     sync.RWMutex
 }
 
 func (s *clientSource) run(ctx context.Context) error {
+	g, ctx := errgroup.WithContext(ctx) // TODO reliable.Group
+	g.Go(func() error {
+		return s.runServer(ctx)
+	})
+	g.Go(func() error {
+		return s.runRoutes(ctx)
+	})
+	return g.Wait()
+}
+
+func (s *clientSource) runServer(ctx context.Context) error {
 	s.logger.Debug("listening for conns")
 	l, err := net.Listen("tcp", s.localAddr)
 	if err != nil {
@@ -291,15 +313,95 @@ func (s *clientSource) run(ctx context.Context) error {
 	}
 }
 
+func (s *clientSource) runRoutes(ctx context.Context) error {
+	for {
+		origins, err := s.loadRoutes(ctx)
+		if err != nil {
+			if errors.Is(err, context.Canceled) {
+				return nil
+			}
+			time.Sleep(time.Second) // TODO reliable sleep
+			continue
+		}
+
+		var routes []quic.Connection
+		for _, origin := range origins {
+			conn, err := s.connectRoute(ctx, origin)
+			if err != nil {
+				// TODO logging?
+				continue
+			}
+
+			routes = append(routes, conn)
+		}
+
+		s.routesMu.Lock()
+		s.routes = routes
+		s.routesMu.Unlock()
+
+		time.Sleep(time.Minute) // TODO reliable sleep
+	}
+}
+
+func (s *clientSource) loadRoutes(ctx context.Context) ([]netip.AddrPort, error) {
+	stream, err := s.defaultRoute.OpenStreamSync(ctx)
+	if err != nil {
+		s.logger.Warn("failed to open server stream", "err", err)
+		return nil, err
+	}
+	defer stream.Close()
+
+	if err := pb.Write(stream, &pbs.Request{
+		Routes: &pbs.Request_Routes{
+			Name: s.destinationName,
+		},
+	}); err != nil {
+		s.logger.Warn("failed to request routes", "err", err)
+		return nil, err
+	}
+
+	resp, err := pbs.ReadResponse(stream)
+	if err != nil {
+		s.logger.Warn("failed to response connection", "err", err)
+		return nil, err
+	}
+
+	var result []netip.AddrPort
+	for _, addr := range resp.Routes.Direct {
+		result = append(result, addr.AsNetip())
+	}
+	s.logger.Info("routes addresses", "addrs", result)
+	return result, nil
+}
+
+func (s *clientSource) connectRoute(ctx context.Context, addr netip.AddrPort) (quic.Connection, error) {
+	return nil, kleverr.Newf("not implemented")
+}
+
+func (s *clientSource) openRoute(ctx context.Context) (quic.Stream, error) {
+	s.routesMu.RLock()
+	routes := s.routes
+	s.routesMu.RUnlock()
+
+	for _, route := range routes {
+		if stream, err := route.OpenStreamSync(ctx); err == nil {
+			return stream, nil
+		}
+	}
+	return s.defaultRoute.OpenStreamSync(ctx)
+}
+
 func (s *clientSource) runConn(ctx context.Context, conn net.Conn) {
 	defer conn.Close()
 
 	s.logger.Debug("received conn", "remote", conn.RemoteAddr())
-	stream, err := s.sess.conn.OpenStreamSync(ctx)
+	stream, err := s.openRoute(ctx)
 	if err != nil {
 		s.logger.Warn("failed to open server stream", "err", err)
 		return
 	}
+	defer stream.Close()
+
 	if err := pb.Write(stream, &pbs.Request{
 		Connect: &pbs.Request_Connect{
 			Name: s.destinationName,
@@ -315,7 +417,7 @@ func (s *clientSource) runConn(ctx context.Context, conn net.Conn) {
 		return
 	}
 
-	s.logger.Debug("joining to server", "direct", resp.Connect.DirectAddresses)
+	s.logger.Debug("joining to server", "direct", resp.Connect)
 	err = netc.Join(ctx, conn, stream)
 	s.logger.Debug("disconnected to server", "err", err)
 }

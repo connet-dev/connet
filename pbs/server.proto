@@ -12,18 +12,23 @@ message Authenticate {
 message AuthenticateResp {
   shared.Error error = 1;
 
-  shared.AddrPort origin = 2;
+  shared.AddrPort public = 2;
 }
 
 message Request {
   // Soft one-of
   Register register = 1;
   Connect connect = 2;
+  Routes routes = 3;
 
   message Register {
     string name = 1;
+    repeated shared.AddrPort direct = 2;
   }
   message Connect {
+    string name = 1;
+  }
+  message Routes {
     string name = 1;
   }
 }
@@ -33,10 +38,13 @@ message Response {
 
   Register register = 2;
   Connect connect = 3;
+  Routes routes = 4;
 
   message Register {
   }
   message Connect {
-    repeated string direct_addresses = 4;
+  }
+  message Routes {
+    repeated shared.AddrPort direct = 4;
   }
 }

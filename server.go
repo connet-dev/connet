@@ -6,7 +6,6 @@ import (
 	"errors"
 	"log/slog"
 	"net"
-	"net/netip"
 	"slices"
 	"strings"
 	"sync"
@@ -113,13 +112,13 @@ func (s *Server) getRealm(name string) *realmClients {
 
 	realm = &realmClients{
 		name:    name,
-		targets: map[string]*serverClient{},
+		targets: map[string]*realmClient{},
 	}
 	s.realms[name] = realm
 	return realm
 }
 
-func (s *Server) register(auth authc.Authentication, name string, c *serverClient) error {
+func (s *Server) register(auth authc.Authentication, name string, c *serverClient, addrs []*pb.AddrPort) error {
 	localName, realmName, found := strings.Cut(name, "@")
 	if found {
 		if !slices.Contains(auth.Realms, realmName) {
@@ -129,7 +128,7 @@ func (s *Server) register(auth authc.Authentication, name string, c *serverClien
 		realmName = auth.SelfRealm
 	}
 
-	return s.getRealm(realmName).register(localName, c)
+	return s.getRealm(realmName).register(localName, c, addrs)
 }
 
 func (s *Server) find(auth authc.Authentication, name string) (*serverClient, error) {
@@ -145,6 +144,19 @@ func (s *Server) find(auth authc.Authentication, name string) (*serverClient, er
 	return s.getRealm(realmName).find(localName)
 }
 
+func (s *Server) findAddrs(auth authc.Authentication, name string) ([]*pb.AddrPort, error) {
+	localName, realmName, found := strings.Cut(name, "@")
+	if found {
+		if !slices.Contains(auth.Realms, realmName) {
+			return nil, kleverr.Newf("realm not accessible: %s", realmName)
+		}
+	} else {
+		realmName = auth.SelfRealm
+	}
+
+	return s.getRealm(realmName).findAddrs(localName)
+}
+
 func (s *Server) deregister(c *serverClient) {
 	for _, realmName := range c.auth.Realms {
 		s.getRealm(realmName).deregister(c)
@@ -153,15 +165,20 @@ func (s *Server) deregister(c *serverClient) {
 
 type realmClients struct {
 	name    string
-	targets map[string]*serverClient
+	targets map[string]*realmClient
 	mu      sync.RWMutex
 }
 
-func (r *realmClients) register(name string, c *serverClient) error {
+type realmClient struct {
+	client *serverClient
+	addrs  []*pb.AddrPort
+}
+
+func (r *realmClients) register(name string, c *serverClient, addrs []*pb.AddrPort) error {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 
-	r.targets[name] = c
+	r.targets[name] = &realmClient{c, addrs}
 	// TODO last register wins?
 	// TODO multiple targets
 	return nil
@@ -175,7 +192,18 @@ func (r *realmClients) find(name string) (*serverClient, error) {
 	if !ok {
 		return nil, kleverr.Newf("target %s not found in %s realm", name, r.name)
 	}
-	return c, nil
+	return c.client, nil
+}
+
+func (r *realmClients) findAddrs(name string) ([]*pb.AddrPort, error) {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+
+	c, ok := r.targets[name]
+	if !ok {
+		return nil, kleverr.Newf("target %s not found in %s realm", name, r.name)
+	}
+	return c.addrs, nil
 }
 
 func (r *realmClients) deregister(c *serverClient) {
@@ -183,7 +211,7 @@ func (r *realmClients) deregister(c *serverClient) {
 	defer r.mu.Unlock()
 
 	for k, v := range r.targets {
-		if v.id == c.id {
+		if v.client.id == c.id {
 			delete(r.targets, k)
 		}
 	}
@@ -251,7 +279,7 @@ func (c *serverClient) authenticate(ctx context.Context) (authc.Authentication, 
 		return retAuth(err)
 	}
 
-	origin, err := pb.NewAddrPort(c.conn.RemoteAddr())
+	origin, err := pb.AddrPortFromNet(c.conn.RemoteAddr())
 	if err != nil {
 		err := pb.NewError(pb.Error_AuthenticationFailed, "cannot resolve origin: %v", err)
 		if err := pb.Write(authStream, &pbs.AuthenticateResp{Error: err}); err != nil {
@@ -261,7 +289,7 @@ func (c *serverClient) authenticate(ctx context.Context) (authc.Authentication, 
 	}
 
 	if err := pb.Write(authStream, &pbs.AuthenticateResp{
-		Origin: origin,
+		Public: origin,
 	}); err != nil {
 		return retAuth(err)
 	}
@@ -289,16 +317,18 @@ func (s *serverStream) run(ctx context.Context) {
 
 	switch {
 	case req.Register != nil:
-		s.register(ctx, req.Register.Name)
+		s.register(ctx, req.Register)
 	case req.Connect != nil:
-		s.connect(ctx, req.Connect.Name)
+		s.connect(ctx, req.Connect)
+	case req.Routes != nil:
+		s.routes(ctx, req.Routes)
 	default:
 		s.unknown(ctx, req)
 	}
 }
 
-func (s *serverStream) register(ctx context.Context, name string) {
-	if err := s.client.server.register(s.client.auth, name, s.client); err != nil {
+func (s *serverStream) register(ctx context.Context, req *pbs.Request_Register) {
+	if err := s.client.server.register(s.client.auth, req.Name, s.client, req.Direct); err != nil {
 		// TODO better errors, codes from below
 		err := pb.NewError(pb.Error_RegistrationFailed, "registration failed: %v", err)
 		if err := pb.Write(s.stream, &pbs.Response{Error: err}); err != nil {
@@ -306,14 +336,15 @@ func (s *serverStream) register(ctx context.Context, name string) {
 		}
 		return
 	}
-	s.logger.Info("registered listener", "name", name)
+	s.logger.Info("registered listener", "name", req.Name)
 
 	if err := pb.Write(s.stream, &pbs.Response{}); err != nil {
 		s.logger.Warn("cannot write register response", "err", err)
 	}
 }
 
-func (s *serverStream) connect(ctx context.Context, name string) {
+func (s *serverStream) connect(ctx context.Context, req *pbs.Request_Connect) {
+	name := req.Name
 	s.logger.Debug("lookup listener", "name", name)
 	otherConn, err := s.client.server.find(s.client.auth, name)
 	if err != nil {
@@ -360,15 +391,8 @@ func (s *serverStream) connect(ctx context.Context, name string) {
 		return
 	}
 
-	var directAddrs []string
-	otherAddrPort, err := netip.ParseAddrPort(otherConn.conn.RemoteAddr().String())
-	if err == nil {
-		directAddrs = append(directAddrs, otherAddrPort.Addr().String())
-	}
 	if err := pb.Write(s.stream, &pbs.Response{
-		Connect: &pbs.Response_Connect{
-			DirectAddresses: directAddrs,
-		},
+		Connect: &pbs.Response_Connect{},
 	}); err != nil {
 		s.logger.Warn("failed to write response", "err", err)
 		return
@@ -377,6 +401,27 @@ func (s *serverStream) connect(ctx context.Context, name string) {
 	s.logger.Info("joining conns", "name", name)
 	err = netc.Join(ctx, s.stream, otherStream)
 	s.logger.Info("disconnected conns", "name", name, "err", err)
+}
+
+func (s *serverStream) routes(ctx context.Context, req *pbs.Request_Routes) {
+	addrs, err := s.client.server.findAddrs(s.client.auth, req.Name)
+	if err != nil {
+		s.logger.Debug("listener lookup failed", "name", req.Name, "err", err)
+		err := pb.NewError(pb.Error_ListenerNotFound, "failed to lookup registration: %v", err)
+		if err := pb.Write(s.stream, &pbs.Response{Error: err}); err != nil {
+			s.logger.Warn("failed to write response", "err", err)
+		}
+		return
+	}
+
+	if err := pb.Write(s.stream, &pbs.Response{
+		Routes: &pbs.Response_Routes{
+			Direct: addrs,
+		},
+	}); err != nil {
+		s.logger.Warn("failed to write response", "err", err)
+		return
+	}
 }
 
 func (s *serverStream) unknown(ctx context.Context, req *pbs.Request) {
