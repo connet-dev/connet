@@ -84,6 +84,7 @@ func (s *Server) Run(ctx context.Context) error {
 				return nil
 			}
 		}
+		s.logger.Info("client connected", "local", conn.LocalAddr(), "remote", conn.RemoteAddr())
 
 		scID := ksuid.New()
 		sc := &serverClient{

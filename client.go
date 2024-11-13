@@ -83,8 +83,12 @@ func (c *Client) connect(ctx context.Context, localConn net.PacketConn) (*client
 		serverName = c.serverAddress
 	}
 
+	tr := &quic.Transport{
+		Conn: localConn,
+	}
+
 	c.logger.Debug("dialing target", "addr", c.serverAddress)
-	conn, err := quic.Dial(ctx, localConn, serverAddr, &tls.Config{
+	conn, err := tr.Dial(ctx, serverAddr, &tls.Config{
 		ServerName:         serverName,
 		RootCAs:            c.cas,
 		InsecureSkipVerify: c.insecure,
