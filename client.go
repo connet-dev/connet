@@ -88,7 +88,7 @@ func (c *Client) connect(ctx context.Context, localConn net.PacketConn) (*client
 		ServerName:         serverName,
 		RootCAs:            c.cas,
 		InsecureSkipVerify: c.insecure,
-		NextProtos:         []string{"quic-connet"},
+		NextProtos:         []string{"connet"},
 	}, &quic.Config{
 		KeepAlivePeriod: 25 * time.Second,
 	})

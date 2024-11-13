@@ -67,7 +67,7 @@ func (s *Server) Run(ctx context.Context) error {
 	s.logger.Debug("start quic listener", "addr", addr)
 	l, err := tr.Listen(&tls.Config{
 		Certificates: []tls.Certificate{*s.certificate},
-		NextProtos:   []string{"quic-connet"},
+		NextProtos:   []string{"connet"},
 	}, &quic.Config{
 		KeepAlivePeriod: 25 * time.Second,
 	})
