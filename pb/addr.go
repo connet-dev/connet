@@ -6,11 +6,18 @@ import (
 )
 
 func AddrPortFromNet(addr net.Addr) (*AddrPort, error) {
-	naddr, err := netip.ParseAddrPort(addr.String())
-	if err != nil {
-		return nil, err
+	switch t := addr.(type) {
+	case *net.UDPAddr:
+		return AddrPortFromNetip(t.AddrPort()), nil
+	case *net.TCPAddr:
+		return AddrPortFromNetip(t.AddrPort()), nil
+	default:
+		naddr, err := netip.ParseAddrPort(addr.String())
+		if err != nil {
+			return nil, err
+		}
+		return AddrPortFromNetip(naddr), nil
 	}
-	return AddrPortFromNetip(naddr), nil
 }
 
 func AddrPortFromNetip(addr netip.AddrPort) *AddrPort {
@@ -19,7 +26,7 @@ func AddrPortFromNetip(addr netip.AddrPort) *AddrPort {
 		v6 := addr.Addr().As16()
 		paddr = &Addr{V6: v6[:]}
 	} else {
-		v4 := addr.Addr().As16()
+		v4 := addr.Addr().As4()
 		paddr = &Addr{V4: v4[:]}
 	}
 
