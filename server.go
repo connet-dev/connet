@@ -295,7 +295,7 @@ func (c *serverClient) authenticate(ctx context.Context) (authc.Authentication, 
 		return retAuth(err)
 	}
 
-	c.logger.Debug("authentication completed", "realms", auth.Realms)
+	c.logger.Debug("authentication completed", "realms", auth.Realms, "local", c.conn.LocalAddr(), "remote", c.conn.RemoteAddr())
 	return auth, nil
 }
 
