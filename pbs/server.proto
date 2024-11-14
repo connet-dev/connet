@@ -24,6 +24,7 @@ message Request {
   message Register {
     string name = 1;
     repeated shared.AddrPort direct = 2;
+    shared.Cert cert = 3;
   }
   message Connect {
     string name = 1;
@@ -46,5 +47,6 @@ message Response {
   }
   message Routes {
     repeated shared.AddrPort direct = 1;
+    shared.Cert cert = 2;
   }
 }

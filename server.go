@@ -122,7 +122,7 @@ func (s *Server) getRealm(name string, upsert bool) (*realmClients, error) {
 	return realm, nil
 }
 
-func (s *Server) register(auth authc.Authentication, name string, c *serverClient, addrs []*pb.AddrPort) error {
+func (s *Server) register(auth authc.Authentication, name string, c *serverClient, addrs []*pb.AddrPort, cert *pb.Cert) error {
 	localName, realmName, found := strings.Cut(name, "@")
 	if found {
 		if !slices.Contains(auth.Realms, realmName) {
@@ -136,7 +136,7 @@ func (s *Server) register(auth authc.Authentication, name string, c *serverClien
 	if err != nil {
 		return err
 	}
-	return realm.register(localName, c, addrs)
+	return realm.register(localName, c, addrs, cert)
 }
 
 func (s *Server) find(auth authc.Authentication, name string) (*serverClient, error) {
@@ -156,11 +156,11 @@ func (s *Server) find(auth authc.Authentication, name string) (*serverClient, er
 	return realm.find(localName)
 }
 
-func (s *Server) findAddrs(auth authc.Authentication, name string) ([]*pb.AddrPort, error) {
+func (s *Server) findAddrs(auth authc.Authentication, name string) ([]*pb.AddrPort, *pb.Cert, error) {
 	localName, realmName, found := strings.Cut(name, "@")
 	if found {
 		if !slices.Contains(auth.Realms, realmName) {
-			return nil, kleverr.Newf("realm not accessible: %s", realmName)
+			return nil, nil, kleverr.Newf("realm not accessible: %s", realmName)
 		}
 	} else {
 		realmName = auth.SelfRealm
@@ -168,7 +168,7 @@ func (s *Server) findAddrs(auth authc.Authentication, name string) ([]*pb.AddrPo
 
 	realm, err := s.getRealm(name, false)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 	return realm.findAddrs(localName)
 }
@@ -190,13 +190,14 @@ type realmClients struct {
 type realmClient struct {
 	client *serverClient
 	addrs  []*pb.AddrPort
+	cert   *pb.Cert
 }
 
-func (r *realmClients) register(name string, c *serverClient, addrs []*pb.AddrPort) error {
+func (r *realmClients) register(name string, c *serverClient, addrs []*pb.AddrPort, cert *pb.Cert) error {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 
-	r.targets[name] = &realmClient{c, addrs}
+	r.targets[name] = &realmClient{c, addrs, cert}
 	// TODO last register wins?
 	// TODO multiple targets
 	return nil
@@ -213,15 +214,15 @@ func (r *realmClients) find(name string) (*serverClient, error) {
 	return c.client, nil
 }
 
-func (r *realmClients) findAddrs(name string) ([]*pb.AddrPort, error) {
+func (r *realmClients) findAddrs(name string) ([]*pb.AddrPort, *pb.Cert, error) {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
 
 	c, ok := r.targets[name]
 	if !ok {
-		return nil, kleverr.Newf("target %s not found in %s realm", name, r.name)
+		return nil, nil, kleverr.Newf("target %s not found in %s realm", name, r.name)
 	}
-	return c.addrs, nil
+	return c.addrs, c.cert, nil
 }
 
 func (r *realmClients) deregister(c *serverClient) {
@@ -331,7 +332,7 @@ func (s *serverStream) run(ctx context.Context) {
 		// TODO error
 		return
 	}
-	s.logger.Debug("incomming request", "req", req)
+	s.logger.Debug("incoming request") //, "req", req) prints encoded data
 
 	switch {
 	case req.Register != nil:
@@ -346,7 +347,7 @@ func (s *serverStream) run(ctx context.Context) {
 }
 
 func (s *serverStream) register(ctx context.Context, req *pbs.Request_Register) {
-	err := s.client.server.register(s.client.auth, req.Name, s.client, req.Direct)
+	err := s.client.server.register(s.client.auth, req.Name, s.client, req.Direct, req.Cert)
 	if err != nil {
 		// TODO better errors, codes from below
 		err := pb.NewError(pb.Error_RegistrationFailed, "registration failed: %v", err)
@@ -425,7 +426,7 @@ func (s *serverStream) connect(ctx context.Context, req *pbs.Request_Connect) {
 }
 
 func (s *serverStream) routes(ctx context.Context, req *pbs.Request_Routes) {
-	addrs, err := s.client.server.findAddrs(s.client.auth, req.Name)
+	addrs, cert, err := s.client.server.findAddrs(s.client.auth, req.Name)
 	if err != nil {
 		s.logger.Debug("listener lookup failed", "name", req.Name, "err", err)
 		err := pb.NewError(pb.Error_ListenerNotFound, "failed to lookup registration: %v", err)
@@ -438,6 +439,7 @@ func (s *serverStream) routes(ctx context.Context, req *pbs.Request_Routes) {
 	if err := pb.Write(s.stream, &pbs.Response{
 		Routes: &pbs.Response_Routes{
 			Direct: addrs,
+			Cert:   cert,
 		},
 	}); err != nil {
 		s.logger.Warn("failed to write response", "err", err)

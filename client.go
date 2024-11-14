@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/tls"
 	"crypto/x509"
+	"encoding/pem"
 	"errors"
 	"log/slog"
 	"net"
@@ -57,17 +58,17 @@ func (c *Client) Run(ctx context.Context) error {
 	}
 	defer localConn.Close()
 
-	localCert, err := certc.SelfSigned("connet.internal")
+	rootCert, err := certc.NewRoot()
 	if err != nil {
 		return kleverr.Ret(err)
 	}
-	c.logger.Debug("generated client cert")
+	c.logger.Debug("generated root cert")
 
 	transport := &quic.Transport{
 		Conn: localConn,
 	}
 
-	sess, err := c.connect(ctx, transport, &localCert)
+	sess, err := c.connect(ctx, transport, rootCert)
 	if err != nil {
 		return err
 	}
@@ -78,13 +79,13 @@ func (c *Client) Run(ctx context.Context) error {
 			return err
 		}
 
-		if sess, err = c.reconnect(ctx, transport, &localCert); err != nil {
+		if sess, err = c.reconnect(ctx, transport, rootCert); err != nil {
 			return err
 		}
 	}
 }
 
-func (c *Client) connect(ctx context.Context, transport *quic.Transport, localCert *tls.Certificate) (*clientSession, error) {
+func (c *Client) connect(ctx context.Context, transport *quic.Transport, rootCert *certc.Cert) (*clientSession, error) {
 	serverAddr, err := net.ResolveUDPAddr("udp", c.serverAddress)
 	if err != nil {
 		return nil, kleverr.Ret(err)
@@ -138,15 +139,15 @@ func (c *Client) connect(ctx context.Context, transport *quic.Transport, localCe
 		conn:        conn,
 		directAddrs: []*pb.AddrPort{resp.Public},
 		logger:      c.logger.With("connection-id", sid),
-		localCert:   localCert,
+		rootCert:    rootCert,
 	}, nil
 }
 
-func (c *Client) reconnect(ctx context.Context, transport *quic.Transport, localCert *tls.Certificate) (*clientSession, error) {
+func (c *Client) reconnect(ctx context.Context, transport *quic.Transport, rootCert *certc.Cert) (*clientSession, error) {
 	for {
 		time.Sleep(time.Second) // TODO backoff and such
 
-		if sess, err := c.connect(ctx, transport, localCert); err != nil {
+		if sess, err := c.connect(ctx, transport, rootCert); err != nil {
 			c.logger.Debug("reconnect failed, retrying", "err", err)
 		} else {
 			return sess, nil
@@ -161,19 +162,24 @@ type clientSession struct {
 	conn        quic.Connection
 	directAddrs []*pb.AddrPort // TODO these should be multiple, not only from server pov
 	logger      *slog.Logger
-	localCert   *tls.Certificate
+	rootCert    *certc.Cert
 }
 
 func (s *clientSession) run(ctx context.Context) error {
+	intCert, err := s.rootCert.NewIntermediate(certc.CertOpts{})
+	if err != nil {
+		return err
+	}
+
 	g, ctx := errgroup.WithContext(ctx)
 
 	g.Go(func() error {
-		return s.runDirect(ctx)
+		return s.runDirect(ctx, intCert)
 	})
 
 	g.Go(func() error {
 		for name, addr := range s.client.destinations {
-			if err := s.registerDestination(ctx, name, addr); err != nil {
+			if err := s.registerDestination(ctx, name, addr, intCert); err != nil {
 				return err
 			}
 		}
@@ -196,7 +202,16 @@ func (s *clientSession) run(ctx context.Context) error {
 	return g.Wait()
 }
 
-func (s *clientSession) registerDestination(ctx context.Context, name, addr string) error {
+func (s *clientSession) registerDestination(ctx context.Context, name, addr string, parent *certc.Cert) error {
+	destCert, err := parent.NewClient(certc.CertOpts{Domains: []string{"connet-direct"}})
+	if err != nil {
+		return kleverr.Ret(err)
+	}
+	cert, err := pb.NewCert(destCert, parent)
+	if err != nil {
+		return kleverr.Ret(err)
+	}
+
 	cmdStream, err := s.conn.OpenStreamSync(ctx)
 	if err != nil {
 		return kleverr.Ret(err)
@@ -207,6 +222,7 @@ func (s *clientSession) registerDestination(ctx context.Context, name, addr stri
 		Register: &pbs.Request_Register{
 			Name:   name,
 			Direct: s.directAddrs,
+			Cert:   cert,
 		},
 	}); err != nil {
 		return kleverr.Ret(err)
@@ -284,9 +300,24 @@ func (s *clientSession) unknown(ctx context.Context, stream quic.Stream, req *pb
 	}
 }
 
-func (c *clientSession) runDirect(ctx context.Context) error {
+func (c *clientSession) runDirect(ctx context.Context, parentCert *certc.Cert) error {
+	serverCert, err := parentCert.NewServer(certc.CertOpts{Domains: []string{"connet-direct"}})
+	if err != nil {
+		return err
+	}
+	localCert, err := serverCert.TLSCert()
+	if err != nil {
+		return err
+	}
+	clientCAs, err := parentCert.CertPool()
+	if err != nil {
+		return err
+	}
+
 	l, err := c.transport.Listen(&tls.Config{
-		Certificates: []tls.Certificate{*c.localCert},
+		Certificates: []tls.Certificate{localCert},
+		ClientCAs:    clientCAs,
+		ClientAuth:   tls.RequireAndVerifyClientCert,
 		NextProtos:   []string{"connet-direct"},
 	}, &quic.Config{
 		KeepAlivePeriod: 25 * time.Second,
@@ -359,18 +390,19 @@ func (s *clientSource) runServer(ctx context.Context) error {
 
 func (s *clientSource) runRoutes(ctx context.Context) error {
 	for {
-		origins, err := s.loadRoutes(ctx)
+		origins, cert, pool, err := s.loadRoutes(ctx)
 		if err != nil {
 			if errors.Is(err, context.Canceled) {
 				return nil
 			}
-			time.Sleep(time.Second) // TODO reliable sleep
+			s.logger.Warn("could not load routes", "err", err)
+			time.Sleep(10 * time.Second) // TODO reliable sleep
 			continue
 		}
 
 		var routes []quic.Connection
 		for _, origin := range origins {
-			conn, err := s.connectRoute(ctx, origin)
+			conn, err := s.connectRoute(ctx, origin, cert, pool)
 			if err != nil {
 				s.logger.Debug("direct route dial failed", "err", err)
 				// TODO logging?
@@ -388,11 +420,11 @@ func (s *clientSource) runRoutes(ctx context.Context) error {
 	}
 }
 
-func (s *clientSource) loadRoutes(ctx context.Context) ([]netip.AddrPort, error) {
+func (s *clientSource) loadRoutes(ctx context.Context) ([]netip.AddrPort, tls.Certificate, *x509.CertPool, error) {
 	stream, err := s.defaultRoute.OpenStreamSync(ctx)
 	if err != nil {
 		s.logger.Warn("failed to open server stream", "err", err)
-		return nil, err
+		return nil, tls.Certificate{}, nil, err
 	}
 	defer stream.Close()
 
@@ -402,13 +434,13 @@ func (s *clientSource) loadRoutes(ctx context.Context) ([]netip.AddrPort, error)
 		},
 	}); err != nil {
 		s.logger.Warn("failed to request routes", "err", err)
-		return nil, err
+		return nil, tls.Certificate{}, nil, err
 	}
 
 	resp, err := pbs.ReadResponse(stream)
 	if err != nil {
 		s.logger.Warn("failed to response connection", "err", err)
-		return nil, err
+		return nil, tls.Certificate{}, nil, err
 	}
 
 	var result []netip.AddrPort
@@ -416,15 +448,36 @@ func (s *clientSource) loadRoutes(ctx context.Context) ([]netip.AddrPort, error)
 		result = append(result, addr.AsNetip())
 	}
 	s.logger.Info("routes addresses", "addrs", result)
-	return result, nil
+
+	cert, err := tls.X509KeyPair(resp.Routes.Cert.Der, resp.Routes.Cert.Pkey)
+	if err != nil {
+		s.logger.Warn("failed to parse pair", "err", err)
+		return nil, tls.Certificate{}, nil, err
+	}
+
+	caData, _ := pem.Decode(resp.Routes.Cert.Cas[0])
+	if caData == nil || caData.Type != "CERTIFICATE" {
+		return nil, tls.Certificate{}, nil, kleverr.New("failed to decode pem")
+	}
+	caCert, err := x509.ParseCertificate(caData.Bytes) // TODO
+	if err != nil {
+		s.logger.Warn("failed to parse ca", "err", err)
+		return nil, tls.Certificate{}, nil, err
+	}
+
+	pool := x509.NewCertPool()
+	pool.AddCert(caCert)
+	return result, cert, pool, nil
 }
 
-func (s *clientSource) connectRoute(ctx context.Context, addr netip.AddrPort) (quic.Connection, error) {
+func (s *clientSource) connectRoute(ctx context.Context, addr netip.AddrPort, cert tls.Certificate, caPool *x509.CertPool) (quic.Connection, error) {
 	// TODO do not redial every time
 	// TODO share certs
 	return s.sess.transport.Dial(ctx, net.UDPAddrFromAddrPort(addr), &tls.Config{
-		InsecureSkipVerify: true,
-		NextProtos:         []string{"connet-direct"},
+		Certificates: []tls.Certificate{cert},
+		RootCAs:      caPool,
+		ServerName:   cert.Leaf.DNSNames[0],
+		NextProtos:   []string{"connet-direct"},
 	}, &quic.Config{
 		KeepAlivePeriod: 25 * time.Second,
 	})
