@@ -41,7 +41,9 @@ func main() {
 	if *serverCert != "" {
 		opts = append(opts, connet.ServerCertificate(*serverCert, *serverKey))
 	} else {
-		opts = append(opts, connet.ServerSelfSigned())
+		fmt.Fprintf(os.Stderr, "cert is required")
+		flag.PrintDefaults()
+		os.Exit(1)
 	}
 
 	if *debug {

@@ -49,6 +49,7 @@ func (c *Client) Run(ctx context.Context) error {
 	if err != nil {
 		return kleverr.Ret(err)
 	}
+
 	c.logger.Debug("start udp listener", "addr", addr)
 	localConn, err := net.ListenUDP("udp", addr)
 	if err != nil {
@@ -56,11 +57,17 @@ func (c *Client) Run(ctx context.Context) error {
 	}
 	defer localConn.Close()
 
+	localCert, err := certc.SelfSigned("connet.internal")
+	if err != nil {
+		return kleverr.Ret(err)
+	}
+	c.logger.Debug("generated client cert")
+
 	transport := &quic.Transport{
 		Conn: localConn,
 	}
 
-	sess, err := c.connect(ctx, transport)
+	sess, err := c.connect(ctx, transport, &localCert)
 	if err != nil {
 		return err
 	}
@@ -71,13 +78,13 @@ func (c *Client) Run(ctx context.Context) error {
 			return err
 		}
 
-		if sess, err = c.reconnect(ctx, transport); err != nil {
+		if sess, err = c.reconnect(ctx, transport, &localCert); err != nil {
 			return err
 		}
 	}
 }
 
-func (c *Client) connect(ctx context.Context, transport *quic.Transport) (*clientSession, error) {
+func (c *Client) connect(ctx context.Context, transport *quic.Transport, localCert *tls.Certificate) (*clientSession, error) {
 	serverAddr, err := net.ResolveUDPAddr("udp", c.serverAddress)
 	if err != nil {
 		return nil, kleverr.Ret(err)
@@ -90,10 +97,9 @@ func (c *Client) connect(ctx context.Context, transport *quic.Transport) (*clien
 
 	c.logger.Debug("dialing target", "addr", c.serverAddress)
 	conn, err := transport.Dial(ctx, serverAddr, &tls.Config{
-		ServerName:         serverName,
-		RootCAs:            c.cas,
-		InsecureSkipVerify: c.insecure,
-		NextProtos:         []string{"connet"},
+		ServerName: serverName,
+		RootCAs:    c.cas,
+		NextProtos: []string{"connet"},
 	}, &quic.Config{
 		KeepAlivePeriod: 25 * time.Second,
 	})
@@ -132,14 +138,15 @@ func (c *Client) connect(ctx context.Context, transport *quic.Transport) (*clien
 		conn:        conn,
 		directAddrs: []*pb.AddrPort{resp.Public},
 		logger:      c.logger.With("connection-id", sid),
+		localCert:   localCert,
 	}, nil
 }
 
-func (c *Client) reconnect(ctx context.Context, transport *quic.Transport) (*clientSession, error) {
+func (c *Client) reconnect(ctx context.Context, transport *quic.Transport, localCert *tls.Certificate) (*clientSession, error) {
 	for {
 		time.Sleep(time.Second) // TODO backoff and such
 
-		if sess, err := c.connect(ctx, transport); err != nil {
+		if sess, err := c.connect(ctx, transport, localCert); err != nil {
 			c.logger.Debug("reconnect failed, retrying", "err", err)
 		} else {
 			return sess, nil
@@ -154,6 +161,7 @@ type clientSession struct {
 	conn        quic.Connection
 	directAddrs []*pb.AddrPort // TODO these should be multiple, not only from server pov
 	logger      *slog.Logger
+	localCert   *tls.Certificate
 }
 
 func (s *clientSession) run(ctx context.Context) error {
@@ -277,17 +285,15 @@ func (s *clientSession) unknown(ctx context.Context, stream quic.Stream, req *pb
 }
 
 func (c *clientSession) runDirect(ctx context.Context) error {
-	cert, err := certc.SelfSigned(false, "127.0.0.1")
-	if err != nil {
-		return err
-	}
-
 	l, err := c.transport.Listen(&tls.Config{
-		Certificates: []tls.Certificate{cert},
+		Certificates: []tls.Certificate{*c.localCert},
 		NextProtos:   []string{"connet-direct"},
 	}, &quic.Config{
 		KeepAlivePeriod: 25 * time.Second,
 	})
+	if err != nil {
+		return err
+	}
 
 	c.logger.Debug("listening for direct conns")
 	for {
@@ -499,7 +505,6 @@ type clientConfig struct {
 	sources       map[string]string
 	destinations  map[string]string
 	cas           *x509.CertPool
-	insecure      bool
 	logger        *slog.Logger
 }
 
@@ -556,13 +561,6 @@ func ClientCA(certFile string, keyFile string) ClientOption {
 			cfg.cas = pool
 			return nil
 		}
-	}
-}
-
-func ClientInsecure() ClientOption {
-	return func(cfg *clientConfig) error {
-		cfg.insecure = true
-		return nil
 	}
 }
 

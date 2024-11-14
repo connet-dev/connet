@@ -469,17 +469,6 @@ func ServerAddress(address string) ServerOption {
 	}
 }
 
-func ServerSelfSigned() ServerOption {
-	return func(cfg *serverConfig) error {
-		if cert, err := certc.SelfSigned(false, "127.0.0.1"); err != nil {
-			return err
-		} else {
-			cfg.certificate = &cert
-			return nil
-		}
-	}
-}
-
 func ServerCertificate(cert, key string) ServerOption {
 	return func(cfg *serverConfig) error {
 		if cert, err := certc.Load(cert, key); err != nil {
