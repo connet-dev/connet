@@ -45,6 +45,6 @@ message Response {
   message Connect {
   }
   message Routes {
-    repeated shared.AddrPort direct = 4;
+    repeated shared.AddrPort direct = 1;
   }
 }

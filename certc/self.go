@@ -14,34 +14,49 @@ import (
 	"github.com/klev-dev/kleverr"
 )
 
-func SelfSigned() (tls.Certificate, error) {
+func SelfSigned(ca bool, hosts ...string) (tls.Certificate, error) {
 	pub, priv, err := ed25519.GenerateKey(rand.Reader)
 	if err != nil {
 		return tls.Certificate{}, err
 	}
 
 	template := &x509.Certificate{
-		SerialNumber: big.NewInt(time.Now().UnixMilli()),
+		SerialNumber: big.NewInt(time.Now().UnixMicro()),
 		Subject: pkix.Name{
 			Country:      []string{"US"},
 			Organization: []string{"Connet"},
 		},
-		SubjectKeyId: []byte{1, 2, 3, 4, 6},
-		IPAddresses:  []net.IP{net.ParseIP("127.0.0.1")},
-		NotBefore:    time.Now(),
-		NotAfter:     time.Now().Add(90 * 24 * time.Hour),
-		KeyUsage:     x509.KeyUsageKeyEncipherment | x509.KeyUsageDigitalSignature,
-		ExtKeyUsage:  []x509.ExtKeyUsage{x509.ExtKeyUsageServerAuth},
-		// IsCA:         true,
+
+		NotBefore: time.Now(),
+		NotAfter:  time.Now().Add(90 * 24 * time.Hour),
+
+		KeyUsage:    x509.KeyUsageDigitalSignature,
+		ExtKeyUsage: []x509.ExtKeyUsage{x509.ExtKeyUsageServerAuth},
+
+		BasicConstraintsValid: true,
 	}
-	certData, err := x509.CreateCertificate(rand.Reader, template, template, pub, priv)
+
+	for _, h := range hosts {
+		if ip := net.ParseIP(h); ip != nil {
+			template.IPAddresses = append(template.IPAddresses, ip)
+		} else {
+			template.DNSNames = append(template.DNSNames, h)
+		}
+	}
+
+	if ca {
+		template.IsCA = true
+		template.KeyUsage |= x509.KeyUsageCertSign
+	}
+
+	derBytes, err := x509.CreateCertificate(rand.Reader, template, template, pub, priv)
 	if err != nil {
 		return tls.Certificate{}, kleverr.Ret(err)
 	}
 
 	certPEM := pem.EncodeToMemory(&pem.Block{
 		Type:  "CERTIFICATE",
-		Bytes: certData,
+		Bytes: derBytes,
 	})
 
 	keyData, err := x509.MarshalPKCS8PrivateKey(priv)

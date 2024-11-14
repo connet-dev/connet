@@ -67,6 +67,7 @@ func (c *Client) Run(ctx context.Context) error {
 
 	for {
 		if err := sess.run(ctx); err != nil {
+			c.logger.Error("session ended", "err", err)
 			return err
 		}
 
@@ -125,12 +126,12 @@ func (c *Client) connect(ctx context.Context, transport *quic.Transport) (*clien
 
 	sid := ksuid.New()
 	return &clientSession{
-		client:     c,
-		id:         sid,
-		transport:  transport,
-		conn:       conn,
-		directAddr: resp.Public.AsNetip(),
-		logger:     c.logger.With("connection-id", sid),
+		client:      c,
+		id:          sid,
+		transport:   transport,
+		conn:        conn,
+		directAddrs: []*pb.AddrPort{resp.Public},
+		logger:      c.logger.With("connection-id", sid),
 	}, nil
 }
 
@@ -147,12 +148,12 @@ func (c *Client) reconnect(ctx context.Context, transport *quic.Transport) (*cli
 }
 
 type clientSession struct {
-	client     *Client
-	id         ksuid.KSUID
-	transport  *quic.Transport
-	conn       quic.Connection
-	directAddr netip.AddrPort // TODO these should be multiple, not only from server pov
-	logger     *slog.Logger
+	client      *Client
+	id          ksuid.KSUID
+	transport   *quic.Transport
+	conn        quic.Connection
+	directAddrs []*pb.AddrPort // TODO these should be multiple, not only from server pov
+	logger      *slog.Logger
 }
 
 func (s *clientSession) run(ctx context.Context) error {
@@ -197,7 +198,7 @@ func (s *clientSession) registerDestination(ctx context.Context, name, addr stri
 	if err := pb.Write(cmdStream, &pbs.Request{
 		Register: &pbs.Request_Register{
 			Name:   name,
-			Direct: []*pb.AddrPort{pb.AddrPortFromNetip(s.directAddr)},
+			Direct: s.directAddrs,
 		},
 	}); err != nil {
 		return kleverr.Ret(err)
@@ -276,7 +277,7 @@ func (s *clientSession) unknown(ctx context.Context, stream quic.Stream, req *pb
 }
 
 func (c *clientSession) runDirect(ctx context.Context) error {
-	cert, err := certc.SelfSigned()
+	cert, err := certc.SelfSigned(false, "127.0.0.1")
 	if err != nil {
 		return err
 	}

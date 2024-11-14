@@ -97,18 +97,21 @@ func (s *Server) Run(ctx context.Context) error {
 	}
 }
 
-func (s *Server) getRealm(name string) *realmClients {
+func (s *Server) getRealm(name string, upsert bool) (*realmClients, error) {
 	s.realmsMu.RLock()
 	realm := s.realms[name]
 	s.realmsMu.RUnlock()
 	if realm != nil {
-		return realm
+		return realm, nil
+	}
+	if !upsert {
+		return nil, kleverr.Newf("unknown realm: %s", name)
 	}
 
 	s.realmsMu.Lock()
 	defer s.realmsMu.Unlock()
 	if realm := s.realms[name]; realm != nil {
-		return realm
+		return realm, nil
 	}
 
 	realm = &realmClients{
@@ -116,7 +119,7 @@ func (s *Server) getRealm(name string) *realmClients {
 		targets: map[string]*realmClient{},
 	}
 	s.realms[name] = realm
-	return realm
+	return realm, nil
 }
 
 func (s *Server) register(auth authc.Authentication, name string, c *serverClient, addrs []*pb.AddrPort) error {
@@ -129,7 +132,11 @@ func (s *Server) register(auth authc.Authentication, name string, c *serverClien
 		realmName = auth.SelfRealm
 	}
 
-	return s.getRealm(realmName).register(localName, c, addrs)
+	realm, err := s.getRealm(name, true)
+	if err != nil {
+		return err
+	}
+	return realm.register(localName, c, addrs)
 }
 
 func (s *Server) find(auth authc.Authentication, name string) (*serverClient, error) {
@@ -142,7 +149,11 @@ func (s *Server) find(auth authc.Authentication, name string) (*serverClient, er
 		realmName = auth.SelfRealm
 	}
 
-	return s.getRealm(realmName).find(localName)
+	realm, err := s.getRealm(name, false)
+	if err != nil {
+		return nil, err
+	}
+	return realm.find(localName)
 }
 
 func (s *Server) findAddrs(auth authc.Authentication, name string) ([]*pb.AddrPort, error) {
@@ -155,12 +166,18 @@ func (s *Server) findAddrs(auth authc.Authentication, name string) ([]*pb.AddrPo
 		realmName = auth.SelfRealm
 	}
 
-	return s.getRealm(realmName).findAddrs(localName)
+	realm, err := s.getRealm(name, false)
+	if err != nil {
+		return nil, err
+	}
+	return realm.findAddrs(localName)
 }
 
 func (s *Server) deregister(c *serverClient) {
 	for _, realmName := range c.auth.Realms {
-		s.getRealm(realmName).deregister(c)
+		if realm, err := s.getRealm(realmName, false); err == nil {
+			realm.deregister(c)
+		}
 	}
 }
 
@@ -329,7 +346,8 @@ func (s *serverStream) run(ctx context.Context) {
 }
 
 func (s *serverStream) register(ctx context.Context, req *pbs.Request_Register) {
-	if err := s.client.server.register(s.client.auth, req.Name, s.client, req.Direct); err != nil {
+	err := s.client.server.register(s.client.auth, req.Name, s.client, req.Direct)
+	if err != nil {
 		// TODO better errors, codes from below
 		err := pb.NewError(pb.Error_RegistrationFailed, "registration failed: %v", err)
 		if err := pb.Write(s.stream, &pbs.Response{Error: err}); err != nil {
@@ -339,7 +357,9 @@ func (s *serverStream) register(ctx context.Context, req *pbs.Request_Register) 
 	}
 	s.logger.Info("registered listener", "name", req.Name)
 
-	if err := pb.Write(s.stream, &pbs.Response{}); err != nil {
+	if err := pb.Write(s.stream, &pbs.Response{
+		Register: &pbs.Response_Register{},
+	}); err != nil {
 		s.logger.Warn("cannot write register response", "err", err)
 	}
 }
@@ -451,7 +471,7 @@ func ServerAddress(address string) ServerOption {
 
 func ServerSelfSigned() ServerOption {
 	return func(cfg *serverConfig) error {
-		if cert, err := certc.SelfSigned(); err != nil {
+		if cert, err := certc.SelfSigned(false, "127.0.0.1"); err != nil {
 			return err
 		} else {
 			cfg.certificate = &cert
