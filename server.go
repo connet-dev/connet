@@ -12,7 +12,6 @@ import (
 	"time"
 
 	"github.com/keihaya-com/connet/authc"
-	"github.com/keihaya-com/connet/certc"
 	"github.com/keihaya-com/connet/netc"
 	"github.com/keihaya-com/connet/pb"
 	"github.com/keihaya-com/connet/pbc"
@@ -473,7 +472,7 @@ func ServerAddress(address string) ServerOption {
 
 func ServerCertificate(cert, key string) ServerOption {
 	return func(cfg *serverConfig) error {
-		if cert, err := certc.Load(cert, key); err != nil {
+		if cert, err := tls.LoadX509KeyPair(cert, key); err != nil {
 			return err
 		} else {
 			cfg.certificate = &cert

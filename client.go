@@ -606,7 +606,7 @@ func ClientDestination(name, addr string) ClientOption {
 
 func ClientCA(certFile string, keyFile string) ClientOption {
 	return func(cfg *clientConfig) error {
-		if cert, err := certc.Load(certFile, keyFile); err != nil {
+		if cert, err := tls.LoadX509KeyPair(certFile, keyFile); err != nil {
 			return err
 		} else {
 			pool := x509.NewCertPool()
