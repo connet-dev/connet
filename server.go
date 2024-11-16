@@ -38,19 +38,15 @@ func NewServer(opts ...ServerOption) (*Server, error) {
 	}
 
 	if cfg.controlAddr == nil {
-		addr, err := net.ResolveUDPAddr("udp", "0.0.0.0:19190")
-		if err != nil {
-			return nil, kleverr.Newf("control address cannot be resolved: %w", err)
+		if err := ServerControlAddress("0.0.0.0:19190")(cfg); err != nil {
+			return nil, err
 		}
-		cfg.controlAddr = addr
 	}
 
 	if cfg.relayAddr == nil {
-		addr, err := net.ResolveUDPAddr("udp", "0.0.0.0:19191")
-		if err != nil {
-			return nil, kleverr.Newf("relay address cannot be resolved: %w", err)
+		if err := ServerRelayAddress("0.0.0.0:19191")(cfg); err != nil {
+			return nil, err
 		}
-		cfg.relayAddr = addr
 	}
 
 	return &Server{
