@@ -29,12 +29,22 @@ type Client struct {
 
 func NewClient(opts ...ClientOption) (*Client, error) {
 	cfg := &clientConfig{
-		serverAddress: "127.0.0.1:19190",
-		localAddress:  "0.0.0.0:19191",
-		logger:        slog.Default(),
+		logger: slog.Default(),
 	}
 	for _, opt := range opts {
 		if err := opt(cfg); err != nil {
+			return nil, err
+		}
+	}
+
+	if cfg.serverAddr == nil {
+		if err := ClientServerAddress("127.0.0.1:19190")(cfg); err != nil {
+			return nil, err
+		}
+	}
+
+	if cfg.directAddr == nil {
+		if err := ClientDirectAddress("0.0.0.0:19192")(cfg); err != nil {
 			return nil, err
 		}
 	}
@@ -45,14 +55,8 @@ func NewClient(opts ...ClientOption) (*Client, error) {
 }
 
 func (c *Client) Run(ctx context.Context) error {
-	c.logger.Debug("resolving udp address", "addr", c.localAddress)
-	addr, err := net.ResolveUDPAddr("udp", c.localAddress)
-	if err != nil {
-		return kleverr.Ret(err)
-	}
-
-	c.logger.Debug("start udp listener", "addr", addr)
-	localConn, err := net.ListenUDP("udp", addr)
+	c.logger.Debug("start udp listener", "addr", c.directAddr)
+	localConn, err := net.ListenUDP("udp", c.directAddr)
 	if err != nil {
 		return kleverr.Ret(err)
 	}
@@ -86,19 +90,9 @@ func (c *Client) Run(ctx context.Context) error {
 }
 
 func (c *Client) connect(ctx context.Context, transport *quic.Transport, rootCert *certc.Cert) (*clientSession, error) {
-	serverAddr, err := net.ResolveUDPAddr("udp", c.serverAddress)
-	if err != nil {
-		return nil, kleverr.Ret(err)
-	}
-
-	serverName, _, err := net.SplitHostPort(c.serverAddress)
-	if err != nil {
-		serverName = c.serverAddress
-	}
-
-	c.logger.Debug("dialing target", "addr", c.serverAddress)
-	conn, err := transport.Dial(ctx, serverAddr, &tls.Config{
-		ServerName: serverName,
+	c.logger.Debug("dialing target", "addr", c.serverAddr)
+	conn, err := transport.Dial(ctx, c.serverAddr, &tls.Config{
+		ServerName: c.serverName,
 		RootCAs:    c.cas,
 		NextProtos: []string{"connet"},
 	}, &quic.Config{
@@ -108,7 +102,7 @@ func (c *Client) connect(ctx context.Context, transport *quic.Transport, rootCer
 		return nil, kleverr.Ret(err)
 	}
 
-	c.logger.Debug("authenticating", "addr", c.serverAddress)
+	c.logger.Debug("authenticating", "addr", c.serverAddr)
 	authStream, err := conn.OpenStreamSync(ctx)
 	if err != nil {
 		return nil, kleverr.Ret(err)
@@ -553,27 +547,41 @@ func (s *clientSource) runConn(ctx context.Context, conn net.Conn) {
 }
 
 type clientConfig struct {
-	serverAddress string
-	localAddress  string
-	token         string
-	sources       map[string]Binding
-	destinations  map[Binding]string
-	cas           *x509.CertPool
-	logger        *slog.Logger
+	serverAddr   *net.UDPAddr
+	serverName   string
+	directAddr   *net.UDPAddr
+	token        string
+	sources      map[string]Binding
+	destinations map[Binding]string
+	cas          *x509.CertPool
+	logger       *slog.Logger
 }
 
 type ClientOption func(cfg *clientConfig) error
 
-func ClientServerAddress(addr string) ClientOption {
+func ClientServerAddress(address string) ClientOption {
 	return func(cfg *clientConfig) error {
-		cfg.serverAddress = addr
+		addr, err := net.ResolveUDPAddr("udp", address)
+		if err != nil {
+			return err
+		}
+		host, _, err := net.SplitHostPort(address)
+		if err != nil {
+			return err
+		}
+		cfg.serverAddr = addr
+		cfg.serverName = host
 		return nil
 	}
 }
 
-func ClientLocalAddress(addr string) ClientOption {
+func ClientDirectAddress(address string) ClientOption {
 	return func(cfg *clientConfig) error {
-		cfg.localAddress = addr
+		addr, err := net.ResolveUDPAddr("udp", address)
+		if err != nil {
+			return err
+		}
+		cfg.directAddr = addr
 		return nil
 	}
 }

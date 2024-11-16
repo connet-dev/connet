@@ -29,13 +29,28 @@ type Server struct {
 
 func NewServer(opts ...ServerOption) (*Server, error) {
 	cfg := &serverConfig{
-		address: "0.0.0.0:19190",
-		logger:  slog.Default(),
+		logger: slog.Default(),
 	}
 	for _, opt := range opts {
 		if err := opt(cfg); err != nil {
 			return nil, err
 		}
+	}
+
+	if cfg.controlAddr == nil {
+		addr, err := net.ResolveUDPAddr("udp", "0.0.0.0:19190")
+		if err != nil {
+			return nil, kleverr.Newf("control address cannot be resolved: %w", err)
+		}
+		cfg.controlAddr = addr
+	}
+
+	if cfg.relayAddr == nil {
+		addr, err := net.ResolveUDPAddr("udp", "0.0.0.0:19191")
+		if err != nil {
+			return nil, kleverr.Newf("relay address cannot be resolved: %w", err)
+		}
+		cfg.relayAddr = addr
 	}
 
 	return &Server{
@@ -45,14 +60,8 @@ func NewServer(opts ...ServerOption) (*Server, error) {
 }
 
 func (s *Server) Run(ctx context.Context) error {
-	s.logger.Debug("resolving udp address", "addr", s.address)
-	addr, err := net.ResolveUDPAddr("udp", s.address)
-	if err != nil {
-		return kleverr.Ret(err)
-	}
-
-	s.logger.Debug("start udp listener", "addr", addr)
-	conn, err := net.ListenUDP("udp", addr)
+	s.logger.Debug("start udp listener", "addr", s.controlAddr)
+	conn, err := net.ListenUDP("udp", s.controlAddr)
 	if err != nil {
 		return kleverr.Ret(err)
 	}
@@ -62,7 +71,7 @@ func (s *Server) Run(ctx context.Context) error {
 		Conn: conn,
 		// TODO review other options
 	}
-	s.logger.Debug("start quic listener", "addr", addr)
+	s.logger.Debug("start quic listener", "addr", s.controlAddr)
 	l, err := tr.Listen(&tls.Config{
 		Certificates: []tls.Certificate{*s.certificate},
 		NextProtos:   []string{"connet"},
@@ -73,12 +82,12 @@ func (s *Server) Run(ctx context.Context) error {
 		return kleverr.Ret(err)
 	}
 
-	s.logger.Info("waiting for incoming connections", "addr", addr)
+	s.logger.Info("waiting for incoming connections", "addr", s.controlAddr)
 	for {
 		conn, err := l.Accept(ctx)
 		if err != nil {
 			if errors.Is(err, quic.ErrServerClosed) {
-				s.logger.Info("stopped quic listener", "addr", addr)
+				s.logger.Info("stopped quic listener", "addr", s.controlAddr)
 				return nil
 			}
 		}
@@ -440,7 +449,9 @@ func (s *serverStream) unknown(ctx context.Context, req *pbs.Request) {
 }
 
 type serverConfig struct {
-	address     string
+	controlAddr *net.UDPAddr
+	relayAddr   *net.UDPAddr
+
 	certificate *tls.Certificate
 	logger      *slog.Logger
 	auth        authc.Authenticator
@@ -448,9 +459,24 @@ type serverConfig struct {
 
 type ServerOption func(*serverConfig) error
 
-func ServerAddress(address string) ServerOption {
+func ServerControlAddress(address string) ServerOption {
 	return func(cfg *serverConfig) error {
-		cfg.address = address
+		addr, err := net.ResolveUDPAddr("udp", address)
+		if err != nil {
+			return kleverr.Newf("control address cannot be resolved: %w", err)
+		}
+		cfg.controlAddr = addr
+		return nil
+	}
+}
+
+func ServerRelayAddress(address string) ServerOption {
+	return func(cfg *serverConfig) error {
+		addr, err := net.ResolveUDPAddr("udp", address)
+		if err != nil {
+			return kleverr.Newf("relay address cannot be resolved: %w", err)
+		}
+		cfg.relayAddr = addr
 		return nil
 	}
 }

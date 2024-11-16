@@ -19,7 +19,7 @@ run-server: all
 	connet-server -debug -auth xxyxx -server-cert .direnv/localhost/cert.pem -server-key .direnv/localhost/key.pem
 
 run-client: all
-	connet -debug -auth xxyxx -listen-name sws -listen-target ":8081" -connect-name sws -connect-source ":9999" -ca-cert .direnv/minica.pem -ca-key .direnv/minica-key.pem 
+	connet -debug -auth xxyxx -destination-name sws -destination-addr ":8081" -source-name sws -source-addr ":9999" -ca-cert .direnv/minica.pem -ca-key .direnv/minica-key.pem 
 
 run-sws:
 	static-web-server --port 8081 --root . --directory-listing

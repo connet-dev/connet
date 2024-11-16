@@ -13,7 +13,7 @@ processes:
       certs:
         condition: process_completed
   client-listen:
-    command: connet -debug -auth xxyxx -listen-name sws -listen-target ":8081" -ca-cert .direnv/minica.pem -ca-key .direnv/minica-key.pem
+    command: connet -debug -auth xxyxx -destination-name sws -destination-addr ":8081" -ca-cert .direnv/minica.pem -ca-key .direnv/minica-key.pem
     depends_on:
       build:
         condition: process_completed_successfully
@@ -22,7 +22,7 @@ processes:
       server:
         condition: process_started
   client-serve:
-    command: connet -debug -auth xxyxx -listen-addr ":19192" -connect-name sws -connect-source ":9999" -ca-cert .direnv/minica.pem -ca-key .direnv/minica-key.pem
+    command: connet -debug -auth xxyxx -direct-addr ":19193" -source-name sws -source-addr ":9999" -ca-cert .direnv/minica.pem -ca-key .direnv/minica-key.pem
     depends_on:
       build:
         condition: process_completed_successfully

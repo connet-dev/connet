@@ -12,7 +12,8 @@ import (
 )
 
 var auth = flag.String("auth", "", "authentication token")
-var listenAddr = flag.String("listen-addr", "", "the address to listen for connections")
+var controlAddr = flag.String("control-addr", "", "the address to listen for control connections")
+var relayAddr = flag.String("relay-addr", "", "the address to listen for relay connections")
 var serverCert = flag.String("server-cert", "", "cert file to use")
 var serverKey = flag.String("server-key", "", "key file to use")
 var debug = flag.Bool("debug", false, "turn on debug logging")
@@ -34,14 +35,18 @@ func main() {
 		connet.ServerAuthenticator(authc.NewStatic(*auth)),
 	}
 
-	if *listenAddr != "" {
-		opts = append(opts, connet.ServerAddress(*listenAddr))
+	if *controlAddr != "" {
+		opts = append(opts, connet.ServerControlAddress(*controlAddr))
+	}
+
+	if *relayAddr != "" {
+		opts = append(opts, connet.ServerRelayAddress(*relayAddr))
 	}
 
 	if *serverCert != "" {
 		opts = append(opts, connet.ServerCertificate(*serverCert, *serverKey))
 	} else {
-		fmt.Fprintf(os.Stderr, "cert is required")
+		fmt.Fprintf(os.Stderr, "cert is required, generate one using minica or similar tool")
 		flag.PrintDefaults()
 		os.Exit(1)
 	}
