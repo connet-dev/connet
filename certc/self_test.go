@@ -1,6 +1,7 @@
 package certc
 
 import (
+	"bytes"
 	"context"
 	"crypto/tls"
 	"crypto/x509"
@@ -159,6 +160,15 @@ func testConnectivityTLS(t *testing.T, serverConf *tls.Config, clientConf *tls.C
 		if err != nil {
 			return kleverr.Ret(err)
 		}
+
+		peerCerts := c.ConnectionState().TLS.PeerCertificates
+		if len(peerCerts) != 1 {
+			return kleverr.Newf("expected 1 client certificate, but found: %d", len(peerCerts))
+		}
+		if !bytes.Equal(peerCerts[0].Raw, clientConf.Certificates[0].Leaf.Raw) {
+			return kleverr.Newf("expected matching certs")
+		}
+
 		s, err := c.AcceptStream(ctx)
 		if err != nil {
 			return kleverr.Ret(err)
