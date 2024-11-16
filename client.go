@@ -178,22 +178,22 @@ func (s *clientSession) run(ctx context.Context) error {
 	})
 
 	g.Go(func() error {
-		for name, addr := range s.client.destinations {
-			if err := s.registerDestination(ctx, name, addr, intCert); err != nil {
+		for bind, addr := range s.client.destinations {
+			if err := s.registerDestination(ctx, bind, addr, intCert); err != nil {
 				return err
 			}
 		}
 		return s.runDestinations(ctx)
 	})
 
-	for addr, name := range s.client.sources {
+	for addr, bind := range s.client.sources {
 		g.Go(func() error {
 			src := &clientSource{
-				sess:            s,
-				localAddr:       addr,
-				destinationName: name,
-				logger:          s.logger.With("addr", addr, "name", name),
-				defaultRoute:    s.conn,
+				sess:         s,
+				localAddr:    addr,
+				destination:  bind,
+				logger:       s.logger.With("addr", addr, "bind", bind),
+				defaultRoute: s.conn,
 			}
 			return src.run(ctx)
 		})
@@ -202,7 +202,7 @@ func (s *clientSession) run(ctx context.Context) error {
 	return g.Wait()
 }
 
-func (s *clientSession) registerDestination(ctx context.Context, name, addr string, parent *certc.Cert) error {
+func (s *clientSession) registerDestination(ctx context.Context, bind Binding, addr string, parent *certc.Cert) error {
 	destCert, err := parent.NewClient(certc.CertOpts{Domains: []string{"connet-direct"}})
 	if err != nil {
 		return kleverr.Ret(err)
@@ -220,9 +220,9 @@ func (s *clientSession) registerDestination(ctx context.Context, name, addr stri
 
 	if err := pb.Write(cmdStream, &pbs.Request{
 		Register: &pbs.Request_Register{
-			Name:   name,
-			Direct: s.directAddrs,
-			Cert:   cert,
+			Binding: bind.AsPB(),
+			Direct:  s.directAddrs,
+			Cert:    cert,
 		},
 	}); err != nil {
 		return kleverr.Ret(err)
@@ -232,7 +232,7 @@ func (s *clientSession) registerDestination(ctx context.Context, name, addr stri
 		return kleverr.Ret(err)
 	}
 
-	s.logger.Info("registered destination", "name", name, "addr", addr)
+	s.logger.Info("registered destination", "bind", bind, "addr", addr)
 	return nil
 }
 
@@ -256,40 +256,41 @@ func (s *clientSession) runDestinationRequest(ctx context.Context, stream quic.S
 
 	switch {
 	case req.Connect != nil:
-		s.destinationConnect(ctx, stream, req.Connect.Name)
+		s.destinationConnect(ctx, stream, NewBindingPB(req.Connect.Binding))
 	default:
 		s.unknown(ctx, stream, req)
 	}
 }
 
-func (s *clientSession) destinationConnect(ctx context.Context, stream quic.Stream, name string) {
-	addr, ok := s.client.destinations[name]
+func (s *clientSession) destinationConnect(ctx context.Context, stream quic.Stream, bind Binding) {
+	logger := s.logger.With("bind", bind)
+	addr, ok := s.client.destinations[bind]
 	if !ok {
-		err := pb.NewError(pb.Error_DestinationNotFound, "%s not found on this client", name)
+		err := pb.NewError(pb.Error_DestinationNotFound, "%s not found on this client", bind)
 		if err := pb.Write(stream, &pbc.Response{Error: err}); err != nil {
-			s.logger.Warn("could not write response", "name", name, "addr", addr, "err", err)
+			logger.Warn("could not write response", "addr", addr, "err", err)
 		}
 		return
 	}
 
 	conn, err := net.Dial("tcp", addr)
 	if err != nil {
-		err := pb.NewError(pb.Error_DestinationDialFailed, "%s could not be dialed: %v", name, err)
+		err := pb.NewError(pb.Error_DestinationDialFailed, "%s could not be dialed: %v", bind, err)
 		if err := pb.Write(stream, &pbc.Response{Error: err}); err != nil {
-			s.logger.Warn("could not write response", "name", name, "addr", addr, "err", err)
+			logger.Warn("could not write response", "addr", addr, "err", err)
 		}
 		return
 	}
 	defer conn.Close()
 
 	if err := pb.Write(stream, &pbc.Response{}); err != nil {
-		s.logger.Warn("could not write response", "name", name, "addr", addr, "err", err)
+		logger.Warn("could not write response", "addr", addr, "err", err)
 		return
 	}
 
-	s.logger.Debug("joining from server", "name", name)
+	logger.Debug("joining from server")
 	err = netc.Join(ctx, stream, conn)
-	s.logger.Debug("disconnected from server", "name", name, "err", err)
+	logger.Debug("disconnected from server", "err", err)
 }
 
 func (s *clientSession) unknown(ctx context.Context, stream quic.Stream, req *pbc.Request) {
@@ -350,10 +351,10 @@ func (c *clientSession) runDirect(ctx context.Context, parentCert *certc.Cert) e
 }
 
 type clientSource struct {
-	sess            *clientSession
-	localAddr       string
-	destinationName string
-	logger          *slog.Logger
+	sess        *clientSession
+	localAddr   string
+	destination Binding
+	logger      *slog.Logger
 
 	defaultRoute quic.Connection
 	routes       []quic.Connection
@@ -430,7 +431,7 @@ func (s *clientSource) loadRoutes(ctx context.Context) ([]netip.AddrPort, tls.Ce
 
 	if err := pb.Write(stream, &pbs.Request{
 		Routes: &pbs.Request_Routes{
-			Name: s.destinationName,
+			Binding: s.destination.AsPB(),
 		},
 	}); err != nil {
 		s.logger.Warn("failed to request routes", "err", err)
@@ -514,7 +515,7 @@ func (s *clientSource) runConn(ctx context.Context, conn net.Conn) {
 	if direct {
 		if err := pb.Write(stream, &pbc.Request{
 			Connect: &pbc.Request_Connect{
-				Name: s.destinationName,
+				Binding: s.destination.AsPB(),
 			},
 		}); err != nil {
 			s.logger.Warn("failed to request connection", "err", err)
@@ -531,7 +532,7 @@ func (s *clientSource) runConn(ctx context.Context, conn net.Conn) {
 	} else {
 		if err := pb.Write(stream, &pbs.Request{
 			Connect: &pbs.Request_Connect{
-				Name: s.destinationName,
+				Binding: s.destination.AsPB(),
 			},
 		}); err != nil {
 			s.logger.Warn("failed to request connection", "err", err)
@@ -555,8 +556,8 @@ type clientConfig struct {
 	serverAddress string
 	localAddress  string
 	token         string
-	sources       map[string]string
-	destinations  map[string]string
+	sources       map[string]Binding
+	destinations  map[Binding]string
 	cas           *x509.CertPool
 	logger        *slog.Logger
 }
@@ -584,22 +585,30 @@ func ClientAuthentication(token string) ClientOption {
 	}
 }
 
-func ClientSource(addr, name string) ClientOption {
+func ClientGlobalSource(addr, name string) ClientOption {
+	return ClientSource(addr, "", name)
+}
+
+func ClientSource(addr, realm, name string) ClientOption {
 	return func(cfg *clientConfig) error {
 		if cfg.sources == nil {
-			cfg.sources = map[string]string{}
+			cfg.sources = map[string]Binding{}
 		}
-		cfg.sources[addr] = name
+		cfg.sources[addr] = Binding{Realm: realm, Name: name}
 		return nil
 	}
 }
 
-func ClientDestination(name, addr string) ClientOption {
+func ClientGlobalDestination(name, addr string) ClientOption {
+	return ClientDestination("", name, addr)
+}
+
+func ClientDestination(realm, name, addr string) ClientOption {
 	return func(cfg *clientConfig) error {
 		if cfg.destinations == nil {
-			cfg.destinations = map[string]string{}
+			cfg.destinations = map[Binding]string{}
 		}
-		cfg.destinations[name] = addr
+		cfg.destinations[Binding{Realm: realm, Name: name}] = addr
 		return nil
 	}
 }

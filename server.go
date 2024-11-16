@@ -7,7 +7,6 @@ import (
 	"log/slog"
 	"net"
 	"slices"
-	"strings"
 	"sync"
 	"time"
 
@@ -121,55 +120,40 @@ func (s *Server) getRealm(name string, upsert bool) (*realmClients, error) {
 	return realm, nil
 }
 
-func (s *Server) register(auth authc.Authentication, name string, c *serverClient, addrs []*pb.AddrPort, cert *pb.Cert) error {
-	localName, realmName, found := strings.Cut(name, "@")
-	if found {
-		if !slices.Contains(auth.Realms, realmName) {
-			return kleverr.Newf("realm not accessible: %s", realmName)
-		}
-	} else {
-		realmName = auth.SelfRealm
+func (s *Server) register(auth authc.Authentication, bind Binding, c *serverClient, addrs []*pb.AddrPort, cert *pb.Cert) error {
+	if !slices.Contains(auth.Realms, bind.Realm) {
+		return kleverr.Newf("realm not accessible: %s", bind.Realm)
 	}
 
-	realm, err := s.getRealm(name, true)
+	realm, err := s.getRealm(bind.Realm, true)
 	if err != nil {
 		return err
 	}
-	return realm.register(localName, c, addrs, cert)
+	return realm.register(bind.Name, c, addrs, cert)
 }
 
-func (s *Server) find(auth authc.Authentication, name string) (*serverClient, error) {
-	localName, realmName, found := strings.Cut(name, "@")
-	if found {
-		if !slices.Contains(auth.Realms, realmName) {
-			return nil, kleverr.Newf("realm not accessible: %s", realmName)
-		}
-	} else {
-		realmName = auth.SelfRealm
+func (s *Server) find(auth authc.Authentication, bind Binding) (*serverClient, error) {
+	if !slices.Contains(auth.Realms, bind.Realm) {
+		return nil, kleverr.Newf("realm not accessible: %s", bind.Realm)
 	}
 
-	realm, err := s.getRealm(name, false)
+	realm, err := s.getRealm(bind.Realm, false)
 	if err != nil {
 		return nil, err
 	}
-	return realm.find(localName)
+	return realm.find(bind.Name)
 }
 
-func (s *Server) findAddrs(auth authc.Authentication, name string) ([]*pb.AddrPort, *pb.Cert, error) {
-	localName, realmName, found := strings.Cut(name, "@")
-	if found {
-		if !slices.Contains(auth.Realms, realmName) {
-			return nil, nil, kleverr.Newf("realm not accessible: %s", realmName)
-		}
-	} else {
-		realmName = auth.SelfRealm
+func (s *Server) findAddrs(auth authc.Authentication, bind Binding) ([]*pb.AddrPort, *pb.Cert, error) {
+	if !slices.Contains(auth.Realms, bind.Realm) {
+		return nil, nil, kleverr.Newf("realm not accessible: %s", bind.Realm)
 	}
 
-	realm, err := s.getRealm(name, false)
+	realm, err := s.getRealm(bind.Realm, false)
 	if err != nil {
 		return nil, nil, err
 	}
-	return realm.findAddrs(localName)
+	return realm.findAddrs(bind.Name)
 }
 
 func (s *Server) deregister(c *serverClient) {
@@ -346,7 +330,7 @@ func (s *serverStream) run(ctx context.Context) {
 }
 
 func (s *serverStream) register(ctx context.Context, req *pbs.Request_Register) {
-	err := s.client.server.register(s.client.auth, req.Name, s.client, req.Direct, req.Cert)
+	err := s.client.server.register(s.client.auth, NewBindingPB(req.Binding), s.client, req.Direct, req.Cert)
 	if err != nil {
 		// TODO better errors, codes from below
 		err := pb.NewError(pb.Error_RegistrationFailed, "registration failed: %v", err)
@@ -355,7 +339,7 @@ func (s *serverStream) register(ctx context.Context, req *pbs.Request_Register) 
 		}
 		return
 	}
-	s.logger.Info("registered listener", "name", req.Name)
+	s.logger.Info("registered listener", "binding", req.Binding)
 
 	if err := pb.Write(s.stream, &pbs.Response{
 		Register: &pbs.Response_Register{},
@@ -365,11 +349,11 @@ func (s *serverStream) register(ctx context.Context, req *pbs.Request_Register) 
 }
 
 func (s *serverStream) connect(ctx context.Context, req *pbs.Request_Connect) {
-	name := req.Name
-	s.logger.Debug("lookup listener", "name", name)
-	otherConn, err := s.client.server.find(s.client.auth, name)
+	bind := req.Binding
+	s.logger.Debug("lookup listener", "bind", bind)
+	otherConn, err := s.client.server.find(s.client.auth, NewBindingPB(req.Binding))
 	if err != nil {
-		s.logger.Debug("listener lookup failed", "name", name, "err", err)
+		s.logger.Debug("listener lookup failed", "bind", bind, "err", err)
 		err := pb.NewError(pb.Error_ListenerNotFound, "failed to lookup registration: %v", err)
 		if err := pb.Write(s.stream, &pbs.Response{Error: err}); err != nil {
 			s.logger.Warn("failed to write response", "err", err)
@@ -379,7 +363,7 @@ func (s *serverStream) connect(ctx context.Context, req *pbs.Request_Connect) {
 
 	otherStream, err := otherConn.conn.OpenStreamSync(ctx)
 	if err != nil {
-		s.logger.Debug("listener not connected", "name", name, "err", err)
+		s.logger.Debug("listener not connected", "bind", bind, "err", err)
 		err := pb.NewError(pb.Error_ListenerNotConnected, "failed to connect listener: %v", err)
 		if err := pb.Write(s.stream, &pbs.Response{Error: err}); err != nil {
 			s.logger.Warn("failed to write response", "err", err)
@@ -389,10 +373,10 @@ func (s *serverStream) connect(ctx context.Context, req *pbs.Request_Connect) {
 
 	if err := pb.Write(otherStream, &pbc.Request{
 		Connect: &pbc.Request_Connect{
-			Name: name,
+			Binding: bind,
 		},
 	}); err != nil {
-		s.logger.Warn("error while writing request", "name", name, "err", err)
+		s.logger.Warn("error while writing request", "bind", bind, "err", err)
 		err := pb.NewError(pb.Error_ListenerRequestFailed, "failed to write client request: %v", err)
 		if err := pb.Write(s.stream, &pbs.Response{Error: err}); err != nil {
 			s.logger.Warn("failed to write response", "err", err)
@@ -401,7 +385,7 @@ func (s *serverStream) connect(ctx context.Context, req *pbs.Request_Connect) {
 	}
 
 	if _, err := pbc.ReadResponse(otherStream); err != nil {
-		s.logger.Warn("error while reading response", "name", name, "err", err)
+		s.logger.Warn("error while reading response", "bind", bind, "err", err)
 		var respErr *pb.Error
 		if !errors.As(err, &respErr) {
 			respErr = pb.NewError(pb.Error_ListenerResponseFailed, "failed to read client response: %v", err)
@@ -419,15 +403,16 @@ func (s *serverStream) connect(ctx context.Context, req *pbs.Request_Connect) {
 		return
 	}
 
-	s.logger.Info("joining conns", "name", name)
+	s.logger.Info("joining conns", "bind", bind)
 	err = netc.Join(ctx, s.stream, otherStream)
-	s.logger.Info("disconnected conns", "name", name, "err", err)
+	s.logger.Info("disconnected conns", "bind", bind, "err", err)
 }
 
 func (s *serverStream) routes(ctx context.Context, req *pbs.Request_Routes) {
-	addrs, cert, err := s.client.server.findAddrs(s.client.auth, req.Name)
+	bind := req.Binding
+	addrs, cert, err := s.client.server.findAddrs(s.client.auth, NewBindingPB(req.Binding))
 	if err != nil {
-		s.logger.Debug("listener lookup failed", "name", req.Name, "err", err)
+		s.logger.Debug("listener lookup failed", "bind", bind, "err", err)
 		err := pb.NewError(pb.Error_ListenerNotFound, "failed to lookup registration: %v", err)
 		if err := pb.Write(s.stream, &pbs.Response{Error: err}); err != nil {
 			s.logger.Warn("failed to write response", "err", err)

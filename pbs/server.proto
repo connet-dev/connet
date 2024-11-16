@@ -22,15 +22,15 @@ message Request {
   Routes routes = 3;
 
   message Register {
-    string name = 1;
+    shared.Binding binding = 1;
     repeated shared.AddrPort direct = 2;
     shared.Cert cert = 3;
   }
   message Connect {
-    string name = 1;
+    shared.Binding binding = 1;
   }
   message Routes {
-    string name = 1;
+    shared.Binding binding = 1;
   }
 }
 

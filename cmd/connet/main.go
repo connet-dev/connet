@@ -42,11 +42,11 @@ func main() {
 	}
 
 	if *listenName != "" {
-		opts = append(opts, connet.ClientDestination(*listenName, *listenTarget))
+		opts = append(opts, connet.ClientGlobalDestination(*listenName, *listenTarget))
 	}
 
 	if *connectName != "" {
-		opts = append(opts, connet.ClientSource(*connectSource, *connectName))
+		opts = append(opts, connet.ClientGlobalSource(*connectSource, *connectName))
 	}
 
 	if *debug {

@@ -25,7 +25,7 @@ type staticAuthenticator struct {
 
 func (s *staticAuthenticator) Authenticate(token string) (Authentication, error) {
 	if _, ok := s.tokens[token]; ok {
-		return Authentication{[]string{"local"}, "local"}, nil
+		return Authentication{[]string{""}, ""}, nil
 	}
 	return Authentication{}, kleverr.Newf("invalid token: %s", token)
 }

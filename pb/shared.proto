@@ -13,6 +13,11 @@ message AddrPort {
   uint32 port = 2; // really uint16, but not a thing in protobuf
 }
 
+message Binding { // TODO better name
+  string name = 1;
+  string realm = 2;
+}
+
 message Error {
   Code code = 1;
   string message = 2;
