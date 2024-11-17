@@ -18,6 +18,7 @@ import (
 	"github.com/klev-dev/kleverr"
 	"github.com/quic-go/quic-go"
 	"github.com/segmentio/ksuid"
+	"golang.org/x/sync/errgroup"
 )
 
 type Server struct {
@@ -56,7 +57,18 @@ func NewServer(opts ...ServerOption) (*Server, error) {
 }
 
 func (s *Server) Run(ctx context.Context) error {
-	s.logger.Debug("start udp listener", "addr", s.controlAddr)
+	g, ctx := errgroup.WithContext(ctx)
+	g.Go(func() error {
+		return s.runControl(ctx)
+	})
+	g.Go(func() error {
+		return s.runRelay(ctx)
+	})
+	return g.Wait()
+}
+
+func (s *Server) runControl(ctx context.Context) error {
+	s.logger.Debug("start control listener", "addr", s.controlAddr)
 	conn, err := net.ListenUDP("udp", s.controlAddr)
 	if err != nil {
 		return kleverr.Ret(err)
@@ -98,6 +110,14 @@ func (s *Server) Run(ctx context.Context) error {
 		}
 		go sc.run(ctx)
 	}
+}
+
+func (s *Server) runRelay(ctx context.Context) error {
+	r, err := newRelayServer(s)
+	if err != nil {
+		return err
+	}
+	return r.Run(ctx)
 }
 
 func (s *Server) getRealm(name string, upsert bool) (*realmClients, error) {
