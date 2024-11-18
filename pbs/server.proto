@@ -20,6 +20,9 @@ message Request {
   Register register = 1;
   Connect connect = 2;
   Routes routes = 3;
+  Relay relay = 4;
+  Destination destination = 5;
+  Source source = 6;
 
   message Register {
     shared.Binding binding = 1;
@@ -32,6 +35,21 @@ message Request {
   message Routes {
     shared.Binding binding = 1;
   }
+  message Relay {
+    bytes certificate = 1; // certificate to use when connecting to a relay
+    repeated shared.Binding destinations = 2;
+    repeated shared.Binding sources = 3;
+  }
+  message Destination {
+    shared.Binding binding = 1;
+    bytes certificate = 2; // certificate that is served as direct connection
+    repeated shared.AddrPort direct_addresses = 3; // the set of addresses for direct connections
+    repeated shared.AddrPort relay_addresses = 4; // the set of addresses for relay connections
+  }
+  message Source {
+    shared.Binding binding = 1;
+    bytes certificate = 2; // certificate that client uses for direct connection
+  }
 }
 
 message Response {
@@ -40,6 +58,9 @@ message Response {
   Register register = 2;
   Connect connect = 3;
   Routes routes = 4;
+  Relay relay = 5;
+  Destination destination = 6;
+  Source source = 7;
 
   message Register {
   }
@@ -48,5 +69,19 @@ message Response {
   message Routes {
     repeated shared.AddrPort direct = 1;
     shared.Cert cert = 2;
+  }
+  message Relay {
+    repeated shared.AddrPort addresses = 1; // set of relay addresses that follow this server
+  }
+  message Destination {
+    repeated bytes certificates = 1; // certificates that the clients will present when connecting directly
+  }
+  message Source {
+    repeated Client clients = 1;
+    repeated shared.AddrPort relays = 2;
+    message Client {
+      bytes certificate = 1; // the destination server certificate
+      repeated shared.AddrPort addresses = 2;
+    }
   }
 }

@@ -103,27 +103,16 @@ func (c *Client) connect(ctx context.Context, transport *quic.Transport, rootCer
 	}
 
 	c.logger.Debug("authenticating", "addr", c.serverAddr)
-	authStream, err := conn.OpenStreamSync(ctx)
+	pclient, err := pbs.NewClient(conn)
 	if err != nil {
 		return nil, kleverr.Ret(err)
 	}
-	defer authStream.Close()
 
-	if err := pb.Write(authStream, &pbs.Authenticate{
-		Token: c.token,
-	}); err != nil {
+	respAddr, err := pclient.Authenticate(ctx, c.token)
+	if err != nil {
 		return nil, kleverr.Ret(err)
 	}
-
-	resp := &pbs.AuthenticateResp{}
-	if err := pb.Read(authStream, resp); err != nil {
-		return nil, kleverr.Ret(err)
-	}
-	if resp.Error != nil {
-		return nil, kleverr.Ret(resp.Error)
-	}
-
-	c.logger.Info("authenticated", "origin", resp.Public.AsNetip())
+	c.logger.Info("authenticated", "origin", respAddr)
 
 	sid := ksuid.New()
 	return &clientSession{
@@ -131,7 +120,8 @@ func (c *Client) connect(ctx context.Context, transport *quic.Transport, rootCer
 		id:          sid,
 		transport:   transport,
 		conn:        conn,
-		directAddrs: []*pb.AddrPort{resp.Public},
+		pclient:     pclient,
+		directAddrs: []*pb.AddrPort{respAddr},
 		logger:      c.logger.With("connection-id", sid),
 		rootCert:    rootCert,
 	}, nil
@@ -154,6 +144,7 @@ type clientSession struct {
 	id          ksuid.KSUID
 	transport   *quic.Transport
 	conn        quic.Connection
+	pclient     pbs.Client
 	directAddrs []*pb.AddrPort // TODO these should be multiple, not only from server pov
 	logger      *slog.Logger
 	rootCert    *certc.Cert
@@ -227,6 +218,16 @@ func (s *clientSession) registerDestination(ctx context.Context, bind Binding, a
 	}
 
 	s.logger.Info("registered destination", "bind", bind, "addr", addr)
+	return nil
+}
+
+func (s *clientSession) addDestination(ctx context.Context, bind Binding) error {
+	cmdStream, err := s.conn.OpenStreamSync(ctx)
+	if err != nil {
+		return kleverr.Ret(err)
+	}
+	defer cmdStream.Close()
+
 	return nil
 }
 

@@ -11,7 +11,6 @@ import (
 	"net"
 	"slices"
 	"sync"
-	"sync/atomic"
 	"time"
 
 	"github.com/keihaya-com/connet/netc"
@@ -22,15 +21,36 @@ import (
 	"github.com/segmentio/ksuid"
 )
 
-type relayServer struct {
+type relayConfig struct {
 	addr   *net.UDPAddr
+	store  RelayStore
+	cert   tls.Certificate
 	logger *slog.Logger
+}
 
-	tlsConf     *tls.Config
-	tlsClientCA atomic.Pointer[x509.CertPool]
+func newRelayServer(cfg relayConfig) (*relayServer, error) {
+	s := &relayServer{
+		addr:  cfg.addr,
+		store: cfg.store,
+		tlsConf: &tls.Config{
+			Certificates: []tls.Certificate{cfg.cert},
+			ClientAuth:   tls.RequireAndVerifyClientCert,
+			NextProtos:   []string{"connet-relay"},
+		},
+		logger: cfg.logger.With("relay", cfg.addr),
 
-	clientConfigs   map[relayClientConfigKey]*relayClientConfig
-	clientConfigsMu sync.RWMutex
+		destinations: map[Binding]map[ksuid.KSUID]*relayConn{},
+	}
+	s.tlsConf.GetConfigForClient = s.tlsConfigWithClientCA
+
+	return s, nil
+}
+
+type relayServer struct {
+	addr    *net.UDPAddr
+	store   RelayStore
+	tlsConf *tls.Config
+	logger  *slog.Logger
 
 	destinations   map[Binding]map[ksuid.KSUID]*relayConn
 	destinationsMu sync.RWMutex
@@ -44,76 +64,11 @@ type relayClientConfig struct {
 	destinations []Binding
 }
 
-func newRelayServer(server *Server) (*relayServer, error) {
-	s := &relayServer{
-		addr:   server.relayAddr,
-		logger: server.logger.With("relay", server.relayAddr),
-
-		tlsConf: &tls.Config{
-			Certificates: []tls.Certificate{*server.certificate},
-			ClientAuth:   tls.RequireAndVerifyClientCert,
-			NextProtos:   []string{"connet-relay"},
-		},
-
-		clientConfigs: map[relayClientConfigKey]*relayClientConfig{},
-		destinations:  map[Binding]map[ksuid.KSUID]*relayConn{},
-	}
-	s.tlsConf.GetConfigForClient = s.tlsConfigWithClientCA
-
-	return s, nil
-}
-
-func (s *relayServer) AddClientConfig(cert *x509.Certificate, sources []Binding, destinations []Binding) error {
-	s.clientConfigsMu.Lock()
-	defer s.clientConfigsMu.Unlock()
-
-	s.clientConfigs[sha256.Sum256(cert.Raw)] = &relayClientConfig{
-		cert:         cert,
-		sources:      sources,
-		destinations: destinations,
-	}
-
-	pool := x509.NewCertPool()
-	for _, cfg := range s.clientConfigs {
-		pool.AddCert(cfg.cert)
-	}
-	s.tlsClientCA.Store(pool)
-
-	return nil
-}
-
-func (s *relayServer) RemoveClientConfig(cert *x509.Certificate) error {
-	s.clientConfigsMu.Lock()
-	defer s.clientConfigsMu.Unlock()
-
-	delete(s.clientConfigs, sha256.Sum256(cert.Raw))
-
-	pool := x509.NewCertPool()
-	for _, cfg := range s.clientConfigs {
-		pool.AddCert(cfg.cert)
-	}
-	s.tlsClientCA.Store(pool)
-
-	return nil
-}
-
-func (s *relayServer) getClientConfig(certs []*x509.Certificate) *relayClientConfig {
-	s.clientConfigsMu.RLock()
-	defer s.clientConfigsMu.RUnlock()
-
-	for _, cert := range certs {
-		if cfg := s.clientConfigs[sha256.Sum256(cert.Raw)]; cfg != nil {
-			return cfg
-		}
-	}
-	return nil
-}
-
 func (s *relayServer) addDestinations(conn *relayConn) {
 	s.destinationsMu.Lock()
 	defer s.destinationsMu.Unlock()
 
-	for _, bind := range conn.cfg.destinations {
+	for bind := range conn.auth.Destinations {
 		bindDest := s.destinations[bind]
 		if bindDest == nil {
 			bindDest = map[ksuid.KSUID]*relayConn{}
@@ -127,7 +82,7 @@ func (s *relayServer) removeDestinations(conn *relayConn) {
 	s.destinationsMu.Lock()
 	defer s.destinationsMu.Unlock()
 
-	for _, bind := range conn.cfg.destinations {
+	for bind := range conn.auth.Destinations {
 		bindDest := s.destinations[bind]
 		delete(bindDest, conn.id)
 		if len(bindDest) == 0 {
@@ -147,13 +102,9 @@ func (s *relayServer) findDestinations(bind Binding) []*relayConn {
 	return slices.Collect(maps.Values(bindDest))
 }
 
-func (c *relayClientConfig) sourceDeny(bind Binding) bool {
-	return !slices.Contains(c.sources, bind)
-}
-
 func (s *relayServer) tlsConfigWithClientCA(chi *tls.ClientHelloInfo) (*tls.Config, error) {
 	cfg := s.tlsConf.Clone()
-	cfg.ClientCAs = s.tlsClientCA.Load()
+	cfg.ClientCAs = s.store.CertificateAuthority()
 	return cfg, nil
 }
 
@@ -185,9 +136,10 @@ func (s *relayServer) Run(ctx context.Context) error {
 		conn, err := l.Accept(ctx)
 		if err != nil {
 			if errors.Is(err, quic.ErrServerClosed) {
-				s.logger.Info("stopped quic relay")
+				s.logger.Info("stopped quic server")
 				return nil
 			}
+			continue
 		}
 		s.logger.Info("client connected", "local", conn.LocalAddr(), "remote", conn.RemoteAddr())
 
@@ -208,18 +160,24 @@ type relayConn struct {
 	conn   quic.Connection
 	logger *slog.Logger
 
-	cfg *relayClientConfig
+	auth *RelayAuthentication
 }
 
-func (c *relayConn) run(ctx context.Context) error {
+func (c *relayConn) run(ctx context.Context) {
 	defer c.conn.CloseWithError(0, "done")
 
+	if err := c.runErr(ctx); err != nil {
+		c.logger.Warn("error while running", "err", err)
+	}
+}
+
+func (c *relayConn) runErr(ctx context.Context) error {
 	certs := c.conn.ConnectionState().TLS.PeerCertificates
-	if cfg := c.server.getClientConfig(certs); cfg == nil {
-		c.conn.CloseWithError(1, "unknown client")
+	if auth := c.server.store.Authenticate(certs); auth == nil {
+		c.conn.CloseWithError(1, "auth failed")
 		return nil
 	} else {
-		c.cfg = cfg
+		c.auth = auth
 	}
 
 	c.server.addDestinations(c)
@@ -251,7 +209,7 @@ func (c *relayConn) runStream(ctx context.Context, stream quic.Stream) error {
 }
 
 func (c *relayConn) connect(ctx context.Context, stream quic.Stream, bind Binding) error {
-	if c.cfg.sourceDeny(bind) {
+	if !c.auth.AllowSource(bind) {
 		err := pb.NewError(pb.Error_DestinationNotFound, "not allowed")
 		return pb.Write(stream, &pbc.Response{Error: err})
 	}

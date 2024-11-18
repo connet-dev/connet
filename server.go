@@ -26,6 +26,9 @@ type Server struct {
 
 	realms   map[string]*realmClients
 	realmsMu sync.RWMutex
+
+	control *controlServer
+	relay   *relayServer
 }
 
 func NewServer(opts ...ServerOption) (*Server, error) {
@@ -50,19 +53,45 @@ func NewServer(opts ...ServerOption) (*Server, error) {
 		}
 	}
 
+	store, err := NewLocalRelayStore(cfg.relayAddr.AddrPort())
+	if err != nil {
+		return nil, err
+	}
+
+	control, err := newControlServer(controlConfig{
+		addr:   cfg.controlAddr,
+		auth:   cfg.auth,
+		store:  store,
+		cert:   *cfg.certificate,
+		logger: cfg.logger,
+	})
+
+	relay, err := newRelayServer(relayConfig{
+		addr:   cfg.relayAddr,
+		store:  store,
+		cert:   *cfg.certificate,
+		logger: cfg.logger,
+	})
+	if err != nil {
+		return nil, err
+	}
+
 	return &Server{
 		serverConfig: *cfg,
 		realms:       map[string]*realmClients{},
+
+		control: control,
+		relay:   relay,
 	}, nil
 }
 
 func (s *Server) Run(ctx context.Context) error {
 	g, ctx := errgroup.WithContext(ctx)
 	g.Go(func() error {
-		return s.runControl(ctx)
+		return s.control.Run(ctx)
 	})
 	g.Go(func() error {
-		return s.runRelay(ctx)
+		return s.relay.Run(ctx)
 	})
 	return g.Wait()
 }
@@ -98,6 +127,7 @@ func (s *Server) runControl(ctx context.Context) error {
 				s.logger.Info("stopped quic listener", "addr", s.controlAddr)
 				return nil
 			}
+			continue
 		}
 		s.logger.Info("client connected", "local", conn.LocalAddr(), "remote", conn.RemoteAddr())
 
@@ -110,14 +140,6 @@ func (s *Server) runControl(ctx context.Context) error {
 		}
 		go sc.run(ctx)
 	}
-}
-
-func (s *Server) runRelay(ctx context.Context) error {
-	r, err := newRelayServer(s)
-	if err != nil {
-		return err
-	}
-	return r.Run(ctx)
 }
 
 func (s *Server) getRealm(name string, upsert bool) (*realmClients, error) {

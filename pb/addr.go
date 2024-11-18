@@ -45,3 +45,19 @@ func (a *AddrPort) AsNetip() netip.AddrPort {
 	}
 	return netip.AddrPortFrom(addr, uint16(a.Port))
 }
+
+func AsNetips(pb []*AddrPort) []netip.AddrPort {
+	s := make([]netip.AddrPort, len(pb))
+	for i, pbi := range pb {
+		s[i] = pbi.AsNetip()
+	}
+	return s
+}
+
+func AsAddrPorts(addrs []netip.AddrPort) []*AddrPort {
+	s := make([]*AddrPort, len(addrs))
+	for i, addr := range addrs {
+		s[i] = AddrPortFromNetip(addr)
+	}
+	return s
+}
