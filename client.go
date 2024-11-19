@@ -103,16 +103,28 @@ func (c *Client) connect(ctx context.Context, transport *quic.Transport, rootCer
 	}
 
 	c.logger.Debug("authenticating", "addr", c.serverAddr)
-	pclient, err := pbs.NewClient(conn)
+
+	authStream, err := conn.OpenStreamSync(ctx)
 	if err != nil {
+		return nil, kleverr.Ret(err)
+	}
+	defer authStream.Close()
+
+	if err := pb.Write(authStream, &pbs.Authenticate{
+		Token: c.token,
+	}); err != nil {
 		return nil, kleverr.Ret(err)
 	}
 
-	respAddr, err := pclient.Authenticate(ctx, c.token)
-	if err != nil {
+	resp := &pbs.AuthenticateResp{}
+	if err := pb.Read(authStream, resp); err != nil {
 		return nil, kleverr.Ret(err)
 	}
-	c.logger.Info("authenticated", "origin", respAddr)
+	if resp.Error != nil {
+		return nil, kleverr.Ret(resp.Error)
+	}
+
+	c.logger.Info("authenticated", "origin", resp.Public.AsNetip())
 
 	sid := ksuid.New()
 	return &clientSession{
@@ -120,8 +132,7 @@ func (c *Client) connect(ctx context.Context, transport *quic.Transport, rootCer
 		id:          sid,
 		transport:   transport,
 		conn:        conn,
-		pclient:     pclient,
-		directAddrs: []*pb.AddrPort{respAddr},
+		directAddrs: []*pb.AddrPort{resp.Public},
 		logger:      c.logger.With("connection-id", sid),
 		rootCert:    rootCert,
 	}, nil
@@ -144,7 +155,6 @@ type clientSession struct {
 	id          ksuid.KSUID
 	transport   *quic.Transport
 	conn        quic.Connection
-	pclient     pbs.Client
 	directAddrs []*pb.AddrPort // TODO these should be multiple, not only from server pov
 	logger      *slog.Logger
 	rootCert    *certc.Cert
@@ -222,11 +232,20 @@ func (s *clientSession) registerDestination(ctx context.Context, bind Binding, a
 }
 
 func (s *clientSession) addDestination(ctx context.Context, bind Binding) error {
-	cmdStream, err := s.conn.OpenStreamSync(ctx)
+	stream, err := s.conn.OpenStreamSync(ctx)
 	if err != nil {
 		return kleverr.Ret(err)
 	}
-	defer cmdStream.Close()
+	defer stream.Close()
+
+	if err := pb.Write(stream, &pbs.Request_Destination{
+		Binding:         bind.AsPB(),
+		Certificate:     nil,
+		DirectAddresses: nil,
+		RelayAddresses:  nil,
+	}); err != nil {
+		return kleverr.Ret(err)
+	}
 
 	return nil
 }

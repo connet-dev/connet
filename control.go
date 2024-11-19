@@ -286,16 +286,8 @@ func (s *controlStream) relay(ctx context.Context, req *pbs.Request_Relay) error
 		return kleverr.Ret(err)
 	}
 
-	var destinations []Binding
-	for _, bind := range req.Destinations {
-		destinations = append(destinations, NewBindingPB(bind))
-	}
-	var sources []Binding
-	for _, bind := range req.Sources {
-		sources = append(sources, NewBindingPB(bind))
-	}
-
-	s.conn.server.store.Add(cert, destinations, sources)
+	s.conn.server.store.Add(cert, NewBindingsPB(req.Destinations), NewBindingsPB(req.Sources))
+	// TODO how to remove?
 
 	addrs, retry := s.conn.server.store.Relays()
 	if err := pb.Write(s.stream, &pbs.Response{
