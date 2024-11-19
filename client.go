@@ -10,6 +10,7 @@ import (
 	"net"
 	"net/netip"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/keihaya-com/connet/certc"
@@ -157,7 +158,19 @@ type clientSession struct {
 	conn        quic.Connection
 	directAddrs []*pb.AddrPort // TODO these should be multiple, not only from server pov
 	logger      *slog.Logger
-	rootCert    *certc.Cert
+
+	rootCert *certc.Cert
+	intCert  *certc.Cert
+
+	relayCert    *certc.Cert
+	relayTLSCert tls.Certificate
+	relayAddrs   []*pb.AddrPort
+
+	directServerCert    *certc.Cert
+	directServerTLSCert tls.Certificate
+	directCAs           atomic.Pointer[x509.CertPool]
+	directClientCert    *certc.Cert
+	directClientTLSCert tls.Certificate
 }
 
 func (s *clientSession) run(ctx context.Context) error {
@@ -165,11 +178,48 @@ func (s *clientSession) run(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
+	s.intCert = intCert
+
+	relayCert, err := intCert.NewClient(certc.CertOpts{})
+	if err != nil {
+		return err
+	}
+	s.relayCert = relayCert
+
+	relayTLS, err := relayCert.TLSCert()
+	if err != nil {
+		return err
+	}
+	s.relayTLSCert = relayTLS
+
+	directServerCert, err := intCert.NewServer(certc.CertOpts{
+		Domains: []string{"connet-direct"},
+	})
+	if err != nil {
+		return err
+	}
+	s.directServerCert = directServerCert
+
+	directServerTLS, err := directServerCert.TLSCert()
+	if err != nil {
+		return err
+	}
+	s.directServerTLSCert = directServerTLS
+
+	directClientCert, err := intCert.NewClient(certc.CertOpts{})
+	if err != nil {
+		return err
+	}
+	s.directClientCert = directClientCert
 
 	g, ctx := errgroup.WithContext(ctx)
 
 	g.Go(func() error {
-		return s.runDirect(ctx, intCert)
+		return s.runRelays(ctx)
+	})
+
+	g.Go(func() error {
+		return s.runDirectServer(ctx)
 	})
 
 	g.Go(func() error {
@@ -195,6 +245,66 @@ func (s *clientSession) run(ctx context.Context) error {
 	}
 
 	return g.Wait()
+}
+
+func (s *clientSession) runRelays(ctx context.Context) error {
+	stream, err := s.conn.OpenStreamSync(ctx)
+	if err != nil {
+		return kleverr.Ret(err)
+	}
+	defer stream.Close()
+
+	var dsts []*pb.Binding
+	for b := range s.client.destinations {
+		dsts = append(dsts, b.AsPB())
+	}
+	var srcs []*pb.Binding
+	for _, b := range s.client.sources {
+		srcs = append(srcs, b.AsPB())
+	}
+	if err := pb.Write(stream, &pbs.Request{
+		Relay: &pbs.Request_Relay{
+			Certificate:  s.relayCert.Raw(),
+			Destinations: dsts,
+			Sources:      srcs,
+		},
+	}); err != nil {
+		return kleverr.Ret(err)
+	}
+
+	for {
+		resp, err := pbs.ReadResponse(stream)
+		if err != nil {
+			return err
+		}
+		if resp.Relay == nil {
+			return kleverr.Newf("unexpected response: %v", resp)
+		}
+
+		s.relayAddrs = resp.Relay.Addresses
+	}
+}
+
+func (s *clientSession) runRelay(ctx context.Context, addr netip.AddrPort) error {
+	conn, err := s.transport.Dial(ctx, net.UDPAddrFromAddrPort(addr), &tls.Config{
+		Certificates: []tls.Certificate{s.relayTLSCert},
+		ServerName:   addr.Addr().String(),
+		NextProtos:   []string{"connet-relay"},
+	}, &quic.Config{
+		KeepAlivePeriod: 25 * time.Second,
+	})
+	if err != nil {
+		return kleverr.Ret(err)
+	}
+	for {
+		stream, err := conn.AcceptStream(ctx)
+		if err != nil {
+			return err
+		}
+
+		s.logger.Debug("serving relay conn", "remote", conn.RemoteAddr())
+		go s.runDestinationRequest(ctx, stream)
+	}
 }
 
 func (s *clientSession) registerDestination(ctx context.Context, bind Binding, addr string, parent *certc.Cert) error {
@@ -231,23 +341,72 @@ func (s *clientSession) registerDestination(ctx context.Context, bind Binding, a
 	return nil
 }
 
-func (s *clientSession) addDestination(ctx context.Context, bind Binding) error {
+func (s *clientSession) runDestination(ctx context.Context, bind Binding) error {
 	stream, err := s.conn.OpenStreamSync(ctx)
 	if err != nil {
 		return kleverr.Ret(err)
 	}
 	defer stream.Close()
 
-	if err := pb.Write(stream, &pbs.Request_Destination{
-		Binding:         bind.AsPB(),
-		Certificate:     nil,
-		DirectAddresses: nil,
-		RelayAddresses:  nil,
+	if err := pb.Write(stream, &pbs.Request{
+		Destination: &pbs.Request_Destination{
+			Binding:         bind.AsPB(),
+			Certificate:     s.directServerCert.Raw(),
+			DirectAddresses: s.directAddrs,
+			RelayAddresses:  s.relayAddrs,
+		},
 	}); err != nil {
 		return kleverr.Ret(err)
 	}
 
-	return nil
+	for {
+		resp, err := pbs.ReadResponse(stream)
+		if err != nil {
+			return err
+		}
+		if resp.Destination == nil {
+			return kleverr.Newf("unexpected response")
+		}
+
+		pool := x509.NewCertPool()
+		for _, certData := range resp.Destination.Certificates {
+			if cert, err := x509.ParseCertificate(certData); err != nil {
+				return kleverr.Newf("failed to parse cert: %w", err)
+			} else {
+				pool.AddCert(cert)
+			}
+		}
+		s.directCAs.Store(pool)
+	}
+}
+
+func (s *clientSession) runSource(ctx context.Context, bind Binding) error {
+	stream, err := s.conn.OpenStreamSync(ctx)
+	if err != nil {
+		return kleverr.Ret(err)
+	}
+	defer stream.Close()
+
+	if err := pb.Write(stream, &pbs.Request{
+		Source: &pbs.Request_Source{
+			Binding:     bind.AsPB(),
+			Certificate: s.directClientCert.Raw(),
+		},
+	}); err != nil {
+		return kleverr.Ret(err)
+	}
+
+	for {
+		resp, err := pbs.ReadResponse(stream)
+		if err != nil {
+			return err
+		}
+		if resp.Source == nil {
+			return kleverr.Newf("unexpected response")
+		}
+
+		// resp.Source.
+	}
 }
 
 func (s *clientSession) runDestinations(ctx context.Context) error {
@@ -315,39 +474,32 @@ func (s *clientSession) unknown(ctx context.Context, stream quic.Stream, req *pb
 	}
 }
 
-func (c *clientSession) runDirect(ctx context.Context, parentCert *certc.Cert) error {
-	serverCert, err := parentCert.NewServer(certc.CertOpts{Domains: []string{"connet-direct"}})
-	if err != nil {
-		return err
-	}
-	localCert, err := serverCert.TLSCert()
-	if err != nil {
-		return err
-	}
-	clientCAs, err := parentCert.CertPool()
-	if err != nil {
-		return err
-	}
-
-	l, err := c.transport.Listen(&tls.Config{
-		Certificates: []tls.Certificate{localCert},
-		ClientCAs:    clientCAs,
+func (s *clientSession) runDirectServer(ctx context.Context) error {
+	tlsConf := &tls.Config{
+		Certificates: []tls.Certificate{s.directServerTLSCert},
 		ClientAuth:   tls.RequireAndVerifyClientCert,
 		NextProtos:   []string{"connet-direct"},
-	}, &quic.Config{
+	}
+	tlsConf.GetConfigForClient = func(chi *tls.ClientHelloInfo) (*tls.Config, error) {
+		conf := tlsConf.Clone()
+		conf.ClientCAs = s.directCAs.Load()
+		return conf, nil
+	}
+
+	l, err := s.transport.Listen(tlsConf, &quic.Config{
 		KeepAlivePeriod: 25 * time.Second,
 	})
 	if err != nil {
 		return err
 	}
 
-	c.logger.Debug("listening for direct conns")
+	s.logger.Debug("listening for direct conns")
 	for {
 		conn, err := l.Accept(ctx)
 		if err != nil {
 			return err
 		}
-		c.logger.Debug("accepted direct conn", "remote", conn.RemoteAddr())
+		s.logger.Debug("accepted direct conn", "remote", conn.RemoteAddr())
 
 		go func() {
 			defer conn.CloseWithError(0, "done")
@@ -357,8 +509,8 @@ func (c *clientSession) runDirect(ctx context.Context, parentCert *certc.Cert) e
 				if err != nil {
 					return
 				}
-				c.logger.Debug("serving direct conn", "remote", conn.RemoteAddr())
-				go c.runDestinationRequest(ctx, stream)
+				s.logger.Debug("serving direct conn", "remote", conn.RemoteAddr())
+				go s.runDestinationRequest(ctx, stream)
 			}
 		}()
 	}

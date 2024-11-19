@@ -28,3 +28,11 @@ func NewBindingsPB(pbs []*pb.Binding) []Binding {
 	}
 	return s
 }
+
+func AsPBBindings(bs []Binding) []*pb.Binding {
+	s := make([]*pb.Binding, len(bs))
+	for i, b := range bs {
+		s[i] = b.AsPB()
+	}
+	return s
+}

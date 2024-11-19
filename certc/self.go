@@ -155,6 +155,10 @@ func (c *Cert) Cert() (*x509.Certificate, error) {
 	return x509.ParseCertificate(c.der)
 }
 
+func (c *Cert) Raw() []byte {
+	return c.der
+}
+
 func (c *Cert) CertPool() (*x509.CertPool, error) {
 	cert, err := c.Cert()
 	if err != nil {
