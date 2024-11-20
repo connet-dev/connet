@@ -6,6 +6,7 @@ import (
 	"crypto/x509"
 	"log/slog"
 	"net"
+	"net/netip"
 	"time"
 
 	"github.com/keihaya-com/connet/certc"
@@ -57,7 +58,7 @@ func NewClient(opts ...ClientOption) (*Client, error) {
 	cfg.logger.Debug("generated root cert")
 
 	serverCert, err := rootCert.NewServer(certc.CertOpts{
-		Domains: []string{"connet"},
+		Domains: []string{"connet-direct"},
 	})
 	if err != nil {
 		return nil, kleverr.Ret(err)
@@ -272,6 +273,8 @@ func (s *clientSession) runDestination(ctx context.Context, bind Binding) error 
 }
 
 func (s *clientSession) runSource(ctx context.Context, bind Binding) error {
+	srcServer := s.client.sourceServers[bind]
+
 	stream, err := s.conn.OpenStreamSync(ctx)
 	if err != nil {
 		return kleverr.Ret(err)
@@ -296,7 +299,23 @@ func (s *clientSession) runSource(ctx context.Context, bind Binding) error {
 			return kleverr.Newf("unexpected response")
 		}
 
-		// resp.Source.
+		routes := map[netip.AddrPort]*x509.Certificate{}
+		for _, direct := range resp.Source.Clients {
+			cert, err := x509.ParseCertificate(direct.Certificate)
+			if err != nil {
+				s.logger.Warn("invalid certificate", "err", err)
+				continue
+			}
+			for _, addr := range direct.Addresses {
+				routes[addr.AsNetip()] = cert
+			}
+		}
+
+		for _, relay := range resp.Source.Relays {
+			routes[relay.AsNetip()] = nil
+		}
+
+		srcServer.setRoutes(routes)
 	}
 }
 
