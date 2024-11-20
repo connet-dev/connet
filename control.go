@@ -2,13 +2,11 @@ package connet
 
 import (
 	"context"
-	"crypto/sha256"
 	"crypto/tls"
 	"crypto/x509"
 	"errors"
 	"log/slog"
 	"net"
-	"sync"
 	"time"
 
 	"github.com/keihaya-com/connet/authc"
@@ -51,70 +49,6 @@ type controlServer struct {
 	logger  *slog.Logger
 
 	whispers *Whispers
-}
-
-type controlBinding struct {
-	destinations map[[sha256.Size]byte]*controlDestination
-	sources      map[[sha256.Size]byte]*controlSource
-	mu           sync.Mutex
-}
-
-type controlDestination struct {
-	cert   *x509.Certificate
-	addr   *pb.AddrPort
-	notify chan controlDestinationNotify
-}
-
-type controlDestinationNotify struct {
-	certs []*x509.Certificate
-}
-
-type controlSource struct {
-	cert   *x509.Certificate
-	notify chan []*x509.Certificate
-}
-
-type controlSourceNotify struct {
-	certs []*x509.Certificate
-	addrs []*pb.AddrPort
-}
-
-func (b *controlBinding) destination(cert *x509.Certificate, addr *pb.AddrPort) chan controlDestinationNotify {
-	b.mu.Lock()
-	defer b.mu.Unlock()
-
-	dst := &controlDestination{
-		cert:   cert,
-		addr:   addr,
-		notify: make(chan controlDestinationNotify, 1),
-	}
-	b.destinations[sha256.Sum256(cert.Raw)] = dst
-
-	var sources []*x509.Certificate
-	for _, src := range b.sources {
-		sources = append(sources, src.cert)
-	}
-	dst.notify <- controlDestinationNotify{sources}
-
-	return dst.notify
-}
-
-func (b *controlBinding) undestination(cert *x509.Certificate) {
-	b.mu.Lock()
-	defer b.mu.Unlock()
-
-	hash := sha256.Sum256(cert.Raw)
-	dst := b.destinations[hash]
-	close(dst.notify)
-
-	delete(b.destinations, hash)
-}
-
-func (b *controlBinding) source(cert *x509.Certificate) error {
-	b.mu.Lock()
-	defer b.mu.Unlock()
-
-	return nil
 }
 
 func (s *controlServer) Run(ctx context.Context) error {
@@ -205,6 +139,8 @@ func (c *controlConn) runErr(ctx context.Context) error {
 	}
 }
 
+var retAuth = kleverr.Ret1[authc.Authentication]
+
 func (c *controlConn) authenticate(ctx context.Context) (authc.Authentication, error) {
 	c.logger.Debug("waiting for authentication")
 	authStream, err := c.conn.AcceptStream(ctx)
@@ -280,6 +216,8 @@ func (s *controlStream) runErr(ctx context.Context) error {
 }
 
 func (s *controlStream) relay(ctx context.Context, req *pbs.Request_Relay) error {
+	// TODO check if bindings is allowed
+
 	cert, err := x509.ParseCertificate(req.Certificate)
 	if err != nil {
 		// TODO reply
@@ -313,6 +251,8 @@ func (s *controlStream) relay(ctx context.Context, req *pbs.Request_Relay) error
 }
 
 func (s *controlStream) destination(ctx context.Context, req *pbs.Request_Destination) error {
+	// TODO check if binding is allowed
+
 	cert, err := x509.ParseCertificate(req.Certificate)
 	if err != nil {
 		respErr := pb.NewError(pb.Error_Unknown, "cannot parse certificate: %v", err)
@@ -378,6 +318,8 @@ func (s *controlStream) destination(ctx context.Context, req *pbs.Request_Destin
 }
 
 func (s *controlStream) source(ctx context.Context, req *pbs.Request_Source) error {
+	// TODO check if binding is allowed
+
 	cert, err := x509.ParseCertificate(req.Certificate)
 	if err != nil {
 		respErr := pb.NewError(pb.Error_Unknown, "cannot parse certificate: %v", err)

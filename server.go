@@ -82,8 +82,6 @@ func (s *Server) Run(ctx context.Context) error {
 	return g.Wait()
 }
 
-var retAuth = kleverr.Ret1[authc.Authentication]
-
 type serverConfig struct {
 	controlAddr *net.UDPAddr
 	relayAddr   *net.UDPAddr
