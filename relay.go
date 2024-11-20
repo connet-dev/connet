@@ -228,28 +228,30 @@ func (c *relayConn) connect(ctx context.Context, stream quic.Stream, bind Bindin
 	return pb.Write(stream, &pbc.Response{Error: err})
 }
 
-func (c *relayConn) connectDestination(ctx context.Context, stream quic.Stream, bind Binding, dest *relayConn) error {
-	otherStream, err := dest.conn.OpenStreamSync(ctx)
+func (c *relayConn) connectDestination(ctx context.Context, srcStream quic.Stream, bind Binding, dest *relayConn) error {
+	dstStream, err := dest.conn.OpenStreamSync(ctx)
 	if err != nil {
 		return kleverr.Newf("could not open stream: %w", err)
 	}
 
-	if err := pb.Write(otherStream, &pbc.Request_Connect{
-		Binding: bind.AsPB(),
+	if err := pb.Write(dstStream, &pbc.Request{
+		Connect: &pbc.Request_Connect{
+			Binding: bind.AsPB(),
+		},
 	}); err != nil {
 		return kleverr.Newf("could not write request: %w", err)
 	}
 
-	if _, err := pbc.ReadResponse(otherStream); err != nil {
+	if _, err := pbc.ReadResponse(dstStream); err != nil {
 		return kleverr.Newf("could not read response: %w", err)
 	}
 
-	if err := pb.Write(stream, &pbc.Response{}); err != nil {
+	if err := pb.Write(srcStream, &pbc.Response{}); err != nil {
 		return kleverr.Newf("could not write response: %w", err)
 	}
 
 	c.logger.Debug("joining conns", "bind", bind)
-	err = netc.Join(ctx, stream, otherStream)
+	err = netc.Join(ctx, srcStream, dstStream)
 	c.logger.Debug("disconnected conns", "bind", bind, "err", err)
 	return nil
 }

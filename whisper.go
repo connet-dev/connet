@@ -5,7 +5,6 @@ import (
 	"crypto/x509"
 	"net/netip"
 	"sync"
-	"time"
 )
 
 type Whispers struct {
@@ -98,8 +97,6 @@ func (w *Whisperer) RemoveSource(cert *x509.Certificate) {
 }
 
 func (w *Whisperer) Sources() []*x509.Certificate {
-	time.Sleep(time.Second) // TODO
-
 	w.sourcesMu.RLock()
 	defer w.sourcesMu.RUnlock()
 
@@ -112,8 +109,6 @@ func (w *Whisperer) Sources() []*x509.Certificate {
 }
 
 func (w *Whisperer) Destinations() DestinationsUpdate {
-	time.Sleep(time.Second) // TODO
-
 	w.destinationsMu.RLock()
 	defer w.destinationsMu.RUnlock()
 

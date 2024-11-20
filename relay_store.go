@@ -11,7 +11,7 @@ import (
 type RelayStoreManager interface {
 	Add(cert *x509.Certificate, destinations []Binding, sources []Binding)
 	Remove(cert *x509.Certificate)
-	Relays() ([]netip.AddrPort, bool)
+	Relays() []netip.AddrPort
 }
 
 type RelayStore interface {
@@ -60,7 +60,11 @@ func (s *localRelayStore) Add(cert *x509.Certificate, destinations []Binding, so
 	s.certsMu.Lock()
 	defer s.certsMu.Unlock()
 
-	auth := &RelayAuthentication{Certificate: cert}
+	auth := &RelayAuthentication{
+		Certificate:  cert,
+		Destinations: map[Binding]struct{}{},
+		Sources:      map[Binding]struct{}{},
+	}
 	for _, dst := range destinations {
 		auth.Destinations[dst] = struct{}{}
 	}
@@ -91,8 +95,8 @@ func (s *localRelayStore) Remove(cert *x509.Certificate) {
 	s.pool.Store(pool)
 }
 
-func (s *localRelayStore) Relays() ([]netip.AddrPort, bool) {
-	return []netip.AddrPort{s.addr}, false
+func (s *localRelayStore) Relays() []netip.AddrPort {
+	return []netip.AddrPort{s.addr}
 }
 
 func (s *localRelayStore) Authenticate(certs []*x509.Certificate) *RelayAuthentication {

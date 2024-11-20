@@ -23,31 +23,26 @@ type clientSourceServer struct {
 	bind      Binding
 	transport *quic.Transport
 	cert      tls.Certificate
+	relayCAs  *x509.CertPool
 	logger    *slog.Logger
 
-	routes   map[netip.AddrPort]*x509.CertPool
+	routes   map[netip.AddrPort]*x509.CertPool // TODO split these in direct/relay
 	routesMu sync.RWMutex
 
 	activeRoute   quic.Connection
 	activeRouteMu sync.RWMutex
 }
 
-func newClientSourceServer(addr string, bind Binding, transport *quic.Transport, clientCert tls.Certificate, logger *slog.Logger) *clientSourceServer {
-	return &clientSourceServer{
-		addr:      addr,
-		bind:      bind,
-		transport: transport,
-		cert:      clientCert,
-		logger:    logger.With("source", addr, "bind", bind),
-	}
-}
-
 func (s *clientSourceServer) setRoutes(routes map[netip.AddrPort]*x509.Certificate) {
 	newRoutes := map[netip.AddrPort]*x509.CertPool{}
 	for addr, cert := range routes {
-		pool := x509.NewCertPool()
-		pool.AddCert(cert)
-		newRoutes[addr] = pool
+		if cert == nil {
+			newRoutes[addr] = nil
+		} else {
+			pool := x509.NewCertPool()
+			pool.AddCert(cert)
+			newRoutes[addr] = pool
+		}
 	}
 
 	s.routesMu.Lock()
@@ -115,7 +110,7 @@ func (s *clientSourceServer) findRoute(ctx context.Context) (quic.Stream, error)
 		if cert != nil {
 			continue
 		}
-		conn, err := s.dialDirect(ctx, addr, cert)
+		conn, err := s.dialRelay(ctx, addr)
 		if err != nil {
 			s.logger.Debug("failed to relay dial", "addr", addr, "err", err)
 			continue
@@ -146,8 +141,11 @@ func (s *clientSourceServer) dialDirect(ctx context.Context, addr netip.AddrPort
 func (s *clientSourceServer) dialRelay(ctx context.Context, addr netip.AddrPort) (quic.Connection, error) {
 	return s.transport.Dial(ctx, net.UDPAddrFromAddrPort(addr), &tls.Config{
 		Certificates: []tls.Certificate{s.cert},
-		ServerName:   "connet-relay",
-		NextProtos:   []string{"connet-relay"},
+		RootCAs:      s.relayCAs,
+		// ServerName:   "connet-relay",
+		// ServerName: addr.Addr().String(),
+		ServerName: "localhost", // TODO
+		NextProtos: []string{"connet-relay"},
 	}, &quic.Config{
 		KeepAlivePeriod: 25 * time.Second,
 	})

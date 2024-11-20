@@ -29,13 +29,14 @@ type controlConfig struct {
 
 func newControlServer(cfg controlConfig) (*controlServer, error) {
 	return &controlServer{
-		addr:   cfg.addr,
-		auth:   cfg.auth,
-		logger: cfg.logger.With("control", cfg.addr),
+		addr:  cfg.addr,
+		auth:  cfg.auth,
+		store: cfg.store,
 		tlsConf: &tls.Config{
 			Certificates: []tls.Certificate{cfg.cert},
 			NextProtos:   []string{"connet"},
 		},
+		logger: cfg.logger.With("control", cfg.addr),
 
 		whispers: NewWhispers(),
 	}, nil
@@ -225,19 +226,11 @@ func (s *controlStream) relay(ctx context.Context, req *pbs.Request_Relay) error
 	}
 
 	s.conn.server.store.Add(cert, NewBindingsPB(req.Destinations), NewBindingsPB(req.Sources))
+	defer s.conn.server.store.Remove(cert)
 	// TODO how to remove?
 
-	addrs, retry := s.conn.server.store.Relays()
-	if err := pb.Write(s.stream, &pbs.Response{
-		Relay: &pbs.Response_Relay{
-			Addresses: pb.AsAddrPorts(addrs),
-		},
-	}); err != nil {
-		return kleverr.Ret(err)
-	}
-
-	for retry {
-		addrs, retry = s.conn.server.store.Relays()
+	for {
+		addrs := s.conn.server.store.Relays()
 		if err := pb.Write(s.stream, &pbs.Response{
 			Relay: &pbs.Response_Relay{
 				Addresses: pb.AsAddrPorts(addrs),
@@ -245,9 +238,8 @@ func (s *controlStream) relay(ctx context.Context, req *pbs.Request_Relay) error
 		}); err != nil {
 			return kleverr.Ret(err)
 		}
+		time.Sleep(time.Second) // TODO
 	}
-
-	return nil
 }
 
 func (s *controlStream) destination(ctx context.Context, req *pbs.Request_Destination) error {
@@ -311,6 +303,8 @@ func (s *controlStream) destination(ctx context.Context, req *pbs.Request_Destin
 			}); err != nil {
 				return kleverr.Ret(err)
 			}
+
+			time.Sleep(time.Second) // TODO
 		}
 	})
 
@@ -382,6 +376,8 @@ func (s *controlStream) source(ctx context.Context, req *pbs.Request_Source) err
 			}); err != nil {
 				return kleverr.Ret(err)
 			}
+
+			time.Sleep(time.Second) // TODO
 		}
 	})
 

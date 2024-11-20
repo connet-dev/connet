@@ -5,8 +5,11 @@ import (
 	"crypto/tls"
 	"crypto/x509"
 	"log/slog"
+	"maps"
 	"net"
 	"net/netip"
+	"slices"
+	"sync"
 	"time"
 
 	"github.com/keihaya-com/connet/certc"
@@ -115,6 +118,7 @@ func (c *Client) Run(ctx context.Context) error {
 			bind:      bind,
 			transport: directTransport,
 			cert:      c.clientCert,
+			relayCAs:  c.controlCAs,
 			logger:    c.logger.With("component", "source-server", "addr", addr, "bind", bind),
 		}
 	}
@@ -189,12 +193,13 @@ func (c *Client) connect(ctx context.Context, transport *quic.Transport) (*clien
 
 	sid := ksuid.New()
 	return &clientSession{
-		client:      c,
-		id:          sid,
-		transport:   transport,
-		conn:        conn,
-		directAddrs: []*pb.AddrPort{resp.Public},
-		logger:      c.logger.With("connection-id", sid),
+		client:    c,
+		id:        sid,
+		transport: transport,
+		conn:      conn,
+		// directAddrs: []*pb.AddrPort{resp.Public},
+		activeRelays: map[netip.AddrPort]*clientRelayServer{},
+		logger:       c.logger.With("connection-id", sid),
 	}, nil
 }
 
@@ -211,16 +216,21 @@ func (c *Client) reconnect(ctx context.Context, transport *quic.Transport) (*cli
 }
 
 type clientSession struct {
-	client      *Client
-	id          ksuid.KSUID
-	transport   *quic.Transport
-	conn        quic.Connection
-	directAddrs []*pb.AddrPort // TODO these should be multiple, not only from server pov
-	logger      *slog.Logger
+	client       *Client
+	id           ksuid.KSUID
+	transport    *quic.Transport
+	conn         quic.Connection
+	directAddrs  []*pb.AddrPort // TODO these should be multiple, not only from server pov
+	relayAddrs   []*pb.AddrPort
+	relayAddrsMu sync.RWMutex
+	activeRelays map[netip.AddrPort]*clientRelayServer
+	logger       *slog.Logger
 }
 
 func (s *clientSession) run(ctx context.Context) error {
 	g, ctx := errgroup.WithContext(ctx)
+
+	g.Go(func() error { return s.runRelays(ctx) })
 
 	for dst := range s.client.destinations {
 		g.Go(func() error { return s.runDestination(ctx, dst) })
@@ -231,6 +241,69 @@ func (s *clientSession) run(ctx context.Context) error {
 	}
 
 	return g.Wait()
+}
+
+func (s *clientSession) runRelays(ctx context.Context) error {
+	stream, err := s.conn.OpenStreamSync(ctx)
+	if err != nil {
+		return kleverr.Ret(err)
+	}
+	defer stream.Close()
+
+	if err := pb.Write(stream, &pbs.Request{
+		Relay: &pbs.Request_Relay{
+			Certificate:  s.client.clientCert.Leaf.Raw,
+			Destinations: AsPBBindings(slices.Collect(maps.Keys(s.client.destinations))),
+			Sources:      AsPBBindings(slices.Collect(maps.Values(s.client.sources))),
+		},
+	}); err != nil {
+		return err
+	}
+
+	for {
+		resp, err := pbs.ReadResponse(stream)
+		if err != nil {
+			return err
+		}
+		if resp.Relay == nil {
+			return kleverr.Newf("unexpected response")
+		}
+
+		s.setRelayAddrs(ctx, resp.Relay.Addresses)
+	}
+}
+
+func (s *clientSession) setRelayAddrs(ctx context.Context, addrs []*pb.AddrPort) {
+	s.relayAddrsMu.Lock()
+	s.relayAddrs = addrs
+	s.relayAddrsMu.Unlock()
+
+	// TODO
+	for _, pbaddr := range addrs {
+		addr := pbaddr.AsNetip()
+
+		if _, ok := s.activeRelays[addr]; ok {
+			continue
+		}
+
+		srv := &clientRelayServer{
+			addr:      addr,
+			transport: s.transport,
+			cert:      s.client.clientCert,
+			relayCAs:  s.client.controlCAs,
+			dialer:    s.client.dialer,
+			logger:    s.client.logger.With("component", "relay", "addr", addr),
+		}
+		s.activeRelays[addr] = srv
+		go srv.run(ctx)
+	}
+}
+
+func (s *clientSession) getRelayAddrs() []*pb.AddrPort {
+	s.relayAddrsMu.RLock()
+	defer s.relayAddrsMu.RUnlock()
+
+	return s.relayAddrs
 }
 
 func (s *clientSession) runDestination(ctx context.Context, bind Binding) error {
@@ -245,31 +318,54 @@ func (s *clientSession) runDestination(ctx context.Context, bind Binding) error 
 			Binding:         bind.AsPB(),
 			Certificate:     s.client.serverCert.Leaf.Raw,
 			DirectAddresses: s.directAddrs,
-			// RelayAddresses:  s.relayAddrs,
+			RelayAddresses:  s.getRelayAddrs(),
 		},
 	}); err != nil {
 		return kleverr.Ret(err)
 	}
 
-	for {
-		resp, err := pbs.ReadResponse(stream)
-		if err != nil {
-			return err
-		}
-		if resp.Destination == nil {
-			return kleverr.Newf("unexpected response")
-		}
+	g, ctx := errgroup.WithContext(ctx)
 
-		pool := x509.NewCertPool()
-		for _, certData := range resp.Destination.Certificates {
-			if cert, err := x509.ParseCertificate(certData); err != nil {
-				return kleverr.Newf("failed to parse cert: %w", err)
-			} else {
-				pool.AddCert(cert)
+	g.Go(func() error {
+		for {
+			time.Sleep(time.Second) // TODO
+
+			if err := pb.Write(stream, &pbs.Request{
+				Destination: &pbs.Request_Destination{
+					Binding:         bind.AsPB(),
+					Certificate:     s.client.serverCert.Leaf.Raw,
+					DirectAddresses: s.directAddrs,
+					RelayAddresses:  s.getRelayAddrs(),
+				},
+			}); err != nil {
+				return kleverr.Ret(err)
 			}
 		}
-		s.client.directServer.clientCA.Store(pool)
-	}
+	})
+
+	g.Go(func() error {
+		for {
+			resp, err := pbs.ReadResponse(stream)
+			if err != nil {
+				return err
+			}
+			if resp.Destination == nil {
+				return kleverr.Newf("unexpected response")
+			}
+
+			pool := x509.NewCertPool()
+			for _, certData := range resp.Destination.Certificates {
+				if cert, err := x509.ParseCertificate(certData); err != nil {
+					return kleverr.Newf("failed to parse cert: %w", err)
+				} else {
+					pool.AddCert(cert)
+				}
+			}
+			s.client.directServer.clientCA.Store(pool)
+		}
+	})
+
+	return g.Wait()
 }
 
 func (s *clientSession) runSource(ctx context.Context, bind Binding) error {
