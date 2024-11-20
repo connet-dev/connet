@@ -156,6 +156,7 @@ func (c *Client) run(ctx context.Context, transport *quic.Transport) error {
 
 func (c *Client) connect(ctx context.Context, transport *quic.Transport) (*clientSession, error) {
 	c.logger.Debug("dialing target", "addr", c.serverAddr)
+	// TODO dial timeout if server is not accessible?
 	conn, err := transport.Dial(ctx, c.serverAddr, &tls.Config{
 		ServerName: c.serverName,
 		RootCAs:    c.controlCAs,
@@ -221,7 +222,7 @@ type clientSession struct {
 	transport    *quic.Transport
 	conn         quic.Connection
 	directAddrs  []*pb.AddrPort // TODO these should be multiple, not only from server pov
-	relayAddrs   []*pb.AddrPort
+	relayAddrs   map[netip.AddrPort]string
 	relayAddrsMu sync.RWMutex
 	activeRelays map[netip.AddrPort]*clientRelayServer
 	logger       *slog.Logger
@@ -269,25 +270,28 @@ func (s *clientSession) runRelays(ctx context.Context) error {
 			return kleverr.Newf("unexpected response")
 		}
 
-		s.setRelayAddrs(ctx, resp.Relay.Addresses)
+		addrs := map[netip.AddrPort]string{}
+		for _, addr := range resp.Relay.Addresses {
+			addrs[addr.Address.AsNetip()] = addr.Name
+		}
+		s.setRelayAddrs(ctx, addrs)
 	}
 }
 
-func (s *clientSession) setRelayAddrs(ctx context.Context, addrs []*pb.AddrPort) {
+func (s *clientSession) setRelayAddrs(ctx context.Context, addrs map[netip.AddrPort]string) {
 	s.relayAddrsMu.Lock()
-	s.relayAddrs = addrs
+	s.relayAddrs = maps.Clone(addrs)
 	s.relayAddrsMu.Unlock()
 
 	// TODO
-	for _, pbaddr := range addrs {
-		addr := pbaddr.AsNetip()
-
+	for addr, name := range addrs {
 		if _, ok := s.activeRelays[addr]; ok {
 			continue
 		}
 
 		srv := &clientRelayServer{
 			addr:      addr,
+			name:      name,
 			transport: s.transport,
 			cert:      s.client.clientCert,
 			relayCAs:  s.client.controlCAs,
@@ -299,11 +303,26 @@ func (s *clientSession) setRelayAddrs(ctx context.Context, addrs []*pb.AddrPort)
 	}
 }
 
-func (s *clientSession) getRelayAddrs() []*pb.AddrPort {
+func (s *clientSession) getDirectAddr() *pbs.DirectAddress {
+	return &pbs.DirectAddress{
+		Certificate: s.client.serverCert.Leaf.Raw,
+		Addresses:   s.directAddrs,
+	}
+}
+
+func (s *clientSession) getRelayAddrs() []*pbs.RelayAddress {
 	s.relayAddrsMu.RLock()
 	defer s.relayAddrsMu.RUnlock()
 
-	return s.relayAddrs
+	var relays []*pbs.RelayAddress
+	for addr, name := range s.relayAddrs {
+		relays = append(relays, &pbs.RelayAddress{
+			Address: pb.AddrPortFromNetip(addr),
+			Name:    name,
+		})
+	}
+
+	return relays
 }
 
 func (s *clientSession) runDestination(ctx context.Context, bind Binding) error {
@@ -315,10 +334,9 @@ func (s *clientSession) runDestination(ctx context.Context, bind Binding) error 
 
 	if err := pb.Write(stream, &pbs.Request{
 		Destination: &pbs.Request_Destination{
-			Binding:         bind.AsPB(),
-			Certificate:     s.client.serverCert.Leaf.Raw,
-			DirectAddresses: s.directAddrs,
-			RelayAddresses:  s.getRelayAddrs(),
+			Binding: bind.AsPB(),
+			Direct:  s.getDirectAddr(),
+			Relays:  s.getRelayAddrs(),
 		},
 	}); err != nil {
 		return kleverr.Ret(err)
@@ -332,10 +350,9 @@ func (s *clientSession) runDestination(ctx context.Context, bind Binding) error 
 
 			if err := pb.Write(stream, &pbs.Request{
 				Destination: &pbs.Request_Destination{
-					Binding:         bind.AsPB(),
-					Certificate:     s.client.serverCert.Leaf.Raw,
-					DirectAddresses: s.directAddrs,
-					RelayAddresses:  s.getRelayAddrs(),
+					Binding: bind.AsPB(),
+					Direct:  s.getDirectAddr(),
+					Relays:  s.getRelayAddrs(),
 				},
 			}); err != nil {
 				return kleverr.Ret(err)
@@ -395,23 +412,24 @@ func (s *clientSession) runSource(ctx context.Context, bind Binding) error {
 			return kleverr.Newf("unexpected response")
 		}
 
-		routes := map[netip.AddrPort]*x509.Certificate{}
-		for _, direct := range resp.Source.Clients {
+		directs := map[netip.AddrPort]*x509.Certificate{}
+		for _, direct := range resp.Source.Directs {
 			cert, err := x509.ParseCertificate(direct.Certificate)
 			if err != nil {
 				s.logger.Warn("invalid certificate", "err", err)
 				continue
 			}
 			for _, addr := range direct.Addresses {
-				routes[addr.AsNetip()] = cert
+				directs[addr.AsNetip()] = cert
 			}
 		}
 
+		relays := map[netip.AddrPort]string{}
 		for _, relay := range resp.Source.Relays {
-			routes[relay.AsNetip()] = nil
+			relays[relay.Address.AsNetip()] = relay.Name
 		}
 
-		srcServer.setRoutes(routes)
+		srcServer.setRoutes(directs, relays)
 	}
 }
 

@@ -1,10 +1,11 @@
 package connet
 
 import (
-	"crypto/sha256"
 	"crypto/x509"
 	"net/netip"
 	"sync"
+
+	"github.com/segmentio/ksuid"
 )
 
 type Whispers struct {
@@ -36,8 +37,8 @@ func (w *Whispers) For(bind Binding) *Whisperer {
 
 	wh = &Whisperer{
 		bind:         bind,
-		destinations: map[[sha256.Size]byte]*whisperDestination{},
-		sources:      map[[sha256.Size]byte]*whisperSource{},
+		destinations: map[ksuid.KSUID]*whisperDestination{},
+		sources:      map[ksuid.KSUID]*whisperSource{},
 	}
 	w.whisperers[bind] = wh
 	return wh
@@ -46,54 +47,52 @@ func (w *Whispers) For(bind Binding) *Whisperer {
 type Whisperer struct {
 	bind Binding
 
-	destinations   map[[sha256.Size]byte]*whisperDestination
+	destinations   map[ksuid.KSUID]*whisperDestination
 	destinationsMu sync.RWMutex
-	sources        map[[sha256.Size]byte]*whisperSource
+	sources        map[ksuid.KSUID]*whisperSource
 	sourcesMu      sync.RWMutex
 }
 
 type whisperDestination struct {
-	cert   *x509.Certificate
-	direct []netip.AddrPort
-	relay  []netip.AddrPort
+	direct *DirectDestination
+	relays []RelayDestination
 }
 
 type whisperSource struct {
 	cert *x509.Certificate
 }
 
-func (w *Whisperer) AddDestination(directCert *x509.Certificate, directAddrs, relayAddrs []netip.AddrPort) {
+func (w *Whisperer) AddDestination(id ksuid.KSUID, direct *DirectDestination, relays []RelayDestination) {
 	w.destinationsMu.Lock()
 	defer w.destinationsMu.Unlock()
 
-	w.destinations[sha256.Sum256(directCert.Raw)] = &whisperDestination{
-		cert:   directCert,
-		direct: directAddrs,
-		relay:  relayAddrs,
+	w.destinations[id] = &whisperDestination{
+		direct: direct,
+		relays: relays,
 	}
 }
 
-func (w *Whisperer) RemoveDestination(cert *x509.Certificate) {
+func (w *Whisperer) RemoveDestination(id ksuid.KSUID) {
 	w.destinationsMu.Lock()
 	defer w.destinationsMu.Unlock()
 
-	delete(w.destinations, sha256.Sum256(cert.Raw))
+	delete(w.destinations, id)
 }
 
-func (w *Whisperer) AddSource(cert *x509.Certificate) {
+func (w *Whisperer) AddSource(id ksuid.KSUID, cert *x509.Certificate) {
 	w.sourcesMu.Lock()
 	defer w.sourcesMu.Unlock()
 
-	w.sources[sha256.Sum256(cert.Raw)] = &whisperSource{
+	w.sources[id] = &whisperSource{
 		cert: cert,
 	}
 }
 
-func (w *Whisperer) RemoveSource(cert *x509.Certificate) {
+func (w *Whisperer) RemoveSource(id ksuid.KSUID) {
 	w.sourcesMu.Lock()
 	defer w.sourcesMu.Unlock()
 
-	delete(w.sources, sha256.Sum256(cert.Raw))
+	delete(w.sources, id)
 }
 
 func (w *Whisperer) Sources() []*x509.Certificate {
@@ -108,33 +107,29 @@ func (w *Whisperer) Sources() []*x509.Certificate {
 	return result
 }
 
-func (w *Whisperer) Destinations() DestinationsUpdate {
+func (w *Whisperer) Destinations() ([]DirectDestination, []RelayDestination) {
 	w.destinationsMu.RLock()
 	defer w.destinationsMu.RUnlock()
 
-	var clients []DestinationsClient
-	var relays []netip.AddrPort
+	var direct []DirectDestination
+	var relays []RelayDestination
 
 	for _, dst := range w.destinations {
-		clients = append(clients, DestinationsClient{
-			Certificate: dst.cert,
-			Addresses:   dst.direct,
-		})
-		relays = append(relays, dst.relay...)
+		if dst.direct != nil {
+			direct = append(direct, *dst.direct)
+		}
+		relays = append(relays, dst.relays...)
 	}
 
-	return DestinationsUpdate{
-		Clients: clients,
-		Relays:  relays,
-	}
+	return direct, relays
 }
 
-type DestinationsUpdate struct {
-	Clients []DestinationsClient
-	Relays  []netip.AddrPort
-}
-
-type DestinationsClient struct {
-	Certificate *x509.Certificate
+type DirectDestination struct {
 	Addresses   []netip.AddrPort
+	Certificate *x509.Certificate
+}
+
+type RelayDestination struct {
+	Address netip.AddrPort
+	Name    string
 }

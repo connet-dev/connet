@@ -14,6 +14,7 @@ import (
 var auth = flag.String("auth", "", "authentication token")
 var controlAddr = flag.String("control-addr", "", "the address to listen for control connections")
 var relayAddr = flag.String("relay-addr", "", "the address to listen for relay connections")
+var relayName = flag.String("relay-name", "", "the public relay name to send to clients")
 var serverCert = flag.String("server-cert", "", "cert file to use")
 var serverKey = flag.String("server-key", "", "key file to use")
 var debug = flag.Bool("debug", false, "turn on debug logging")
@@ -40,7 +41,7 @@ func main() {
 	}
 
 	if *relayAddr != "" {
-		opts = append(opts, connet.ServerRelayAddress(*relayAddr))
+		opts = append(opts, connet.ServerRelay(*relayAddr, *relayName))
 	}
 
 	if *serverCert != "" {

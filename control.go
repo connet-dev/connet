@@ -230,10 +230,17 @@ func (s *controlStream) relay(ctx context.Context, req *pbs.Request_Relay) error
 	// TODO how to remove?
 
 	for {
-		addrs := s.conn.server.store.Relays()
+		var addrs []*pbs.RelayAddress
+		for addr, name := range s.conn.server.store.Relays() {
+			addrs = append(addrs, &pbs.RelayAddress{
+				Address: pb.AddrPortFromNetip(addr),
+				Name:    name,
+			})
+		}
+
 		if err := pb.Write(s.stream, &pbs.Response{
 			Relay: &pbs.Response_Relay{
-				Addresses: pb.AsAddrPorts(addrs),
+				Addresses: addrs,
 			},
 		}); err != nil {
 			return kleverr.Ret(err)
@@ -244,23 +251,35 @@ func (s *controlStream) relay(ctx context.Context, req *pbs.Request_Relay) error
 
 func (s *controlStream) destination(ctx context.Context, req *pbs.Request_Destination) error {
 	// TODO check if binding is allowed
+	var direct *DirectDestination
+	var relays []RelayDestination
 
-	cert, err := x509.ParseCertificate(req.Certificate)
-	if err != nil {
-		respErr := pb.NewError(pb.Error_Unknown, "cannot parse certificate: %v", err)
-		return pb.Write(s.stream, &pbs.Response{Error: respErr})
+	if req.Direct != nil {
+		cert, err := x509.ParseCertificate(req.Direct.Certificate)
+		if err != nil {
+			respErr := pb.NewError(pb.Error_Unknown, "cannot parse certificate: %v", err)
+			return pb.Write(s.stream, &pbs.Response{Error: respErr})
+		}
+		direct = &DirectDestination{
+			Addresses:   pb.AsNetips(req.Direct.Addresses),
+			Certificate: cert,
+		}
+	}
+
+	for _, r := range req.Relays {
+		relays = append(relays, RelayDestination{
+			Address: r.Address.AsNetip(),
+			Name:    r.Name,
+		})
 	}
 
 	w := s.conn.server.whispers.For(NewBindingPB(req.Binding))
+	w.AddDestination(s.conn.id, direct, relays)
+	defer w.RemoveDestination(s.conn.id)
 
 	g, ctx := errgroup.WithContext(ctx)
 
 	g.Go(func() error {
-		w.AddDestination(cert, pb.AsNetips(req.DirectAddresses), pb.AsNetips(req.RelayAddresses))
-		defer func() {
-			w.RemoveDestination(cert)
-		}()
-
 		for {
 			req, err := pbs.ReadRequest(s.stream)
 			if err != nil {
@@ -274,18 +293,30 @@ func (s *controlStream) destination(ctx context.Context, req *pbs.Request_Destin
 				return respErr
 			}
 
-			newCert, err := x509.ParseCertificate(req.Destination.Certificate)
-			if err != nil {
-				respErr := pb.NewError(pb.Error_Unknown, "cannot parse certificate: %v", err)
-				if err := pb.Write(s.stream, &pbs.Response{Error: respErr}); err != nil {
-					return kleverr.Ret(err)
+			// TODO dupe
+			var direct *DirectDestination
+			var relays []RelayDestination
+
+			if req.Destination.Direct != nil {
+				cert, err := x509.ParseCertificate(req.Destination.Direct.Certificate)
+				if err != nil {
+					respErr := pb.NewError(pb.Error_Unknown, "cannot parse certificate: %v", err)
+					return pb.Write(s.stream, &pbs.Response{Error: respErr})
 				}
-				return respErr
+				direct = &DirectDestination{
+					Addresses:   pb.AsNetips(req.Destination.Direct.Addresses),
+					Certificate: cert,
+				}
 			}
 
-			w.RemoveDestination(cert)
-			w.AddDestination(newCert, pb.AsNetips(req.Destination.DirectAddresses), pb.AsNetips(req.Destination.RelayAddresses))
-			cert = newCert
+			for _, r := range req.Destination.Relays {
+				relays = append(relays, RelayDestination{
+					Address: r.Address.AsNetip(),
+					Name:    r.Name,
+				})
+			}
+
+			w.AddDestination(s.conn.id, direct, relays)
 		}
 	})
 
@@ -321,15 +352,12 @@ func (s *controlStream) source(ctx context.Context, req *pbs.Request_Source) err
 	}
 
 	w := s.conn.server.whispers.For(NewBindingPB(req.Binding))
+	w.AddSource(s.conn.id, cert)
+	defer w.RemoveSource(s.conn.id)
 
 	g, ctx := errgroup.WithContext(ctx)
 
 	g.Go(func() error {
-		w.AddSource(cert)
-		defer func() {
-			w.RemoveSource(cert)
-		}()
-
 		for {
 			req, err := pbs.ReadRequest(s.stream)
 			if err != nil {
@@ -343,7 +371,7 @@ func (s *controlStream) source(ctx context.Context, req *pbs.Request_Source) err
 				return respErr
 			}
 
-			newCert, err := x509.ParseCertificate(req.Source.Certificate)
+			cert, err := x509.ParseCertificate(req.Source.Certificate)
 			if err != nil {
 				respErr := pb.NewError(pb.Error_Unknown, "cannot parse certificate: %v", err)
 				if err := pb.Write(s.stream, &pbs.Response{Error: respErr}); err != nil {
@@ -351,23 +379,25 @@ func (s *controlStream) source(ctx context.Context, req *pbs.Request_Source) err
 				}
 				return respErr
 			}
-			w.RemoveSource(cert)
-			w.AddSource(newCert)
-			cert = newCert
+			w.AddSource(s.conn.id, cert)
 		}
 	})
 
 	g.Go(func() error {
 		for {
-			update := w.Destinations()
+			resp := &pbs.Response_Source{}
 
-			resp := &pbs.Response_Source{
-				Relays: pb.AsAddrPorts(update.Relays),
+			direct, relays := w.Destinations()
+			for _, dst := range direct {
+				resp.Directs = append(resp.Directs, &pbs.DirectAddress{
+					Addresses:   pb.AsAddrPorts(dst.Addresses),
+					Certificate: dst.Certificate.Raw,
+				})
 			}
-			for _, cl := range update.Clients {
-				resp.Clients = append(resp.Clients, &pbs.Response_Source_Client{
-					Certificate: cl.Certificate.Raw,
-					Addresses:   pb.AsAddrPorts(cl.Addresses),
+			for _, dst := range relays {
+				resp.Relays = append(resp.Relays, &pbs.RelayAddress{
+					Address: pb.AddrPortFromNetip(dst.Address),
+					Name:    dst.Name,
 				})
 			}
 

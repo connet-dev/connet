@@ -28,9 +28,8 @@ message Request {
   }
   message Destination {
     shared.Binding binding = 1;
-    bytes certificate = 2; // certificate that is served as direct connection
-    repeated shared.AddrPort direct_addresses = 3; // the set of addresses for direct connections
-    repeated shared.AddrPort relay_addresses = 4; // the set of addresses for relay connections
+    DirectAddress direct = 2; // the set of addresses for direct connections
+    repeated RelayAddress relays = 3; // the set of addresses for relay connections
   }
   message Source {
     shared.Binding binding = 1;
@@ -46,17 +45,23 @@ message Response {
   Source source = 4;
 
   message Relay {
-    repeated shared.AddrPort addresses = 1; // set of relay addresses that follow this server
+    repeated RelayAddress addresses = 1; // set of relay addresses that follow this server
   }
   message Destination {
     repeated bytes certificates = 1; // certificates that the clients will present when connecting directly
   }
   message Source {
-    repeated Client clients = 1;
-    repeated shared.AddrPort relays = 2;
-    message Client {
-      bytes certificate = 1; // the destination server certificate
-      repeated shared.AddrPort addresses = 2;
-    }
+    repeated DirectAddress directs = 1;
+    repeated RelayAddress relays = 2;
   }
+}
+
+message DirectAddress {
+  repeated shared.AddrPort addresses = 1;
+  bytes certificate = 2; // the server certificate when connecting directly
+}
+
+message RelayAddress {
+  shared.AddrPort address = 1;
+  string name = 2; // the relay server name when connecting directly
 }

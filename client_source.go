@@ -27,25 +27,22 @@ type clientSourceServer struct {
 	logger    *slog.Logger
 
 	directRoutes map[netip.AddrPort]*x509.CertPool
-	relayRoutes  map[netip.AddrPort]struct{}
+	relayRoutes  map[netip.AddrPort]string
 	routesMu     sync.RWMutex
 
 	activeRoute   quic.Connection
 	activeRouteMu sync.RWMutex
 }
 
-func (s *clientSourceServer) setRoutes(routes map[netip.AddrPort]*x509.Certificate) {
+func (s *clientSourceServer) setRoutes(direct map[netip.AddrPort]*x509.Certificate, relays map[netip.AddrPort]string) {
 	newDirect := map[netip.AddrPort]*x509.CertPool{}
-	newRelay := map[netip.AddrPort]struct{}{}
-	for addr, cert := range routes {
-		if cert != nil {
-			pool := x509.NewCertPool()
-			pool.AddCert(cert)
-			newDirect[addr] = pool
-		} else {
-			newRelay[addr] = struct{}{}
-		}
+	for addr, cert := range direct {
+		pool := x509.NewCertPool()
+		pool.AddCert(cert)
+		newDirect[addr] = pool
 	}
+
+	newRelay := maps.Clone(relays)
 
 	s.routesMu.Lock()
 	defer s.routesMu.Unlock()
@@ -61,7 +58,7 @@ func (s *clientSourceServer) getDirectRoutes() map[netip.AddrPort]*x509.CertPool
 	return maps.Clone(s.directRoutes)
 }
 
-func (s *clientSourceServer) getRelayRoutes() map[netip.AddrPort]struct{} {
+func (s *clientSourceServer) getRelayRoutes() map[netip.AddrPort]string {
 	s.routesMu.RLock()
 	defer s.routesMu.RUnlock()
 
@@ -111,8 +108,8 @@ func (s *clientSourceServer) findRoute(ctx context.Context) (quic.Stream, error)
 	}
 
 	// now try the relays
-	for addr := range s.getRelayRoutes() {
-		conn, err := s.dialRelay(ctx, addr)
+	for addr, name := range s.getRelayRoutes() {
+		conn, err := s.dialRelay(ctx, addr, name)
 		if err != nil {
 			s.logger.Debug("failed to relay dial", "addr", addr, "err", err)
 			continue
@@ -140,7 +137,7 @@ func (s *clientSourceServer) dialDirect(ctx context.Context, addr netip.AddrPort
 	})
 }
 
-func (s *clientSourceServer) dialRelay(ctx context.Context, addr netip.AddrPort) (quic.Connection, error) {
+func (s *clientSourceServer) dialRelay(ctx context.Context, addr netip.AddrPort, name string) (quic.Connection, error) {
 	return s.transport.Dial(ctx, net.UDPAddrFromAddrPort(addr), &tls.Config{
 		Certificates: []tls.Certificate{s.cert},
 		RootCAs:      s.relayCAs,

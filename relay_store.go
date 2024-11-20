@@ -11,7 +11,7 @@ import (
 type RelayStoreManager interface {
 	Add(cert *x509.Certificate, destinations []Binding, sources []Binding)
 	Remove(cert *x509.Certificate)
-	Relays() []netip.AddrPort
+	Relays() map[netip.AddrPort]string
 }
 
 type RelayStore interface {
@@ -40,15 +40,15 @@ type LocalRelayStore interface {
 	RelayStore
 }
 
-func NewLocalRelayStore(addr netip.AddrPort) (LocalRelayStore, error) {
+func NewLocalRelayStore(addr netip.AddrPort, name string) (LocalRelayStore, error) {
 	return &localRelayStore{
-		addr:  addr,
-		certs: map[relayStoreKey]*RelayAuthentication{},
+		relays: map[netip.AddrPort]string{addr: name},
+		certs:  map[relayStoreKey]*RelayAuthentication{},
 	}, nil
 }
 
 type localRelayStore struct {
-	addr    netip.AddrPort
+	relays  map[netip.AddrPort]string
 	certs   map[relayStoreKey]*RelayAuthentication
 	certsMu sync.RWMutex
 	pool    atomic.Pointer[x509.CertPool]
@@ -95,8 +95,8 @@ func (s *localRelayStore) Remove(cert *x509.Certificate) {
 	s.pool.Store(pool)
 }
 
-func (s *localRelayStore) Relays() []netip.AddrPort {
-	return []netip.AddrPort{s.addr}
+func (s *localRelayStore) Relays() map[netip.AddrPort]string {
+	return s.relays
 }
 
 func (s *localRelayStore) Authenticate(certs []*x509.Certificate) *RelayAuthentication {
