@@ -243,8 +243,11 @@ func (s *controlStream) relay(ctx context.Context, req *pbs.Request_Relay) error
 
 	cert, err := x509.ParseCertificate(req.Certificate)
 	if err != nil {
-		// TODO reply
-		return kleverr.Ret(err)
+		err := pb.NewError(pb.Error_Unknown, "invalid certificate: %v", err)
+		if err := pb.Write(s.stream, &pbs.Response{Error: err}); err != nil {
+			return kleverr.Newf("could not write error response: %w", err)
+		}
+		return err
 	}
 
 	s.conn.server.store.Add(cert, NewBindingsPB(req.Destinations), NewBindingsPB(req.Sources))
