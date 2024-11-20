@@ -193,11 +193,11 @@ func (c *Client) connect(ctx context.Context, transport *quic.Transport) (*clien
 
 	sid := ksuid.New()
 	return &clientSession{
-		client:    c,
-		id:        sid,
-		transport: transport,
-		conn:      conn,
-		// directAddrs: []*pb.AddrPort{resp.Public},
+		client:       c,
+		id:           sid,
+		transport:    transport,
+		conn:         conn,
+		directAddrs:  []*pb.AddrPort{resp.Public},
 		activeRelays: map[netip.AddrPort]*clientRelayServer{},
 		logger:       c.logger.With("connection-id", sid),
 	}, nil

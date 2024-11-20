@@ -26,36 +26,46 @@ type clientSourceServer struct {
 	relayCAs  *x509.CertPool
 	logger    *slog.Logger
 
-	routes   map[netip.AddrPort]*x509.CertPool // TODO split these in direct/relay
-	routesMu sync.RWMutex
+	directRoutes map[netip.AddrPort]*x509.CertPool
+	relayRoutes  map[netip.AddrPort]struct{}
+	routesMu     sync.RWMutex
 
 	activeRoute   quic.Connection
 	activeRouteMu sync.RWMutex
 }
 
 func (s *clientSourceServer) setRoutes(routes map[netip.AddrPort]*x509.Certificate) {
-	newRoutes := map[netip.AddrPort]*x509.CertPool{}
+	newDirect := map[netip.AddrPort]*x509.CertPool{}
+	newRelay := map[netip.AddrPort]struct{}{}
 	for addr, cert := range routes {
-		if cert == nil {
-			newRoutes[addr] = nil
-		} else {
+		if cert != nil {
 			pool := x509.NewCertPool()
 			pool.AddCert(cert)
-			newRoutes[addr] = pool
+			newDirect[addr] = pool
+		} else {
+			newRelay[addr] = struct{}{}
 		}
 	}
 
 	s.routesMu.Lock()
 	defer s.routesMu.Unlock()
 
-	s.routes = newRoutes
+	s.directRoutes = newDirect
+	s.relayRoutes = newRelay
 }
 
-func (s *clientSourceServer) getRoutes() map[netip.AddrPort]*x509.CertPool {
+func (s *clientSourceServer) getDirectRoutes() map[netip.AddrPort]*x509.CertPool {
 	s.routesMu.RLock()
 	defer s.routesMu.RUnlock()
 
-	return maps.Clone(s.routes)
+	return maps.Clone(s.directRoutes)
+}
+
+func (s *clientSourceServer) getRelayRoutes() map[netip.AddrPort]struct{} {
+	s.routesMu.RLock()
+	defer s.routesMu.RUnlock()
+
+	return maps.Clone(s.relayRoutes)
 }
 
 func (s *clientSourceServer) findRoute(ctx context.Context) (quic.Stream, error) {
@@ -84,13 +94,8 @@ func (s *clientSourceServer) findRoute(ctx context.Context) (quic.Stream, error)
 		s.activeRoute = nil
 	}
 
-	routes := s.getRoutes()
-
 	// try direct routes first
-	for addr, cert := range routes {
-		if cert == nil {
-			continue
-		}
+	for addr, cert := range s.getDirectRoutes() {
 		conn, err := s.dialDirect(ctx, addr, cert)
 		if err != nil {
 			s.logger.Debug("failed to direct dial", "addr", addr, "err", err)
@@ -106,10 +111,7 @@ func (s *clientSourceServer) findRoute(ctx context.Context) (quic.Stream, error)
 	}
 
 	// now try the relays
-	for addr, cert := range routes {
-		if cert != nil {
-			continue
-		}
+	for addr := range s.getRelayRoutes() {
 		conn, err := s.dialRelay(ctx, addr)
 		if err != nil {
 			s.logger.Debug("failed to relay dial", "addr", addr, "err", err)
