@@ -7,6 +7,7 @@ import (
 	"errors"
 	"log/slog"
 	"net"
+	"slices"
 	"time"
 
 	"github.com/keihaya-com/connet/authc"
@@ -216,8 +217,29 @@ func (s *controlStream) runErr(ctx context.Context) error {
 	}
 }
 
+func (s *controlStream) allowed(bind *pb.Binding) bool {
+	return slices.Contains(s.conn.auth.Realms, bind.Realm)
+}
+
 func (s *controlStream) relay(ctx context.Context, req *pbs.Request_Relay) error {
-	// TODO check if bindings is allowed
+	for _, dst := range req.Destinations {
+		if !s.allowed(dst) {
+			err := pb.NewError(pb.Error_Unknown, "desination %s.%s not allowed", dst.Name, dst.Realm)
+			if err := pb.Write(s.stream, &pbs.Response{Error: err}); err != nil {
+				return kleverr.Newf("could not write error response: %w", err)
+			}
+			return err
+		}
+	}
+	for _, src := range req.Sources {
+		if !s.allowed(src) {
+			err := pb.NewError(pb.Error_Unknown, "source %s.%s not allowed", src.Name, src.Realm)
+			if err := pb.Write(s.stream, &pbs.Response{Error: err}); err != nil {
+				return kleverr.Newf("could not write error response: %w", err)
+			}
+			return err
+		}
+	}
 
 	cert, err := x509.ParseCertificate(req.Certificate)
 	if err != nil {
@@ -250,7 +272,14 @@ func (s *controlStream) relay(ctx context.Context, req *pbs.Request_Relay) error
 }
 
 func (s *controlStream) destination(ctx context.Context, req *pbs.Request_Destination) error {
-	// TODO check if binding is allowed
+	if !s.allowed(req.Binding) {
+		err := pb.NewError(pb.Error_Unknown, "desination %s.%s not allowed", req.Binding.Name, req.Binding.Realm)
+		if err := pb.Write(s.stream, &pbs.Response{Error: err}); err != nil {
+			return kleverr.Newf("could not write error response: %w", err)
+		}
+		return err
+	}
+
 	var direct *DirectDestination
 	var relays []RelayDestination
 
@@ -343,7 +372,13 @@ func (s *controlStream) destination(ctx context.Context, req *pbs.Request_Destin
 }
 
 func (s *controlStream) source(ctx context.Context, req *pbs.Request_Source) error {
-	// TODO check if binding is allowed
+	if !s.allowed(req.Binding) {
+		err := pb.NewError(pb.Error_Unknown, "source %s.%s not allowed", req.Binding.Name, req.Binding.Realm)
+		if err := pb.Write(s.stream, &pbs.Response{Error: err}); err != nil {
+			return kleverr.Newf("could not write error response: %w", err)
+		}
+		return err
+	}
 
 	cert, err := x509.ParseCertificate(req.Certificate)
 	if err != nil {

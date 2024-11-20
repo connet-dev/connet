@@ -141,10 +141,8 @@ func (s *clientSourceServer) dialRelay(ctx context.Context, addr netip.AddrPort,
 	return s.transport.Dial(ctx, net.UDPAddrFromAddrPort(addr), &tls.Config{
 		Certificates: []tls.Certificate{s.cert},
 		RootCAs:      s.relayCAs,
-		// ServerName:   "connet-relay",
-		// ServerName: addr.Addr().String(),
-		ServerName: "localhost", // TODO
-		NextProtos: []string{"connet-relay"},
+		ServerName:   name,
+		NextProtos:   []string{"connet-relay"},
 	}, &quic.Config{
 		KeepAlivePeriod: 25 * time.Second,
 	})

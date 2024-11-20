@@ -103,7 +103,10 @@ func (c *Client) Run(ctx context.Context) error {
 	}
 	defer directUDP.Close()
 
-	directTransport := &quic.Transport{Conn: directUDP}
+	directTransport := &quic.Transport{
+		Conn: directUDP,
+		// TODO review other options
+	}
 
 	c.directServer = &clientDirectServer{
 		dialer:     c.dialer,
