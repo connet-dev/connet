@@ -4,19 +4,12 @@ import (
 	"context"
 	"crypto/tls"
 	"crypto/x509"
-	"encoding/pem"
-	"errors"
 	"log/slog"
 	"net"
-	"net/netip"
-	"sync"
-	"sync/atomic"
 	"time"
 
 	"github.com/keihaya-com/connet/certc"
-	"github.com/keihaya-com/connet/netc"
 	"github.com/keihaya-com/connet/pb"
-	"github.com/keihaya-com/connet/pbc"
 	"github.com/keihaya-com/connet/pbs"
 	"github.com/klev-dev/kleverr"
 	"github.com/quic-go/quic-go"
@@ -26,6 +19,13 @@ import (
 
 type Client struct {
 	clientConfig
+
+	serverCert tls.Certificate
+	clientCert tls.Certificate
+	dialer     *destinationsDialer
+
+	directServer  *clientDirectServer
+	sourceServers map[Binding]*clientSourceServer
 }
 
 func NewClient(opts ...ClientOption) (*Client, error) {
@@ -34,46 +34,105 @@ func NewClient(opts ...ClientOption) (*Client, error) {
 	}
 	for _, opt := range opts {
 		if err := opt(cfg); err != nil {
-			return nil, err
+			return nil, kleverr.Ret(err)
 		}
 	}
 
 	if cfg.serverAddr == nil {
 		if err := ClientServerAddress("127.0.0.1:19190")(cfg); err != nil {
-			return nil, err
+			return nil, kleverr.Ret(err)
 		}
 	}
 
 	if cfg.directAddr == nil {
 		if err := ClientDirectAddress("0.0.0.0:19192")(cfg); err != nil {
-			return nil, err
+			return nil, kleverr.Ret(err)
 		}
 	}
 
+	rootCert, err := certc.NewRoot()
+	if err != nil {
+		return nil, kleverr.Ret(err)
+	}
+	cfg.logger.Debug("generated root cert")
+
+	serverCert, err := rootCert.NewServer(certc.CertOpts{
+		Domains: []string{"connet"},
+	})
+	if err != nil {
+		return nil, kleverr.Ret(err)
+	}
+	serverTLSCert, err := serverCert.TLSCert()
+	if err != nil {
+		return nil, kleverr.Ret(err)
+	}
+	cfg.logger.Debug("generated server cert")
+
+	clientCert, err := rootCert.NewClient(certc.CertOpts{})
+	if err != nil {
+		return nil, kleverr.Ret(err)
+	}
+	clientTLSCert, err := clientCert.TLSCert()
+	if err != nil {
+		return nil, kleverr.Ret(err)
+	}
+	cfg.logger.Debug("generated client cert")
+
 	return &Client{
 		clientConfig: *cfg,
+
+		serverCert: serverTLSCert,
+		clientCert: clientTLSCert,
+		dialer: &destinationsDialer{
+			destinations: cfg.destinations,
+			logger:       cfg.logger.With("component", "dialer"),
+		},
+
+		sourceServers: map[Binding]*clientSourceServer{},
 	}, nil
 }
 
 func (c *Client) Run(ctx context.Context) error {
-	c.logger.Debug("start udp listener", "addr", c.directAddr)
-	localConn, err := net.ListenUDP("udp", c.directAddr)
+	directUDP, err := net.ListenUDP("udp", c.directAddr)
 	if err != nil {
 		return kleverr.Ret(err)
 	}
-	defer localConn.Close()
+	defer directUDP.Close()
 
-	rootCert, err := certc.NewRoot()
-	if err != nil {
-		return kleverr.Ret(err)
+	directTransport := &quic.Transport{Conn: directUDP}
+
+	c.directServer = &clientDirectServer{
+		dialer:     c.dialer,
+		transport:  directTransport,
+		serverCert: c.serverCert,
+		logger:     c.logger.With("component", "direct-server", "addr", c.directAddr),
 	}
-	c.logger.Debug("generated root cert")
 
-	transport := &quic.Transport{
-		Conn: localConn,
+	for addr, bind := range c.sources {
+		c.sourceServers[bind] = &clientSourceServer{
+			addr:      addr,
+			bind:      bind,
+			transport: directTransport,
+			cert:      c.clientCert,
+			logger:    c.logger.With("component", "source-server", "addr", addr, "bind", bind),
+		}
 	}
 
-	sess, err := c.connect(ctx, transport, rootCert)
+	g, ctx := errgroup.WithContext(ctx)
+
+	g.Go(func() error { return c.directServer.run(ctx) })
+
+	for _, srv := range c.sourceServers {
+		g.Go(func() error { return srv.run(ctx) })
+	}
+
+	g.Go(func() error { return c.run(ctx, directTransport) })
+
+	return g.Wait()
+}
+
+func (c *Client) run(ctx context.Context, transport *quic.Transport) error {
+	sess, err := c.connect(ctx, transport)
 	if err != nil {
 		return err
 	}
@@ -84,17 +143,17 @@ func (c *Client) Run(ctx context.Context) error {
 			return err
 		}
 
-		if sess, err = c.reconnect(ctx, transport, rootCert); err != nil {
+		if sess, err = c.reconnect(ctx, transport); err != nil {
 			return err
 		}
 	}
 }
 
-func (c *Client) connect(ctx context.Context, transport *quic.Transport, rootCert *certc.Cert) (*clientSession, error) {
+func (c *Client) connect(ctx context.Context, transport *quic.Transport) (*clientSession, error) {
 	c.logger.Debug("dialing target", "addr", c.serverAddr)
 	conn, err := transport.Dial(ctx, c.serverAddr, &tls.Config{
 		ServerName: c.serverName,
-		RootCAs:    c.cas,
+		RootCAs:    c.controlCAs,
 		NextProtos: []string{"connet"},
 	}, &quic.Config{
 		KeepAlivePeriod: 25 * time.Second,
@@ -135,15 +194,14 @@ func (c *Client) connect(ctx context.Context, transport *quic.Transport, rootCer
 		conn:        conn,
 		directAddrs: []*pb.AddrPort{resp.Public},
 		logger:      c.logger.With("connection-id", sid),
-		rootCert:    rootCert,
 	}, nil
 }
 
-func (c *Client) reconnect(ctx context.Context, transport *quic.Transport, rootCert *certc.Cert) (*clientSession, error) {
+func (c *Client) reconnect(ctx context.Context, transport *quic.Transport) (*clientSession, error) {
 	for {
 		time.Sleep(time.Second) // TODO backoff and such
 
-		if sess, err := c.connect(ctx, transport, rootCert); err != nil {
+		if sess, err := c.connect(ctx, transport); err != nil {
 			c.logger.Debug("reconnect failed, retrying", "err", err)
 		} else {
 			return sess, nil
@@ -158,187 +216,20 @@ type clientSession struct {
 	conn        quic.Connection
 	directAddrs []*pb.AddrPort // TODO these should be multiple, not only from server pov
 	logger      *slog.Logger
-
-	rootCert *certc.Cert
-	intCert  *certc.Cert
-
-	relayCert    *certc.Cert
-	relayTLSCert tls.Certificate
-	relayAddrs   []*pb.AddrPort
-
-	directServerCert    *certc.Cert
-	directServerTLSCert tls.Certificate
-	directCAs           atomic.Pointer[x509.CertPool]
-	directClientCert    *certc.Cert
-	directClientTLSCert tls.Certificate
 }
 
 func (s *clientSession) run(ctx context.Context) error {
-	intCert, err := s.rootCert.NewIntermediate(certc.CertOpts{})
-	if err != nil {
-		return err
-	}
-	s.intCert = intCert
-
-	relayCert, err := intCert.NewClient(certc.CertOpts{})
-	if err != nil {
-		return err
-	}
-	s.relayCert = relayCert
-
-	relayTLS, err := relayCert.TLSCert()
-	if err != nil {
-		return err
-	}
-	s.relayTLSCert = relayTLS
-
-	directServerCert, err := intCert.NewServer(certc.CertOpts{
-		Domains: []string{"connet-direct"},
-	})
-	if err != nil {
-		return err
-	}
-	s.directServerCert = directServerCert
-
-	directServerTLS, err := directServerCert.TLSCert()
-	if err != nil {
-		return err
-	}
-	s.directServerTLSCert = directServerTLS
-
-	directClientCert, err := intCert.NewClient(certc.CertOpts{})
-	if err != nil {
-		return err
-	}
-	s.directClientCert = directClientCert
-
 	g, ctx := errgroup.WithContext(ctx)
 
-	g.Go(func() error {
-		return s.runRelays(ctx)
-	})
+	for dst := range s.client.destinations {
+		g.Go(func() error { return s.runDestination(ctx, dst) })
+	}
 
-	g.Go(func() error {
-		return s.runDirectServer(ctx)
-	})
-
-	g.Go(func() error {
-		for bind, addr := range s.client.destinations {
-			if err := s.registerDestination(ctx, bind, addr, intCert); err != nil {
-				return err
-			}
-		}
-		return s.runDestinations(ctx)
-	})
-
-	for addr, bind := range s.client.sources {
-		g.Go(func() error {
-			src := &clientSource{
-				sess:         s,
-				localAddr:    addr,
-				destination:  bind,
-				logger:       s.logger.With("addr", addr, "bind", bind),
-				defaultRoute: s.conn,
-			}
-			return src.run(ctx)
-		})
+	for _, src := range s.client.sources {
+		g.Go(func() error { return s.runSource(ctx, src) })
 	}
 
 	return g.Wait()
-}
-
-func (s *clientSession) runRelays(ctx context.Context) error {
-	stream, err := s.conn.OpenStreamSync(ctx)
-	if err != nil {
-		return kleverr.Ret(err)
-	}
-	defer stream.Close()
-
-	var dsts []*pb.Binding
-	for b := range s.client.destinations {
-		dsts = append(dsts, b.AsPB())
-	}
-	var srcs []*pb.Binding
-	for _, b := range s.client.sources {
-		srcs = append(srcs, b.AsPB())
-	}
-	if err := pb.Write(stream, &pbs.Request{
-		Relay: &pbs.Request_Relay{
-			Certificate:  s.relayCert.Raw(),
-			Destinations: dsts,
-			Sources:      srcs,
-		},
-	}); err != nil {
-		return kleverr.Ret(err)
-	}
-
-	for {
-		resp, err := pbs.ReadResponse(stream)
-		if err != nil {
-			return err
-		}
-		if resp.Relay == nil {
-			return kleverr.Newf("unexpected response: %v", resp)
-		}
-
-		s.relayAddrs = resp.Relay.Addresses
-	}
-}
-
-func (s *clientSession) runRelay(ctx context.Context, addr netip.AddrPort) error {
-	conn, err := s.transport.Dial(ctx, net.UDPAddrFromAddrPort(addr), &tls.Config{
-		Certificates: []tls.Certificate{s.relayTLSCert},
-		ServerName:   addr.Addr().String(),
-		NextProtos:   []string{"connet-relay"},
-	}, &quic.Config{
-		KeepAlivePeriod: 25 * time.Second,
-	})
-	if err != nil {
-		return kleverr.Ret(err)
-	}
-	for {
-		stream, err := conn.AcceptStream(ctx)
-		if err != nil {
-			return err
-		}
-
-		s.logger.Debug("serving relay conn", "remote", conn.RemoteAddr())
-		go s.runDestinationRequest(ctx, stream)
-	}
-}
-
-func (s *clientSession) registerDestination(ctx context.Context, bind Binding, addr string, parent *certc.Cert) error {
-	destCert, err := parent.NewClient(certc.CertOpts{Domains: []string{"connet-direct"}})
-	if err != nil {
-		return kleverr.Ret(err)
-	}
-	cert, err := pb.NewCert(destCert, parent)
-	if err != nil {
-		return kleverr.Ret(err)
-	}
-
-	cmdStream, err := s.conn.OpenStreamSync(ctx)
-	if err != nil {
-		return kleverr.Ret(err)
-	}
-	defer cmdStream.Close()
-
-	if err := pb.Write(cmdStream, &pbs.Request{
-		Register: &pbs.Request_Register{
-			Binding: bind.AsPB(),
-			Direct:  s.directAddrs,
-			Cert:    cert,
-		},
-	}); err != nil {
-		return kleverr.Ret(err)
-	}
-
-	if _, err := pbs.ReadResponse(cmdStream); err != nil {
-		return kleverr.Ret(err)
-	}
-
-	s.logger.Info("registered destination", "bind", bind, "addr", addr)
-	return nil
 }
 
 func (s *clientSession) runDestination(ctx context.Context, bind Binding) error {
@@ -351,9 +242,9 @@ func (s *clientSession) runDestination(ctx context.Context, bind Binding) error 
 	if err := pb.Write(stream, &pbs.Request{
 		Destination: &pbs.Request_Destination{
 			Binding:         bind.AsPB(),
-			Certificate:     s.directServerCert.Raw(),
+			Certificate:     s.client.serverCert.Leaf.Raw,
 			DirectAddresses: s.directAddrs,
-			RelayAddresses:  s.relayAddrs,
+			// RelayAddresses:  s.relayAddrs,
 		},
 	}); err != nil {
 		return kleverr.Ret(err)
@@ -376,7 +267,7 @@ func (s *clientSession) runDestination(ctx context.Context, bind Binding) error 
 				pool.AddCert(cert)
 			}
 		}
-		s.directCAs.Store(pool)
+		s.client.directServer.clientCA.Store(pool)
 	}
 }
 
@@ -390,7 +281,7 @@ func (s *clientSession) runSource(ctx context.Context, bind Binding) error {
 	if err := pb.Write(stream, &pbs.Request{
 		Source: &pbs.Request_Source{
 			Binding:     bind.AsPB(),
-			Certificate: s.directClientCert.Raw(),
+			Certificate: s.client.clientCert.Leaf.Raw,
 		},
 	}); err != nil {
 		return kleverr.Ret(err)
@@ -409,315 +300,6 @@ func (s *clientSession) runSource(ctx context.Context, bind Binding) error {
 	}
 }
 
-func (s *clientSession) runDestinations(ctx context.Context) error {
-	for {
-		stream, err := s.conn.AcceptStream(ctx)
-		if err != nil {
-			return kleverr.Ret(err)
-		}
-		go s.runDestinationRequest(ctx, stream)
-	}
-}
-
-func (s *clientSession) runDestinationRequest(ctx context.Context, stream quic.Stream) {
-	defer stream.Close()
-
-	req, err := pbc.ReadRequest(stream)
-	if err != nil {
-		return
-	}
-
-	switch {
-	case req.Connect != nil:
-		s.destinationConnect(ctx, stream, NewBindingPB(req.Connect.Binding))
-	default:
-		s.unknown(ctx, stream, req)
-	}
-}
-
-func (s *clientSession) destinationConnect(ctx context.Context, stream quic.Stream, bind Binding) {
-	logger := s.logger.With("bind", bind)
-	addr, ok := s.client.destinations[bind]
-	if !ok {
-		err := pb.NewError(pb.Error_DestinationNotFound, "%s not found on this client", bind)
-		if err := pb.Write(stream, &pbc.Response{Error: err}); err != nil {
-			logger.Warn("could not write response", "addr", addr, "err", err)
-		}
-		return
-	}
-
-	conn, err := net.Dial("tcp", addr)
-	if err != nil {
-		err := pb.NewError(pb.Error_DestinationDialFailed, "%s could not be dialed: %v", bind, err)
-		if err := pb.Write(stream, &pbc.Response{Error: err}); err != nil {
-			logger.Warn("could not write response", "addr", addr, "err", err)
-		}
-		return
-	}
-	defer conn.Close()
-
-	if err := pb.Write(stream, &pbc.Response{}); err != nil {
-		logger.Warn("could not write response", "addr", addr, "err", err)
-		return
-	}
-
-	logger.Debug("joining from server")
-	err = netc.Join(ctx, stream, conn)
-	logger.Debug("disconnected from server", "err", err)
-}
-
-func (s *clientSession) unknown(ctx context.Context, stream quic.Stream, req *pbc.Request) {
-	s.logger.Error("unknown request", "req", req)
-	err := pb.NewError(pb.Error_RequestUnknown, "unknown request: %v", req)
-	if err := pb.Write(stream, &pbc.Response{Error: err}); err != nil {
-		s.logger.Warn("could not write response", "err", err)
-	}
-}
-
-func (s *clientSession) runDirectServer(ctx context.Context) error {
-	tlsConf := &tls.Config{
-		Certificates: []tls.Certificate{s.directServerTLSCert},
-		ClientAuth:   tls.RequireAndVerifyClientCert,
-		NextProtos:   []string{"connet-direct"},
-	}
-	tlsConf.GetConfigForClient = func(chi *tls.ClientHelloInfo) (*tls.Config, error) {
-		conf := tlsConf.Clone()
-		conf.ClientCAs = s.directCAs.Load()
-		return conf, nil
-	}
-
-	l, err := s.transport.Listen(tlsConf, &quic.Config{
-		KeepAlivePeriod: 25 * time.Second,
-	})
-	if err != nil {
-		return err
-	}
-
-	s.logger.Debug("listening for direct conns")
-	for {
-		conn, err := l.Accept(ctx)
-		if err != nil {
-			return err
-		}
-		s.logger.Debug("accepted direct conn", "remote", conn.RemoteAddr())
-
-		go func() {
-			defer conn.CloseWithError(0, "done")
-
-			for {
-				stream, err := conn.AcceptStream(ctx)
-				if err != nil {
-					return
-				}
-				s.logger.Debug("serving direct conn", "remote", conn.RemoteAddr())
-				go s.runDestinationRequest(ctx, stream)
-			}
-		}()
-	}
-}
-
-type clientSource struct {
-	sess        *clientSession
-	localAddr   string
-	destination Binding
-	logger      *slog.Logger
-
-	defaultRoute quic.Connection
-	routes       []quic.Connection
-	routesMu     sync.RWMutex
-}
-
-func (s *clientSource) run(ctx context.Context) error {
-	g, ctx := errgroup.WithContext(ctx) // TODO reliable.Group
-	g.Go(func() error {
-		return s.runServer(ctx)
-	})
-	g.Go(func() error {
-		return s.runRoutes(ctx)
-	})
-	return g.Wait()
-}
-
-func (s *clientSource) runServer(ctx context.Context) error {
-	s.logger.Debug("listening for conns")
-	l, err := net.Listen("tcp", s.localAddr)
-	if err != nil {
-		return kleverr.Ret(err)
-	}
-
-	for {
-		conn, err := l.Accept()
-		if err != nil {
-			return kleverr.Ret(err)
-		}
-
-		go s.runConn(ctx, conn)
-	}
-}
-
-func (s *clientSource) runRoutes(ctx context.Context) error {
-	for {
-		origins, cert, pool, err := s.loadRoutes(ctx)
-		if err != nil {
-			if errors.Is(err, context.Canceled) {
-				return nil
-			}
-			s.logger.Warn("could not load routes", "err", err)
-			time.Sleep(10 * time.Second) // TODO reliable sleep
-			continue
-		}
-
-		var routes []quic.Connection
-		for _, origin := range origins {
-			conn, err := s.connectRoute(ctx, origin, cert, pool)
-			if err != nil {
-				s.logger.Debug("direct route dial failed", "err", err)
-				// TODO logging?
-				continue
-			}
-
-			routes = append(routes, conn)
-		}
-
-		s.routesMu.Lock()
-		s.routes = routes
-		s.routesMu.Unlock()
-
-		time.Sleep(time.Minute) // TODO reliable sleep
-	}
-}
-
-func (s *clientSource) loadRoutes(ctx context.Context) ([]netip.AddrPort, tls.Certificate, *x509.CertPool, error) {
-	stream, err := s.defaultRoute.OpenStreamSync(ctx)
-	if err != nil {
-		s.logger.Warn("failed to open server stream", "err", err)
-		return nil, tls.Certificate{}, nil, err
-	}
-	defer stream.Close()
-
-	if err := pb.Write(stream, &pbs.Request{
-		Routes: &pbs.Request_Routes{
-			Binding: s.destination.AsPB(),
-		},
-	}); err != nil {
-		s.logger.Warn("failed to request routes", "err", err)
-		return nil, tls.Certificate{}, nil, err
-	}
-
-	resp, err := pbs.ReadResponse(stream)
-	if err != nil {
-		s.logger.Warn("failed to response connection", "err", err)
-		return nil, tls.Certificate{}, nil, err
-	}
-
-	var result []netip.AddrPort
-	for _, addr := range resp.Routes.Direct {
-		result = append(result, addr.AsNetip())
-	}
-	s.logger.Info("routes addresses", "addrs", result)
-
-	cert, err := tls.X509KeyPair(resp.Routes.Cert.Der, resp.Routes.Cert.Pkey)
-	if err != nil {
-		s.logger.Warn("failed to parse pair", "err", err)
-		return nil, tls.Certificate{}, nil, err
-	}
-
-	caData, _ := pem.Decode(resp.Routes.Cert.Cas[0])
-	if caData == nil || caData.Type != "CERTIFICATE" {
-		return nil, tls.Certificate{}, nil, kleverr.New("failed to decode pem")
-	}
-	caCert, err := x509.ParseCertificate(caData.Bytes) // TODO
-	if err != nil {
-		s.logger.Warn("failed to parse ca", "err", err)
-		return nil, tls.Certificate{}, nil, err
-	}
-
-	pool := x509.NewCertPool()
-	pool.AddCert(caCert)
-	return result, cert, pool, nil
-}
-
-func (s *clientSource) connectRoute(ctx context.Context, addr netip.AddrPort, cert tls.Certificate, caPool *x509.CertPool) (quic.Connection, error) {
-	// TODO do not redial every time
-	// TODO share certs
-	return s.sess.transport.Dial(ctx, net.UDPAddrFromAddrPort(addr), &tls.Config{
-		Certificates: []tls.Certificate{cert},
-		RootCAs:      caPool,
-		ServerName:   cert.Leaf.DNSNames[0],
-		NextProtos:   []string{"connet-direct"},
-	}, &quic.Config{
-		KeepAlivePeriod: 25 * time.Second,
-	})
-}
-
-func (s *clientSource) openRoute(ctx context.Context) (quic.Stream, bool, error) {
-	s.routesMu.RLock()
-	routes := s.routes
-	s.routesMu.RUnlock()
-
-	for _, route := range routes {
-		if stream, err := route.OpenStreamSync(ctx); err == nil {
-			return stream, true, nil
-		}
-	}
-	if stream, err := s.defaultRoute.OpenStreamSync(ctx); err != nil {
-		return nil, false, err
-	} else {
-		return stream, false, nil
-	}
-}
-
-func (s *clientSource) runConn(ctx context.Context, conn net.Conn) {
-	defer conn.Close()
-
-	s.logger.Debug("received conn", "remote", conn.RemoteAddr())
-	stream, direct, err := s.openRoute(ctx)
-	if err != nil {
-		s.logger.Warn("failed to open server stream", "err", err)
-		return
-	}
-	defer stream.Close()
-
-	if direct {
-		if err := pb.Write(stream, &pbc.Request{
-			Connect: &pbc.Request_Connect{
-				Binding: s.destination.AsPB(),
-			},
-		}); err != nil {
-			s.logger.Warn("failed to request connection", "err", err)
-			return
-		}
-
-		resp, err := pbc.ReadResponse(stream)
-		if err != nil {
-			s.logger.Warn("failed to response connection", "err", err)
-			return
-		}
-
-		s.logger.Debug("joining to client", "connect", resp)
-	} else {
-		if err := pb.Write(stream, &pbs.Request{
-			Connect: &pbs.Request_Connect{
-				Binding: s.destination.AsPB(),
-			},
-		}); err != nil {
-			s.logger.Warn("failed to request connection", "err", err)
-			return
-		}
-
-		resp, err := pbs.ReadResponse(stream)
-		if err != nil {
-			s.logger.Warn("failed to response connection", "err", err)
-			return
-		}
-
-		s.logger.Debug("joining to server", "connect", resp.Connect)
-	}
-
-	err = netc.Join(ctx, conn, stream)
-	s.logger.Debug("disconnected to server", "err", err)
-}
-
 type clientConfig struct {
 	serverAddr   *net.UDPAddr
 	serverName   string
@@ -725,7 +307,7 @@ type clientConfig struct {
 	token        string
 	sources      map[string]Binding
 	destinations map[Binding]string
-	cas          *x509.CertPool
+	controlCAs   *x509.CertPool
 	logger       *slog.Logger
 }
 
@@ -800,7 +382,7 @@ func ClientCA(certFile string, keyFile string) ClientOption {
 		} else {
 			pool := x509.NewCertPool()
 			pool.AddCert(cert.Leaf)
-			cfg.cas = pool
+			cfg.controlCAs = pool
 			return nil
 		}
 	}

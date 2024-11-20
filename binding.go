@@ -1,6 +1,10 @@
 package connet
 
-import "github.com/keihaya-com/connet/pb"
+import (
+	"fmt"
+
+	"github.com/keihaya-com/connet/pb"
+)
 
 type Binding struct {
 	Realm string
@@ -19,6 +23,10 @@ func (b Binding) AsPB() *pb.Binding {
 		Realm: b.Realm,
 		Name:  b.Name,
 	}
+}
+
+func (b Binding) String() string {
+	return fmt.Sprintf("%s.%s", b.Name, b.Realm)
 }
 
 func NewBindingsPB(pbs []*pb.Binding) []Binding {

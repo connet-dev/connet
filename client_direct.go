@@ -19,13 +19,7 @@ type clientDirectServer struct {
 	logger     *slog.Logger
 }
 
-func (s *clientDirectServer) run(ctx context.Context) {
-	if err := s.runErr(ctx); err != nil {
-		s.logger.Warn("error handling conn", "err", err)
-	}
-}
-
-func (s *clientDirectServer) runErr(ctx context.Context) error {
+func (s *clientDirectServer) run(ctx context.Context) error {
 	tlsConf := &tls.Config{
 		Certificates: []tls.Certificate{s.serverCert},
 		ClientAuth:   tls.RequireAndVerifyClientCert,
@@ -44,13 +38,13 @@ func (s *clientDirectServer) runErr(ctx context.Context) error {
 		return err
 	}
 
-	s.logger.Debug("listening for direct conns")
+	s.logger.Debug("listening for conns")
 	for {
 		conn, err := l.Accept(ctx)
 		if err != nil {
 			return err
 		}
-		s.logger.Debug("accepted direct conn", "remote", conn.RemoteAddr())
+		s.logger.Debug("accepted conn", "remote", conn.RemoteAddr())
 		go s.runConn(ctx, conn)
 	}
 }

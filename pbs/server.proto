@@ -17,24 +17,10 @@ message AuthenticateResp {
 
 message Request {
   // Soft one-of
-  Register register = 1;
-  Connect connect = 2;
-  Routes routes = 3;
-  Relay relay = 4;
-  Destination destination = 5;
-  Source source = 6;
+  Relay relay = 1;
+  Destination destination = 2;
+  Source source = 3;
 
-  message Register {
-    shared.Binding binding = 1;
-    repeated shared.AddrPort direct = 2;
-    shared.Cert cert = 3;
-  }
-  message Connect {
-    shared.Binding binding = 1;
-  }
-  message Routes {
-    shared.Binding binding = 1;
-  }
   message Relay {
     bytes certificate = 1; // certificate to use when connecting to a relay
     repeated shared.Binding destinations = 2;
@@ -55,21 +41,10 @@ message Request {
 message Response {
   shared.Error error = 1;
 
-  Register register = 2;
-  Connect connect = 3;
-  Routes routes = 4;
-  Relay relay = 5;
-  Destination destination = 6;
-  Source source = 7;
+  Relay relay = 2;
+  Destination destination = 3;
+  Source source = 4;
 
-  message Register {
-  }
-  message Connect {
-  }
-  message Routes {
-    repeated shared.AddrPort direct = 1;
-    shared.Cert cert = 2;
-  }
   message Relay {
     repeated shared.AddrPort addresses = 1; // set of relay addresses that follow this server
   }
