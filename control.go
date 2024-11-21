@@ -284,25 +284,10 @@ func (s *controlStream) destination(ctx context.Context, req *pbs.Request_Destin
 		return err
 	}
 
-	var direct *DirectDestination
-	var relays []RelayDestination
-
-	if req.Direct != nil {
-		cert, err := x509.ParseCertificate(req.Direct.Certificate)
-		if err != nil {
-			respErr := pb.NewError(pb.Error_Unknown, "cannot parse certificate: %v", err)
-			return pb.Write(s.stream, &pbs.Response{Error: respErr})
-		}
-		direct = &DirectDestination{
-			Addresses:   pb.AsNetips(req.Direct.Addresses),
-			Certificate: cert,
-		}
-	}
-
-	for _, r := range req.Relays {
-		relays = append(relays, RelayDestination{
-			Hostport: r.Hostport,
-		})
+	direct, relays, err := s.readDestination(req)
+	if err != nil {
+		respErr := pb.NewError(pb.Error_Unknown, "cannot parse certificate: %v", err)
+		return pb.Write(s.stream, &pbs.Response{Error: respErr})
 	}
 
 	w := s.conn.server.whispers.For(NewBindingPB(req.Binding))
@@ -325,26 +310,10 @@ func (s *controlStream) destination(ctx context.Context, req *pbs.Request_Destin
 				return respErr
 			}
 
-			// TODO dupe
-			var direct *DirectDestination
-			var relays []RelayDestination
-
-			if req.Destination.Direct != nil {
-				cert, err := x509.ParseCertificate(req.Destination.Direct.Certificate)
-				if err != nil {
-					respErr := pb.NewError(pb.Error_Unknown, "cannot parse certificate: %v", err)
-					return pb.Write(s.stream, &pbs.Response{Error: respErr})
-				}
-				direct = &DirectDestination{
-					Addresses:   pb.AsNetips(req.Destination.Direct.Addresses),
-					Certificate: cert,
-				}
-			}
-
-			for _, r := range req.Destination.Relays {
-				relays = append(relays, RelayDestination{
-					Hostport: r.Hostport,
-				})
+			direct, relays, err := s.readDestination(req.Destination)
+			if err != nil {
+				respErr := pb.NewError(pb.Error_Unknown, "cannot parse certificate: %v", err)
+				return pb.Write(s.stream, &pbs.Response{Error: respErr})
 			}
 
 			w.AddDestination(s.conn.id, direct, relays)
@@ -371,6 +340,30 @@ func (s *controlStream) destination(ctx context.Context, req *pbs.Request_Destin
 	})
 
 	return g.Wait()
+}
+
+func (s *controlStream) readDestination(req *pbs.Request_Destination) (*DirectDestination, []RelayDestination, error) {
+	var direct *DirectDestination
+	var relays []RelayDestination
+
+	if req.Direct != nil {
+		cert, err := x509.ParseCertificate(req.Direct.Certificate)
+		if err != nil {
+			return nil, nil, err
+		}
+		direct = &DirectDestination{
+			Addresses:   pb.AsNetips(req.Direct.Addresses),
+			Certificate: cert,
+		}
+	}
+
+	for _, r := range req.Relays {
+		relays = append(relays, RelayDestination{
+			Hostport: r.Hostport,
+		})
+	}
+
+	return direct, relays, nil
 }
 
 func (s *controlStream) source(ctx context.Context, req *pbs.Request_Source) error {
