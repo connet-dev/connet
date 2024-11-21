@@ -62,5 +62,5 @@ message DirectAddress {
 }
 
 message RelayAddress {
-  string hostport = 1;
+  string hostport = 1; // TODO do we combine addresses?
 }

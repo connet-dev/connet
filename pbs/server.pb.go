@@ -308,7 +308,7 @@ type RelayAddress struct {
 	sizeCache     protoimpl.SizeCache
 	unknownFields protoimpl.UnknownFields
 
-	Hostport string `protobuf:"bytes,1,opt,name=hostport,proto3" json:"hostport,omitempty"`
+	Hostport string `protobuf:"bytes,1,opt,name=hostport,proto3" json:"hostport,omitempty"` // TODO do we combine addresses?
 }
 
 func (x *RelayAddress) Reset() {
