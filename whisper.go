@@ -130,6 +130,5 @@ type DirectDestination struct {
 }
 
 type RelayDestination struct {
-	Address netip.AddrPort
-	Name    string
+	Hostport string
 }

@@ -202,7 +202,7 @@ func (c *Client) connect(ctx context.Context, transport *quic.Transport) (*clien
 		transport:    transport,
 		conn:         conn,
 		directAddrs:  []*pb.AddrPort{resp.Public},
-		activeRelays: map[netip.AddrPort]*clientRelayServer{},
+		activeRelays: map[string]*clientRelayServer{},
 		logger:       c.logger.With("connection-id", sid),
 	}, nil
 }
@@ -225,9 +225,9 @@ type clientSession struct {
 	transport    *quic.Transport
 	conn         quic.Connection
 	directAddrs  []*pb.AddrPort // TODO these should be multiple, not only from server pov
-	relayAddrs   map[netip.AddrPort]string
+	relayAddrs   map[string]struct{}
 	relayAddrsMu sync.RWMutex
-	activeRelays map[netip.AddrPort]*clientRelayServer
+	activeRelays map[string]*clientRelayServer
 	logger       *slog.Logger
 }
 
@@ -273,35 +273,34 @@ func (s *clientSession) runRelays(ctx context.Context) error {
 			return kleverr.Newf("unexpected response")
 		}
 
-		addrs := map[netip.AddrPort]string{}
+		addrs := map[string]struct{}{}
 		for _, addr := range resp.Relay.Addresses {
-			addrs[addr.Address.AsNetip()] = addr.Name
+			addrs[addr.Hostport] = struct{}{}
 		}
 		s.setRelayAddrs(ctx, addrs)
 	}
 }
 
-func (s *clientSession) setRelayAddrs(ctx context.Context, addrs map[netip.AddrPort]string) {
+func (s *clientSession) setRelayAddrs(ctx context.Context, addrs map[string]struct{}) {
 	s.relayAddrsMu.Lock()
 	s.relayAddrs = maps.Clone(addrs)
 	s.relayAddrsMu.Unlock()
 
 	// TODO
-	for addr, name := range addrs {
-		if _, ok := s.activeRelays[addr]; ok {
+	for hostport := range addrs {
+		if _, ok := s.activeRelays[hostport]; ok {
 			continue
 		}
 
 		srv := &clientRelayServer{
-			addr:      addr,
-			name:      name,
+			hostport:  hostport,
 			transport: s.transport,
 			cert:      s.client.clientCert,
 			relayCAs:  s.client.controlCAs,
 			dialer:    s.client.dialer,
-			logger:    s.client.logger.With("component", "relay", "addr", addr),
+			logger:    s.client.logger.With("component", "relay", "addr", hostport),
 		}
-		s.activeRelays[addr] = srv
+		s.activeRelays[hostport] = srv
 		go srv.run(ctx)
 	}
 }
@@ -318,10 +317,9 @@ func (s *clientSession) getRelayAddrs() []*pbs.RelayAddress {
 	defer s.relayAddrsMu.RUnlock()
 
 	var relays []*pbs.RelayAddress
-	for addr, name := range s.relayAddrs {
+	for hostport := range s.relayAddrs {
 		relays = append(relays, &pbs.RelayAddress{
-			Address: pb.AddrPortFromNetip(addr),
-			Name:    name,
+			Hostport: hostport,
 		})
 	}
 
@@ -427,9 +425,9 @@ func (s *clientSession) runSource(ctx context.Context, bind Binding) error {
 			}
 		}
 
-		relays := map[netip.AddrPort]string{}
+		relays := map[string]struct{}{}
 		for _, relay := range resp.Source.Relays {
-			relays[relay.Address.AsNetip()] = relay.Name
+			relays[relay.Hostport] = struct{}{}
 		}
 
 		srcServer.setRoutes(directs, relays)

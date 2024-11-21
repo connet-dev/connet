@@ -3,7 +3,9 @@ package connet
 import (
 	"crypto/sha256"
 	"crypto/x509"
+	"maps"
 	"net/netip"
+	"slices"
 	"sync"
 	"sync/atomic"
 )
@@ -11,7 +13,7 @@ import (
 type RelayStoreManager interface {
 	Add(cert *x509.Certificate, destinations []Binding, sources []Binding)
 	Remove(cert *x509.Certificate)
-	Relays() map[netip.AddrPort]string
+	Relays() []string
 }
 
 type RelayStore interface {
@@ -54,7 +56,7 @@ type localRelayStore struct {
 	pool    atomic.Pointer[x509.CertPool]
 }
 
-type relayStoreKey [sha256.Size]byte
+type relayStoreKey [sha256.Size]byte // TODO another key?
 
 func (s *localRelayStore) Add(cert *x509.Certificate, destinations []Binding, sources []Binding) {
 	s.certsMu.Lock()
@@ -95,8 +97,8 @@ func (s *localRelayStore) Remove(cert *x509.Certificate) {
 	s.pool.Store(pool)
 }
 
-func (s *localRelayStore) Relays() map[netip.AddrPort]string {
-	return s.relays
+func (s *localRelayStore) Relays() []string {
+	return slices.Collect(maps.Values(s.relays))
 }
 
 func (s *localRelayStore) Authenticate(certs []*x509.Certificate) *RelayAuthentication {

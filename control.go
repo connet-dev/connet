@@ -256,10 +256,9 @@ func (s *controlStream) relay(ctx context.Context, req *pbs.Request_Relay) error
 
 	for {
 		var addrs []*pbs.RelayAddress
-		for addr, name := range s.conn.server.store.Relays() {
+		for _, hostport := range s.conn.server.store.Relays() {
 			addrs = append(addrs, &pbs.RelayAddress{
-				Address: pb.AddrPortFromNetip(addr),
-				Name:    name,
+				Hostport: hostport,
 			})
 		}
 
@@ -300,8 +299,7 @@ func (s *controlStream) destination(ctx context.Context, req *pbs.Request_Destin
 
 	for _, r := range req.Relays {
 		relays = append(relays, RelayDestination{
-			Address: r.Address.AsNetip(),
-			Name:    r.Name,
+			Hostport: r.Hostport,
 		})
 	}
 
@@ -343,8 +341,7 @@ func (s *controlStream) destination(ctx context.Context, req *pbs.Request_Destin
 
 			for _, r := range req.Destination.Relays {
 				relays = append(relays, RelayDestination{
-					Address: r.Address.AsNetip(),
-					Name:    r.Name,
+					Hostport: r.Hostport,
 				})
 			}
 
@@ -434,8 +431,7 @@ func (s *controlStream) source(ctx context.Context, req *pbs.Request_Source) err
 			}
 			for _, dst := range relays {
 				resp.Relays = append(resp.Relays, &pbs.RelayAddress{
-					Address: pb.AddrPortFromNetip(dst.Address),
-					Name:    dst.Name,
+					Hostport: dst.Hostport,
 				})
 			}
 

@@ -27,14 +27,14 @@ type clientSourceServer struct {
 	logger    *slog.Logger
 
 	directRoutes map[netip.AddrPort]*x509.CertPool
-	relayRoutes  map[netip.AddrPort]string
+	relayRoutes  map[string]struct{}
 	routesMu     sync.RWMutex
 
 	activeRoute   quic.Connection
 	activeRouteMu sync.RWMutex
 }
 
-func (s *clientSourceServer) setRoutes(direct map[netip.AddrPort]*x509.Certificate, relays map[netip.AddrPort]string) {
+func (s *clientSourceServer) setRoutes(direct map[netip.AddrPort]*x509.Certificate, relays map[string]struct{}) {
 	newDirect := map[netip.AddrPort]*x509.CertPool{}
 	for addr, cert := range direct {
 		pool := x509.NewCertPool()
@@ -58,7 +58,7 @@ func (s *clientSourceServer) getDirectRoutes() map[netip.AddrPort]*x509.CertPool
 	return maps.Clone(s.directRoutes)
 }
 
-func (s *clientSourceServer) getRelayRoutes() map[netip.AddrPort]string {
+func (s *clientSourceServer) getRelayRoutes() map[string]struct{} {
 	s.routesMu.RLock()
 	defer s.routesMu.RUnlock()
 
@@ -108,15 +108,15 @@ func (s *clientSourceServer) findRoute(ctx context.Context) (quic.Stream, error)
 	}
 
 	// now try the relays
-	for addr, name := range s.getRelayRoutes() {
-		conn, err := s.dialRelay(ctx, addr, name)
+	for hostport := range s.getRelayRoutes() {
+		conn, err := s.dialRelay(ctx, hostport)
 		if err != nil {
-			s.logger.Debug("failed to relay dial", "addr", addr, "err", err)
+			s.logger.Debug("failed to relay dial", "hostport", hostport, "err", err)
 			continue
 		}
 		stream, err := conn.OpenStreamSync(ctx)
 		if err != nil {
-			s.logger.Debug("failed to relay open stream", "addr", addr, "err", err)
+			s.logger.Debug("failed to relay open stream", "hostport", hostport, "err", err)
 			continue
 		}
 		s.activeRoute = conn
@@ -137,11 +137,19 @@ func (s *clientSourceServer) dialDirect(ctx context.Context, addr netip.AddrPort
 	})
 }
 
-func (s *clientSourceServer) dialRelay(ctx context.Context, addr netip.AddrPort, name string) (quic.Connection, error) {
-	return s.transport.Dial(ctx, net.UDPAddrFromAddrPort(addr), &tls.Config{
+func (s *clientSourceServer) dialRelay(ctx context.Context, hostport string) (quic.Connection, error) {
+	addr, err := net.ResolveUDPAddr("udp", hostport)
+	if err != nil {
+		return nil, kleverr.Ret(err)
+	}
+	host, _, err := net.SplitHostPort(hostport)
+	if err != nil {
+		return nil, kleverr.Ret(err)
+	}
+	return s.transport.Dial(ctx, addr, &tls.Config{
 		Certificates: []tls.Certificate{s.cert},
 		RootCAs:      s.relayCAs,
-		ServerName:   name,
+		ServerName:   host,
 		NextProtos:   []string{"connet-relay"},
 	}, &quic.Config{
 		KeepAlivePeriod: 25 * time.Second,

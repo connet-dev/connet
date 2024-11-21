@@ -34,13 +34,13 @@ func NewServer(opts ...ServerOption) (*Server, error) {
 		}
 	}
 
-	if cfg.relayAddr == nil {
-		if err := ServerRelay("0.0.0.0:19191", "localhost")(cfg); err != nil {
+	if cfg.relayListenAddr == nil {
+		if err := ServerRelayAddresses("0.0.0.0:19191", "localhost:19191")(cfg); err != nil {
 			return nil, err
 		}
 	}
 
-	store, err := NewLocalRelayStore(cfg.relayAddr.AddrPort(), cfg.relayName)
+	store, err := NewLocalRelayStore(cfg.relayListenAddr.AddrPort(), cfg.relayPublicAddr)
 	if err != nil {
 		return nil, err
 	}
@@ -54,7 +54,7 @@ func NewServer(opts ...ServerOption) (*Server, error) {
 	})
 
 	relay, err := newRelayServer(relayConfig{
-		addr:   cfg.relayAddr,
+		addr:   cfg.relayListenAddr,
 		store:  store,
 		cert:   *cfg.certificate,
 		logger: cfg.logger,
@@ -83,9 +83,9 @@ func (s *Server) Run(ctx context.Context) error {
 }
 
 type serverConfig struct {
-	controlAddr *net.UDPAddr
-	relayAddr   *net.UDPAddr
-	relayName   string
+	controlAddr     *net.UDPAddr
+	relayListenAddr *net.UDPAddr
+	relayPublicAddr string
 
 	certificate *tls.Certificate
 	logger      *slog.Logger
@@ -105,14 +105,14 @@ func ServerControlAddress(address string) ServerOption {
 	}
 }
 
-func ServerRelay(address string, name string) ServerOption {
+func ServerRelayAddresses(listen string, public string) ServerOption {
 	return func(cfg *serverConfig) error {
-		addr, err := net.ResolveUDPAddr("udp", address)
+		addr, err := net.ResolveUDPAddr("udp", listen)
 		if err != nil {
 			return kleverr.Newf("relay address cannot be resolved: %w", err)
 		}
-		cfg.relayAddr = addr
-		cfg.relayName = name
+		cfg.relayListenAddr = addr
+		cfg.relayPublicAddr = public
 		return nil
 	}
 }

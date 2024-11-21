@@ -6,15 +6,14 @@ import (
 	"crypto/x509"
 	"log/slog"
 	"net"
-	"net/netip"
 	"time"
 
+	"github.com/klev-dev/kleverr"
 	"github.com/quic-go/quic-go"
 )
 
 type clientRelayServer struct {
-	addr      netip.AddrPort
-	name      string
+	hostport  string
 	transport *quic.Transport
 	cert      tls.Certificate
 	relayCAs  *x509.CertPool
@@ -24,10 +23,18 @@ type clientRelayServer struct {
 
 func (s *clientRelayServer) run(ctx context.Context) error {
 	s.logger.Debug("dialing relay")
-	conn, err := s.transport.Dial(ctx, net.UDPAddrFromAddrPort(s.addr), &tls.Config{
+	addr, err := net.ResolveUDPAddr("udp", s.hostport)
+	if err != nil {
+		return kleverr.Ret(err)
+	}
+	host, _, err := net.SplitHostPort(s.hostport)
+	if err != nil {
+		return kleverr.Ret(err)
+	}
+	conn, err := s.transport.Dial(ctx, addr, &tls.Config{
 		Certificates: []tls.Certificate{s.cert},
 		RootCAs:      s.relayCAs,
-		ServerName:   s.name,
+		ServerName:   host,
 		NextProtos:   []string{"connet-relay"},
 	}, &quic.Config{
 		KeepAlivePeriod: 25 * time.Second,
