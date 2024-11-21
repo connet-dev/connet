@@ -1,6 +1,7 @@
 package connet
 
 import (
+	"context"
 	"crypto/sha256"
 	"crypto/x509"
 	"maps"
@@ -14,6 +15,7 @@ type RelayStoreManager interface {
 	Add(cert *x509.Certificate, destinations []Binding, sources []Binding)
 	Remove(cert *x509.Certificate)
 	Relays() []string
+	RelaysNotify(ctx context.Context, f func(hostports []string) error) error
 }
 
 type RelayStore interface {
@@ -43,17 +45,21 @@ type LocalRelayStore interface {
 }
 
 func NewLocalRelayStore(addr netip.AddrPort, name string) (LocalRelayStore, error) {
-	return &localRelayStore{
-		relays: map[netip.AddrPort]string{addr: name},
-		certs:  map[relayStoreKey]*RelayAuthentication{},
-	}, nil
+	s := &localRelayStore{
+		relays:       map[netip.AddrPort]string{addr: name},
+		relaysNotify: newNotify(),
+		certs:        map[relayStoreKey]*RelayAuthentication{},
+	}
+	s.relaysNotify.inc() // in local put notify at version 1
+	return s, nil
 }
 
 type localRelayStore struct {
-	relays  map[netip.AddrPort]string
-	certs   map[relayStoreKey]*RelayAuthentication
-	certsMu sync.RWMutex
-	pool    atomic.Pointer[x509.CertPool]
+	relays       map[netip.AddrPort]string
+	relaysNotify *notify
+	certs        map[relayStoreKey]*RelayAuthentication
+	certsMu      sync.RWMutex
+	pool         atomic.Pointer[x509.CertPool]
 }
 
 type relayStoreKey [sha256.Size]byte // TODO another key?
@@ -99,6 +105,12 @@ func (s *localRelayStore) Remove(cert *x509.Certificate) {
 
 func (s *localRelayStore) Relays() []string {
 	return slices.Collect(maps.Values(s.relays))
+}
+
+func (s *localRelayStore) RelaysNotify(ctx context.Context, f func([]string) error) error {
+	return runNotify(ctx, s.relaysNotify, func() error {
+		return f(s.Relays())
+	})
 }
 
 func (s *localRelayStore) Authenticate(certs []*x509.Certificate) *RelayAuthentication {

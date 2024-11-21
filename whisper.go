@@ -1,6 +1,7 @@
 package connet
 
 import (
+	"context"
 	"crypto/x509"
 	"net/netip"
 	"sync"
@@ -36,9 +37,11 @@ func (w *Whispers) For(bind Binding) *Whisperer {
 	}
 
 	wh = &Whisperer{
-		bind:         bind,
-		destinations: map[ksuid.KSUID]*whisperDestination{},
-		sources:      map[ksuid.KSUID]*whisperSource{},
+		bind:               bind,
+		destinations:       map[ksuid.KSUID]*whisperDestination{},
+		destinationsNotify: newNotify(),
+		sources:            map[ksuid.KSUID]*whisperSource{},
+		sourcesNotify:      newNotify(),
 	}
 	w.whisperers[bind] = wh
 	return wh
@@ -47,10 +50,12 @@ func (w *Whispers) For(bind Binding) *Whisperer {
 type Whisperer struct {
 	bind Binding
 
-	destinations   map[ksuid.KSUID]*whisperDestination
-	destinationsMu sync.RWMutex
-	sources        map[ksuid.KSUID]*whisperSource
-	sourcesMu      sync.RWMutex
+	destinations       map[ksuid.KSUID]*whisperDestination
+	destinationsMu     sync.RWMutex
+	destinationsNotify *notify
+	sources            map[ksuid.KSUID]*whisperSource
+	sourcesMu          sync.RWMutex
+	sourcesNotify      *notify
 }
 
 type whisperDestination struct {
@@ -63,6 +68,8 @@ type whisperSource struct {
 }
 
 func (w *Whisperer) AddDestination(id ksuid.KSUID, direct *DirectDestination, relays []RelayDestination) {
+	defer w.destinationsNotify.inc()
+
 	w.destinationsMu.Lock()
 	defer w.destinationsMu.Unlock()
 
@@ -73,6 +80,8 @@ func (w *Whisperer) AddDestination(id ksuid.KSUID, direct *DirectDestination, re
 }
 
 func (w *Whisperer) RemoveDestination(id ksuid.KSUID) {
+	defer w.destinationsNotify.inc()
+
 	w.destinationsMu.Lock()
 	defer w.destinationsMu.Unlock()
 
@@ -80,6 +89,8 @@ func (w *Whisperer) RemoveDestination(id ksuid.KSUID) {
 }
 
 func (w *Whisperer) AddSource(id ksuid.KSUID, cert *x509.Certificate) {
+	defer w.sourcesNotify.inc()
+
 	w.sourcesMu.Lock()
 	defer w.sourcesMu.Unlock()
 
@@ -89,6 +100,8 @@ func (w *Whisperer) AddSource(id ksuid.KSUID, cert *x509.Certificate) {
 }
 
 func (w *Whisperer) RemoveSource(id ksuid.KSUID) {
+	defer w.sourcesNotify.inc()
+
 	w.sourcesMu.Lock()
 	defer w.sourcesMu.Unlock()
 
@@ -107,6 +120,12 @@ func (w *Whisperer) Sources() []*x509.Certificate {
 	return result
 }
 
+func (w *Whisperer) SourcesNotify(ctx context.Context, f func([]*x509.Certificate) error) error {
+	return runNotify(ctx, w.sourcesNotify, func() error {
+		return f(w.Sources())
+	})
+}
+
 func (w *Whisperer) Destinations() ([]DirectDestination, []RelayDestination) {
 	w.destinationsMu.RLock()
 	defer w.destinationsMu.RUnlock()
@@ -122,6 +141,12 @@ func (w *Whisperer) Destinations() ([]DirectDestination, []RelayDestination) {
 	}
 
 	return direct, relays
+}
+
+func (w *Whisperer) DestinationsNotify(ctx context.Context, f func([]DirectDestination, []RelayDestination) error) error {
+	return runNotify(ctx, w.destinationsNotify, func() error {
+		return f(w.Destinations())
+	})
 }
 
 type DirectDestination struct {

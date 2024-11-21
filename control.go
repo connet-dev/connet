@@ -254,9 +254,11 @@ func (s *controlStream) relay(ctx context.Context, req *pbs.Request_Relay) error
 	defer s.conn.server.store.Remove(cert)
 	// TODO how to remove?
 
-	for {
+	defer s.logger.Debug("completed relays notify")
+	return s.conn.server.store.RelaysNotify(ctx, func(relays []string) error {
+		s.logger.Debug("updated relays list", "relays", len(relays))
 		var addrs []*pbs.RelayAddress
-		for _, hostport := range s.conn.server.store.Relays() {
+		for _, hostport := range relays {
 			addrs = append(addrs, &pbs.RelayAddress{
 				Hostport: hostport,
 			})
@@ -269,8 +271,8 @@ func (s *controlStream) relay(ctx context.Context, req *pbs.Request_Relay) error
 		}); err != nil {
 			return kleverr.Ret(err)
 		}
-		time.Sleep(time.Second) // TODO
-	}
+		return nil
+	})
 }
 
 func (s *controlStream) destination(ctx context.Context, req *pbs.Request_Destination) error {
@@ -350,8 +352,9 @@ func (s *controlStream) destination(ctx context.Context, req *pbs.Request_Destin
 	})
 
 	g.Go(func() error {
-		for {
-			certs := w.Sources()
+		defer s.logger.Debug("completed sources notify")
+		return w.SourcesNotify(ctx, func(certs []*x509.Certificate) error {
+			s.logger.Debug("updated sources list", "certs", len(certs))
 			var certData [][]byte
 			for _, cert := range certs {
 				certData = append(certData, cert.Raw)
@@ -363,9 +366,8 @@ func (s *controlStream) destination(ctx context.Context, req *pbs.Request_Destin
 			}); err != nil {
 				return kleverr.Ret(err)
 			}
-
-			time.Sleep(time.Second) // TODO
-		}
+			return nil
+		})
 	})
 
 	return g.Wait()
@@ -419,10 +421,11 @@ func (s *controlStream) source(ctx context.Context, req *pbs.Request_Source) err
 	})
 
 	g.Go(func() error {
-		for {
+		defer s.logger.Debug("completed destinations notify")
+		return w.DestinationsNotify(ctx, func(direct []DirectDestination, relays []RelayDestination) error {
+			s.logger.Debug("updated destinations list", "direct", len(direct), "relay", len(relays))
 			resp := &pbs.Response_Source{}
 
-			direct, relays := w.Destinations()
 			for _, dst := range direct {
 				resp.Directs = append(resp.Directs, &pbs.DirectAddress{
 					Addresses:   pb.AsAddrPorts(dst.Addresses),
@@ -440,9 +443,8 @@ func (s *controlStream) source(ctx context.Context, req *pbs.Request_Source) err
 			}); err != nil {
 				return kleverr.Ret(err)
 			}
-
-			time.Sleep(time.Second) // TODO
-		}
+			return nil
+		})
 	})
 
 	return g.Wait()

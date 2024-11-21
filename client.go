@@ -197,13 +197,14 @@ func (c *Client) connect(ctx context.Context, transport *quic.Transport) (*clien
 
 	sid := ksuid.New()
 	return &clientSession{
-		client:       c,
-		id:           sid,
-		transport:    transport,
-		conn:         conn,
-		directAddrs:  []*pb.AddrPort{resp.Public},
-		activeRelays: map[string]*clientRelayServer{},
-		logger:       c.logger.With("connection-id", sid),
+		client:           c,
+		id:               sid,
+		transport:        transport,
+		conn:             conn,
+		directAddrs:      []*pb.AddrPort{resp.Public},
+		relayAddrsNotify: newNotify(),
+		activeRelays:     map[string]*clientRelayServer{},
+		logger:           c.logger.With("connection-id", sid),
 	}, nil
 }
 
@@ -220,15 +221,16 @@ func (c *Client) reconnect(ctx context.Context, transport *quic.Transport) (*cli
 }
 
 type clientSession struct {
-	client       *Client
-	id           ksuid.KSUID
-	transport    *quic.Transport
-	conn         quic.Connection
-	directAddrs  []*pb.AddrPort // TODO these should be multiple, not only from server pov
-	relayAddrs   map[string]struct{}
-	relayAddrsMu sync.RWMutex
-	activeRelays map[string]*clientRelayServer
-	logger       *slog.Logger
+	client           *Client
+	id               ksuid.KSUID
+	transport        *quic.Transport
+	conn             quic.Connection
+	directAddrs      []*pb.AddrPort // TODO these should be multiple, not only from server pov
+	relayAddrs       map[string]struct{}
+	relayAddrsMu     sync.RWMutex
+	relayAddrsNotify *notify
+	activeRelays     map[string]*clientRelayServer
+	logger           *slog.Logger
 }
 
 func (s *clientSession) run(ctx context.Context) error {
@@ -282,6 +284,8 @@ func (s *clientSession) runRelays(ctx context.Context) error {
 }
 
 func (s *clientSession) setRelayAddrs(ctx context.Context, addrs map[string]struct{}) {
+	defer s.relayAddrsNotify.inc()
+
 	s.relayAddrsMu.Lock()
 	s.relayAddrs = maps.Clone(addrs)
 	s.relayAddrsMu.Unlock()
@@ -346,9 +350,10 @@ func (s *clientSession) runDestination(ctx context.Context, bind Binding) error 
 	g, ctx := errgroup.WithContext(ctx)
 
 	g.Go(func() error {
-		for {
-			time.Sleep(time.Second) // TODO
-
+		defer s.logger.Debug("completed destinations notify")
+		return runNotify(ctx, s.relayAddrsNotify, func() error {
+			direct, relays := s.getDirectAddr(), s.getRelayAddrs()
+			s.logger.Debug("updated destinations", "direct", len(direct.Addresses), "relays", len(relays))
 			if err := pb.Write(stream, &pbs.Request{
 				Destination: &pbs.Request_Destination{
 					Binding: bind.AsPB(),
@@ -358,7 +363,8 @@ func (s *clientSession) runDestination(ctx context.Context, bind Binding) error 
 			}); err != nil {
 				return kleverr.Ret(err)
 			}
-		}
+			return nil
+		})
 	})
 
 	g.Go(func() error {
