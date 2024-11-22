@@ -44,9 +44,3 @@ message Error {
     DestinationDialFailed = 401;
   }
 }
-
-message Cert {
-  bytes der = 1;
-  bytes pkey = 2;
-  repeated bytes cas = 3;
-}

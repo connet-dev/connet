@@ -118,7 +118,7 @@ func (s *localRelayStore) Authenticate(certs []*x509.Certificate) *RelayAuthenti
 	defer s.certsMu.RUnlock()
 
 	for _, cert := range certs {
-		if auth := s.certs[sha256.Sum256(cert.Raw)]; auth != nil {
+		if auth := s.certs[sha256.Sum256(cert.Raw)]; auth != nil && auth.Certificate.Equal(cert) {
 			return auth
 		}
 	}

@@ -237,6 +237,7 @@ func (s *clientSession) run(ctx context.Context) error {
 	g, ctx := errgroup.WithContext(ctx)
 
 	g.Go(func() error { return s.runRelays(ctx) })
+	g.Go(func() error { return s.runRelayConns(ctx) })
 
 	for dst := range s.client.destinations {
 		g.Go(func() error { return s.runDestination(ctx, dst) })
@@ -283,30 +284,38 @@ func (s *clientSession) runRelays(ctx context.Context) error {
 	}
 }
 
+func (s *clientSession) runRelayConns(ctx context.Context) error {
+	defer s.logger.Debug("completed relays notify")
+	return runNotify(ctx, s.relayAddrsNotify, func() error {
+		relays := s.getRelayAddrs()
+		s.logger.Debug("updated relays", "relays", len(relays))
+		for _, addr := range s.getRelayAddrs() {
+			if _, ok := s.activeRelays[addr.Hostport]; ok {
+				continue
+			}
+
+			srv := &clientRelayServer{
+				hostport:  addr.Hostport,
+				transport: s.transport,
+				cert:      s.client.clientCert,
+				relayCAs:  s.client.controlCAs,
+				dialer:    s.client.dialer,
+				logger:    s.client.logger.With("component", "relay", "addr", addr.Hostport),
+			}
+			s.activeRelays[addr.Hostport] = srv
+			go srv.run(ctx)
+		}
+		return nil
+	})
+}
+
 func (s *clientSession) setRelayAddrs(ctx context.Context, addrs map[string]struct{}) {
 	defer s.relayAddrsNotify.inc()
 
 	s.relayAddrsMu.Lock()
+	defer s.relayAddrsMu.Unlock()
+
 	s.relayAddrs = maps.Clone(addrs)
-	s.relayAddrsMu.Unlock()
-
-	// TODO
-	for hostport := range addrs {
-		if _, ok := s.activeRelays[hostport]; ok {
-			continue
-		}
-
-		srv := &clientRelayServer{
-			hostport:  hostport,
-			transport: s.transport,
-			cert:      s.client.clientCert,
-			relayCAs:  s.client.controlCAs,
-			dialer:    s.client.dialer,
-			logger:    s.client.logger.With("component", "relay", "addr", hostport),
-		}
-		s.activeRelays[hostport] = srv
-		go srv.run(ctx)
-	}
 }
 
 func (s *clientSession) getDirectAddr() *pbs.DirectAddress {
