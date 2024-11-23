@@ -28,12 +28,12 @@ message Request {
   }
   message Destination {
     shared.Binding binding = 1;
-    DirectAddress direct = 2; // the set of addresses for direct connections
-    repeated RelayAddress relays = 3; // the set of addresses for relay connections
+    repeated Route directs = 2; // the set of routes for direct connections
+    repeated Route relays = 3; // the set of routes for relay connections
   }
   message Source {
     shared.Binding binding = 1;
-    bytes certificate = 2; // certificate that client uses for direct connection
+    bytes certificate = 2; // certificate that this client uses for direct connections
   }
 }
 
@@ -45,22 +45,18 @@ message Response {
   Source source = 4;
 
   message Relay {
-    repeated RelayAddress addresses = 1; // set of relay addresses that follow this server
+    repeated Route relays = 1; // set of relay addresses that follow this server
   }
   message Destination {
-    repeated bytes certificates = 1; // certificates that the clients will present when connecting directly
+    repeated bytes certificates = 1; // certificates that the clients will present when connecting directly for this destination
   }
   message Source {
-    repeated DirectAddress directs = 1;
-    repeated RelayAddress relays = 2;
+    repeated Route directs = 1;
+    repeated Route relays = 2;
   }
 }
 
-message DirectAddress {
-  repeated shared.AddrPort addresses = 1;
-  bytes certificate = 2; // the server certificate when connecting directly
-}
-
-message RelayAddress {
-  string hostport = 1; // TODO do we combine addresses?
+message Route {
+  string hostport = 1;
+  bytes certificate = 2;
 }

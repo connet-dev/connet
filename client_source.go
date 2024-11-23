@@ -7,7 +7,6 @@ import (
 	"log/slog"
 	"maps"
 	"net"
-	"net/netip"
 	"sync"
 	"time"
 
@@ -26,7 +25,7 @@ type clientSourceServer struct {
 	relayCAs  *x509.CertPool
 	logger    *slog.Logger
 
-	directRoutes map[netip.AddrPort]*x509.CertPool
+	directRoutes map[string]*x509.CertPool
 	relayRoutes  map[string]struct{}
 	routesMu     sync.RWMutex
 
@@ -34,8 +33,8 @@ type clientSourceServer struct {
 	activeRouteMu sync.RWMutex
 }
 
-func (s *clientSourceServer) setRoutes(direct map[netip.AddrPort]*x509.Certificate, relays map[string]struct{}) {
-	newDirect := map[netip.AddrPort]*x509.CertPool{}
+func (s *clientSourceServer) setRoutes(direct map[string]*x509.Certificate, relays map[string]struct{}) {
+	newDirect := map[string]*x509.CertPool{}
 	for addr, cert := range direct {
 		pool := x509.NewCertPool()
 		pool.AddCert(cert)
@@ -51,7 +50,7 @@ func (s *clientSourceServer) setRoutes(direct map[netip.AddrPort]*x509.Certifica
 	s.relayRoutes = newRelay
 }
 
-func (s *clientSourceServer) getDirectRoutes() map[netip.AddrPort]*x509.CertPool {
+func (s *clientSourceServer) getDirectRoutes() map[string]*x509.CertPool {
 	s.routesMu.RLock()
 	defer s.routesMu.RUnlock()
 
@@ -126,8 +125,12 @@ func (s *clientSourceServer) findRoute(ctx context.Context) (quic.Stream, error)
 	return nil, kleverr.New("unable to dial any route")
 }
 
-func (s *clientSourceServer) dialDirect(ctx context.Context, addr netip.AddrPort, pool *x509.CertPool) (quic.Connection, error) {
-	return s.transport.Dial(ctx, net.UDPAddrFromAddrPort(addr), &tls.Config{
+func (s *clientSourceServer) dialDirect(ctx context.Context, hostport string, pool *x509.CertPool) (quic.Connection, error) {
+	addr, err := net.ResolveUDPAddr("udp", hostport)
+	if err != nil {
+		return nil, kleverr.Ret(err)
+	}
+	return s.transport.Dial(ctx, addr, &tls.Config{
 		Certificates: []tls.Certificate{s.cert},
 		RootCAs:      pool,
 		ServerName:   "connet-direct",

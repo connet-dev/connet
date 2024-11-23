@@ -3,7 +3,6 @@ package connet
 import (
 	"context"
 	"crypto/x509"
-	"net/netip"
 	"sync"
 
 	"github.com/segmentio/ksuid"
@@ -59,23 +58,23 @@ type Whisperer struct {
 }
 
 type whisperDestination struct {
-	direct *DirectDestination
-	relays []RelayDestination
+	directs []Route
+	relays  []Route
 }
 
 type whisperSource struct {
 	cert *x509.Certificate
 }
 
-func (w *Whisperer) AddDestination(id ksuid.KSUID, direct *DirectDestination, relays []RelayDestination) {
+func (w *Whisperer) AddDestination(id ksuid.KSUID, directs []Route, relays []Route) {
 	defer w.destinationsNotify.inc()
 
 	w.destinationsMu.Lock()
 	defer w.destinationsMu.Unlock()
 
 	w.destinations[id] = &whisperDestination{
-		direct: direct,
-		relays: relays,
+		directs: directs,
+		relays:  relays,
 	}
 }
 
@@ -126,34 +125,28 @@ func (w *Whisperer) SourcesNotify(ctx context.Context, f func([]*x509.Certificat
 	})
 }
 
-func (w *Whisperer) Destinations() ([]DirectDestination, []RelayDestination) {
+func (w *Whisperer) Destinations() ([]Route, []Route) {
 	w.destinationsMu.RLock()
 	defer w.destinationsMu.RUnlock()
 
-	var direct []DirectDestination
-	var relays []RelayDestination
+	var directs []Route
+	var relays []Route
 
 	for _, dst := range w.destinations {
-		if dst.direct != nil {
-			direct = append(direct, *dst.direct)
-		}
+		directs = append(directs, dst.directs...)
 		relays = append(relays, dst.relays...)
 	}
 
-	return direct, relays
+	return directs, relays
 }
 
-func (w *Whisperer) DestinationsNotify(ctx context.Context, f func([]DirectDestination, []RelayDestination) error) error {
+func (w *Whisperer) DestinationsNotify(ctx context.Context, f func([]Route, []Route) error) error {
 	return runNotify(ctx, w.destinationsNotify, func() error {
 		return f(w.Destinations())
 	})
 }
 
-type DirectDestination struct {
-	Addresses   []netip.AddrPort
+type Route struct {
+	Hostport    string
 	Certificate *x509.Certificate
-}
-
-type RelayDestination struct {
-	Hostport string
 }

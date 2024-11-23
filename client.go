@@ -7,7 +7,6 @@ import (
 	"log/slog"
 	"maps"
 	"net"
-	"net/netip"
 	"slices"
 	"sync"
 	"time"
@@ -277,7 +276,7 @@ func (s *clientSession) runRelays(ctx context.Context) error {
 		}
 
 		addrs := map[string]struct{}{}
-		for _, addr := range resp.Relay.Addresses {
+		for _, addr := range resp.Relay.Relays {
 			addrs[addr.Hostport] = struct{}{}
 		}
 		s.setRelayAddrs(ctx, addrs)
@@ -318,20 +317,25 @@ func (s *clientSession) setRelayAddrs(ctx context.Context, addrs map[string]stru
 	s.relayAddrs = maps.Clone(addrs)
 }
 
-func (s *clientSession) getDirectAddr() *pbs.DirectAddress {
-	return &pbs.DirectAddress{
-		Certificate: s.client.serverCert.Leaf.Raw,
-		Addresses:   s.directAddrs,
+func (s *clientSession) getDirectAddr() []*pbs.Route {
+	var directs []*pbs.Route
+	for _, direct := range s.directAddrs {
+		directs = append(directs, &pbs.Route{
+			Hostport:    direct.AsNetip().String(),
+			Certificate: s.client.serverCert.Leaf.Raw,
+		})
 	}
+
+	return directs
 }
 
-func (s *clientSession) getRelayAddrs() []*pbs.RelayAddress {
+func (s *clientSession) getRelayAddrs() []*pbs.Route {
 	s.relayAddrsMu.RLock()
 	defer s.relayAddrsMu.RUnlock()
 
-	var relays []*pbs.RelayAddress
+	var relays []*pbs.Route
 	for hostport := range s.relayAddrs {
-		relays = append(relays, &pbs.RelayAddress{
+		relays = append(relays, &pbs.Route{
 			Hostport: hostport,
 		})
 	}
@@ -349,7 +353,7 @@ func (s *clientSession) runDestination(ctx context.Context, bind Binding) error 
 	if err := pb.Write(stream, &pbs.Request{
 		Destination: &pbs.Request_Destination{
 			Binding: bind.AsPB(),
-			Direct:  s.getDirectAddr(),
+			Directs: s.getDirectAddr(),
 			Relays:  s.getRelayAddrs(),
 		},
 	}); err != nil {
@@ -362,11 +366,11 @@ func (s *clientSession) runDestination(ctx context.Context, bind Binding) error 
 		defer s.logger.Debug("completed destinations notify")
 		return runNotify(ctx, s.relayAddrsNotify, func() error {
 			direct, relays := s.getDirectAddr(), s.getRelayAddrs()
-			s.logger.Debug("updated destinations", "direct", len(direct.Addresses), "relays", len(relays))
+			s.logger.Debug("updated destinations", "direct", len(direct), "relays", len(relays))
 			if err := pb.Write(stream, &pbs.Request{
 				Destination: &pbs.Request_Destination{
 					Binding: bind.AsPB(),
-					Direct:  s.getDirectAddr(),
+					Directs: s.getDirectAddr(),
 					Relays:  s.getRelayAddrs(),
 				},
 			}); err != nil {
@@ -428,16 +432,14 @@ func (s *clientSession) runSource(ctx context.Context, bind Binding) error {
 			return kleverr.Newf("unexpected response")
 		}
 
-		directs := map[netip.AddrPort]*x509.Certificate{}
+		directs := map[string]*x509.Certificate{}
 		for _, direct := range resp.Source.Directs {
 			cert, err := x509.ParseCertificate(direct.Certificate)
 			if err != nil {
 				s.logger.Warn("invalid certificate", "err", err)
 				continue
 			}
-			for _, addr := range direct.Addresses {
-				directs[addr.AsNetip()] = cert
-			}
+			directs[direct.Hostport] = cert
 		}
 
 		relays := map[string]struct{}{}

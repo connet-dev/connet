@@ -257,16 +257,16 @@ func (s *controlStream) relay(ctx context.Context, req *pbs.Request_Relay) error
 	defer s.logger.Debug("completed relays notify")
 	return s.conn.server.store.RelaysNotify(ctx, func(relays []string) error {
 		s.logger.Debug("updated relays list", "relays", len(relays))
-		var addrs []*pbs.RelayAddress
+		var addrs []*pbs.Route
 		for _, hostport := range relays {
-			addrs = append(addrs, &pbs.RelayAddress{
+			addrs = append(addrs, &pbs.Route{
 				Hostport: hostport,
 			})
 		}
 
 		if err := pb.Write(s.stream, &pbs.Response{
 			Relay: &pbs.Response_Relay{
-				Addresses: addrs,
+				Relays: addrs,
 			},
 		}); err != nil {
 			return kleverr.Ret(err)
@@ -342,28 +342,28 @@ func (s *controlStream) destination(ctx context.Context, req *pbs.Request_Destin
 	return g.Wait()
 }
 
-func (s *controlStream) readDestination(req *pbs.Request_Destination) (*DirectDestination, []RelayDestination, error) {
-	var direct *DirectDestination
-	var relays []RelayDestination
+func (s *controlStream) readDestination(req *pbs.Request_Destination) ([]Route, []Route, error) {
+	var directs []Route
+	var relays []Route
 
-	if req.Direct != nil {
-		cert, err := x509.ParseCertificate(req.Direct.Certificate)
+	for _, d := range req.Directs {
+		cert, err := x509.ParseCertificate(d.Certificate)
 		if err != nil {
 			return nil, nil, err
 		}
-		direct = &DirectDestination{
-			Addresses:   pb.AsNetips(req.Direct.Addresses),
+		directs = append(directs, Route{
+			Hostport:    d.Hostport,
 			Certificate: cert,
-		}
+		})
 	}
 
 	for _, r := range req.Relays {
-		relays = append(relays, RelayDestination{
+		relays = append(relays, Route{
 			Hostport: r.Hostport,
 		})
 	}
 
-	return direct, relays, nil
+	return directs, relays, nil
 }
 
 func (s *controlStream) source(ctx context.Context, req *pbs.Request_Source) error {
@@ -415,18 +415,18 @@ func (s *controlStream) source(ctx context.Context, req *pbs.Request_Source) err
 
 	g.Go(func() error {
 		defer s.logger.Debug("completed destinations notify")
-		return w.DestinationsNotify(ctx, func(direct []DirectDestination, relays []RelayDestination) error {
+		return w.DestinationsNotify(ctx, func(direct []Route, relays []Route) error {
 			s.logger.Debug("updated destinations list", "direct", len(direct), "relay", len(relays))
 			resp := &pbs.Response_Source{}
 
 			for _, dst := range direct {
-				resp.Directs = append(resp.Directs, &pbs.DirectAddress{
-					Addresses:   pb.AsAddrPorts(dst.Addresses),
+				resp.Directs = append(resp.Directs, &pbs.Route{
+					Hostport:    dst.Hostport,
 					Certificate: dst.Certificate.Raw,
 				})
 			}
 			for _, dst := range relays {
-				resp.Relays = append(resp.Relays, &pbs.RelayAddress{
+				resp.Relays = append(resp.Relays, &pbs.Route{
 					Hostport: dst.Hostport,
 				})
 			}
