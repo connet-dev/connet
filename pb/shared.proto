@@ -30,17 +30,21 @@ message Error {
     // Authentication
     AuthenticationFailed = 100;
 
-    // Register codes
-    RegistrationFailed = 200;
+    // Relay
+    RelayInvalidCertificate = 200;
+    RelayDestinationNotAllowed = 201;
+    RelaySourceNotAllowed = 202;
 
-    // Server connect codes
-    ListenerNotFound = 300;
-    ListenerNotConnected = 301;
-    ListenerRequestFailed = 302;
-    ListenerResponseFailed = 303;
+    // Destination
+    DestinationNotAllowed = 300;
+    DestinationInvalidCertificate = 301;
+
+    // Source
+    SourceNotAllowed = 400;
+    SourceInvalidCertificate = 401;
 
     // Client connect codes
-    DestinationNotFound = 400;
-    DestinationDialFailed = 401;
+    DestinationNotFound = 500;
+    DestinationDialFailed = 501;
   }
 }
