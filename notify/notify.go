@@ -1,4 +1,4 @@
-package connet
+package notify
 
 import (
 	"context"
@@ -7,13 +7,13 @@ import (
 	"github.com/klev-dev/kleverr"
 )
 
-type notify struct {
+type N struct {
 	value   atomic.Uint64
 	barrier chan chan struct{}
 }
 
-func newNotify() *notify {
-	n := &notify{
+func New() *N {
+	n := &N{
 		barrier: make(chan chan struct{}, 1),
 	}
 	n.barrier <- make(chan struct{})
@@ -21,7 +21,7 @@ func newNotify() *notify {
 	return n
 }
 
-func (n *notify) get(ctx context.Context, version uint64) (uint64, error) {
+func (n *N) Get(ctx context.Context, version uint64) (uint64, error) {
 	if current := n.value.Load(); current > version {
 		return current, nil
 	}
@@ -51,7 +51,21 @@ func (n *notify) get(ctx context.Context, version uint64) (uint64, error) {
 	}
 }
 
-func (n *notify) inc() {
+func (n *N) Listen(ctx context.Context, f func() error) error {
+	var version uint64
+	var err error
+	for {
+		version, err = n.Get(ctx, version)
+		if err != nil {
+			return err
+		}
+		if err := f(); err != nil {
+			return err
+		}
+	}
+}
+
+func (n *N) Updated() {
 	b, ok := <-n.barrier
 	if !ok {
 		return
@@ -64,7 +78,7 @@ func (n *notify) inc() {
 	n.barrier <- make(chan struct{})
 }
 
-func (n *notify) close() {
+func (n *N) Close() {
 	b, ok := <-n.barrier
 	if !ok {
 		return
@@ -73,18 +87,4 @@ func (n *notify) close() {
 	close(b)
 
 	close(n.barrier)
-}
-
-func runNotify(ctx context.Context, n *notify, f func() error) error {
-	var version uint64
-	var err error
-	for {
-		version, err = n.get(ctx, version)
-		if err != nil {
-			return err
-		}
-		if err := f(); err != nil {
-			return err
-		}
-	}
 }

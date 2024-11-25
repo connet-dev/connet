@@ -9,6 +9,8 @@ import (
 	"slices"
 	"sync"
 	"sync/atomic"
+
+	"github.com/keihaya-com/connet/notify"
 )
 
 type RelayStoreManager interface {
@@ -47,16 +49,16 @@ type LocalRelayStore interface {
 func NewLocalRelayStore(addr netip.AddrPort, name string) (LocalRelayStore, error) {
 	s := &localRelayStore{
 		relays:       map[netip.AddrPort]string{addr: name},
-		relaysNotify: newNotify(),
+		relaysNotify: notify.New(),
 		certs:        map[relayStoreKey]*RelayAuthentication{},
 	}
-	s.relaysNotify.inc() // in local put notify at version 1
+	s.relaysNotify.Updated() // in local put notify at version 1, so new listens will return the static value and never fire again
 	return s, nil
 }
 
 type localRelayStore struct {
 	relays       map[netip.AddrPort]string
-	relaysNotify *notify
+	relaysNotify *notify.N
 	certs        map[relayStoreKey]*RelayAuthentication
 	certsMu      sync.RWMutex
 	pool         atomic.Pointer[x509.CertPool]
@@ -108,7 +110,7 @@ func (s *localRelayStore) Relays() []string {
 }
 
 func (s *localRelayStore) RelaysNotify(ctx context.Context, f func([]string) error) error {
-	return runNotify(ctx, s.relaysNotify, func() error {
+	return s.relaysNotify.Listen(ctx, func() error {
 		return f(s.Relays())
 	})
 }

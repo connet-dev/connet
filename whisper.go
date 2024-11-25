@@ -5,23 +5,24 @@ import (
 	"crypto/x509"
 	"sync"
 
+	"github.com/keihaya-com/connet/notify"
 	"github.com/segmentio/ksuid"
 )
 
-type Whispers struct {
-	whisperers map[Forward]*Whisperer
-	mu         sync.RWMutex
+type whisperer struct {
+	whispers map[Forward]*whisper
+	mu       sync.RWMutex
 }
 
-func NewWhispers() *Whispers {
-	return &Whispers{
-		whisperers: map[Forward]*Whisperer{},
+func newWhisperer() *whisperer {
+	return &whisperer{
+		whispers: map[Forward]*whisper{},
 	}
 }
 
-func (w *Whispers) For(fwd Forward) *Whisperer {
+func (w *whisperer) For(fwd Forward) *whisper {
 	w.mu.RLock()
-	wh := w.whisperers[fwd]
+	wh := w.whispers[fwd]
 	w.mu.RUnlock()
 	if wh != nil {
 		return wh
@@ -30,30 +31,30 @@ func (w *Whispers) For(fwd Forward) *Whisperer {
 	w.mu.Lock()
 	defer w.mu.Unlock()
 
-	wh = w.whisperers[fwd]
+	wh = w.whispers[fwd]
 	if wh != nil {
 		return wh
 	}
 
-	wh = &Whisperer{
+	wh = &whisper{
 		forward:            fwd,
 		destinations:       map[ksuid.KSUID]*whisperDestination{},
-		destinationsNotify: newNotify(),
+		destinationsNotify: notify.New(),
 		sources:            map[ksuid.KSUID]*whisperSource{},
-		sourcesNotify:      newNotify(),
+		sourcesNotify:      notify.New(),
 	}
-	w.whisperers[fwd] = wh
+	w.whispers[fwd] = wh
 	return wh
 }
 
-type Whisperer struct {
+type whisper struct {
 	forward            Forward
 	destinations       map[ksuid.KSUID]*whisperDestination
 	destinationsMu     sync.RWMutex
-	destinationsNotify *notify
+	destinationsNotify *notify.N
 	sources            map[ksuid.KSUID]*whisperSource
 	sourcesMu          sync.RWMutex
-	sourcesNotify      *notify
+	sourcesNotify      *notify.N
 }
 
 type whisperDestination struct {
@@ -65,8 +66,8 @@ type whisperSource struct {
 	cert *x509.Certificate
 }
 
-func (w *Whisperer) AddDestination(id ksuid.KSUID, directs []Route, relays []Route) {
-	defer w.destinationsNotify.inc()
+func (w *whisper) AddDestination(id ksuid.KSUID, directs []Route, relays []Route) {
+	defer w.destinationsNotify.Updated()
 
 	w.destinationsMu.Lock()
 	defer w.destinationsMu.Unlock()
@@ -77,8 +78,8 @@ func (w *Whisperer) AddDestination(id ksuid.KSUID, directs []Route, relays []Rou
 	}
 }
 
-func (w *Whisperer) RemoveDestination(id ksuid.KSUID) {
-	defer w.destinationsNotify.inc()
+func (w *whisper) RemoveDestination(id ksuid.KSUID) {
+	defer w.destinationsNotify.Updated()
 
 	w.destinationsMu.Lock()
 	defer w.destinationsMu.Unlock()
@@ -86,8 +87,8 @@ func (w *Whisperer) RemoveDestination(id ksuid.KSUID) {
 	delete(w.destinations, id)
 }
 
-func (w *Whisperer) AddSource(id ksuid.KSUID, cert *x509.Certificate) {
-	defer w.sourcesNotify.inc()
+func (w *whisper) AddSource(id ksuid.KSUID, cert *x509.Certificate) {
+	defer w.sourcesNotify.Updated()
 
 	w.sourcesMu.Lock()
 	defer w.sourcesMu.Unlock()
@@ -97,8 +98,8 @@ func (w *Whisperer) AddSource(id ksuid.KSUID, cert *x509.Certificate) {
 	}
 }
 
-func (w *Whisperer) RemoveSource(id ksuid.KSUID) {
-	defer w.sourcesNotify.inc()
+func (w *whisper) RemoveSource(id ksuid.KSUID) {
+	defer w.sourcesNotify.Updated()
 
 	w.sourcesMu.Lock()
 	defer w.sourcesMu.Unlock()
@@ -106,7 +107,7 @@ func (w *Whisperer) RemoveSource(id ksuid.KSUID) {
 	delete(w.sources, id)
 }
 
-func (w *Whisperer) Sources() []*x509.Certificate {
+func (w *whisper) Sources() []*x509.Certificate {
 	w.sourcesMu.RLock()
 	defer w.sourcesMu.RUnlock()
 
@@ -118,13 +119,13 @@ func (w *Whisperer) Sources() []*x509.Certificate {
 	return result
 }
 
-func (w *Whisperer) SourcesNotify(ctx context.Context, f func([]*x509.Certificate) error) error {
-	return runNotify(ctx, w.sourcesNotify, func() error {
+func (w *whisper) SourcesListen(ctx context.Context, f func([]*x509.Certificate) error) error {
+	return w.sourcesNotify.Listen(ctx, func() error {
 		return f(w.Sources())
 	})
 }
 
-func (w *Whisperer) Destinations() ([]Route, []Route) {
+func (w *whisper) Destinations() ([]Route, []Route) {
 	w.destinationsMu.RLock()
 	defer w.destinationsMu.RUnlock()
 
@@ -139,8 +140,8 @@ func (w *Whisperer) Destinations() ([]Route, []Route) {
 	return directs, relays
 }
 
-func (w *Whisperer) DestinationsNotify(ctx context.Context, f func([]Route, []Route) error) error {
-	return runNotify(ctx, w.destinationsNotify, func() error {
+func (w *whisper) DestinationsListen(ctx context.Context, f func([]Route, []Route) error) error {
+	return w.destinationsNotify.Listen(ctx, func() error {
 		return f(w.Destinations())
 	})
 }

@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/keihaya-com/connet/certc"
+	"github.com/keihaya-com/connet/notify"
 	"github.com/keihaya-com/connet/pb"
 	"github.com/keihaya-com/connet/pbs"
 	"github.com/klev-dev/kleverr"
@@ -201,7 +202,7 @@ func (c *Client) connect(ctx context.Context, transport *quic.Transport) (*clien
 		transport:        transport,
 		conn:             conn,
 		directAddrs:      []*pb.AddrPort{resp.Public},
-		relayAddrsNotify: newNotify(),
+		relayAddrsNotify: notify.New(),
 		activeRelays:     map[string]*clientRelayServer{},
 		logger:           c.logger.With("connection-id", sid),
 	}, nil
@@ -227,7 +228,7 @@ type clientSession struct {
 	directAddrs      []*pb.AddrPort // TODO these should be multiple, not only from server pov
 	relayAddrs       map[string]struct{}
 	relayAddrsMu     sync.RWMutex
-	relayAddrsNotify *notify
+	relayAddrsNotify *notify.N
 	activeRelays     map[string]*clientRelayServer
 	logger           *slog.Logger
 }
@@ -285,7 +286,7 @@ func (s *clientSession) runRelays(ctx context.Context) error {
 
 func (s *clientSession) runRelayConns(ctx context.Context) error {
 	defer s.logger.Debug("completed relays notify")
-	return runNotify(ctx, s.relayAddrsNotify, func() error {
+	return s.relayAddrsNotify.Listen(ctx, func() error {
 		relays := s.getRelayAddrs()
 		s.logger.Debug("updated relays", "relays", len(relays))
 		for _, addr := range s.getRelayAddrs() {
@@ -309,7 +310,7 @@ func (s *clientSession) runRelayConns(ctx context.Context) error {
 }
 
 func (s *clientSession) setRelayAddrs(ctx context.Context, addrs map[string]struct{}) {
-	defer s.relayAddrsNotify.inc()
+	defer s.relayAddrsNotify.Updated()
 
 	s.relayAddrsMu.Lock()
 	defer s.relayAddrsMu.Unlock()
@@ -364,7 +365,7 @@ func (s *clientSession) runDestination(ctx context.Context, fwd Forward) error {
 
 	g.Go(func() error {
 		defer s.logger.Debug("completed destinations notify")
-		return runNotify(ctx, s.relayAddrsNotify, func() error {
+		return s.relayAddrsNotify.Listen(ctx, func() error {
 			direct, relays := s.getDirectAddr(), s.getRelayAddrs()
 			s.logger.Debug("updated destinations", "direct", len(direct), "relays", len(relays))
 			if err := pb.Write(stream, &pbs.Request{

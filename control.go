@@ -38,7 +38,7 @@ func newControlServer(cfg controlConfig) (*controlServer, error) {
 		},
 		logger: cfg.logger.With("control", cfg.addr),
 
-		whispers: NewWhispers(),
+		whisperer: newWhisperer(),
 	}, nil
 }
 
@@ -49,7 +49,7 @@ type controlServer struct {
 	tlsConf *tls.Config
 	logger  *slog.Logger
 
-	whispers *Whispers
+	whisperer *whisperer
 }
 
 func (s *controlServer) Run(ctx context.Context) error {
@@ -293,7 +293,7 @@ func (s *controlStream) destination(ctx context.Context, req *pbs.Request_Destin
 		return pb.Write(s.stream, &pbs.Response{Error: respErr})
 	}
 
-	w := s.conn.server.whispers.For(from)
+	w := s.conn.server.whisperer.For(from)
 	w.AddDestination(s.conn.id, direct, relays)
 	defer w.RemoveDestination(s.conn.id)
 
@@ -325,7 +325,7 @@ func (s *controlStream) destination(ctx context.Context, req *pbs.Request_Destin
 
 	g.Go(func() error {
 		defer s.logger.Debug("completed sources notify")
-		return w.SourcesNotify(ctx, func(certs []*x509.Certificate) error {
+		return w.SourcesListen(ctx, func(certs []*x509.Certificate) error {
 			s.logger.Debug("updated sources list", "certs", len(certs))
 			var certData [][]byte
 			for _, cert := range certs {
@@ -385,7 +385,7 @@ func (s *controlStream) source(ctx context.Context, req *pbs.Request_Source) err
 		return pb.Write(s.stream, &pbs.Response{Error: respErr})
 	}
 
-	w := s.conn.server.whispers.For(to)
+	w := s.conn.server.whisperer.For(to)
 	w.AddSource(s.conn.id, cert)
 	defer w.RemoveSource(s.conn.id)
 
@@ -419,7 +419,7 @@ func (s *controlStream) source(ctx context.Context, req *pbs.Request_Source) err
 
 	g.Go(func() error {
 		defer s.logger.Debug("completed destinations notify")
-		return w.DestinationsNotify(ctx, func(direct []Route, relays []Route) error {
+		return w.DestinationsListen(ctx, func(direct []Route, relays []Route) error {
 			s.logger.Debug("updated destinations list", "direct", len(direct), "relay", len(relays))
 			resp := &pbs.Response_Source{}
 
