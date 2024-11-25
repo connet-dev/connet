@@ -23,16 +23,16 @@ message Request {
 
   message Relay {
     bytes certificate = 1; // certificate to use when connecting to a relay
-    repeated shared.Binding destinations = 2;
-    repeated shared.Binding sources = 3;
+    repeated shared.Forward destinations = 2;
+    repeated shared.Forward sources = 3;
   }
   message Destination {
-    shared.Binding binding = 1;
+    shared.Forward from = 1;
     repeated Route directs = 2; // the set of routes for direct connections
     repeated Route relays = 3; // the set of routes for relay connections
   }
   message Source {
-    shared.Binding binding = 1;
+    shared.Forward to = 1;
     bytes certificate = 2; // certificate that this client uses for direct connections
   }
 }

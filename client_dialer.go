@@ -13,7 +13,7 @@ import (
 )
 
 type destinationsDialer struct {
-	destinations map[Binding]string
+	destinations map[Forward]string
 	logger       *slog.Logger
 }
 
@@ -33,17 +33,17 @@ func (s *destinationsDialer) runRequestErr(ctx context.Context, stream quic.Stre
 
 	switch {
 	case req.Connect != nil:
-		return s.connect(ctx, stream, NewBindingPB(req.Connect.Binding))
+		return s.connect(ctx, stream, NewForwardFromPB(req.Connect.To))
 	default:
 		return s.unknown(ctx, stream, req)
 	}
 }
 
-func (s *destinationsDialer) connect(ctx context.Context, stream quic.Stream, bind Binding) error {
-	logger := s.logger.With("bind", bind)
-	addr, ok := s.destinations[bind]
+func (s *destinationsDialer) connect(ctx context.Context, stream quic.Stream, target Forward) error {
+	logger := s.logger.With("target", target)
+	addr, ok := s.destinations[target]
 	if !ok {
-		err := pb.NewError(pb.Error_DestinationNotFound, "%s not found on this client", bind)
+		err := pb.NewError(pb.Error_DestinationNotFound, "%s not found on this client", target)
 		if err := pb.Write(stream, &pbc.Response{Error: err}); err != nil {
 			return kleverr.Newf("could not write error response: %w", err)
 		}
@@ -52,7 +52,7 @@ func (s *destinationsDialer) connect(ctx context.Context, stream quic.Stream, bi
 
 	conn, err := net.Dial("tcp", addr)
 	if err != nil {
-		err := pb.NewError(pb.Error_DestinationDialFailed, "%s could not be dialed: %v", bind, err)
+		err := pb.NewError(pb.Error_DestinationDialFailed, "%s could not be dialed: %v", target, err)
 		if err := pb.Write(stream, &pbc.Response{Error: err}); err != nil {
 			return kleverr.Newf("could not write error response: %w", err)
 		}

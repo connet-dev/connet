@@ -39,7 +39,7 @@ func newRelayServer(cfg relayConfig) (*relayServer, error) {
 		},
 		logger: cfg.logger.With("relay", cfg.addr),
 
-		destinations: map[Binding]map[ksuid.KSUID]*relayConn{},
+		destinations: map[Forward]map[ksuid.KSUID]*relayConn{},
 	}
 	s.tlsConf.GetConfigForClient = s.tlsConfigWithClientCA
 
@@ -52,7 +52,7 @@ type relayServer struct {
 	tlsConf *tls.Config
 	logger  *slog.Logger
 
-	destinations   map[Binding]map[ksuid.KSUID]*relayConn
+	destinations   map[Forward]map[ksuid.KSUID]*relayConn
 	destinationsMu sync.RWMutex
 }
 
@@ -60,21 +60,21 @@ type relayClientConfigKey [sha256.Size]byte
 
 type relayClientConfig struct {
 	cert         *x509.Certificate
-	sources      []Binding
-	destinations []Binding
+	sources      []Forward
+	destinations []Forward
 }
 
 func (s *relayServer) addDestinations(conn *relayConn) {
 	s.destinationsMu.Lock()
 	defer s.destinationsMu.Unlock()
 
-	for bind := range conn.auth.Destinations {
-		bindDest := s.destinations[bind]
-		if bindDest == nil {
-			bindDest = map[ksuid.KSUID]*relayConn{}
-			s.destinations[bind] = bindDest
+	for fwd := range conn.auth.Destinations {
+		fwdDest := s.destinations[fwd]
+		if fwdDest == nil {
+			fwdDest = map[ksuid.KSUID]*relayConn{}
+			s.destinations[fwd] = fwdDest
 		}
-		bindDest[conn.id] = conn
+		fwdDest[conn.id] = conn
 	}
 }
 
@@ -82,24 +82,24 @@ func (s *relayServer) removeDestinations(conn *relayConn) {
 	s.destinationsMu.Lock()
 	defer s.destinationsMu.Unlock()
 
-	for bind := range conn.auth.Destinations {
-		bindDest := s.destinations[bind]
-		delete(bindDest, conn.id)
-		if len(bindDest) == 0 {
-			delete(s.destinations, bind)
+	for fwd := range conn.auth.Destinations {
+		fwdDest := s.destinations[fwd]
+		delete(fwdDest, conn.id)
+		if len(fwdDest) == 0 {
+			delete(s.destinations, fwd)
 		}
 	}
 }
 
-func (s *relayServer) findDestinations(bind Binding) []*relayConn {
+func (s *relayServer) findDestinations(fwd Forward) []*relayConn {
 	s.destinationsMu.RLock()
 	defer s.destinationsMu.RUnlock()
 
-	bindDest := s.destinations[bind]
-	if bindDest == nil {
+	fwdDest := s.destinations[fwd]
+	if fwdDest == nil {
 		return nil
 	}
-	return slices.Collect(maps.Values(bindDest))
+	return slices.Collect(maps.Values(fwdDest))
 }
 
 func (s *relayServer) tlsConfigWithClientCA(chi *tls.ClientHelloInfo) (*tls.Config, error) {
@@ -202,21 +202,21 @@ func (c *relayConn) runStream(ctx context.Context, stream quic.Stream) error {
 
 	switch {
 	case req.Connect != nil:
-		return c.connect(ctx, stream, NewBindingPB(req.Connect.Binding))
+		return c.connect(ctx, stream, NewForwardFromPB(req.Connect.To))
 	default:
 		return c.unknown(ctx, stream, req)
 	}
 }
 
-func (c *relayConn) connect(ctx context.Context, stream quic.Stream, bind Binding) error {
-	if !c.auth.AllowSource(bind) {
+func (c *relayConn) connect(ctx context.Context, stream quic.Stream, fwd Forward) error {
+	if !c.auth.AllowSource(fwd) {
 		err := pb.NewError(pb.Error_DestinationNotFound, "not allowed")
 		return pb.Write(stream, &pbc.Response{Error: err})
 	}
 
-	dests := c.server.findDestinations(bind)
+	dests := c.server.findDestinations(fwd)
 	for _, dest := range dests {
-		if err := c.connectDestination(ctx, stream, bind, dest); err != nil {
+		if err := c.connectDestination(ctx, stream, fwd, dest); err != nil {
 			c.logger.Debug("could not dial destination", "err", err)
 		} else {
 			// connect was success
@@ -228,7 +228,7 @@ func (c *relayConn) connect(ctx context.Context, stream quic.Stream, bind Bindin
 	return pb.Write(stream, &pbc.Response{Error: err})
 }
 
-func (c *relayConn) connectDestination(ctx context.Context, srcStream quic.Stream, bind Binding, dest *relayConn) error {
+func (c *relayConn) connectDestination(ctx context.Context, srcStream quic.Stream, fwd Forward, dest *relayConn) error {
 	dstStream, err := dest.conn.OpenStreamSync(ctx)
 	if err != nil {
 		return kleverr.Newf("could not open stream: %w", err)
@@ -236,7 +236,7 @@ func (c *relayConn) connectDestination(ctx context.Context, srcStream quic.Strea
 
 	if err := pb.Write(dstStream, &pbc.Request{
 		Connect: &pbc.Request_Connect{
-			Binding: bind.AsPB(),
+			To: fwd.PB(),
 		},
 	}); err != nil {
 		return kleverr.Newf("could not write request: %w", err)
@@ -250,9 +250,9 @@ func (c *relayConn) connectDestination(ctx context.Context, srcStream quic.Strea
 		return kleverr.Newf("could not write response: %w", err)
 	}
 
-	c.logger.Debug("joining conns", "bind", bind)
+	c.logger.Debug("joining conns", "forward", fwd)
 	err = netc.Join(ctx, srcStream, dstStream)
-	c.logger.Debug("disconnected conns", "bind", bind, "err", err)
+	c.logger.Debug("disconnected conns", "forward", fwd, "err", err)
 	return nil
 }
 

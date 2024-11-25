@@ -19,7 +19,7 @@ import (
 
 type clientSourceServer struct {
 	addr      string
-	bind      Binding
+	fwd       Forward
 	transport *quic.Transport
 	cert      tls.Certificate
 	relayCAs  *x509.CertPool
@@ -193,7 +193,7 @@ func (s *clientSourceServer) runConnErr(ctx context.Context, conn net.Conn) erro
 
 	if err := pb.Write(stream, &pbc.Request{
 		Connect: &pbc.Request_Connect{
-			Binding: s.bind.AsPB(),
+			To: s.fwd.PB(),
 		},
 	}); err != nil {
 		return kleverr.Newf("could not write request: %w", err)

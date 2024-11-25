@@ -10,7 +10,7 @@ message Request {
   Connect connect = 1;
 
   message Connect {
-    shared.Binding binding = 1;
+    shared.Forward to = 1;
   }
 }
 

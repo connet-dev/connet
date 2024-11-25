@@ -45,11 +45,11 @@ func main() {
 	}
 
 	if *destinationName != "" {
-		opts = append(opts, connet.ClientGlobalDestination(*destinationName, *destinationAddr))
+		opts = append(opts, connet.ClientDestination(*destinationName, *destinationAddr))
 	}
 
 	if *sourceName != "" {
-		opts = append(opts, connet.ClientGlobalSource(*sourceAddr, *sourceName))
+		opts = append(opts, connet.ClientSource(*sourceAddr, *sourceName))
 	}
 
 	if *debug {

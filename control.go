@@ -217,23 +217,30 @@ func (s *controlStream) runErr(ctx context.Context) error {
 }
 
 func (s *controlStream) relay(ctx context.Context, req *pbs.Request_Relay) error {
+	var destinations []Forward
 	for _, dst := range req.Destinations {
-		if !s.conn.auth.AllowDestination(NewBindingPB(dst).String()) {
-			err := pb.NewError(pb.Error_RelayDestinationNotAllowed, "desination %s.%s not allowed", dst.Name, dst.Realm)
+		fwd := NewForwardFromPB(dst)
+		if !s.conn.auth.AllowDestination(fwd.String()) {
+			err := pb.NewError(pb.Error_RelayDestinationNotAllowed, "desination '%s' not allowed", fwd)
 			if err := pb.Write(s.stream, &pbs.Response{Error: err}); err != nil {
 				return kleverr.Newf("could not write error response: %w", err)
 			}
 			return err
 		}
+		destinations = append(destinations, fwd)
 	}
+
+	var sources []Forward
 	for _, src := range req.Sources {
-		if !s.conn.auth.AllowSource(NewBindingPB(src).String()) {
-			err := pb.NewError(pb.Error_RelaySourceNotAllowed, "source %s.%s not allowed", src.Name, src.Realm)
+		fwd := NewForwardFromPB(src)
+		if !s.conn.auth.AllowSource(fwd.String()) {
+			err := pb.NewError(pb.Error_RelaySourceNotAllowed, "source '%s' not allowed", fwd)
 			if err := pb.Write(s.stream, &pbs.Response{Error: err}); err != nil {
 				return kleverr.Newf("could not write error response: %w", err)
 			}
 			return err
 		}
+		sources = append(sources, fwd)
 	}
 
 	cert, err := x509.ParseCertificate(req.Certificate)
@@ -245,7 +252,7 @@ func (s *controlStream) relay(ctx context.Context, req *pbs.Request_Relay) error
 		return err
 	}
 
-	s.conn.server.store.Add(cert, NewBindingsPB(req.Destinations), NewBindingsPB(req.Sources))
+	s.conn.server.store.Add(cert, destinations, sources)
 	defer s.conn.server.store.Remove(cert)
 	// TODO how to remove?
 
@@ -271,8 +278,9 @@ func (s *controlStream) relay(ctx context.Context, req *pbs.Request_Relay) error
 }
 
 func (s *controlStream) destination(ctx context.Context, req *pbs.Request_Destination) error {
-	if !s.conn.auth.AllowDestination(NewBindingPB(req.Binding).String()) {
-		err := pb.NewError(pb.Error_DestinationNotAllowed, "desination %s.%s not allowed", req.Binding.Name, req.Binding.Realm)
+	from := NewForwardFromPB(req.From)
+	if !s.conn.auth.AllowDestination(from.String()) {
+		err := pb.NewError(pb.Error_DestinationNotAllowed, "desination '%s' not allowed", from)
 		if err := pb.Write(s.stream, &pbs.Response{Error: err}); err != nil {
 			return kleverr.Newf("could not write error response: %w", err)
 		}
@@ -285,7 +293,7 @@ func (s *controlStream) destination(ctx context.Context, req *pbs.Request_Destin
 		return pb.Write(s.stream, &pbs.Response{Error: respErr})
 	}
 
-	w := s.conn.server.whispers.For(NewBindingPB(req.Binding))
+	w := s.conn.server.whispers.For(from)
 	w.AddDestination(s.conn.id, direct, relays)
 	defer w.RemoveDestination(s.conn.id)
 
@@ -362,8 +370,9 @@ func (s *controlStream) readDestination(req *pbs.Request_Destination) ([]Route, 
 }
 
 func (s *controlStream) source(ctx context.Context, req *pbs.Request_Source) error {
-	if !s.conn.auth.AllowSource(NewBindingPB(req.Binding).String()) {
-		err := pb.NewError(pb.Error_SourceNotAllowed, "source %s.%s not allowed", req.Binding.Name, req.Binding.Realm)
+	to := NewForwardFromPB(req.To)
+	if !s.conn.auth.AllowSource(to.String()) {
+		err := pb.NewError(pb.Error_SourceNotAllowed, "source '%s' not allowed", to)
 		if err := pb.Write(s.stream, &pbs.Response{Error: err}); err != nil {
 			return kleverr.Newf("could not write error response: %w", err)
 		}
@@ -376,7 +385,7 @@ func (s *controlStream) source(ctx context.Context, req *pbs.Request_Source) err
 		return pb.Write(s.stream, &pbs.Response{Error: respErr})
 	}
 
-	w := s.conn.server.whispers.For(NewBindingPB(req.Binding))
+	w := s.conn.server.whispers.For(to)
 	w.AddSource(s.conn.id, cert)
 	defer w.RemoveSource(s.conn.id)
 

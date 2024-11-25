@@ -13,9 +13,8 @@ message AddrPort {
   uint32 port = 2; // really uint16, but not a thing in protobuf
 }
 
-message Binding { // TODO better name
+message Forward {
   string name = 1;
-  string realm = 2;
 }
 
 message Error {

@@ -28,7 +28,7 @@ type Client struct {
 	dialer     *destinationsDialer
 
 	directServer  *clientDirectServer
-	sourceServers map[Binding]*clientSourceServer
+	sourceServers map[Forward]*clientSourceServer
 }
 
 func NewClient(opts ...ClientOption) (*Client, error) {
@@ -91,7 +91,7 @@ func NewClient(opts ...ClientOption) (*Client, error) {
 			logger:       cfg.logger.With("component", "dialer"),
 		},
 
-		sourceServers: map[Binding]*clientSourceServer{},
+		sourceServers: map[Forward]*clientSourceServer{},
 	}, nil
 }
 
@@ -114,14 +114,14 @@ func (c *Client) Run(ctx context.Context) error {
 		logger:     c.logger.With("component", "direct-server", "addr", c.directAddr),
 	}
 
-	for addr, bind := range c.sources {
-		c.sourceServers[bind] = &clientSourceServer{
+	for addr, fwd := range c.sources {
+		c.sourceServers[fwd] = &clientSourceServer{
 			addr:      addr,
-			bind:      bind,
+			fwd:       fwd,
 			transport: directTransport,
 			cert:      c.clientCert,
 			relayCAs:  c.controlCAs,
-			logger:    c.logger.With("component", "source-server", "addr", addr, "bind", bind),
+			logger:    c.logger.With("component", "source-server", "addr", addr, "forward", fwd),
 		}
 	}
 
@@ -259,8 +259,8 @@ func (s *clientSession) runRelays(ctx context.Context) error {
 	if err := pb.Write(stream, &pbs.Request{
 		Relay: &pbs.Request_Relay{
 			Certificate:  s.client.clientCert.Leaf.Raw,
-			Destinations: AsPBBindings(slices.Collect(maps.Keys(s.client.destinations))),
-			Sources:      AsPBBindings(slices.Collect(maps.Values(s.client.sources))),
+			Destinations: PBFromForwards(slices.Collect(maps.Keys(s.client.destinations))),
+			Sources:      PBFromForwards(slices.Collect(maps.Values(s.client.sources))),
 		},
 	}); err != nil {
 		return err
@@ -343,7 +343,7 @@ func (s *clientSession) getRelayAddrs() []*pbs.Route {
 	return relays
 }
 
-func (s *clientSession) runDestination(ctx context.Context, bind Binding) error {
+func (s *clientSession) runDestination(ctx context.Context, fwd Forward) error {
 	stream, err := s.conn.OpenStreamSync(ctx)
 	if err != nil {
 		return kleverr.Ret(err)
@@ -352,7 +352,7 @@ func (s *clientSession) runDestination(ctx context.Context, bind Binding) error 
 
 	if err := pb.Write(stream, &pbs.Request{
 		Destination: &pbs.Request_Destination{
-			Binding: bind.AsPB(),
+			From:    fwd.PB(),
 			Directs: s.getDirectAddr(),
 			Relays:  s.getRelayAddrs(),
 		},
@@ -369,7 +369,7 @@ func (s *clientSession) runDestination(ctx context.Context, bind Binding) error 
 			s.logger.Debug("updated destinations", "direct", len(direct), "relays", len(relays))
 			if err := pb.Write(stream, &pbs.Request{
 				Destination: &pbs.Request_Destination{
-					Binding: bind.AsPB(),
+					From:    fwd.PB(),
 					Directs: s.getDirectAddr(),
 					Relays:  s.getRelayAddrs(),
 				},
@@ -405,8 +405,8 @@ func (s *clientSession) runDestination(ctx context.Context, bind Binding) error 
 	return g.Wait()
 }
 
-func (s *clientSession) runSource(ctx context.Context, bind Binding) error {
-	srcServer := s.client.sourceServers[bind]
+func (s *clientSession) runSource(ctx context.Context, fwd Forward) error {
+	srcServer := s.client.sourceServers[fwd]
 
 	stream, err := s.conn.OpenStreamSync(ctx)
 	if err != nil {
@@ -416,7 +416,7 @@ func (s *clientSession) runSource(ctx context.Context, bind Binding) error {
 
 	if err := pb.Write(stream, &pbs.Request{
 		Source: &pbs.Request_Source{
-			Binding:     bind.AsPB(),
+			To:          fwd.PB(),
 			Certificate: s.client.clientCert.Leaf.Raw,
 		},
 	}); err != nil {
@@ -456,8 +456,8 @@ type clientConfig struct {
 	serverName   string
 	directAddr   *net.UDPAddr
 	token        string
-	sources      map[string]Binding
-	destinations map[Binding]string
+	sources      map[string]Forward
+	destinations map[Forward]string
 	controlCAs   *x509.CertPool
 	logger       *slog.Logger
 }
@@ -498,30 +498,22 @@ func ClientAuthentication(token string) ClientOption {
 	}
 }
 
-func ClientGlobalSource(addr, name string) ClientOption {
-	return ClientSource(addr, "", name)
-}
-
-func ClientSource(addr, realm, name string) ClientOption {
+func ClientSource(addr, name string) ClientOption {
 	return func(cfg *clientConfig) error {
 		if cfg.sources == nil {
-			cfg.sources = map[string]Binding{}
+			cfg.sources = map[string]Forward{}
 		}
-		cfg.sources[addr] = Binding{Realm: realm, Name: name}
+		cfg.sources[addr] = NewForward(name)
 		return nil
 	}
 }
 
-func ClientGlobalDestination(name, addr string) ClientOption {
-	return ClientDestination("", name, addr)
-}
-
-func ClientDestination(realm, name, addr string) ClientOption {
+func ClientDestination(name, addr string) ClientOption {
 	return func(cfg *clientConfig) error {
 		if cfg.destinations == nil {
-			cfg.destinations = map[Binding]string{}
+			cfg.destinations = map[Forward]string{}
 		}
-		cfg.destinations[Binding{Realm: realm, Name: name}] = addr
+		cfg.destinations[NewForward(name)] = addr
 		return nil
 	}
 }

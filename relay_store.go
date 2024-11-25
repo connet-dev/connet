@@ -12,7 +12,7 @@ import (
 )
 
 type RelayStoreManager interface {
-	Add(cert *x509.Certificate, destinations []Binding, sources []Binding)
+	Add(cert *x509.Certificate, destinations []Forward, sources []Forward)
 	Remove(cert *x509.Certificate)
 	Relays() []string
 	RelaysNotify(ctx context.Context, f func(hostports []string) error) error
@@ -25,17 +25,17 @@ type RelayStore interface {
 
 type RelayAuthentication struct {
 	Certificate  *x509.Certificate
-	Destinations map[Binding]struct{}
-	Sources      map[Binding]struct{}
+	Destinations map[Forward]struct{}
+	Sources      map[Forward]struct{}
 }
 
-func (a *RelayAuthentication) AllowDestination(bind Binding) bool {
-	_, ok := a.Destinations[bind]
+func (a *RelayAuthentication) AllowDestination(fwd Forward) bool {
+	_, ok := a.Destinations[fwd]
 	return ok
 }
 
-func (a *RelayAuthentication) AllowSource(bind Binding) bool {
-	_, ok := a.Sources[bind]
+func (a *RelayAuthentication) AllowSource(fwd Forward) bool {
+	_, ok := a.Sources[fwd]
 	return ok
 }
 
@@ -64,14 +64,14 @@ type localRelayStore struct {
 
 type relayStoreKey [sha256.Size]byte // TODO another key?
 
-func (s *localRelayStore) Add(cert *x509.Certificate, destinations []Binding, sources []Binding) {
+func (s *localRelayStore) Add(cert *x509.Certificate, destinations []Forward, sources []Forward) {
 	s.certsMu.Lock()
 	defer s.certsMu.Unlock()
 
 	auth := &RelayAuthentication{
 		Certificate:  cert,
-		Destinations: map[Binding]struct{}{},
-		Sources:      map[Binding]struct{}{},
+		Destinations: map[Forward]struct{}{},
+		Sources:      map[Forward]struct{}{},
 	}
 	for _, dst := range destinations {
 		auth.Destinations[dst] = struct{}{}

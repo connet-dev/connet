@@ -9,19 +9,19 @@ import (
 )
 
 type Whispers struct {
-	whisperers map[Binding]*Whisperer
+	whisperers map[Forward]*Whisperer
 	mu         sync.RWMutex
 }
 
 func NewWhispers() *Whispers {
 	return &Whispers{
-		whisperers: map[Binding]*Whisperer{},
+		whisperers: map[Forward]*Whisperer{},
 	}
 }
 
-func (w *Whispers) For(bind Binding) *Whisperer {
+func (w *Whispers) For(fwd Forward) *Whisperer {
 	w.mu.RLock()
-	wh := w.whisperers[bind]
+	wh := w.whisperers[fwd]
 	w.mu.RUnlock()
 	if wh != nil {
 		return wh
@@ -30,25 +30,24 @@ func (w *Whispers) For(bind Binding) *Whisperer {
 	w.mu.Lock()
 	defer w.mu.Unlock()
 
-	wh = w.whisperers[bind]
+	wh = w.whisperers[fwd]
 	if wh != nil {
 		return wh
 	}
 
 	wh = &Whisperer{
-		bind:               bind,
+		forward:            fwd,
 		destinations:       map[ksuid.KSUID]*whisperDestination{},
 		destinationsNotify: newNotify(),
 		sources:            map[ksuid.KSUID]*whisperSource{},
 		sourcesNotify:      newNotify(),
 	}
-	w.whisperers[bind] = wh
+	w.whisperers[fwd] = wh
 	return wh
 }
 
 type Whisperer struct {
-	bind Binding
-
+	forward            Forward
 	destinations       map[ksuid.KSUID]*whisperDestination
 	destinationsMu     sync.RWMutex
 	destinationsNotify *notify
