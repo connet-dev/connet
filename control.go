@@ -7,7 +7,6 @@ import (
 	"errors"
 	"log/slog"
 	"net"
-	"slices"
 	"time"
 
 	"github.com/keihaya-com/connet/authc"
@@ -180,7 +179,7 @@ func (c *controlConn) authenticate(ctx context.Context) (authc.Authentication, e
 		return retAuth(err)
 	}
 
-	c.logger.Debug("authentication completed", "realms", auth.Realms, "local", c.conn.LocalAddr(), "remote", c.conn.RemoteAddr())
+	c.logger.Debug("authentication completed", "local", c.conn.LocalAddr(), "remote", c.conn.RemoteAddr())
 	return auth, nil
 }
 
@@ -217,13 +216,9 @@ func (s *controlStream) runErr(ctx context.Context) error {
 	}
 }
 
-func (s *controlStream) allowed(bind *pb.Binding) bool {
-	return slices.Contains(s.conn.auth.Realms, bind.Realm)
-}
-
 func (s *controlStream) relay(ctx context.Context, req *pbs.Request_Relay) error {
 	for _, dst := range req.Destinations {
-		if !s.allowed(dst) {
+		if !s.conn.auth.AllowDestination(NewBindingPB(dst).String()) {
 			err := pb.NewError(pb.Error_RelayDestinationNotAllowed, "desination %s.%s not allowed", dst.Name, dst.Realm)
 			if err := pb.Write(s.stream, &pbs.Response{Error: err}); err != nil {
 				return kleverr.Newf("could not write error response: %w", err)
@@ -232,7 +227,7 @@ func (s *controlStream) relay(ctx context.Context, req *pbs.Request_Relay) error
 		}
 	}
 	for _, src := range req.Sources {
-		if !s.allowed(src) {
+		if !s.conn.auth.AllowSource(NewBindingPB(src).String()) {
 			err := pb.NewError(pb.Error_RelaySourceNotAllowed, "source %s.%s not allowed", src.Name, src.Realm)
 			if err := pb.Write(s.stream, &pbs.Response{Error: err}); err != nil {
 				return kleverr.Newf("could not write error response: %w", err)
@@ -276,7 +271,7 @@ func (s *controlStream) relay(ctx context.Context, req *pbs.Request_Relay) error
 }
 
 func (s *controlStream) destination(ctx context.Context, req *pbs.Request_Destination) error {
-	if !s.allowed(req.Binding) {
+	if !s.conn.auth.AllowDestination(NewBindingPB(req.Binding).String()) {
 		err := pb.NewError(pb.Error_DestinationNotAllowed, "desination %s.%s not allowed", req.Binding.Name, req.Binding.Realm)
 		if err := pb.Write(s.stream, &pbs.Response{Error: err}); err != nil {
 			return kleverr.Newf("could not write error response: %w", err)
@@ -367,7 +362,7 @@ func (s *controlStream) readDestination(req *pbs.Request_Destination) ([]Route, 
 }
 
 func (s *controlStream) source(ctx context.Context, req *pbs.Request_Source) error {
-	if !s.allowed(req.Binding) {
+	if !s.conn.auth.AllowSource(NewBindingPB(req.Binding).String()) {
 		err := pb.NewError(pb.Error_SourceNotAllowed, "source %s.%s not allowed", req.Binding.Name, req.Binding.Realm)
 		if err := pb.Write(s.stream, &pbs.Response{Error: err}); err != nil {
 			return kleverr.Newf("could not write error response: %w", err)

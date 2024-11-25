@@ -2,8 +2,9 @@ package authc
 
 import "github.com/klev-dev/kleverr"
 
-type Authentication struct {
-	Realms []string
+type Authentication interface {
+	AllowDestination(name string) bool
+	AllowSource(name string) bool
 }
 
 type Authenticator interface {
@@ -18,13 +19,25 @@ func NewStatic(tokens ...string) Authenticator {
 	return s
 }
 
+type staticAuthentication struct {
+	token string
+}
+
+func (a *staticAuthentication) AllowDestination(name string) bool {
+	return true
+}
+
+func (a *staticAuthentication) AllowSource(name string) bool {
+	return true
+}
+
 type staticAuthenticator struct {
 	tokens map[string]struct{}
 }
 
 func (s *staticAuthenticator) Authenticate(token string) (Authentication, error) {
 	if _, ok := s.tokens[token]; ok {
-		return Authentication{[]string{""}}, nil
+		return &staticAuthentication{token}, nil
 	}
-	return Authentication{}, kleverr.Newf("invalid token: %s", token)
+	return nil, kleverr.Newf("invalid token: %s", token)
 }
