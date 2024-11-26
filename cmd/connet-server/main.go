@@ -8,7 +8,6 @@ import (
 	"os"
 
 	"github.com/keihaya-com/connet"
-	"github.com/keihaya-com/connet/authc"
 )
 
 var auth = flag.String("auth", "", "authentication token")
@@ -33,7 +32,7 @@ func main() {
 	}
 
 	opts := []connet.ServerOption{
-		connet.ServerAuthenticator(authc.NewStatic(*auth)),
+		connet.ServerAuthenticator(connet.NewStaticAuthenticator(*auth)),
 	}
 
 	if *controlAddr != "" {

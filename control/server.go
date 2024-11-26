@@ -9,7 +9,6 @@ import (
 	"net"
 	"time"
 
-	"github.com/keihaya-com/connet/authc"
 	"github.com/keihaya-com/connet/model"
 	"github.com/keihaya-com/connet/pb"
 	"github.com/keihaya-com/connet/pbc"
@@ -23,7 +22,7 @@ import (
 
 type Config struct {
 	Addr   *net.UDPAddr
-	Auth   authc.Authenticator
+	Auth   Authenticator
 	Store  relay.StoreManager
 	Cert   tls.Certificate
 	Logger *slog.Logger
@@ -46,7 +45,7 @@ func NewServer(cfg Config) (*Server, error) {
 
 type Server struct {
 	addr    *net.UDPAddr
-	auth    authc.Authenticator
+	auth    Authenticator
 	store   relay.StoreManager
 	tlsConf *tls.Config
 	logger  *slog.Logger
@@ -106,7 +105,7 @@ type controlConn struct {
 	conn   quic.Connection
 	logger *slog.Logger
 
-	auth authc.Authentication
+	auth Authentication
 }
 
 func (c *controlConn) run(ctx context.Context) {
@@ -142,9 +141,9 @@ func (c *controlConn) runErr(ctx context.Context) error {
 	}
 }
 
-var retAuth = kleverr.Ret1[authc.Authentication]
+var retAuth = kleverr.Ret1[Authentication]
 
-func (c *controlConn) authenticate(ctx context.Context) (authc.Authentication, error) {
+func (c *controlConn) authenticate(ctx context.Context) (Authentication, error) {
 	c.logger.Debug("waiting for authentication")
 	authStream, err := c.conn.AcceptStream(ctx)
 	if err != nil {

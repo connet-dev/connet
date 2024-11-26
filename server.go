@@ -6,7 +6,6 @@ import (
 	"log/slog"
 	"net"
 
-	"github.com/keihaya-com/connet/authc"
 	"github.com/keihaya-com/connet/control"
 	"github.com/keihaya-com/connet/relay"
 	"github.com/klev-dev/kleverr"
@@ -91,7 +90,7 @@ type serverConfig struct {
 
 	certificate *tls.Certificate
 	logger      *slog.Logger
-	auth        authc.Authenticator
+	auth        control.Authenticator
 }
 
 type ServerOption func(*serverConfig) error
@@ -137,7 +136,7 @@ func ServerLogger(logger *slog.Logger) ServerOption {
 	}
 }
 
-func ServerAuthenticator(auth authc.Authenticator) ServerOption {
+func ServerAuthenticator(auth control.Authenticator) ServerOption {
 	return func(cfg *serverConfig) error {
 		cfg.auth = auth
 		return nil
