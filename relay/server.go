@@ -24,15 +24,15 @@ import (
 
 type Config struct {
 	Addr   *net.UDPAddr
-	Store  Store
+	Auth   Authenticator
 	Cert   tls.Certificate
 	Logger *slog.Logger
 }
 
 func NewServer(cfg Config) (*Server, error) {
 	s := &Server{
-		addr:  cfg.Addr,
-		store: cfg.Store,
+		addr: cfg.Addr,
+		auth: cfg.Auth,
 		tlsConf: &tls.Config{
 			Certificates: []tls.Certificate{cfg.Cert},
 			ClientAuth:   tls.RequireAndVerifyClientCert,
@@ -49,7 +49,7 @@ func NewServer(cfg Config) (*Server, error) {
 
 type Server struct {
 	addr    *net.UDPAddr
-	store   Store
+	auth    Authenticator
 	tlsConf *tls.Config
 	logger  *slog.Logger
 
@@ -105,7 +105,7 @@ func (s *Server) findDestinations(fwd model.Forward) []*relayConn {
 
 func (s *Server) tlsConfigWithClientCA(chi *tls.ClientHelloInfo) (*tls.Config, error) {
 	cfg := s.tlsConf.Clone()
-	cfg.ClientCAs = s.store.CertificateAuthority()
+	cfg.ClientCAs = s.auth.CertificateAuthority()
 	return cfg, nil
 }
 
@@ -174,7 +174,7 @@ func (c *relayConn) run(ctx context.Context) {
 
 func (c *relayConn) runErr(ctx context.Context) error {
 	certs := c.conn.ConnectionState().TLS.PeerCertificates
-	if auth := c.server.store.Authenticate(certs); auth == nil {
+	if auth := c.server.auth.Authenticate(certs); auth == nil {
 		c.conn.CloseWithError(1, "auth failed")
 		return nil
 	} else {

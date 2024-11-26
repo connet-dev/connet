@@ -13,7 +13,6 @@ import (
 	"github.com/keihaya-com/connet/pb"
 	"github.com/keihaya-com/connet/pbc"
 	"github.com/keihaya-com/connet/pbs"
-	"github.com/keihaya-com/connet/relay"
 	"github.com/klev-dev/kleverr"
 	"github.com/quic-go/quic-go"
 	"github.com/segmentio/ksuid"
@@ -23,16 +22,16 @@ import (
 type Config struct {
 	Addr   *net.UDPAddr
 	Auth   Authenticator
-	Store  relay.StoreManager
+	Relays Relays
 	Cert   tls.Certificate
 	Logger *slog.Logger
 }
 
 func NewServer(cfg Config) (*Server, error) {
 	return &Server{
-		addr:  cfg.Addr,
-		auth:  cfg.Auth,
-		store: cfg.Store,
+		addr:   cfg.Addr,
+		auth:   cfg.Auth,
+		relays: cfg.Relays,
 		tlsConf: &tls.Config{
 			Certificates: []tls.Certificate{cfg.Cert},
 			NextProtos:   []string{"connet"},
@@ -46,7 +45,7 @@ func NewServer(cfg Config) (*Server, error) {
 type Server struct {
 	addr    *net.UDPAddr
 	auth    Authenticator
-	store   relay.StoreManager
+	relays  Relays
 	tlsConf *tls.Config
 	logger  *slog.Logger
 
@@ -253,12 +252,12 @@ func (s *controlStream) relay(ctx context.Context, req *pbs.Request_Relay) error
 		return err
 	}
 
-	s.conn.server.store.Add(cert, destinations, sources)
-	defer s.conn.server.store.Remove(cert)
+	s.conn.server.relays.Add(cert, destinations, sources)
+	defer s.conn.server.relays.Remove(cert)
 	// TODO how to remove?
 
 	defer s.logger.Debug("completed relays notify")
-	return s.conn.server.store.RelaysNotify(ctx, func(relays []string) error {
+	return s.conn.server.relays.ActiveNotify(ctx, func(relays []string) error {
 		s.logger.Debug("updated relays list", "relays", len(relays))
 		var addrs []*pbs.Route
 		for _, hostport := range relays {

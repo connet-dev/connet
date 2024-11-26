@@ -41,7 +41,7 @@ func NewServer(opts ...ServerOption) (*Server, error) {
 		}
 	}
 
-	store, err := relay.NewLocalStore(cfg.relayListenAddr.AddrPort(), cfg.relayPublicAddr)
+	store, err := NewLocalRelay(cfg.relayListenAddr.AddrPort(), cfg.relayPublicAddr)
 	if err != nil {
 		return nil, err
 	}
@@ -49,14 +49,14 @@ func NewServer(opts ...ServerOption) (*Server, error) {
 	control, err := control.NewServer(control.Config{
 		Addr:   cfg.controlAddr,
 		Auth:   cfg.auth,
-		Store:  store,
+		Relays: store,
 		Cert:   *cfg.certificate,
 		Logger: cfg.logger,
 	})
 
 	relay, err := relay.NewServer(relay.Config{
 		Addr:   cfg.relayListenAddr,
-		Store:  store,
+		Auth:   store,
 		Cert:   *cfg.certificate,
 		Logger: cfg.logger,
 	})
