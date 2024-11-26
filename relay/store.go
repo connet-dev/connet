@@ -1,4 +1,4 @@
-package connet
+package relay
 
 import (
 	"context"
@@ -14,64 +14,64 @@ import (
 	"github.com/keihaya-com/connet/notify"
 )
 
-type RelayStoreManager interface {
+type StoreManager interface {
 	Add(cert *x509.Certificate, destinations []model.Forward, sources []model.Forward)
 	Remove(cert *x509.Certificate)
 	Relays() []string
 	RelaysNotify(ctx context.Context, f func(hostports []string) error) error
 }
 
-type RelayStore interface {
-	Authenticate(certs []*x509.Certificate) *RelayAuthentication
+type Store interface {
+	Authenticate(certs []*x509.Certificate) *Authentication
 	CertificateAuthority() *x509.CertPool
 }
 
-type RelayAuthentication struct {
+type Authentication struct { // interface like authc?
 	Certificate  *x509.Certificate
 	Destinations map[model.Forward]struct{}
 	Sources      map[model.Forward]struct{}
 }
 
-func (a *RelayAuthentication) AllowDestination(fwd model.Forward) bool {
+func (a *Authentication) AllowDestination(fwd model.Forward) bool {
 	_, ok := a.Destinations[fwd]
 	return ok
 }
 
-func (a *RelayAuthentication) AllowSource(fwd model.Forward) bool {
+func (a *Authentication) AllowSource(fwd model.Forward) bool {
 	_, ok := a.Sources[fwd]
 	return ok
 }
 
-type LocalRelayStore interface {
-	RelayStoreManager
-	RelayStore
+type LocalStore interface {
+	StoreManager
+	Store
 }
 
-func NewLocalRelayStore(addr netip.AddrPort, name string) (LocalRelayStore, error) {
-	s := &localRelayStore{
+func NewLocalStore(addr netip.AddrPort, name string) (LocalStore, error) {
+	s := &localStore{
 		relays:       map[netip.AddrPort]string{addr: name},
 		relaysNotify: notify.New(),
-		certs:        map[relayStoreKey]*RelayAuthentication{},
+		certs:        map[storeKey]*Authentication{},
 	}
 	s.relaysNotify.Updated() // in local put notify at version 1, so new listens will return the static value and never fire again
 	return s, nil
 }
 
-type localRelayStore struct {
+type localStore struct {
 	relays       map[netip.AddrPort]string
 	relaysNotify *notify.N
-	certs        map[relayStoreKey]*RelayAuthentication
+	certs        map[storeKey]*Authentication
 	certsMu      sync.RWMutex
 	pool         atomic.Pointer[x509.CertPool]
 }
 
-type relayStoreKey [sha256.Size]byte // TODO another key?
+type storeKey [sha256.Size]byte // TODO another key?
 
-func (s *localRelayStore) Add(cert *x509.Certificate, destinations []model.Forward, sources []model.Forward) {
+func (s *localStore) Add(cert *x509.Certificate, destinations []model.Forward, sources []model.Forward) {
 	s.certsMu.Lock()
 	defer s.certsMu.Unlock()
 
-	auth := &RelayAuthentication{
+	auth := &Authentication{
 		Certificate:  cert,
 		Destinations: map[model.Forward]struct{}{},
 		Sources:      map[model.Forward]struct{}{},
@@ -92,7 +92,7 @@ func (s *localRelayStore) Add(cert *x509.Certificate, destinations []model.Forwa
 	s.pool.Store(pool)
 }
 
-func (s *localRelayStore) Remove(cert *x509.Certificate) {
+func (s *localStore) Remove(cert *x509.Certificate) {
 	s.certsMu.Lock()
 	defer s.certsMu.Unlock()
 
@@ -106,17 +106,17 @@ func (s *localRelayStore) Remove(cert *x509.Certificate) {
 	s.pool.Store(pool)
 }
 
-func (s *localRelayStore) Relays() []string {
+func (s *localStore) Relays() []string {
 	return slices.Collect(maps.Values(s.relays))
 }
 
-func (s *localRelayStore) RelaysNotify(ctx context.Context, f func([]string) error) error {
+func (s *localStore) RelaysNotify(ctx context.Context, f func([]string) error) error {
 	return s.relaysNotify.Listen(ctx, func() error {
 		return f(s.Relays())
 	})
 }
 
-func (s *localRelayStore) Authenticate(certs []*x509.Certificate) *RelayAuthentication {
+func (s *localStore) Authenticate(certs []*x509.Certificate) *Authentication {
 	s.certsMu.RLock()
 	defer s.certsMu.RUnlock()
 
@@ -129,6 +129,6 @@ func (s *localRelayStore) Authenticate(certs []*x509.Certificate) *RelayAuthenti
 	return nil
 }
 
-func (s *localRelayStore) CertificateAuthority() *x509.CertPool {
+func (s *localStore) CertificateAuthority() *x509.CertPool {
 	return s.pool.Load()
 }

@@ -1,4 +1,4 @@
-package connet
+package relay
 
 import (
 	"context"
@@ -22,23 +22,23 @@ import (
 	"github.com/segmentio/ksuid"
 )
 
-type relayConfig struct {
-	addr   *net.UDPAddr
-	store  RelayStore
-	cert   tls.Certificate
-	logger *slog.Logger
+type Config struct {
+	Addr   *net.UDPAddr
+	Store  Store
+	Cert   tls.Certificate
+	Logger *slog.Logger
 }
 
-func newRelayServer(cfg relayConfig) (*relayServer, error) {
-	s := &relayServer{
-		addr:  cfg.addr,
-		store: cfg.store,
+func NewServer(cfg Config) (*Server, error) {
+	s := &Server{
+		addr:  cfg.Addr,
+		store: cfg.Store,
 		tlsConf: &tls.Config{
-			Certificates: []tls.Certificate{cfg.cert},
+			Certificates: []tls.Certificate{cfg.Cert},
 			ClientAuth:   tls.RequireAndVerifyClientCert,
 			NextProtos:   []string{"connet-relay"},
 		},
-		logger: cfg.logger.With("relay", cfg.addr),
+		logger: cfg.Logger.With("relay", cfg.Addr),
 
 		destinations: map[model.Forward]map[ksuid.KSUID]*relayConn{},
 	}
@@ -47,9 +47,9 @@ func newRelayServer(cfg relayConfig) (*relayServer, error) {
 	return s, nil
 }
 
-type relayServer struct {
+type Server struct {
 	addr    *net.UDPAddr
-	store   RelayStore
+	store   Store
 	tlsConf *tls.Config
 	logger  *slog.Logger
 
@@ -65,7 +65,7 @@ type relayClientConfig struct {
 	destinations []model.Forward
 }
 
-func (s *relayServer) addDestinations(conn *relayConn) {
+func (s *Server) addDestinations(conn *relayConn) {
 	s.destinationsMu.Lock()
 	defer s.destinationsMu.Unlock()
 
@@ -79,7 +79,7 @@ func (s *relayServer) addDestinations(conn *relayConn) {
 	}
 }
 
-func (s *relayServer) removeDestinations(conn *relayConn) {
+func (s *Server) removeDestinations(conn *relayConn) {
 	s.destinationsMu.Lock()
 	defer s.destinationsMu.Unlock()
 
@@ -92,7 +92,7 @@ func (s *relayServer) removeDestinations(conn *relayConn) {
 	}
 }
 
-func (s *relayServer) findDestinations(fwd model.Forward) []*relayConn {
+func (s *Server) findDestinations(fwd model.Forward) []*relayConn {
 	s.destinationsMu.RLock()
 	defer s.destinationsMu.RUnlock()
 
@@ -103,13 +103,13 @@ func (s *relayServer) findDestinations(fwd model.Forward) []*relayConn {
 	return slices.Collect(maps.Values(fwdDest))
 }
 
-func (s *relayServer) tlsConfigWithClientCA(chi *tls.ClientHelloInfo) (*tls.Config, error) {
+func (s *Server) tlsConfigWithClientCA(chi *tls.ClientHelloInfo) (*tls.Config, error) {
 	cfg := s.tlsConf.Clone()
 	cfg.ClientCAs = s.store.CertificateAuthority()
 	return cfg, nil
 }
 
-func (s *relayServer) Run(ctx context.Context) error {
+func (s *Server) Run(ctx context.Context) error {
 	s.logger.Debug("start udp listener")
 	conn, err := net.ListenUDP("udp", s.addr)
 	if err != nil {
@@ -157,11 +157,11 @@ func (s *relayServer) Run(ctx context.Context) error {
 
 type relayConn struct {
 	id     ksuid.KSUID
-	server *relayServer
+	server *Server
 	conn   quic.Connection
 	logger *slog.Logger
 
-	auth *RelayAuthentication
+	auth *Authentication
 }
 
 func (c *relayConn) run(ctx context.Context) {

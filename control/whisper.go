@@ -1,4 +1,4 @@
-package connet
+package control
 
 import (
 	"context"

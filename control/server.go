@@ -1,4 +1,4 @@
-package connet
+package control
 
 import (
 	"context"
@@ -14,46 +14,47 @@ import (
 	"github.com/keihaya-com/connet/pb"
 	"github.com/keihaya-com/connet/pbc"
 	"github.com/keihaya-com/connet/pbs"
+	"github.com/keihaya-com/connet/relay"
 	"github.com/klev-dev/kleverr"
 	"github.com/quic-go/quic-go"
 	"github.com/segmentio/ksuid"
 	"golang.org/x/sync/errgroup"
 )
 
-type controlConfig struct {
-	addr   *net.UDPAddr
-	auth   authc.Authenticator
-	store  RelayStoreManager
-	cert   tls.Certificate
-	logger *slog.Logger
+type Config struct {
+	Addr   *net.UDPAddr
+	Auth   authc.Authenticator
+	Store  relay.StoreManager
+	Cert   tls.Certificate
+	Logger *slog.Logger
 }
 
-func newControlServer(cfg controlConfig) (*controlServer, error) {
-	return &controlServer{
-		addr:  cfg.addr,
-		auth:  cfg.auth,
-		store: cfg.store,
+func NewServer(cfg Config) (*Server, error) {
+	return &Server{
+		addr:  cfg.Addr,
+		auth:  cfg.Auth,
+		store: cfg.Store,
 		tlsConf: &tls.Config{
-			Certificates: []tls.Certificate{cfg.cert},
+			Certificates: []tls.Certificate{cfg.Cert},
 			NextProtos:   []string{"connet"},
 		},
-		logger: cfg.logger.With("control", cfg.addr),
+		logger: cfg.Logger.With("control", cfg.Addr),
 
 		whisperer: newWhisperer(),
 	}, nil
 }
 
-type controlServer struct {
+type Server struct {
 	addr    *net.UDPAddr
 	auth    authc.Authenticator
-	store   RelayStoreManager
+	store   relay.StoreManager
 	tlsConf *tls.Config
 	logger  *slog.Logger
 
 	whisperer *whisperer
 }
 
-func (s *controlServer) Run(ctx context.Context) error {
+func (s *Server) Run(ctx context.Context) error {
 	s.logger.Debug("start udp listener")
 	conn, err := net.ListenUDP("udp", s.addr)
 	if err != nil {
@@ -101,7 +102,7 @@ func (s *controlServer) Run(ctx context.Context) error {
 
 type controlConn struct {
 	id     ksuid.KSUID
-	server *controlServer
+	server *Server
 	conn   quic.Connection
 	logger *slog.Logger
 

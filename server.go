@@ -7,6 +7,8 @@ import (
 	"net"
 
 	"github.com/keihaya-com/connet/authc"
+	"github.com/keihaya-com/connet/control"
+	"github.com/keihaya-com/connet/relay"
 	"github.com/klev-dev/kleverr"
 	"golang.org/x/sync/errgroup"
 )
@@ -14,8 +16,8 @@ import (
 type Server struct {
 	serverConfig
 
-	control *controlServer
-	relay   *relayServer
+	control *control.Server
+	relay   *relay.Server
 }
 
 func NewServer(opts ...ServerOption) (*Server, error) {
@@ -40,24 +42,24 @@ func NewServer(opts ...ServerOption) (*Server, error) {
 		}
 	}
 
-	store, err := NewLocalRelayStore(cfg.relayListenAddr.AddrPort(), cfg.relayPublicAddr)
+	store, err := relay.NewLocalStore(cfg.relayListenAddr.AddrPort(), cfg.relayPublicAddr)
 	if err != nil {
 		return nil, err
 	}
 
-	control, err := newControlServer(controlConfig{
-		addr:   cfg.controlAddr,
-		auth:   cfg.auth,
-		store:  store,
-		cert:   *cfg.certificate,
-		logger: cfg.logger,
+	control, err := control.NewServer(control.Config{
+		Addr:   cfg.controlAddr,
+		Auth:   cfg.auth,
+		Store:  store,
+		Cert:   *cfg.certificate,
+		Logger: cfg.logger,
 	})
 
-	relay, err := newRelayServer(relayConfig{
-		addr:   cfg.relayListenAddr,
-		store:  store,
-		cert:   *cfg.certificate,
-		logger: cfg.logger,
+	relay, err := relay.NewServer(relay.Config{
+		Addr:   cfg.relayListenAddr,
+		Store:  store,
+		Cert:   *cfg.certificate,
+		Logger: cfg.logger,
 	})
 	if err != nil {
 		return nil, err
