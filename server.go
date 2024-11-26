@@ -8,6 +8,7 @@ import (
 
 	"github.com/keihaya-com/connet/control"
 	"github.com/keihaya-com/connet/relay"
+	"github.com/keihaya-com/connet/selfhosted"
 	"github.com/klev-dev/kleverr"
 	"golang.org/x/sync/errgroup"
 )
@@ -41,7 +42,7 @@ func NewServer(opts ...ServerOption) (*Server, error) {
 		}
 	}
 
-	store, err := NewLocalRelay(cfg.relayListenAddr.AddrPort(), cfg.relayPublicAddr)
+	rsync, err := selfhosted.NewRelaySync(cfg.relayListenAddr.AddrPort(), cfg.relayPublicAddr)
 	if err != nil {
 		return nil, err
 	}
@@ -49,14 +50,14 @@ func NewServer(opts ...ServerOption) (*Server, error) {
 	control, err := control.NewServer(control.Config{
 		Addr:   cfg.controlAddr,
 		Auth:   cfg.auth,
-		Relays: store,
+		Relays: rsync,
 		Cert:   *cfg.certificate,
 		Logger: cfg.logger,
 	})
 
 	relay, err := relay.NewServer(relay.Config{
 		Addr:   cfg.relayListenAddr,
-		Auth:   store,
+		Auth:   rsync,
 		Cert:   *cfg.certificate,
 		Logger: cfg.logger,
 	})

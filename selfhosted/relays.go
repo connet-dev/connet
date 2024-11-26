@@ -1,4 +1,4 @@
-package connet
+package selfhosted
 
 import (
 	"context"
@@ -15,8 +15,8 @@ import (
 	"github.com/keihaya-com/connet/relay"
 )
 
-func NewLocalRelay(addr netip.AddrPort, hostport string) (*LocalRelay, error) {
-	s := &LocalRelay{
+func NewRelaySync(addr netip.AddrPort, hostport string) (*RelaySync, error) {
+	s := &RelaySync{
 		relays:       map[netip.AddrPort]string{addr: hostport},
 		relaysNotify: notify.New(),
 		certs:        map[storeKey]*relay.Authentication{},
@@ -25,7 +25,7 @@ func NewLocalRelay(addr netip.AddrPort, hostport string) (*LocalRelay, error) {
 	return s, nil
 }
 
-type LocalRelay struct {
+type RelaySync struct {
 	relays       map[netip.AddrPort]string
 	relaysNotify *notify.N
 	certs        map[storeKey]*relay.Authentication
@@ -35,7 +35,7 @@ type LocalRelay struct {
 
 type storeKey [sha256.Size]byte // TODO another key?
 
-func (s *LocalRelay) Add(cert *x509.Certificate, destinations []model.Forward, sources []model.Forward) {
+func (s *RelaySync) Add(cert *x509.Certificate, destinations []model.Forward, sources []model.Forward) {
 	s.certsMu.Lock()
 	defer s.certsMu.Unlock()
 
@@ -60,7 +60,7 @@ func (s *LocalRelay) Add(cert *x509.Certificate, destinations []model.Forward, s
 	s.pool.Store(pool)
 }
 
-func (s *LocalRelay) Remove(cert *x509.Certificate) {
+func (s *RelaySync) Remove(cert *x509.Certificate) {
 	s.certsMu.Lock()
 	defer s.certsMu.Unlock()
 
@@ -74,17 +74,17 @@ func (s *LocalRelay) Remove(cert *x509.Certificate) {
 	s.pool.Store(pool)
 }
 
-func (s *LocalRelay) Active() []string {
+func (s *RelaySync) Active() []string {
 	return slices.Collect(maps.Values(s.relays))
 }
 
-func (s *LocalRelay) ActiveNotify(ctx context.Context, f func([]string) error) error {
+func (s *RelaySync) ActiveNotify(ctx context.Context, f func([]string) error) error {
 	return s.relaysNotify.Listen(ctx, func() error {
 		return f(s.Active())
 	})
 }
 
-func (s *LocalRelay) Authenticate(certs []*x509.Certificate) *relay.Authentication {
+func (s *RelaySync) Authenticate(certs []*x509.Certificate) *relay.Authentication {
 	s.certsMu.RLock()
 	defer s.certsMu.RUnlock()
 
@@ -97,6 +97,6 @@ func (s *LocalRelay) Authenticate(certs []*x509.Certificate) *relay.Authenticati
 	return nil
 }
 
-func (s *LocalRelay) CertificateAuthority() *x509.CertPool {
+func (s *RelaySync) CertificateAuthority() *x509.CertPool {
 	return s.pool.Load()
 }

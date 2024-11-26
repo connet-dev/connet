@@ -1,4 +1,4 @@
-package connet
+package selfhosted
 
 import (
 	"github.com/keihaya-com/connet/control"
