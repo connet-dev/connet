@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/keihaya-com/connet/authc"
+	"github.com/keihaya-com/connet/model"
 	"github.com/keihaya-com/connet/pb"
 	"github.com/keihaya-com/connet/pbc"
 	"github.com/keihaya-com/connet/pbs"
@@ -217,9 +218,9 @@ func (s *controlStream) runErr(ctx context.Context) error {
 }
 
 func (s *controlStream) relay(ctx context.Context, req *pbs.Request_Relay) error {
-	var destinations []Forward
+	var destinations []model.Forward
 	for _, dst := range req.Destinations {
-		fwd := NewForwardFromPB(dst)
+		fwd := model.NewForwardFromPB(dst)
 		if !s.conn.auth.AllowDestination(fwd.String()) {
 			err := pb.NewError(pb.Error_RelayDestinationNotAllowed, "desination '%s' not allowed", fwd)
 			if err := pb.Write(s.stream, &pbs.Response{Error: err}); err != nil {
@@ -230,9 +231,9 @@ func (s *controlStream) relay(ctx context.Context, req *pbs.Request_Relay) error
 		destinations = append(destinations, fwd)
 	}
 
-	var sources []Forward
+	var sources []model.Forward
 	for _, src := range req.Sources {
-		fwd := NewForwardFromPB(src)
+		fwd := model.NewForwardFromPB(src)
 		if !s.conn.auth.AllowSource(fwd.String()) {
 			err := pb.NewError(pb.Error_RelaySourceNotAllowed, "source '%s' not allowed", fwd)
 			if err := pb.Write(s.stream, &pbs.Response{Error: err}); err != nil {
@@ -278,7 +279,7 @@ func (s *controlStream) relay(ctx context.Context, req *pbs.Request_Relay) error
 }
 
 func (s *controlStream) destination(ctx context.Context, req *pbs.Request_Destination) error {
-	from := NewForwardFromPB(req.From)
+	from := model.NewForwardFromPB(req.From)
 	if !s.conn.auth.AllowDestination(from.String()) {
 		err := pb.NewError(pb.Error_DestinationNotAllowed, "desination '%s' not allowed", from)
 		if err := pb.Write(s.stream, &pbs.Response{Error: err}); err != nil {
@@ -345,32 +346,31 @@ func (s *controlStream) destination(ctx context.Context, req *pbs.Request_Destin
 	return g.Wait()
 }
 
-func (s *controlStream) readDestination(req *pbs.Request_Destination) ([]Route, []Route, error) {
-	var directs []Route
-	var relays []Route
+func (s *controlStream) readDestination(req *pbs.Request_Destination) ([]model.Route, []model.Route, error) {
+	var directs []model.Route
+	var relays []model.Route
 
 	for _, d := range req.Directs {
-		cert, err := x509.ParseCertificate(d.Certificate)
-		if err != nil {
+		if mr, err := model.NewRouteFromPB(d); err != nil {
 			return nil, nil, err
+		} else {
+			directs = append(directs, mr)
 		}
-		directs = append(directs, Route{
-			Hostport:    d.Hostport,
-			Certificate: cert,
-		})
 	}
 
 	for _, r := range req.Relays {
-		relays = append(relays, Route{
-			Hostport: r.Hostport,
-		})
+		if mr, err := model.NewRouteFromPB(r); err != nil {
+			return nil, nil, err
+		} else {
+			relays = append(relays, mr)
+		}
 	}
 
 	return directs, relays, nil
 }
 
 func (s *controlStream) source(ctx context.Context, req *pbs.Request_Source) error {
-	to := NewForwardFromPB(req.To)
+	to := model.NewForwardFromPB(req.To)
 	if !s.conn.auth.AllowSource(to.String()) {
 		err := pb.NewError(pb.Error_SourceNotAllowed, "source '%s' not allowed", to)
 		if err := pb.Write(s.stream, &pbs.Response{Error: err}); err != nil {
@@ -419,20 +419,15 @@ func (s *controlStream) source(ctx context.Context, req *pbs.Request_Source) err
 
 	g.Go(func() error {
 		defer s.logger.Debug("completed destinations notify")
-		return w.DestinationsListen(ctx, func(direct []Route, relays []Route) error {
+		return w.DestinationsListen(ctx, func(direct []model.Route, relays []model.Route) error {
 			s.logger.Debug("updated destinations list", "direct", len(direct), "relay", len(relays))
 			resp := &pbs.Response_Source{}
 
 			for _, dst := range direct {
-				resp.Directs = append(resp.Directs, &pbs.Route{
-					Hostport:    dst.Hostport,
-					Certificate: dst.Certificate.Raw,
-				})
+				resp.Directs = append(resp.Directs, dst.PB())
 			}
 			for _, dst := range relays {
-				resp.Relays = append(resp.Relays, &pbs.Route{
-					Hostport: dst.Hostport,
-				})
+				resp.Relays = append(resp.Relays, dst.PB())
 			}
 
 			if err := pb.Write(s.stream, &pbs.Response{

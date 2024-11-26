@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/keihaya-com/connet/certc"
+	"github.com/keihaya-com/connet/model"
 	"github.com/keihaya-com/connet/notify"
 	"github.com/keihaya-com/connet/pb"
 	"github.com/keihaya-com/connet/pbs"
@@ -29,7 +30,7 @@ type Client struct {
 	dialer     *destinationsDialer
 
 	directServer  *clientDirectServer
-	sourceServers map[Forward]*clientSourceServer
+	sourceServers map[model.Forward]*clientSourceServer
 }
 
 func NewClient(opts ...ClientOption) (*Client, error) {
@@ -92,7 +93,7 @@ func NewClient(opts ...ClientOption) (*Client, error) {
 			logger:       cfg.logger.With("component", "dialer"),
 		},
 
-		sourceServers: map[Forward]*clientSourceServer{},
+		sourceServers: map[model.Forward]*clientSourceServer{},
 	}, nil
 }
 
@@ -260,8 +261,8 @@ func (s *clientSession) runRelays(ctx context.Context) error {
 	if err := pb.Write(stream, &pbs.Request{
 		Relay: &pbs.Request_Relay{
 			Certificate:  s.client.clientCert.Leaf.Raw,
-			Destinations: PBFromForwards(slices.Collect(maps.Keys(s.client.destinations))),
-			Sources:      PBFromForwards(slices.Collect(maps.Values(s.client.sources))),
+			Destinations: model.PBFromForwards(slices.Collect(maps.Keys(s.client.destinations))),
+			Sources:      model.PBFromForwards(slices.Collect(maps.Values(s.client.sources))),
 		},
 	}); err != nil {
 		return err
@@ -280,7 +281,7 @@ func (s *clientSession) runRelays(ctx context.Context) error {
 		for _, addr := range resp.Relay.Relays {
 			addrs[addr.Hostport] = struct{}{}
 		}
-		s.setRelayAddrs(ctx, addrs)
+		s.setRelayAddrs(addrs)
 	}
 }
 
@@ -309,7 +310,7 @@ func (s *clientSession) runRelayConns(ctx context.Context) error {
 	})
 }
 
-func (s *clientSession) setRelayAddrs(ctx context.Context, addrs map[string]struct{}) {
+func (s *clientSession) setRelayAddrs(addrs map[string]struct{}) {
 	defer s.relayAddrsNotify.Updated()
 
 	s.relayAddrsMu.Lock()
@@ -318,7 +319,7 @@ func (s *clientSession) setRelayAddrs(ctx context.Context, addrs map[string]stru
 	s.relayAddrs = maps.Clone(addrs)
 }
 
-func (s *clientSession) getDirectAddr() []*pbs.Route {
+func (s *clientSession) getDirectAddrs() []*pbs.Route {
 	var directs []*pbs.Route
 	for _, direct := range s.directAddrs {
 		directs = append(directs, &pbs.Route{
@@ -344,7 +345,7 @@ func (s *clientSession) getRelayAddrs() []*pbs.Route {
 	return relays
 }
 
-func (s *clientSession) runDestination(ctx context.Context, fwd Forward) error {
+func (s *clientSession) runDestination(ctx context.Context, fwd model.Forward) error {
 	stream, err := s.conn.OpenStreamSync(ctx)
 	if err != nil {
 		return kleverr.Ret(err)
@@ -354,7 +355,7 @@ func (s *clientSession) runDestination(ctx context.Context, fwd Forward) error {
 	if err := pb.Write(stream, &pbs.Request{
 		Destination: &pbs.Request_Destination{
 			From:    fwd.PB(),
-			Directs: s.getDirectAddr(),
+			Directs: s.getDirectAddrs(),
 			Relays:  s.getRelayAddrs(),
 		},
 	}); err != nil {
@@ -366,12 +367,12 @@ func (s *clientSession) runDestination(ctx context.Context, fwd Forward) error {
 	g.Go(func() error {
 		defer s.logger.Debug("completed destinations notify")
 		return s.relayAddrsNotify.Listen(ctx, func() error {
-			direct, relays := s.getDirectAddr(), s.getRelayAddrs()
+			direct, relays := s.getDirectAddrs(), s.getRelayAddrs()
 			s.logger.Debug("updated destinations", "direct", len(direct), "relays", len(relays))
 			if err := pb.Write(stream, &pbs.Request{
 				Destination: &pbs.Request_Destination{
 					From:    fwd.PB(),
-					Directs: s.getDirectAddr(),
+					Directs: s.getDirectAddrs(),
 					Relays:  s.getRelayAddrs(),
 				},
 			}); err != nil {
@@ -406,7 +407,7 @@ func (s *clientSession) runDestination(ctx context.Context, fwd Forward) error {
 	return g.Wait()
 }
 
-func (s *clientSession) runSource(ctx context.Context, fwd Forward) error {
+func (s *clientSession) runSource(ctx context.Context, fwd model.Forward) error {
 	srcServer := s.client.sourceServers[fwd]
 
 	stream, err := s.conn.OpenStreamSync(ctx)
@@ -457,8 +458,8 @@ type clientConfig struct {
 	serverName   string
 	directAddr   *net.UDPAddr
 	token        string
-	sources      map[string]Forward
-	destinations map[Forward]string
+	sources      map[string]model.Forward
+	destinations map[model.Forward]string
 	controlCAs   *x509.CertPool
 	logger       *slog.Logger
 }
@@ -502,9 +503,9 @@ func ClientAuthentication(token string) ClientOption {
 func ClientSource(addr, name string) ClientOption {
 	return func(cfg *clientConfig) error {
 		if cfg.sources == nil {
-			cfg.sources = map[string]Forward{}
+			cfg.sources = map[string]model.Forward{}
 		}
-		cfg.sources[addr] = NewForward(name)
+		cfg.sources[addr] = model.NewForward(name)
 		return nil
 	}
 }
@@ -512,9 +513,9 @@ func ClientSource(addr, name string) ClientOption {
 func ClientDestination(name, addr string) ClientOption {
 	return func(cfg *clientConfig) error {
 		if cfg.destinations == nil {
-			cfg.destinations = map[Forward]string{}
+			cfg.destinations = map[model.Forward]string{}
 		}
-		cfg.destinations[NewForward(name)] = addr
+		cfg.destinations[model.NewForward(name)] = addr
 		return nil
 	}
 }

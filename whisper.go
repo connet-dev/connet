@@ -5,22 +5,23 @@ import (
 	"crypto/x509"
 	"sync"
 
+	"github.com/keihaya-com/connet/model"
 	"github.com/keihaya-com/connet/notify"
 	"github.com/segmentio/ksuid"
 )
 
 type whisperer struct {
-	whispers map[Forward]*whisper
+	whispers map[model.Forward]*whisper
 	mu       sync.RWMutex
 }
 
 func newWhisperer() *whisperer {
 	return &whisperer{
-		whispers: map[Forward]*whisper{},
+		whispers: map[model.Forward]*whisper{},
 	}
 }
 
-func (w *whisperer) For(fwd Forward) *whisper {
+func (w *whisperer) For(fwd model.Forward) *whisper {
 	w.mu.RLock()
 	wh := w.whispers[fwd]
 	w.mu.RUnlock()
@@ -48,7 +49,7 @@ func (w *whisperer) For(fwd Forward) *whisper {
 }
 
 type whisper struct {
-	forward            Forward
+	forward            model.Forward
 	destinations       map[ksuid.KSUID]*whisperDestination
 	destinationsMu     sync.RWMutex
 	destinationsNotify *notify.N
@@ -58,15 +59,15 @@ type whisper struct {
 }
 
 type whisperDestination struct {
-	directs []Route
-	relays  []Route
+	directs []model.Route
+	relays  []model.Route
 }
 
 type whisperSource struct {
 	cert *x509.Certificate
 }
 
-func (w *whisper) AddDestination(id ksuid.KSUID, directs []Route, relays []Route) {
+func (w *whisper) AddDestination(id ksuid.KSUID, directs []model.Route, relays []model.Route) {
 	defer w.destinationsNotify.Updated()
 
 	w.destinationsMu.Lock()
@@ -125,12 +126,12 @@ func (w *whisper) SourcesListen(ctx context.Context, f func([]*x509.Certificate)
 	})
 }
 
-func (w *whisper) Destinations() ([]Route, []Route) {
+func (w *whisper) Destinations() ([]model.Route, []model.Route) {
 	w.destinationsMu.RLock()
 	defer w.destinationsMu.RUnlock()
 
-	var directs []Route
-	var relays []Route
+	var directs []model.Route
+	var relays []model.Route
 
 	for _, dst := range w.destinations {
 		directs = append(directs, dst.directs...)
@@ -140,13 +141,8 @@ func (w *whisper) Destinations() ([]Route, []Route) {
 	return directs, relays
 }
 
-func (w *whisper) DestinationsListen(ctx context.Context, f func([]Route, []Route) error) error {
+func (w *whisper) DestinationsListen(ctx context.Context, f func([]model.Route, []model.Route) error) error {
 	return w.destinationsNotify.Listen(ctx, func() error {
 		return f(w.Destinations())
 	})
-}
-
-type Route struct {
-	Hostport    string
-	Certificate *x509.Certificate
 }

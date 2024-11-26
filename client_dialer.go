@@ -5,6 +5,7 @@ import (
 	"log/slog"
 	"net"
 
+	"github.com/keihaya-com/connet/model"
 	"github.com/keihaya-com/connet/netc"
 	"github.com/keihaya-com/connet/pb"
 	"github.com/keihaya-com/connet/pbc"
@@ -13,7 +14,7 @@ import (
 )
 
 type destinationsDialer struct {
-	destinations map[Forward]string
+	destinations map[model.Forward]string
 	logger       *slog.Logger
 }
 
@@ -33,13 +34,13 @@ func (s *destinationsDialer) runRequestErr(ctx context.Context, stream quic.Stre
 
 	switch {
 	case req.Connect != nil:
-		return s.connect(ctx, stream, NewForwardFromPB(req.Connect.To))
+		return s.connect(ctx, stream, model.NewForwardFromPB(req.Connect.To))
 	default:
 		return s.unknown(ctx, stream, req)
 	}
 }
 
-func (s *destinationsDialer) connect(ctx context.Context, stream quic.Stream, target Forward) error {
+func (s *destinationsDialer) connect(ctx context.Context, stream quic.Stream, target model.Forward) error {
 	logger := s.logger.With("target", target)
 	addr, ok := s.destinations[target]
 	if !ok {

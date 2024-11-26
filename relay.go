@@ -13,6 +13,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/keihaya-com/connet/model"
 	"github.com/keihaya-com/connet/netc"
 	"github.com/keihaya-com/connet/pb"
 	"github.com/keihaya-com/connet/pbc"
@@ -39,7 +40,7 @@ func newRelayServer(cfg relayConfig) (*relayServer, error) {
 		},
 		logger: cfg.logger.With("relay", cfg.addr),
 
-		destinations: map[Forward]map[ksuid.KSUID]*relayConn{},
+		destinations: map[model.Forward]map[ksuid.KSUID]*relayConn{},
 	}
 	s.tlsConf.GetConfigForClient = s.tlsConfigWithClientCA
 
@@ -52,7 +53,7 @@ type relayServer struct {
 	tlsConf *tls.Config
 	logger  *slog.Logger
 
-	destinations   map[Forward]map[ksuid.KSUID]*relayConn
+	destinations   map[model.Forward]map[ksuid.KSUID]*relayConn
 	destinationsMu sync.RWMutex
 }
 
@@ -60,8 +61,8 @@ type relayClientConfigKey [sha256.Size]byte
 
 type relayClientConfig struct {
 	cert         *x509.Certificate
-	sources      []Forward
-	destinations []Forward
+	sources      []model.Forward
+	destinations []model.Forward
 }
 
 func (s *relayServer) addDestinations(conn *relayConn) {
@@ -91,7 +92,7 @@ func (s *relayServer) removeDestinations(conn *relayConn) {
 	}
 }
 
-func (s *relayServer) findDestinations(fwd Forward) []*relayConn {
+func (s *relayServer) findDestinations(fwd model.Forward) []*relayConn {
 	s.destinationsMu.RLock()
 	defer s.destinationsMu.RUnlock()
 
@@ -202,13 +203,13 @@ func (c *relayConn) runStream(ctx context.Context, stream quic.Stream) error {
 
 	switch {
 	case req.Connect != nil:
-		return c.connect(ctx, stream, NewForwardFromPB(req.Connect.To))
+		return c.connect(ctx, stream, model.NewForwardFromPB(req.Connect.To))
 	default:
 		return c.unknown(ctx, stream, req)
 	}
 }
 
-func (c *relayConn) connect(ctx context.Context, stream quic.Stream, fwd Forward) error {
+func (c *relayConn) connect(ctx context.Context, stream quic.Stream, fwd model.Forward) error {
 	if !c.auth.AllowSource(fwd) {
 		err := pb.NewError(pb.Error_DestinationNotFound, "not allowed")
 		return pb.Write(stream, &pbc.Response{Error: err})
@@ -228,7 +229,7 @@ func (c *relayConn) connect(ctx context.Context, stream quic.Stream, fwd Forward
 	return pb.Write(stream, &pbc.Response{Error: err})
 }
 
-func (c *relayConn) connectDestination(ctx context.Context, srcStream quic.Stream, fwd Forward, dest *relayConn) error {
+func (c *relayConn) connectDestination(ctx context.Context, srcStream quic.Stream, fwd model.Forward, dest *relayConn) error {
 	dstStream, err := dest.conn.OpenStreamSync(ctx)
 	if err != nil {
 		return kleverr.Newf("could not open stream: %w", err)

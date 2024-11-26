@@ -10,6 +10,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/keihaya-com/connet/model"
 	"github.com/keihaya-com/connet/netc"
 	"github.com/keihaya-com/connet/pb"
 	"github.com/keihaya-com/connet/pbc"
@@ -19,7 +20,7 @@ import (
 
 type clientSourceServer struct {
 	addr      string
-	fwd       Forward
+	fwd       model.Forward
 	transport *quic.Transport
 	cert      tls.Certificate
 	relayCAs  *x509.CertPool

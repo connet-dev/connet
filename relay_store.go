@@ -10,11 +10,12 @@ import (
 	"sync"
 	"sync/atomic"
 
+	"github.com/keihaya-com/connet/model"
 	"github.com/keihaya-com/connet/notify"
 )
 
 type RelayStoreManager interface {
-	Add(cert *x509.Certificate, destinations []Forward, sources []Forward)
+	Add(cert *x509.Certificate, destinations []model.Forward, sources []model.Forward)
 	Remove(cert *x509.Certificate)
 	Relays() []string
 	RelaysNotify(ctx context.Context, f func(hostports []string) error) error
@@ -27,16 +28,16 @@ type RelayStore interface {
 
 type RelayAuthentication struct {
 	Certificate  *x509.Certificate
-	Destinations map[Forward]struct{}
-	Sources      map[Forward]struct{}
+	Destinations map[model.Forward]struct{}
+	Sources      map[model.Forward]struct{}
 }
 
-func (a *RelayAuthentication) AllowDestination(fwd Forward) bool {
+func (a *RelayAuthentication) AllowDestination(fwd model.Forward) bool {
 	_, ok := a.Destinations[fwd]
 	return ok
 }
 
-func (a *RelayAuthentication) AllowSource(fwd Forward) bool {
+func (a *RelayAuthentication) AllowSource(fwd model.Forward) bool {
 	_, ok := a.Sources[fwd]
 	return ok
 }
@@ -66,14 +67,14 @@ type localRelayStore struct {
 
 type relayStoreKey [sha256.Size]byte // TODO another key?
 
-func (s *localRelayStore) Add(cert *x509.Certificate, destinations []Forward, sources []Forward) {
+func (s *localRelayStore) Add(cert *x509.Certificate, destinations []model.Forward, sources []model.Forward) {
 	s.certsMu.Lock()
 	defer s.certsMu.Unlock()
 
 	auth := &RelayAuthentication{
 		Certificate:  cert,
-		Destinations: map[Forward]struct{}{},
-		Sources:      map[Forward]struct{}{},
+		Destinations: map[model.Forward]struct{}{},
+		Sources:      map[model.Forward]struct{}{},
 	}
 	for _, dst := range destinations {
 		auth.Destinations[dst] = struct{}{}

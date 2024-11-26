@@ -1,4 +1,4 @@
-package connet
+package model
 
 import "github.com/keihaya-com/connet/pb"
 
