@@ -4,6 +4,7 @@ let
     (lib.fileset.maybeMissing ./result)
     ./.envrc
     ./.gitignore
+    ./examples
     ./flake.lock
     ./flake.nix
     ./Makefile
@@ -21,8 +22,8 @@ lib.fileset.trace sourceFiles
     fileset = sourceFiles;
   };
 
-  vendorHash = "sha256-yJUvgldzJsE8XKfTphk38P9D9uoyZnJvzTdcoTgQd7g=";
-  subPackages = [ "cmd/connet" "cmd/connet-server" ];
+  vendorHash = "sha256-jO29MNeilVvbihJnnY2cd/Aw5RQZOSOV0/fguN9IISI=";
+  subPackages = [ "cmd/connet" ];
 
   meta = with lib; {
     description = "A reverse proxy, written in Golang";
