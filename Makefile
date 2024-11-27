@@ -16,10 +16,10 @@ gen:
 
 .PHONY: run-server run-client run-sws
 run-server: all
-	connet server local.toml #-debug -auth xxyxx -server-cert .direnv/localhost/cert.pem -server-key .direnv/localhost/key.pem
+	connet server local.toml
 
 run-client: all
-	connet client local.toml #-debug -auth xxyxx -destination-name sws -destination-addr ":8081" -source-name sws -source-addr ":9999" -ca-cert .direnv/minica.pem -ca-key .direnv/minica-key.pem 
+	connet client local.toml
 
 run-sws:
 	static-web-server --port 8081 --root . --directory-listing

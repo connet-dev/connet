@@ -30,8 +30,8 @@ type ClientConfig struct {
 	ServerCert string         `toml:"server_cert_file"`
 	Direct     ListenerConfig `toml:"direct"`
 
-	Destinations []ForwardConfig `toml:"destinations"`
-	Sources      []ForwardConfig `toml:"sources"`
+	Destinations map[string]ForwardConfig `toml:"destinations"`
+	Sources      map[string]ForwardConfig `toml:"sources"`
 }
 
 type ListenerConfig struct {
@@ -41,8 +41,8 @@ type ListenerConfig struct {
 }
 
 type ForwardConfig struct {
-	Name string `toml:"name"`
-	Addr string `toml:"addr"`
+	Addr  string `toml:"addr"`
+	Route string `toml:"route"`
 }
 
 func main() {
@@ -56,9 +56,6 @@ func main() {
 	if err != nil {
 		fmt.Printf("Could not parse '%s' config file: %v\n", os.Args[2], err)
 		os.Exit(2)
-	}
-	if len(md.Undecoded()) > 0 {
-		// TODO print warning?
 	}
 
 	logger := logger(cfg)
@@ -77,6 +74,10 @@ func main() {
 		}
 		os.Exit(0)
 	case "check":
+		if len(md.Undecoded()) > 0 {
+			fmt.Println("Invalid configuration file (unknown keys):", md.Undecoded())
+			os.Exit(6)
+		}
 		fmt.Println("Valid configuration file")
 		os.Exit(0)
 	default:
@@ -136,11 +137,11 @@ func client(cfg ClientConfig, logger *slog.Logger) error {
 	opts = append(opts, connet.ClientDirectServer(cfg.Direct.Addr, cfg.Direct.Cert, cfg.Direct.Key))
 	opts = append(opts, connet.ClientLogger(logger))
 
-	for _, fc := range cfg.Destinations {
-		opts = append(opts, connet.ClientDestination(fc.Name, fc.Addr))
+	for name, fc := range cfg.Destinations {
+		opts = append(opts, connet.ClientDestination(name, fc.Addr))
 	}
-	for _, fc := range cfg.Sources {
-		opts = append(opts, connet.ClientSource(fc.Name, fc.Addr))
+	for name, fc := range cfg.Sources {
+		opts = append(opts, connet.ClientSource(name, fc.Addr))
 	}
 
 	cl, err := connet.NewClient(opts...)
