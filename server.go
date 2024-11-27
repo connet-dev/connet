@@ -32,13 +32,13 @@ func NewServer(opts ...ServerOption) (*Server, error) {
 	}
 
 	if cfg.controlAddr == nil {
-		if err := ServerControl(":19190")(cfg); err != nil {
+		if err := ServerControlAddress(":19190")(cfg); err != nil {
 			return nil, err
 		}
 	}
 
 	if cfg.relayAddr == nil {
-		if err := ServerRelay(":19191")(cfg); err != nil {
+		if err := ServerRelayAddress(":19191")(cfg); err != nil {
 			return nil, err
 		}
 	}
@@ -150,7 +150,7 @@ func ServerDefaultCertificate(certFile, keyFile string) ServerOption {
 	}
 }
 
-func ServerControl(address string) ServerOption {
+func ServerControlAddress(address string) ServerOption {
 	return func(cfg *serverConfig) error {
 		addr, err := net.ResolveUDPAddr("udp", address)
 		if err != nil {
@@ -176,7 +176,7 @@ func ServerControlCertificate(certFile, keyFile string) ServerOption {
 	}
 }
 
-func ServerRelay(address string) ServerOption {
+func ServerRelayAddress(address string) ServerOption {
 	return func(cfg *serverConfig) error {
 		addr, err := net.ResolveUDPAddr("udp", address)
 		if err != nil {

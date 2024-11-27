@@ -26,20 +26,20 @@ type ServerConfig struct {
 	Relay    ListenerConfig `toml:"relay"`
 }
 
-type ClientConfig struct {
-	Token      string         `toml:"token"`
-	ServerAddr string         `toml:"server_addr"`
-	ServerCert string         `toml:"server_cert_file"`
-	Direct     ListenerConfig `toml:"direct"`
-
-	Destinations map[string]ForwardConfig `toml:"destinations"`
-	Sources      map[string]ForwardConfig `toml:"sources"`
-}
-
 type ListenerConfig struct {
 	Addr string `toml:"bind_addr"`
 	Cert string `toml:"cert_file"`
 	Key  string `toml:"key_file"`
+}
+
+type ClientConfig struct {
+	Token      string `toml:"token"`
+	ServerAddr string `toml:"server_addr"`
+	ServerCAs  string `toml:"server_cas"`
+	DirectAddr string `toml:"direct_addr"`
+
+	Destinations map[string]ForwardConfig `toml:"destinations"`
+	Sources      map[string]ForwardConfig `toml:"sources"`
 }
 
 type ForwardConfig struct {
@@ -128,14 +128,14 @@ func server(cfg ServerConfig, logger *slog.Logger) error {
 	}
 
 	if cfg.Control.Addr != "" {
-		opts = append(opts, connet.ServerControl(cfg.Control.Addr))
+		opts = append(opts, connet.ServerControlAddress(cfg.Control.Addr))
 	}
 	if cfg.Control.Cert != "" {
 		opts = append(opts, connet.ServerControlCertificate(cfg.Control.Cert, cfg.Control.Key))
 	}
 
 	if cfg.Relay.Addr != "" {
-		opts = append(opts, connet.ServerRelay(cfg.Relay.Addr))
+		opts = append(opts, connet.ServerRelayAddress(cfg.Relay.Addr))
 	}
 	if cfg.Relay.Cert != "" {
 		opts = append(opts, connet.ServerRelayCertificate(cfg.Relay.Cert, cfg.Relay.Key))
@@ -154,9 +154,18 @@ func client(cfg ClientConfig, logger *slog.Logger) error {
 	var opts []connet.ClientOption
 
 	opts = append(opts, connet.ClientToken(cfg.Token))
-	opts = append(opts, connet.ClientControlServer(cfg.ServerAddr, cfg.ServerCert))
-	opts = append(opts, connet.ClientDirectServer(cfg.Direct.Addr, cfg.Direct.Cert, cfg.Direct.Key))
 	opts = append(opts, connet.ClientLogger(logger))
+
+	if cfg.ServerAddr != "" {
+		opts = append(opts, connet.ClientControlAddress(cfg.ServerAddr))
+	}
+	if cfg.ServerCAs != "" {
+		opts = append(opts, connet.ClientControlCAs(cfg.ServerCAs))
+	}
+
+	if cfg.DirectAddr != "" {
+		opts = append(opts, connet.ClientDirectAddress(cfg.DirectAddr))
+	}
 
 	for name, fc := range cfg.Destinations {
 		opts = append(opts, connet.ClientDestination(name, fc.Addr))

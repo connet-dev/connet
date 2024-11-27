@@ -7,13 +7,7 @@ key_file = ".direnv/localhost/key.pem"
 
 [client]
 token = "xxyxx"
-server_addr = "127.0.0.1:19190"
-server_cert_file = ".direnv/localhost/cert.pem"
-
-[client.direct]
-bind_addr = ":19192"
-cert_file = ".direnv/localhost/cert.pem"
-key_file = ".direnv/localhost/key.pem"
+server_cas = ".direnv/localhost/cert.pem"
 
 [client.destinations.sws]
 addr = ":8081"

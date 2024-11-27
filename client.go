@@ -4,7 +4,6 @@ import (
 	"context"
 	"crypto/tls"
 	"crypto/x509"
-	"encoding/pem"
 	"log/slog"
 	"maps"
 	"net"
@@ -46,13 +45,13 @@ func NewClient(opts ...ClientOption) (*Client, error) {
 	}
 
 	if cfg.controlAddr == nil {
-		if err := ClientControlServer("127.0.0.1:19190", "")(cfg); err != nil {
+		if err := ClientControlAddress("127.0.0.1:19190")(cfg); err != nil {
 			return nil, kleverr.Ret(err)
 		}
 	}
 
 	if cfg.directAddr == nil {
-		if err := ClientDirectServer("0.0.0.0:19192", "", "")(cfg); err != nil {
+		if err := ClientDirectAddress(":19192")(cfg); err != nil {
 			return nil, kleverr.Ret(err)
 		}
 	}
@@ -477,7 +476,6 @@ type clientConfig struct {
 	controlCAs  *x509.CertPool
 
 	directAddr *net.UDPAddr
-	directCert tls.Certificate
 
 	destinations map[model.Forward]string
 	sources      map[string]model.Forward
@@ -494,7 +492,7 @@ func ClientToken(token string) ClientOption {
 	}
 }
 
-func ClientControlServer(address string, certFile string) ClientOption {
+func ClientControlAddress(address string) ClientOption {
 	return func(cfg *clientConfig) error {
 		addr, err := net.ResolveUDPAddr("udp", address)
 		if err != nil {
@@ -505,46 +503,39 @@ func ClientControlServer(address string, certFile string) ClientOption {
 			return err
 		}
 
-		var cas *x509.CertPool
-		if certFile != "" {
-			certPEMBlock, err := os.ReadFile(certFile)
-			if err != nil {
-				return err
-			}
-			certDERBlock, _ := pem.Decode(certPEMBlock)
-			if certDERBlock.Type != "CERTIFICATE" {
-				return kleverr.Newf("unexpected certificate block: %s", certDERBlock.Type)
-			}
-			cert, err := x509.ParseCertificate(certDERBlock.Bytes)
-			if err != nil {
-				return err
-			}
-			cas = x509.NewCertPool()
-			cas.AddCert(cert)
-		}
-
 		cfg.controlAddr = addr
 		cfg.controlHost = host
+
+		return nil
+	}
+}
+
+func ClientControlCAs(certFile string) ClientOption {
+	return func(cfg *clientConfig) error {
+		casData, err := os.ReadFile(certFile)
+		if err != nil {
+			return kleverr.Newf("cannot read certs file: %w", err)
+		}
+
+		cas := x509.NewCertPool()
+		if !cas.AppendCertsFromPEM(casData) {
+			return kleverr.Newf("no certificates found in %s", certFile)
+		}
+
 		cfg.controlCAs = cas
 
 		return nil
 	}
 }
 
-func ClientDirectServer(address string, certFile string, keyFile string) ClientOption {
+func ClientDirectAddress(address string) ClientOption {
 	return func(cfg *clientConfig) error {
 		addr, err := net.ResolveUDPAddr("udp", address)
 		if err != nil {
 			return err
 		}
 
-		cert, err := tls.LoadX509KeyPair(certFile, keyFile)
-		if err != nil {
-			return err
-		}
-
 		cfg.directAddr = addr
-		cfg.directCert = cert
 
 		return nil
 	}
