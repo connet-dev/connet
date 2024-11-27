@@ -22,7 +22,7 @@ lib.fileset.trace sourceFiles
     fileset = sourceFiles;
   };
 
-  vendorHash = "sha256-jO29MNeilVvbihJnnY2cd/Aw5RQZOSOV0/fguN9IISI=";
+  vendorHash = "sha256-ZZhCGgxzX3pWZyL8Fifd9EjPfP04vC6klIFjiJeWaoU=";
   subPackages = [ "cmd/connet" ];
 
   meta = with lib; {
