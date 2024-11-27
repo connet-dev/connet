@@ -23,18 +23,17 @@ type clientSourceServer struct {
 	fwd       model.Forward
 	transport *quic.Transport
 	cert      tls.Certificate
-	relayCAs  *x509.CertPool
 	logger    *slog.Logger
 
 	directRoutes map[string]*x509.CertPool
-	relayRoutes  map[string]struct{}
+	relayRoutes  map[string]*x509.CertPool
 	routesMu     sync.RWMutex
 
 	activeRoute   quic.Connection
 	activeRouteMu sync.RWMutex
 }
 
-func (s *clientSourceServer) setRoutes(direct map[string]*x509.Certificate, relays map[string]struct{}) {
+func (s *clientSourceServer) setRoutes(direct map[string]*x509.Certificate, relays map[string]*x509.Certificate) {
 	newDirect := map[string]*x509.CertPool{}
 	for addr, cert := range direct {
 		pool := x509.NewCertPool()
@@ -42,7 +41,15 @@ func (s *clientSourceServer) setRoutes(direct map[string]*x509.Certificate, rela
 		newDirect[addr] = pool
 	}
 
-	newRelay := maps.Clone(relays)
+	newRelay := map[string]*x509.CertPool{}
+	for addr, cert := range relays {
+		var pool *x509.CertPool
+		if cert != nil {
+			pool = x509.NewCertPool()
+			pool.AddCert(cert)
+		}
+		newRelay[addr] = pool
+	}
 
 	s.routesMu.Lock()
 	defer s.routesMu.Unlock()
@@ -58,7 +65,7 @@ func (s *clientSourceServer) getDirectRoutes() map[string]*x509.CertPool {
 	return maps.Clone(s.directRoutes)
 }
 
-func (s *clientSourceServer) getRelayRoutes() map[string]struct{} {
+func (s *clientSourceServer) getRelayRoutes() map[string]*x509.CertPool {
 	s.routesMu.RLock()
 	defer s.routesMu.RUnlock()
 
@@ -92,8 +99,8 @@ func (s *clientSourceServer) findRoute(ctx context.Context) (quic.Stream, error)
 	}
 
 	// try direct routes first
-	for addr, cert := range s.getDirectRoutes() {
-		conn, err := s.dialDirect(ctx, addr, cert)
+	for addr, cas := range s.getDirectRoutes() {
+		conn, err := s.dialDirect(ctx, addr, cas)
 		if err != nil {
 			s.logger.Debug("failed to direct dial", "addr", addr, "err", err)
 			continue
@@ -108,8 +115,8 @@ func (s *clientSourceServer) findRoute(ctx context.Context) (quic.Stream, error)
 	}
 
 	// now try the relays
-	for hostport := range s.getRelayRoutes() {
-		conn, err := s.dialRelay(ctx, hostport)
+	for hostport, cas := range s.getRelayRoutes() {
+		conn, err := s.dialRelay(ctx, hostport, cas)
 		if err != nil {
 			s.logger.Debug("failed to relay dial", "hostport", hostport, "err", err)
 			continue
@@ -141,7 +148,7 @@ func (s *clientSourceServer) dialDirect(ctx context.Context, hostport string, po
 	})
 }
 
-func (s *clientSourceServer) dialRelay(ctx context.Context, hostport string) (quic.Connection, error) {
+func (s *clientSourceServer) dialRelay(ctx context.Context, hostport string, pool *x509.CertPool) (quic.Connection, error) {
 	addr, err := net.ResolveUDPAddr("udp", hostport)
 	if err != nil {
 		return nil, kleverr.Ret(err)
@@ -152,7 +159,7 @@ func (s *clientSourceServer) dialRelay(ctx context.Context, hostport string) (qu
 	}
 	return s.transport.Dial(ctx, addr, &tls.Config{
 		Certificates: []tls.Certificate{s.cert},
-		RootCAs:      s.relayCAs,
+		RootCAs:      pool,
 		ServerName:   host,
 		NextProtos:   []string{"connet-relay"},
 	}, &quic.Config{

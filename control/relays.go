@@ -11,6 +11,6 @@ type Relays interface {
 	Add(cert *x509.Certificate, destinations []model.Forward, sources []model.Forward)
 	Remove(cert *x509.Certificate)
 
-	Active() []string
-	ActiveNotify(ctx context.Context, f func(hostports []string) error) error
+	Active() map[string]*x509.Certificate
+	ActiveNotify(ctx context.Context, f func(hostports map[string]*x509.Certificate) error) error
 }

@@ -122,7 +122,6 @@ func (c *Client) Run(ctx context.Context) error {
 			fwd:       fwd,
 			transport: directTransport,
 			cert:      c.clientCert,
-			relayCAs:  c.controlCAs,
 			logger:    c.logger.With("component", "source-server", "addr", addr, "forward", fwd),
 		}
 	}
@@ -227,7 +226,7 @@ type clientSession struct {
 	transport        *quic.Transport
 	conn             quic.Connection
 	directAddrs      []*pb.AddrPort // TODO these should be multiple, not only from server pov
-	relayAddrs       map[string]struct{}
+	relayAddrs       map[string]*x509.Certificate
 	relayAddrsMu     sync.RWMutex
 	relayAddrsNotify *notify.N
 	activeRelays     map[string]*clientRelayServer
@@ -277,9 +276,14 @@ func (s *clientSession) runRelays(ctx context.Context) error {
 			return kleverr.Newf("unexpected response")
 		}
 
-		addrs := map[string]struct{}{}
-		for _, addr := range resp.Relay.Relays {
-			addrs[addr.Hostport] = struct{}{}
+		addrs := map[string]*x509.Certificate{}
+		for _, relay := range resp.Relay.Relays {
+			route, err := model.NewRouteFromPB(relay)
+			if err != nil {
+				s.logger.Warn("cannot parse route", "err", err)
+				continue
+			}
+			addrs[route.Hostport] = route.Certificate
 		}
 		s.setRelayAddrs(addrs)
 	}
@@ -310,7 +314,7 @@ func (s *clientSession) runRelayConns(ctx context.Context) error {
 	})
 }
 
-func (s *clientSession) setRelayAddrs(addrs map[string]struct{}) {
+func (s *clientSession) setRelayAddrs(addrs map[string]*x509.Certificate) {
 	defer s.relayAddrsNotify.Updated()
 
 	s.relayAddrsMu.Lock()
@@ -336,9 +340,14 @@ func (s *clientSession) getRelayAddrs() []*pbs.Route {
 	defer s.relayAddrsMu.RUnlock()
 
 	var relays []*pbs.Route
-	for hostport := range s.relayAddrs {
+	for hostport, cert := range s.relayAddrs {
+		var certData []byte
+		if cert != nil {
+			certData = cert.Raw
+		}
 		relays = append(relays, &pbs.Route{
-			Hostport: hostport,
+			Hostport:    hostport,
+			Certificate: certData,
 		})
 	}
 
@@ -436,17 +445,22 @@ func (s *clientSession) runSource(ctx context.Context, fwd model.Forward) error 
 
 		directs := map[string]*x509.Certificate{}
 		for _, direct := range resp.Source.Directs {
-			cert, err := x509.ParseCertificate(direct.Certificate)
+			route, err := model.NewRouteFromPB(direct)
 			if err != nil {
-				s.logger.Warn("invalid certificate", "err", err)
+				s.logger.Warn("cannot parse route", "err", err)
 				continue
 			}
-			directs[direct.Hostport] = cert
+			directs[route.Hostport] = route.Certificate
 		}
 
-		relays := map[string]struct{}{}
+		relays := map[string]*x509.Certificate{}
 		for _, relay := range resp.Source.Relays {
-			relays[relay.Hostport] = struct{}{}
+			route, err := model.NewRouteFromPB(relay)
+			if err != nil {
+				s.logger.Warn("cannot parse route", "err", err)
+				continue
+			}
+			relays[route.Hostport] = route.Certificate
 		}
 
 		srcServer.setRoutes(directs, relays)

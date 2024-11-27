@@ -257,12 +257,17 @@ func (s *controlStream) relay(ctx context.Context, req *pbs.Request_Relay) error
 	// TODO how to remove?
 
 	defer s.logger.Debug("completed relays notify")
-	return s.conn.server.relays.ActiveNotify(ctx, func(relays []string) error {
+	return s.conn.server.relays.ActiveNotify(ctx, func(relays map[string]*x509.Certificate) error {
 		s.logger.Debug("updated relays list", "relays", len(relays))
 		var addrs []*pbs.Route
-		for _, hostport := range relays {
+		for hostport, cert := range relays {
+			var certData []byte
+			if cert != nil {
+				certData = cert.Raw
+			}
 			addrs = append(addrs, &pbs.Route{
-				Hostport: hostport,
+				Hostport:    hostport,
+				Certificate: certData,
 			})
 		}
 

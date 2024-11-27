@@ -42,7 +42,7 @@ func NewServer(opts ...ServerOption) (*Server, error) {
 		}
 	}
 
-	rsync, err := selfhosted.NewRelaySync(cfg.relayListenAddr.AddrPort(), cfg.relayPublicAddr)
+	rsync, err := selfhosted.NewRelaySync(cfg.relayPublicAddr, cfg.certificate.Leaf)
 	if err != nil {
 		return nil, err
 	}
