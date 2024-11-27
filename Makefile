@@ -16,10 +16,10 @@ gen:
 
 .PHONY: run-server run-client run-sws
 run-server: all
-	connet server local.toml
+	connet server examples/minimal.toml
 
 run-client: all
-	connet client local.toml
+	connet client examples/minimal.toml
 
 run-sws:
 	static-web-server --port 8081 --root . --directory-listing

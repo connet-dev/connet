@@ -3,17 +3,19 @@ version: "0.5"
 processes:
   build:
     command: make
+    availability:
+      restart: "exit_on_failure"
   certs:
     command: gen-local-certs
   server:
-    command: connet-server -debug -auth xxyxx -server-cert .direnv/localhost/cert.pem -server-key .direnv/localhost/key.pem
+    command: connet server examples/minimal.toml
     depends_on:
       build:
         condition: process_completed_successfully
       certs:
         condition: process_completed
   client-listen:
-    command: connet -debug -auth xxyxx -destination-name sws -destination-addr ":8081" -ca-cert .direnv/minica.pem -ca-key .direnv/minica-key.pem
+    command: connet client examples/client-destination.toml
     depends_on:
       build:
         condition: process_completed_successfully
@@ -22,7 +24,7 @@ processes:
       server:
         condition: process_started
   client-serve:
-    command: connet -debug -auth xxyxx -direct-addr ":19193" -source-name sws -source-addr ":9999" -ca-cert .direnv/minica.pem -ca-key .direnv/minica-key.pem
+    command: connet client examples/client-source.toml
     depends_on:
       build:
         condition: process_completed_successfully

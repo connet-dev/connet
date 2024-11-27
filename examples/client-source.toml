@@ -1,0 +1,9 @@
+log_level = "debug"
+
+[client]
+token = "xxyxx"
+server_cas = ".direnv/localhost/cert.pem"
+direct_addr = ":19193"
+
+[client.sources.sws]
+addr = ":9999"

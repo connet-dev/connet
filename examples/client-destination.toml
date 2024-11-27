@@ -1,0 +1,8 @@
+log_level = "debug"
+
+[client]
+token = "xxyxx"
+server_cas = ".direnv/localhost/cert.pem"
+
+[client.destinations.sws]
+addr = ":8081"
