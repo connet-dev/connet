@@ -108,7 +108,7 @@ func (w *whisper) RemoveSource(id ksuid.KSUID) {
 	delete(w.sources, id)
 }
 
-func (w *whisper) Sources() []*x509.Certificate {
+func (w *whisper) getSources() []*x509.Certificate {
 	w.sourcesMu.RLock()
 	defer w.sourcesMu.RUnlock()
 
@@ -120,13 +120,13 @@ func (w *whisper) Sources() []*x509.Certificate {
 	return result
 }
 
-func (w *whisper) SourcesListen(ctx context.Context, f func([]*x509.Certificate) error) error {
+func (w *whisper) Sources(ctx context.Context, f func([]*x509.Certificate) error) error {
 	return w.sourcesNotify.Listen(ctx, func() error {
-		return f(w.Sources())
+		return f(w.getSources())
 	})
 }
 
-func (w *whisper) Destinations() ([]model.Route, []model.Route) {
+func (w *whisper) getDestinations() ([]model.Route, []model.Route) {
 	w.destinationsMu.RLock()
 	defer w.destinationsMu.RUnlock()
 
@@ -141,8 +141,8 @@ func (w *whisper) Destinations() ([]model.Route, []model.Route) {
 	return directs, relays
 }
 
-func (w *whisper) DestinationsListen(ctx context.Context, f func([]model.Route, []model.Route) error) error {
+func (w *whisper) Destinations(ctx context.Context, f func([]model.Route, []model.Route) error) error {
 	return w.destinationsNotify.Listen(ctx, func() error {
-		return f(w.Destinations())
+		return f(w.getDestinations())
 	})
 }

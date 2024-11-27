@@ -71,14 +71,9 @@ func (s *RelaySync) Remove(cert *x509.Certificate) {
 	s.pool.Store(pool)
 }
 
-func (s *RelaySync) Active() map[string]*x509.Certificate {
-	return s.relays
-}
-
-// TODO rename to ActiveListen? remove Active?
-func (s *RelaySync) ActiveNotify(ctx context.Context, f func(map[string]*x509.Certificate) error) error {
+func (s *RelaySync) Active(ctx context.Context, f func(map[string]*x509.Certificate) error) error {
 	return s.relaysNotify.Listen(ctx, func() error {
-		return f(s.Active())
+		return f(s.relays)
 	})
 }
 

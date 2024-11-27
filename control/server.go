@@ -257,7 +257,7 @@ func (s *controlStream) relay(ctx context.Context, req *pbs.Request_Relay) error
 	// TODO how to remove?
 
 	defer s.logger.Debug("completed relays notify")
-	return s.conn.server.relays.ActiveNotify(ctx, func(relays map[string]*x509.Certificate) error {
+	return s.conn.server.relays.Active(ctx, func(relays map[string]*x509.Certificate) error {
 		s.logger.Debug("updated relays list", "relays", len(relays))
 		var addrs []*pbs.Route
 		for hostport, cert := range relays {
@@ -330,7 +330,7 @@ func (s *controlStream) destination(ctx context.Context, req *pbs.Request_Destin
 
 	g.Go(func() error {
 		defer s.logger.Debug("completed sources notify")
-		return w.SourcesListen(ctx, func(certs []*x509.Certificate) error {
+		return w.Sources(ctx, func(certs []*x509.Certificate) error {
 			s.logger.Debug("updated sources list", "certs", len(certs))
 			var certData [][]byte
 			for _, cert := range certs {
@@ -423,7 +423,7 @@ func (s *controlStream) source(ctx context.Context, req *pbs.Request_Source) err
 
 	g.Go(func() error {
 		defer s.logger.Debug("completed destinations notify")
-		return w.DestinationsListen(ctx, func(direct []model.Route, relays []model.Route) error {
+		return w.Destinations(ctx, func(direct []model.Route, relays []model.Route) error {
 			s.logger.Debug("updated destinations list", "direct", len(direct), "relay", len(relays))
 			resp := &pbs.Response_Source{}
 
