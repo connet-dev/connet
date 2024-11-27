@@ -14,8 +14,8 @@ processes:
         condition: process_completed_successfully
       certs:
         condition: process_completed
-  client-listen:
-    command: connet client examples/client-destination.toml
+  client-dst:
+    command: connet examples/client-destination.toml
     depends_on:
       build:
         condition: process_completed_successfully
@@ -23,8 +23,8 @@ processes:
         condition: process_completed
       server:
         condition: process_started
-  client-serve:
-    command: connet client examples/client-source.toml
+  client-src:
+    command: connet examples/client-source.toml
     depends_on:
       build:
         condition: process_completed_successfully
@@ -32,7 +32,7 @@ processes:
         condition: process_completed
       server:
         condition: process_started
-      client-listen:
+      client-dst:
         condition: process_started
   upstream:
     command: static-web-server --port 8081 --root . --directory-listing

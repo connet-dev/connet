@@ -48,21 +48,28 @@ type ForwardConfig struct {
 }
 
 func main() {
-	if len(os.Args) != 3 {
+	args := os.Args
+	if len(args) == 2 {
+		// if we are given 'connet file-name.toml', pretend we start a client (if config file exists)
+		if _, err := os.Stat(args[1]); err == nil {
+			args = []string{args[0], "client", args[1]}
+		}
+	}
+	if len(args) != 3 {
 		fmt.Println("Usage: connet [server|client|check] <config-file>")
 		os.Exit(1)
 	}
 
 	var cfg Config
-	md, err := toml.DecodeFile(os.Args[2], &cfg)
+	md, err := toml.DecodeFile(args[2], &cfg)
 	if err != nil {
-		fmt.Printf("Could not parse '%s' config file: %v\n", os.Args[2], err)
+		fmt.Printf("Could not parse '%s' config file: %v\n", args[2], err)
 		os.Exit(2)
 	}
 
 	logger := logger(cfg)
 
-	switch os.Args[1] {
+	switch args[1] {
 	case "server":
 		if err := server(cfg.Server, logger); err != nil {
 			fmt.Printf("Error while running server: %v\n", err)
