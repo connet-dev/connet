@@ -3,6 +3,7 @@ package connet
 import (
 	"context"
 	"crypto/tls"
+	"fmt"
 	"log/slog"
 	"net"
 
@@ -31,34 +32,34 @@ func NewServer(opts ...ServerOption) (*Server, error) {
 	}
 
 	if cfg.controlAddr == nil {
-		if err := ServerControlAddress("0.0.0.0:19190")(cfg); err != nil {
+		if err := ServerControl("0.0.0.0:19190", "", "")(cfg); err != nil {
 			return nil, err
 		}
 	}
 
-	if cfg.relayListenAddr == nil {
-		if err := ServerRelayAddresses("0.0.0.0:19191", "localhost:19191")(cfg); err != nil {
+	if cfg.relayAddr == nil {
+		if err := ServerRelay("0.0.0.0:19191", "", "")(cfg); err != nil {
 			return nil, err
 		}
 	}
 
-	rsync, err := selfhosted.NewRelaySync(cfg.relayPublicAddr, cfg.certificate.Leaf)
+	rsync, err := selfhosted.NewRelaySync(fmt.Sprintf("%s:%d", cfg.hostname, cfg.relayAddr.Port), cfg.relayCert.Leaf)
 	if err != nil {
 		return nil, err
 	}
 
 	control, err := control.NewServer(control.Config{
 		Addr:   cfg.controlAddr,
+		Cert:   cfg.controlCert,
 		Auth:   cfg.auth,
 		Relays: rsync,
-		Cert:   *cfg.certificate,
 		Logger: cfg.logger,
 	})
 
 	relay, err := relay.NewServer(relay.Config{
-		Addr:   cfg.relayListenAddr,
+		Addr:   cfg.relayAddr,
+		Cert:   cfg.relayCert,
 		Auth:   rsync,
-		Cert:   *cfg.certificate,
 		Logger: cfg.logger,
 	})
 	if err != nil {
@@ -85,61 +86,75 @@ func (s *Server) Run(ctx context.Context) error {
 }
 
 type serverConfig struct {
-	controlAddr     *net.UDPAddr
-	relayListenAddr *net.UDPAddr
-	relayPublicAddr string
+	hostname string
 
-	certificate *tls.Certificate
-	logger      *slog.Logger
-	auth        control.Authenticator
+	controlAddr *net.UDPAddr
+	controlCert tls.Certificate
+
+	relayAddr *net.UDPAddr
+	relayCert tls.Certificate
+
+	logger *slog.Logger
+	auth   control.Authenticator
 }
 
 type ServerOption func(*serverConfig) error
 
-func ServerControlAddress(address string) ServerOption {
+func ServerTokens(tokens ...string) ServerOption {
+	return func(cfg *serverConfig) error {
+		cfg.auth = selfhosted.NewStaticAuthenticator(tokens...)
+		return nil
+	}
+}
+
+func ServerHostname(hostname string) ServerOption {
+	return func(cfg *serverConfig) error {
+		cfg.hostname = hostname
+		return nil
+	}
+}
+
+func ServerControl(address, certFile, keyFile string) ServerOption {
 	return func(cfg *serverConfig) error {
 		addr, err := net.ResolveUDPAddr("udp", address)
 		if err != nil {
 			return kleverr.Newf("control address cannot be resolved: %w", err)
 		}
+
+		cert, err := tls.LoadX509KeyPair(certFile, keyFile)
+		if err != nil {
+			return kleverr.Newf("control cert cannot be loaded: %w", err)
+		}
+
 		cfg.controlAddr = addr
+		cfg.controlCert = cert
+
 		return nil
 	}
 }
 
-func ServerRelayAddresses(listen string, public string) ServerOption {
+func ServerRelay(address, certFile, keyFile string) ServerOption {
 	return func(cfg *serverConfig) error {
-		addr, err := net.ResolveUDPAddr("udp", listen)
+		addr, err := net.ResolveUDPAddr("udp", address)
 		if err != nil {
 			return kleverr.Newf("relay address cannot be resolved: %w", err)
 		}
-		cfg.relayListenAddr = addr
-		cfg.relayPublicAddr = public
-		return nil
-	}
-}
 
-func ServerCertificate(cert, key string) ServerOption {
-	return func(cfg *serverConfig) error {
-		if cert, err := tls.LoadX509KeyPair(cert, key); err != nil {
-			return err
-		} else {
-			cfg.certificate = &cert
-			return nil
+		cert, err := tls.LoadX509KeyPair(certFile, keyFile)
+		if err != nil {
+			return kleverr.Newf("relay cert cannot be loaded: %w", err)
 		}
+
+		cfg.relayAddr = addr
+		cfg.relayCert = cert
+
+		return nil
 	}
 }
 
 func ServerLogger(logger *slog.Logger) ServerOption {
 	return func(cfg *serverConfig) error {
 		cfg.logger = logger
-		return nil
-	}
-}
-
-func ServerAuthenticator(auth control.Authenticator) ServerOption {
-	return func(cfg *serverConfig) error {
-		cfg.auth = auth
 		return nil
 	}
 }

@@ -4,9 +4,11 @@ import (
 	"context"
 	"crypto/tls"
 	"crypto/x509"
+	"encoding/pem"
 	"log/slog"
 	"maps"
 	"net"
+	"os"
 	"slices"
 	"sync"
 	"time"
@@ -43,14 +45,14 @@ func NewClient(opts ...ClientOption) (*Client, error) {
 		}
 	}
 
-	if cfg.serverAddr == nil {
-		if err := ClientServerAddress("127.0.0.1:19190")(cfg); err != nil {
+	if cfg.controlAddr == nil {
+		if err := ClientControlServer("127.0.0.1:19190", "")(cfg); err != nil {
 			return nil, kleverr.Ret(err)
 		}
 	}
 
 	if cfg.directAddr == nil {
-		if err := ClientDirectAddress("0.0.0.0:19192")(cfg); err != nil {
+		if err := ClientDirectServer("0.0.0.0:19192", "", "")(cfg); err != nil {
 			return nil, kleverr.Ret(err)
 		}
 	}
@@ -158,10 +160,10 @@ func (c *Client) run(ctx context.Context, transport *quic.Transport) error {
 }
 
 func (c *Client) connect(ctx context.Context, transport *quic.Transport) (*clientSession, error) {
-	c.logger.Debug("dialing target", "addr", c.serverAddr)
+	c.logger.Debug("dialing target", "addr", c.controlAddr)
 	// TODO dial timeout if server is not accessible?
-	conn, err := transport.Dial(ctx, c.serverAddr, &tls.Config{
-		ServerName: c.serverName,
+	conn, err := transport.Dial(ctx, c.controlAddr, &tls.Config{
+		ServerName: c.controlHost,
 		RootCAs:    c.controlCAs,
 		NextProtos: []string{"connet"},
 	}, &quic.Config{
@@ -171,7 +173,7 @@ func (c *Client) connect(ctx context.Context, transport *quic.Transport) (*clien
 		return nil, kleverr.Ret(err)
 	}
 
-	c.logger.Debug("authenticating", "addr", c.serverAddr)
+	c.logger.Debug("authenticating", "addr", c.controlAddr)
 
 	authStream, err := conn.OpenStreamSync(ctx)
 	if err != nil {
@@ -468,19 +470,31 @@ func (s *clientSession) runSource(ctx context.Context, fwd model.Forward) error 
 }
 
 type clientConfig struct {
-	serverAddr   *net.UDPAddr
-	serverName   string
-	directAddr   *net.UDPAddr
-	token        string
-	sources      map[string]model.Forward
+	token string
+
+	controlAddr *net.UDPAddr
+	controlHost string
+	controlCAs  *x509.CertPool
+
+	directAddr *net.UDPAddr
+	directCert tls.Certificate
+
 	destinations map[model.Forward]string
-	controlCAs   *x509.CertPool
-	logger       *slog.Logger
+	sources      map[string]model.Forward
+
+	logger *slog.Logger
 }
 
 type ClientOption func(cfg *clientConfig) error
 
-func ClientServerAddress(address string) ClientOption {
+func ClientToken(token string) ClientOption {
+	return func(cfg *clientConfig) error {
+		cfg.token = token
+		return nil
+	}
+}
+
+func ClientControlServer(address string, certFile string) ClientOption {
 	return func(cfg *clientConfig) error {
 		addr, err := net.ResolveUDPAddr("udp", address)
 		if err != nil {
@@ -490,36 +504,48 @@ func ClientServerAddress(address string) ClientOption {
 		if err != nil {
 			return err
 		}
-		cfg.serverAddr = addr
-		cfg.serverName = host
+
+		var cas *x509.CertPool
+		if certFile != "" {
+			certPEMBlock, err := os.ReadFile(certFile)
+			if err != nil {
+				return err
+			}
+			certDERBlock, _ := pem.Decode(certPEMBlock)
+			if certDERBlock.Type != "CERTIFICATE" {
+				return kleverr.Newf("unexpected certificate block: %s", certDERBlock.Type)
+			}
+			cert, err := x509.ParseCertificate(certDERBlock.Bytes)
+			if err != nil {
+				return err
+			}
+			cas = x509.NewCertPool()
+			cas.AddCert(cert)
+		}
+
+		cfg.controlAddr = addr
+		cfg.controlHost = host
+		cfg.controlCAs = cas
+
 		return nil
 	}
 }
 
-func ClientDirectAddress(address string) ClientOption {
+func ClientDirectServer(address string, certFile string, keyFile string) ClientOption {
 	return func(cfg *clientConfig) error {
 		addr, err := net.ResolveUDPAddr("udp", address)
 		if err != nil {
 			return err
 		}
-		cfg.directAddr = addr
-		return nil
-	}
-}
 
-func ClientAuthentication(token string) ClientOption {
-	return func(cfg *clientConfig) error {
-		cfg.token = token
-		return nil
-	}
-}
-
-func ClientSource(addr, name string) ClientOption {
-	return func(cfg *clientConfig) error {
-		if cfg.sources == nil {
-			cfg.sources = map[string]model.Forward{}
+		cert, err := tls.LoadX509KeyPair(certFile, keyFile)
+		if err != nil {
+			return err
 		}
-		cfg.sources[addr] = model.NewForward(name)
+
+		cfg.directAddr = addr
+		cfg.directCert = cert
+
 		return nil
 	}
 }
@@ -534,16 +560,13 @@ func ClientDestination(name, addr string) ClientOption {
 	}
 }
 
-func ClientCA(certFile string, keyFile string) ClientOption {
+func ClientSource(name, addr string) ClientOption {
 	return func(cfg *clientConfig) error {
-		if cert, err := tls.LoadX509KeyPair(certFile, keyFile); err != nil {
-			return err
-		} else {
-			pool := x509.NewCertPool()
-			pool.AddCert(cert.Leaf)
-			cfg.controlCAs = pool
-			return nil
+		if cfg.sources == nil {
+			cfg.sources = map[string]model.Forward{}
 		}
+		cfg.sources[addr] = model.NewForward(name)
+		return nil
 	}
 }
 

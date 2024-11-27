@@ -24,8 +24,8 @@ import (
 
 type Config struct {
 	Addr   *net.UDPAddr
-	Auth   Authenticator
 	Cert   tls.Certificate
+	Auth   Authenticator
 	Logger *slog.Logger
 }
 

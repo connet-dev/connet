@@ -1,6 +1,7 @@
 package certc
 
 import (
+	"crypto"
 	"crypto/ed25519"
 	"crypto/rand"
 	"crypto/tls"
@@ -22,7 +23,7 @@ var SharedSubject = pkix.Name{
 
 type Cert struct {
 	der []byte
-	pk  ed25519.PrivateKey
+	pk  crypto.PrivateKey
 }
 
 type CertOpts struct {

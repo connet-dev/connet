@@ -2,72 +2,150 @@ package main
 
 import (
 	"context"
-	"flag"
 	"fmt"
 	"log/slog"
 	"os"
 
+	"github.com/BurntSushi/toml"
 	"github.com/keihaya-com/connet"
 )
 
-var serverAddr = flag.String("server-addr", "", "target server")
-var directAddr = flag.String("direct-addr", "", "the address to listen for direct connections")
-var auth = flag.String("auth", "", "authentication token")
-var destinationName = flag.String("destination-name", "", "name to listen on")
-var destinationAddr = flag.String("destination-addr", "", "forward incoming conns to")
-var sourceAddr = flag.String("source-addr", "", "listen for incoming conns")
-var sourceName = flag.String("source-name", "", "name to connect to")
-var caCert = flag.String("ca-cert", "", "ca cert file to use")
-var caKey = flag.String("ca-key", "", "ca key file to use")
-var debug = flag.Bool("debug", false, "turn on debug logging")
+type Config struct {
+	LogLevel  string       `toml:"log_level"`
+	LogFormat string       `toml:"log_format"`
+	Server    ServerConfig `toml:"server"`
+	Client    ClientConfig `toml:"client"`
+}
+
+type ServerConfig struct {
+	Tokens   []string       `toml:"tokens"`
+	Hostname string         `toml:"hostname"`
+	Control  ListenerConfig `toml:"control"`
+	Relay    ListenerConfig `toml:"relay"`
+}
+
+type ClientConfig struct {
+	Token      string         `toml:"token"`
+	ServerAddr string         `toml:"server_addr"`
+	ServerCert string         `toml:"server_cert_file"`
+	Direct     ListenerConfig `toml:"direct"`
+
+	Destinations []ForwardConfig `toml:"destinations"`
+	Sources      []ForwardConfig `toml:"sources"`
+}
+
+type ListenerConfig struct {
+	Addr string `toml:"bind_addr"`
+	Cert string `toml:"cert_file"`
+	Key  string `toml:"key_file"`
+}
+
+type ForwardConfig struct {
+	Name string `toml:"name"`
+	Addr string `toml:"addr"`
+}
 
 func main() {
-	if err := flag.CommandLine.Parse(os.Args[1:]); err != nil {
-		fmt.Fprintf(os.Stderr, "could not parse flags: %v", err)
-		flag.PrintDefaults()
+	if len(os.Args) != 3 {
+		fmt.Println("Usage: connet [server|client|check] <config-file>")
 		os.Exit(1)
 	}
 
-	var opts = []connet.ClientOption{
-		connet.ClientAuthentication(*auth),
-	}
-
-	if *serverAddr != "" {
-		opts = append(opts, connet.ClientServerAddress(*serverAddr))
-	}
-
-	if *directAddr != "" {
-		opts = append(opts, connet.ClientDirectAddress(*directAddr))
-	}
-
-	if *caCert != "" {
-		opts = append(opts, connet.ClientCA(*caCert, *caKey))
-	}
-
-	if *destinationName != "" {
-		opts = append(opts, connet.ClientDestination(*destinationName, *destinationAddr))
-	}
-
-	if *sourceName != "" {
-		opts = append(opts, connet.ClientSource(*sourceAddr, *sourceName))
-	}
-
-	if *debug {
-		opts = append(opts,
-			connet.ClientLogger(slog.New(slog.NewTextHandler(os.Stdout, &slog.HandlerOptions{
-				Level: slog.LevelDebug,
-			}))),
-		)
-	}
-
-	c, err := connet.NewClient(opts...)
+	var cfg Config
+	md, err := toml.DecodeFile(os.Args[2], &cfg)
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "could create client: %v", err)
-		flag.PrintDefaults()
-		os.Exit(1)
+		fmt.Printf("Could not parse '%s' config file: %v\n", os.Args[2], err)
+		os.Exit(2)
+	}
+	if len(md.Undecoded()) > 0 {
+		// TODO print warning?
 	}
 
-	if err := c.Run(context.Background()); err != nil {
-		fmt.Fprintf(os.Stderr, "could create client: %v", err)
+	logger := logger(cfg)
+
+	switch os.Args[1] {
+	case "server":
+		if err := server(cfg.Server, logger); err != nil {
+			fmt.Printf("Error while running server: %v\n", err)
+			os.Exit(4)
+		}
+		os.Exit(0)
+	case "client":
+		if err := client(cfg.Client, logger); err != nil {
+			fmt.Printf("Error while running client: %v\n", err)
+			os.Exit(5)
+		}
+		os.Exit(0)
+	case "check":
+		fmt.Println("Valid configuration file")
+		os.Exit(0)
+	default:
+		fmt.Println("Unknown command, try one of [server|client|check]")
+		os.Exit(3)
 	}
+}
+
+func logger(cfg Config) *slog.Logger {
+	logLevel := slog.LevelInfo
+	switch cfg.LogLevel {
+	case "debug":
+		logLevel = slog.LevelDebug
+	case "warn":
+		logLevel = slog.LevelWarn
+	case "error":
+		logLevel = slog.LevelError
+	case "info":
+		logLevel = slog.LevelInfo
+	}
+
+	switch cfg.LogFormat {
+	case "json":
+		return slog.New(slog.NewJSONHandler(os.Stderr, &slog.HandlerOptions{
+			Level: logLevel,
+		}))
+	case "text":
+		fallthrough
+	default:
+		return slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{
+			Level: logLevel,
+		}))
+	}
+}
+
+func server(cfg ServerConfig, logger *slog.Logger) error {
+	var opts []connet.ServerOption
+
+	opts = append(opts, connet.ServerTokens(cfg.Tokens...))
+	opts = append(opts, connet.ServerHostname(cfg.Hostname))
+	opts = append(opts, connet.ServerControl(cfg.Control.Addr, cfg.Control.Cert, cfg.Control.Key))
+	opts = append(opts, connet.ServerRelay(cfg.Relay.Addr, cfg.Relay.Cert, cfg.Relay.Key))
+	opts = append(opts, connet.ServerLogger(logger))
+
+	srv, err := connet.NewServer(opts...)
+	if err != nil {
+		return err
+	}
+	return srv.Run(context.Background())
+}
+
+func client(cfg ClientConfig, logger *slog.Logger) error {
+	var opts []connet.ClientOption
+
+	opts = append(opts, connet.ClientToken(cfg.Token))
+	opts = append(opts, connet.ClientControlServer(cfg.ServerAddr, cfg.ServerCert))
+	opts = append(opts, connet.ClientDirectServer(cfg.Direct.Addr, cfg.Direct.Cert, cfg.Direct.Key))
+	opts = append(opts, connet.ClientLogger(logger))
+
+	for _, fc := range cfg.Destinations {
+		opts = append(opts, connet.ClientDestination(fc.Name, fc.Addr))
+	}
+	for _, fc := range cfg.Sources {
+		opts = append(opts, connet.ClientSource(fc.Name, fc.Addr))
+	}
+
+	cl, err := connet.NewClient(opts...)
+	if err != nil {
+		return err
+	}
+	return cl.Run(context.Background())
 }
