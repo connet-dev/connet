@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bufio"
 	"context"
 	"fmt"
 	"log/slog"
@@ -8,6 +9,7 @@ import (
 
 	"github.com/BurntSushi/toml"
 	"github.com/keihaya-com/connet"
+	"github.com/klev-dev/kleverr"
 )
 
 type Config struct {
@@ -18,12 +20,15 @@ type Config struct {
 }
 
 type ServerConfig struct {
-	Tokens   []string       `toml:"tokens"`
-	Hostname string         `toml:"hostname"`
-	Cert     string         `toml:"cert_file"`
-	Key      string         `toml:"key_file"`
-	Control  ListenerConfig `toml:"control"`
-	Relay    ListenerConfig `toml:"relay"`
+	Tokens     []string `toml:"tokens"`
+	TokensFile string   `toml:"tokens_file"`
+
+	Hostname string `toml:"hostname"`
+	Cert     string `toml:"cert_file"`
+	Key      string `toml:"key_file"`
+
+	Control ListenerConfig `toml:"control"`
+	Relay   ListenerConfig `toml:"relay"`
 }
 
 type ListenerConfig struct {
@@ -33,7 +38,9 @@ type ListenerConfig struct {
 }
 
 type ClientConfig struct {
-	Token      string `toml:"token"`
+	Token     string `toml:"token"`
+	TokenFile string `toml:"token_file"`
+
 	ServerAddr string `toml:"server_addr"`
 	ServerCAs  string `toml:"server_cas"`
 	DirectAddr string `toml:"direct_addr"`
@@ -125,7 +132,15 @@ func logger(cfg Config) *slog.Logger {
 func server(cfg ServerConfig, logger *slog.Logger) error {
 	var opts []connet.ServerOption
 
-	opts = append(opts, connet.ServerTokens(cfg.Tokens...))
+	if cfg.TokensFile != "" {
+		tokens, err := loadTokens(cfg.TokensFile)
+		if err != nil {
+			return err
+		}
+		opts = append(opts, connet.ServerTokens(tokens...))
+	} else {
+		opts = append(opts, connet.ServerTokens(cfg.Tokens...))
+	}
 
 	if cfg.Hostname != "" {
 		opts = append(opts, connet.ServerHostname(cfg.Hostname))
@@ -160,8 +175,15 @@ func server(cfg ServerConfig, logger *slog.Logger) error {
 func client(cfg ClientConfig, logger *slog.Logger) error {
 	var opts []connet.ClientOption
 
-	opts = append(opts, connet.ClientToken(cfg.Token))
-	opts = append(opts, connet.ClientLogger(logger))
+	if cfg.TokenFile != "" {
+		tokens, err := loadTokens(cfg.TokenFile)
+		if err != nil {
+			return err
+		}
+		opts = append(opts, connet.ClientToken(tokens[0]))
+	} else {
+		opts = append(opts, connet.ClientToken(cfg.Token))
+	}
 
 	if cfg.ServerAddr != "" {
 		opts = append(opts, connet.ClientControlAddress(cfg.ServerAddr))
@@ -181,9 +203,28 @@ func client(cfg ClientConfig, logger *slog.Logger) error {
 		opts = append(opts, connet.ClientSource(name, fc.Addr))
 	}
 
+	opts = append(opts, connet.ClientLogger(logger))
+
 	cl, err := connet.NewClient(opts...)
 	if err != nil {
 		return err
 	}
 	return cl.Run(context.Background())
+}
+
+func loadTokens(tokensFile string) ([]string, error) {
+	f, err := os.Open(tokensFile)
+	if err != nil {
+		return nil, kleverr.Newf("cannot open tokens file: %w", err)
+	}
+
+	var tokens []string
+	scanner := bufio.NewScanner(f)
+	for scanner.Scan() {
+		tokens = append(tokens, scanner.Text())
+	}
+	if err := scanner.Err(); err != nil {
+		return nil, kleverr.Newf("cannot read tokens file: %w", err)
+	}
+	return tokens, nil
 }

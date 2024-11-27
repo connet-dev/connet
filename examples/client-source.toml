@@ -1,7 +1,7 @@
 log_level = "debug"
 
 [client]
-token = "xxyxx"
+token_file = "examples/token.secret"
 server_cas = ".direnv/localhost/cert.pem"
 direct_addr = ":19193"
 
