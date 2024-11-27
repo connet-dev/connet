@@ -20,6 +20,8 @@ type Config struct {
 type ServerConfig struct {
 	Tokens   []string       `toml:"tokens"`
 	Hostname string         `toml:"hostname"`
+	Cert     string         `toml:"cert_file"`
+	Key      string         `toml:"key_file"`
 	Control  ListenerConfig `toml:"control"`
 	Relay    ListenerConfig `toml:"relay"`
 }
@@ -117,9 +119,28 @@ func server(cfg ServerConfig, logger *slog.Logger) error {
 	var opts []connet.ServerOption
 
 	opts = append(opts, connet.ServerTokens(cfg.Tokens...))
-	opts = append(opts, connet.ServerHostname(cfg.Hostname))
-	opts = append(opts, connet.ServerControl(cfg.Control.Addr, cfg.Control.Cert, cfg.Control.Key))
-	opts = append(opts, connet.ServerRelay(cfg.Relay.Addr, cfg.Relay.Cert, cfg.Relay.Key))
+
+	if cfg.Hostname != "" {
+		opts = append(opts, connet.ServerHostname(cfg.Hostname))
+	}
+	if cfg.Cert != "" {
+		opts = append(opts, connet.ServerDefaultCertificate(cfg.Cert, cfg.Key))
+	}
+
+	if cfg.Control.Addr != "" {
+		opts = append(opts, connet.ServerControl(cfg.Control.Addr))
+	}
+	if cfg.Control.Cert != "" {
+		opts = append(opts, connet.ServerControlCertificate(cfg.Control.Cert, cfg.Control.Key))
+	}
+
+	if cfg.Relay.Addr != "" {
+		opts = append(opts, connet.ServerRelay(cfg.Relay.Addr))
+	}
+	if cfg.Relay.Cert != "" {
+		opts = append(opts, connet.ServerRelayCertificate(cfg.Relay.Cert, cfg.Relay.Key))
+	}
+
 	opts = append(opts, connet.ServerLogger(logger))
 
 	srv, err := connet.NewServer(opts...)

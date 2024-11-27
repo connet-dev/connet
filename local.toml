@@ -2,15 +2,6 @@ log_level = "debug"
 
 [server]
 tokens = ["xxyxx"]
-hostname = "localhost"
-
-[server.control]
-bind_addr = ":19190"
-cert_file = ".direnv/localhost/cert.pem"
-key_file = ".direnv/localhost/key.pem"
-
-[server.relay]
-bind_addr = ":19191"
 cert_file = ".direnv/localhost/cert.pem"
 key_file = ".direnv/localhost/key.pem"
 
