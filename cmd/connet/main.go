@@ -11,6 +11,7 @@ import (
 	"github.com/keihaya-com/connet"
 	"github.com/keihaya-com/connet/model"
 	"github.com/klev-dev/kleverr"
+	"github.com/spf13/cobra"
 )
 
 type Config struct {
@@ -56,55 +57,153 @@ type ForwardConfig struct {
 }
 
 func main() {
-	args := os.Args
-	if len(args) == 2 {
-		// if we are given 'connet file-name.toml', pretend we start a client (if config file exists)
-		if _, err := os.Stat(args[1]); err == nil {
-			args = []string{args[0], "client", args[1]}
-		}
-	}
-	if len(args) != 3 {
-		fmt.Println("Usage: connet [server|client|check] <config-file>")
+	if err := rootCmd().ExecuteContext(context.Background()); err != nil {
+		fmt.Fprintln(os.Stderr, err)
 		os.Exit(1)
 	}
+}
 
-	var cfg Config
-	md, err := toml.DecodeFile(args[2], &cfg)
-	if err != nil {
-		fmt.Printf("Could not parse '%s' config file: %v\n", args[2], err)
-		os.Exit(2)
+func rootCmd() *cobra.Command {
+	cmd := &cobra.Command{
+		Use:   "connet",
+		Short: "connet is a reverse proxy/nat traversal tool",
 	}
 
-	logger, err := logger(cfg)
-	if err != nil {
-		fmt.Printf("Could not parse '%s' config file: %v\n", args[2], err)
-		os.Exit(2)
+	cmd.AddCommand(serverCmd())
+	cmd.AddCommand(checkCmd())
+
+	filename := cmd.Flags().String("config", "", "config file to load")
+
+	var flagsConfig Config
+	cmd.Flags().StringVar(&flagsConfig.LogLevel, "log-level", "", "log level to use")
+	cmd.Flags().StringVar(&flagsConfig.LogFormat, "log-format", "", "log formatter to use")
+
+	cmd.Flags().StringVar(&flagsConfig.Client.Token, "token", "", "token to use")
+	cmd.Flags().StringVar(&flagsConfig.Client.TokenFile, "token-file", "", "token file to use")
+
+	cmd.Flags().StringVar(&flagsConfig.Client.ServerAddr, "server-addr", "", "control server address to connect")
+	cmd.Flags().StringVar(&flagsConfig.Client.ServerCAs, "server-cas", "", "control server CAs to use")
+	cmd.Flags().StringVar(&flagsConfig.Client.DirectAddr, "direct-addr", "", "direct server address to listen")
+
+	var dstName string
+	var dstCfg ForwardConfig
+	cmd.Flags().StringVar(&dstName, "dst-name", "", "destination name")
+	cmd.Flags().StringVar(&dstCfg.Addr, "dst-addr", "", "destination address")
+	cmd.Flags().StringVar(&dstCfg.Route, "dst-route", "", "destination route")
+
+	var srcName string
+	var srcCfg ForwardConfig
+	cmd.Flags().StringVar(&srcName, "src-name", "", "source name")
+	cmd.Flags().StringVar(&srcCfg.Addr, "src-addr", "", "source address")
+	cmd.Flags().StringVar(&srcCfg.Route, "src-route", "", "source route")
+
+	cmd.RunE = func(cmd *cobra.Command, args []string) error {
+		var cfg Config
+		if *filename != "" {
+			md, err := toml.DecodeFile(*filename, &cfg)
+			if err != nil {
+				return kleverr.Ret(err)
+			}
+			if len(md.Undecoded()) > 0 {
+				return kleverr.Newf("undecoded keys in config: %v", md.Undecoded())
+			}
+		}
+
+		if dstName != "" {
+			flagsConfig.Client.Destinations = map[string]ForwardConfig{dstName: dstCfg}
+		}
+		if srcName != "" {
+			flagsConfig.Client.Sources = map[string]ForwardConfig{srcName: srcCfg}
+		}
+
+		cfg.merge(flagsConfig)
+
+		logger, err := logger(cfg)
+		if err != nil {
+			return kleverr.Ret(err)
+		}
+
+		return client(cfg.Client, logger)
 	}
 
-	switch args[1] {
-	case "server":
-		if err := server(cfg.Server, logger); err != nil {
-			fmt.Printf("Error while running server: %v\n", err)
-			os.Exit(4)
-		}
-		os.Exit(0)
-	case "client":
-		if err := client(cfg.Client, logger); err != nil {
-			fmt.Printf("Error while running client: %v\n", err)
-			os.Exit(5)
-		}
-		os.Exit(0)
-	case "check":
-		if len(md.Undecoded()) > 0 {
-			fmt.Println("Invalid configuration file (unknown keys):", md.Undecoded())
-			os.Exit(6)
-		}
-		fmt.Println("Valid configuration file")
-		os.Exit(0)
-	default:
-		fmt.Println("Unknown command, try one of [server|client|check]")
-		os.Exit(3)
+	return cmd
+}
+
+func serverCmd() *cobra.Command {
+	cmd := &cobra.Command{
+		Use:   "server",
+		Short: "run connet server",
 	}
+
+	filename := cmd.Flags().String("config", "", "config file to load")
+
+	var flagsConfig Config
+	cmd.Flags().StringVar(&flagsConfig.LogLevel, "log-level", "", "log level to use")
+	cmd.Flags().StringVar(&flagsConfig.LogFormat, "log-format", "", "log formatter to use")
+
+	cmd.Flags().StringArrayVar(&flagsConfig.Server.Tokens, "tokens", nil, "tokens for clients to connect")
+	cmd.Flags().StringVar(&flagsConfig.Server.TokensFile, "tokens-file", "", "tokens file to load")
+
+	cmd.Flags().StringVar(&flagsConfig.Server.Hostname, "hostname", "", "hostname to connect to")
+	cmd.Flags().StringVar(&flagsConfig.Server.Cert, "cert-file", "", "server cert to use")
+	cmd.Flags().StringVar(&flagsConfig.Server.Key, "key-file", "", "server key to use")
+
+	cmd.Flags().StringVar(&flagsConfig.Server.Control.Addr, "control-addr", "", "control server addr to use")
+	cmd.Flags().StringVar(&flagsConfig.Server.Control.Cert, "control-cert-file", "", "control server cert to use")
+	cmd.Flags().StringVar(&flagsConfig.Server.Control.Key, "control-key-file", "", "control server key to use")
+
+	cmd.Flags().StringVar(&flagsConfig.Server.Relay.Addr, "relay-addr", "", "relay server addr to use")
+	cmd.Flags().StringVar(&flagsConfig.Server.Relay.Cert, "relay-cert-file", "", "relay server cert to use")
+	cmd.Flags().StringVar(&flagsConfig.Server.Relay.Key, "relay-key-file", "", "relay server key to use")
+
+	cmd.RunE = func(cmd *cobra.Command, args []string) error {
+		var cfg Config
+		if *filename != "" {
+			md, err := toml.DecodeFile(args[0], &cfg)
+			if err != nil {
+				return kleverr.Ret(err)
+			}
+			if len(md.Undecoded()) > 0 {
+				return kleverr.Newf("undecoded keys in config: %v", md.Undecoded())
+			}
+		}
+
+		cfg.merge(flagsConfig)
+
+		logger, err := logger(cfg)
+		if err != nil {
+			return kleverr.Ret(err)
+		}
+
+		return server(cfg.Server, logger)
+	}
+
+	return cmd
+}
+
+func checkCmd() *cobra.Command {
+	cmd := &cobra.Command{
+		Use:   "check <config-file>",
+		Short: "check configuration file",
+		Args:  cobra.ExactArgs(1),
+	}
+
+	cmd.RunE = func(cmd *cobra.Command, args []string) error {
+		var cfg Config
+		if md, err := toml.DecodeFile(args[0], &cfg); err != nil {
+			return kleverr.Ret(err)
+		} else if len(md.Undecoded()) > 0 {
+			return kleverr.Newf("undecoded keys in config: %v", md.Undecoded())
+		}
+
+		if _, err := logger(cfg); err != nil {
+			return kleverr.Ret(err)
+		}
+
+		return nil
+	}
+
+	return cmd
 }
 
 func logger(cfg Config) (*slog.Logger, error) {
@@ -249,4 +348,66 @@ func parseRouteOption(s string) (model.RouteOption, error) {
 		return model.RouteAny, nil
 	}
 	return model.ParseRouteOption(s)
+}
+
+func (c *Config) merge(o Config) {
+	c.LogLevel = override(c.LogLevel, o.LogLevel)
+	c.LogFormat = override(c.LogFormat, o.LogFormat)
+
+	c.Server.merge(o.Server)
+	c.Client.merge(o.Client)
+}
+
+func (c *ServerConfig) merge(o ServerConfig) {
+	c.Tokens = append(c.Tokens, o.Tokens...)
+	c.TokensFile = override(c.TokensFile, o.TokensFile)
+
+	c.Hostname = override(c.Hostname, o.Hostname)
+	c.Cert = override(c.Cert, o.Cert)
+	c.Key = override(c.Key, o.Key)
+
+	c.Control.Addr = override(c.Control.Addr, o.Control.Addr)
+	c.Control.Cert = override(c.Control.Cert, o.Control.Cert)
+	c.Control.Key = override(c.Control.Key, o.Control.Key)
+
+	c.Relay.Addr = override(c.Relay.Addr, o.Relay.Addr)
+	c.Relay.Cert = override(c.Relay.Cert, o.Relay.Cert)
+	c.Relay.Key = override(c.Relay.Key, o.Relay.Key)
+}
+
+func (c *ClientConfig) merge(o ClientConfig) {
+	c.Token = override(c.Token, o.Token)
+	c.TokenFile = override(c.TokenFile, o.TokenFile)
+
+	c.ServerAddr = override(c.ServerAddr, o.ServerAddr)
+	c.ServerCAs = override(c.ServerCAs, o.ServerCAs)
+	c.DirectAddr = override(c.DirectAddr, o.DirectAddr)
+
+	for k, v := range o.Destinations {
+		if c.Destinations == nil {
+			c.Destinations = map[string]ForwardConfig{}
+		}
+		c.Destinations[k] = mergeForwardConfig(c.Destinations[k], v)
+	}
+
+	for k, v := range o.Sources {
+		if c.Sources == nil {
+			c.Sources = map[string]ForwardConfig{}
+		}
+		c.Sources[k] = mergeForwardConfig(c.Sources[k], v)
+	}
+}
+
+func mergeForwardConfig(c, o ForwardConfig) ForwardConfig {
+	return ForwardConfig{
+		Addr:  override(c.Addr, o.Addr),
+		Route: override(c.Route, o.Route),
+	}
+}
+
+func override(s, o string) string {
+	if o != "" {
+		return o
+	}
+	return s
 }
