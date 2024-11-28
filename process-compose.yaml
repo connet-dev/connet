@@ -8,14 +8,14 @@ processes:
   certs:
     command: gen-local-certs
   server:
-    command: connet server examples/minimal.toml
+    command: connet server --config examples/minimal.toml
     depends_on:
       build:
         condition: process_completed_successfully
       certs:
         condition: process_completed
   client-dst:
-    command: connet examples/client-destination.toml
+    command: connet --config examples/client-destination.toml
     depends_on:
       build:
         condition: process_completed_successfully
@@ -24,7 +24,7 @@ processes:
       server:
         condition: process_started
   client-src:
-    command: connet examples/client-source.toml
+    command: connet --config examples/client-source.toml
     depends_on:
       build:
         condition: process_completed_successfully

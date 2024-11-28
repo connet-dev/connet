@@ -159,7 +159,7 @@ func serverCmd() *cobra.Command {
 	cmd.RunE = func(cmd *cobra.Command, args []string) error {
 		var cfg Config
 		if *filename != "" {
-			md, err := toml.DecodeFile(args[0], &cfg)
+			md, err := toml.DecodeFile(*filename, &cfg)
 			if err != nil {
 				return kleverr.Ret(err)
 			}
