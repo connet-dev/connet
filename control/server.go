@@ -79,11 +79,11 @@ func (s *Server) Run(ctx context.Context) error {
 	for {
 		conn, err := l.Accept(ctx)
 		if err != nil {
-			if errors.Is(err, quic.ErrServerClosed) {
-				s.logger.Info("stopped quic server")
-				return nil
+			if errors.Is(err, context.Canceled) {
+				err = context.Cause(ctx)
 			}
-			continue
+			s.logger.Warn("accept error", "err", err)
+			return kleverr.Ret(err)
 		}
 		s.logger.Info("client connected", "local", conn.LocalAddr(), "remote", conn.RemoteAddr())
 

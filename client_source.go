@@ -173,6 +173,12 @@ func (s *clientSourceServer) run(ctx context.Context) error {
 	if err != nil {
 		return kleverr.Ret(err)
 	}
+	defer l.Close()
+
+	go func() {
+		<-ctx.Done()
+		l.Close()
+	}()
 
 	for {
 		conn, err := l.Accept()

@@ -4,10 +4,12 @@ import (
 	"context"
 	"crypto/tls"
 	"crypto/x509"
+	"errors"
 	"log/slog"
 	"sync/atomic"
 	"time"
 
+	"github.com/klev-dev/kleverr"
 	"github.com/quic-go/quic-go"
 )
 
@@ -42,7 +44,11 @@ func (s *clientDirectServer) run(ctx context.Context) error {
 	for {
 		conn, err := l.Accept(ctx)
 		if err != nil {
-			return err
+			if errors.Is(err, context.Canceled) {
+				err = context.Cause(ctx)
+			}
+			s.logger.Warn("accept error", "err", err)
+			return kleverr.Ret(err)
 		}
 		s.logger.Debug("accepted conn", "remote", conn.RemoteAddr())
 		go s.runConn(ctx, conn)

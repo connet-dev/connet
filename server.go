@@ -45,11 +45,11 @@ func NewServer(opts ...ServerOption) (*Server, error) {
 
 	if cfg.hostname == "" {
 		switch {
-		case len(cfg.relayCert.Leaf.DNSNames) > 0:
+		case cfg.relayCert.Leaf != nil && len(cfg.relayCert.Leaf.DNSNames) > 0:
 			if err := ServerHostname(cfg.relayCert.Leaf.DNSNames[0])(cfg); err != nil {
 				return nil, err
 			}
-		case len(cfg.relayCert.Leaf.IPAddresses) > 0:
+		case cfg.relayCert.Leaf != nil && len(cfg.relayCert.Leaf.IPAddresses) > 0:
 			if err := ServerHostname(cfg.relayCert.Leaf.IPAddresses[0].String())(cfg); err != nil {
 				return nil, err
 			}
@@ -139,6 +139,19 @@ func ServerDefaultCertificate(certFile, keyFile string) ServerOption {
 			return kleverr.Newf("default cert cannot be loaded: %w", err)
 		}
 
+		if cfg.controlCert.Leaf == nil {
+			cfg.controlCert = cert
+		}
+		if cfg.relayCert.Leaf == nil {
+			cfg.relayCert = cert
+		}
+
+		return nil
+	}
+}
+
+func serverDefaultCertificate(cert tls.Certificate) ServerOption {
+	return func(cfg *serverConfig) error {
 		if cfg.controlCert.Leaf == nil {
 			cfg.controlCert = cert
 		}

@@ -218,16 +218,24 @@ func (c *Cert) EncodeToMemory() ([]byte, []byte, error) {
 	return certPEM, keyPEM, nil
 }
 
-func SelfSigned(domain string) (tls.Certificate, error) {
+func SelfSigned(domain string) (tls.Certificate, *x509.CertPool, error) {
 	root, err := NewRoot()
 	if err != nil {
-		return tls.Certificate{}, err
+		return tls.Certificate{}, nil, err
 	}
 	cert, err := root.NewServer(CertOpts{
 		Domains: []string{domain},
 	})
 	if err != nil {
-		return tls.Certificate{}, err
+		return tls.Certificate{}, nil, err
 	}
-	return cert.TLSCert()
+	tlsCert, err := cert.TLSCert()
+	if err != nil {
+		return tls.Certificate{}, nil, err
+	}
+	pool, err := cert.CertPool()
+	if err != nil {
+		return tls.Certificate{}, nil, err
+	}
+	return tlsCert, pool, nil
 }

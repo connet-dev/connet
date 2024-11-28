@@ -153,7 +153,7 @@ func (c *Client) run(ctx context.Context, transport *quic.Transport) error {
 	for {
 		if err := sess.run(ctx); err != nil {
 			c.logger.Error("session ended", "err", err)
-			return err
+			return err // TODO should not exit on all errors
 		}
 
 		if sess, err = c.reconnect(ctx, transport); err != nil {
@@ -286,26 +286,38 @@ func (s *clientSession) runRelays(ctx context.Context) error {
 		return err
 	}
 
-	for {
-		resp, err := pbs.ReadResponse(stream)
-		if err != nil {
-			return err
-		}
-		if resp.Relay == nil {
-			return kleverr.Newf("unexpected response")
-		}
+	g, ctx := errgroup.WithContext(ctx)
 
-		addrs := map[string]*x509.Certificate{}
-		for _, relay := range resp.Relay.Relays {
-			route, err := model.NewRouteFromPB(relay)
+	g.Go(func() error {
+		<-ctx.Done()
+		stream.CancelRead(0)
+		return nil
+	})
+
+	g.Go(func() error {
+		for {
+			resp, err := pbs.ReadResponse(stream)
 			if err != nil {
-				s.logger.Warn("cannot parse route", "err", err)
-				continue
+				return err
 			}
-			addrs[route.Hostport] = route.Certificate
+			if resp.Relay == nil {
+				return kleverr.Newf("unexpected response")
+			}
+
+			addrs := map[string]*x509.Certificate{}
+			for _, relay := range resp.Relay.Relays {
+				route, err := model.NewRouteFromPB(relay)
+				if err != nil {
+					s.logger.Warn("cannot parse route", "err", err)
+					continue
+				}
+				addrs[route.Hostport] = route.Certificate
+			}
+			s.setRelayAddrs(addrs)
 		}
-		s.setRelayAddrs(addrs)
-	}
+	})
+
+	return g.Wait()
 }
 
 func (s *clientSession) runRelayConns(ctx context.Context) error {
@@ -397,6 +409,12 @@ func (s *clientSession) runDestination(ctx context.Context, fwd model.Forward, o
 	g, ctx := errgroup.WithContext(ctx)
 
 	g.Go(func() error {
+		<-ctx.Done()
+		stream.CancelRead(0)
+		return nil
+	})
+
+	g.Go(func() error {
 		defer s.logger.Debug("completed destinations notify")
 		return s.relayAddrsNotify.Listen(ctx, func() error {
 			dstReq := &pbs.Request_Destination{From: fwd.PB()}
@@ -459,41 +477,53 @@ func (s *clientSession) runSource(ctx context.Context, fwd model.Forward, opt mo
 		return kleverr.Ret(err)
 	}
 
-	for {
-		resp, err := pbs.ReadResponse(stream)
-		if err != nil {
-			return err
-		}
-		if resp.Source == nil {
-			return kleverr.Newf("unexpected response")
-		}
+	g, ctx := errgroup.WithContext(ctx)
 
-		directs := map[string]*x509.Certificate{}
-		if opt.AllowDirect() {
-			for _, direct := range resp.Source.Directs {
-				route, err := model.NewRouteFromPB(direct)
-				if err != nil {
-					s.logger.Warn("cannot parse route", "err", err)
-					continue
-				}
-				directs[route.Hostport] = route.Certificate
+	g.Go(func() error {
+		<-ctx.Done()
+		stream.CancelRead(0)
+		return nil
+	})
+
+	g.Go(func() error {
+		for {
+			resp, err := pbs.ReadResponse(stream)
+			if err != nil {
+				return err
 			}
-		}
-
-		relays := map[string]*x509.Certificate{}
-		if opt.AllowRelay() {
-			for _, relay := range resp.Source.Relays {
-				route, err := model.NewRouteFromPB(relay)
-				if err != nil {
-					s.logger.Warn("cannot parse route", "err", err)
-					continue
-				}
-				relays[route.Hostport] = route.Certificate
+			if resp.Source == nil {
+				return kleverr.Newf("unexpected response")
 			}
-		}
 
-		srcServer.setRoutes(directs, relays)
-	}
+			directs := map[string]*x509.Certificate{}
+			if opt.AllowDirect() {
+				for _, direct := range resp.Source.Directs {
+					route, err := model.NewRouteFromPB(direct)
+					if err != nil {
+						s.logger.Warn("cannot parse route", "err", err)
+						continue
+					}
+					directs[route.Hostport] = route.Certificate
+				}
+			}
+
+			relays := map[string]*x509.Certificate{}
+			if opt.AllowRelay() {
+				for _, relay := range resp.Source.Relays {
+					route, err := model.NewRouteFromPB(relay)
+					if err != nil {
+						s.logger.Warn("cannot parse route", "err", err)
+						continue
+					}
+					relays[route.Hostport] = route.Certificate
+				}
+			}
+
+			srcServer.setRoutes(directs, relays)
+		}
+	})
+
+	return g.Wait()
 }
 
 type clientConfig struct {
@@ -555,6 +585,14 @@ func ClientControlCAs(certFile string) ClientOption {
 			return kleverr.Newf("no certificates found in %s", certFile)
 		}
 
+		cfg.controlCAs = cas
+
+		return nil
+	}
+}
+
+func clientControlCAs(cas *x509.CertPool) ClientOption {
+	return func(cfg *clientConfig) error {
 		cfg.controlCAs = cas
 
 		return nil
