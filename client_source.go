@@ -168,7 +168,7 @@ func (s *clientSourceServer) dialRelay(ctx context.Context, hostport string, poo
 }
 
 func (s *clientSourceServer) run(ctx context.Context) error {
-	s.logger.Debug("listening for conns")
+	s.logger.Info("listening for conns")
 	l, err := net.Listen("tcp", s.addr)
 	if err != nil {
 		return kleverr.Ret(err)

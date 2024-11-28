@@ -4,10 +4,12 @@ import (
 	"context"
 	"crypto/tls"
 	"crypto/x509"
+	"fmt"
 	"log/slog"
 	"maps"
 	"net"
 	"os"
+	"strings"
 	"sync"
 	"time"
 
@@ -557,6 +559,10 @@ func ClientToken(token string) ClientOption {
 
 func ClientControlAddress(address string) ClientOption {
 	return func(cfg *clientConfig) error {
+		if i := strings.LastIndex(address, ":"); i < 0 {
+			// missing :port, lets give it the default
+			address = fmt.Sprintf("%s:%d", address, 19190)
+		}
 		addr, err := net.ResolveUDPAddr("udp", address)
 		if err != nil {
 			return err
