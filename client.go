@@ -8,7 +8,6 @@ import (
 	"maps"
 	"net"
 	"os"
-	"slices"
 	"sync"
 	"time"
 
@@ -84,13 +83,18 @@ func NewClient(opts ...ClientOption) (*Client, error) {
 	}
 	cfg.logger.Debug("generated client cert")
 
+	dsts := map[model.Forward]string{}
+	for dst, cfg := range cfg.destinations {
+		dsts[dst] = cfg.addr
+	}
+
 	return &Client{
 		clientConfig: *cfg,
 
 		serverCert: serverTLSCert,
 		clientCert: clientTLSCert,
 		dialer: &destinationsDialer{
-			destinations: cfg.destinations,
+			destinations: dsts,
 			logger:       cfg.logger.With("component", "dialer"),
 		},
 
@@ -117,13 +121,13 @@ func (c *Client) Run(ctx context.Context) error {
 		logger:     c.logger.With("component", "direct-server", "addr", c.directAddr),
 	}
 
-	for addr, fwd := range c.sources {
-		c.sourceServers[fwd] = &clientSourceServer{
-			addr:      addr,
-			fwd:       fwd,
+	for src, cfg := range c.sources {
+		c.sourceServers[src] = &clientSourceServer{
+			addr:      cfg.addr,
+			fwd:       src,
 			transport: directTransport,
 			cert:      c.clientCert,
-			logger:    c.logger.With("component", "source-server", "addr", addr, "forward", fwd),
+			logger:    c.logger.With("component", "source-server", "forward", src, "addr", cfg.addr),
 		}
 	}
 
@@ -240,12 +244,12 @@ func (s *clientSession) run(ctx context.Context) error {
 	g.Go(func() error { return s.runRelays(ctx) })
 	g.Go(func() error { return s.runRelayConns(ctx) })
 
-	for dst := range s.client.destinations {
-		g.Go(func() error { return s.runDestination(ctx, dst) })
+	for dst, cfg := range s.client.destinations {
+		g.Go(func() error { return s.runDestination(ctx, dst, cfg.route) })
 	}
 
-	for _, src := range s.client.sources {
-		g.Go(func() error { return s.runSource(ctx, src) })
+	for src, cfg := range s.client.sources {
+		g.Go(func() error { return s.runSource(ctx, src, cfg.route) })
 	}
 
 	return g.Wait()
@@ -258,11 +262,25 @@ func (s *clientSession) runRelays(ctx context.Context) error {
 	}
 	defer stream.Close()
 
+	var dsts []model.Forward
+	for fwd, cfg := range s.client.destinations {
+		if cfg.route.AllowRelay() {
+			dsts = append(dsts, fwd)
+		}
+	}
+
+	var srcs []model.Forward
+	for fwd, cfg := range s.client.sources {
+		if cfg.route.AllowRelay() {
+			srcs = append(srcs, fwd)
+		}
+	}
+
 	if err := pb.Write(stream, &pbs.Request{
 		Relay: &pbs.Request_Relay{
 			Certificate:  s.client.clientCert.Leaf.Raw,
-			Destinations: model.PBFromForwards(slices.Collect(maps.Keys(s.client.destinations))),
-			Sources:      model.PBFromForwards(slices.Collect(maps.Values(s.client.sources))),
+			Destinations: model.PBFromForwards(dsts),
+			Sources:      model.PBFromForwards(srcs),
 		},
 	}); err != nil {
 		return err
@@ -355,19 +373,23 @@ func (s *clientSession) getRelayAddrs() []*pbs.Route {
 	return relays
 }
 
-func (s *clientSession) runDestination(ctx context.Context, fwd model.Forward) error {
+func (s *clientSession) runDestination(ctx context.Context, fwd model.Forward, opt model.RouteOption) error {
 	stream, err := s.conn.OpenStreamSync(ctx)
 	if err != nil {
 		return kleverr.Ret(err)
 	}
 	defer stream.Close()
 
+	dstReq := &pbs.Request_Destination{From: fwd.PB()}
+	if opt.AllowDirect() {
+		dstReq.Directs = s.getDirectAddrs()
+	}
+	if opt.AllowRelay() {
+		dstReq.Relays = s.getRelayAddrs()
+	}
+
 	if err := pb.Write(stream, &pbs.Request{
-		Destination: &pbs.Request_Destination{
-			From:    fwd.PB(),
-			Directs: s.getDirectAddrs(),
-			Relays:  s.getRelayAddrs(),
-		},
+		Destination: dstReq,
 	}); err != nil {
 		return kleverr.Ret(err)
 	}
@@ -377,14 +399,16 @@ func (s *clientSession) runDestination(ctx context.Context, fwd model.Forward) e
 	g.Go(func() error {
 		defer s.logger.Debug("completed destinations notify")
 		return s.relayAddrsNotify.Listen(ctx, func() error {
-			direct, relays := s.getDirectAddrs(), s.getRelayAddrs()
-			s.logger.Debug("updated destinations", "direct", len(direct), "relays", len(relays))
+			dstReq := &pbs.Request_Destination{From: fwd.PB()}
+			if opt.AllowDirect() {
+				dstReq.Directs = s.getDirectAddrs()
+			}
+			if opt.AllowRelay() {
+				dstReq.Relays = s.getRelayAddrs()
+			}
+			s.logger.Debug("updated destinations", "direct", len(dstReq.Directs), "relays", len(dstReq.Relays))
 			if err := pb.Write(stream, &pbs.Request{
-				Destination: &pbs.Request_Destination{
-					From:    fwd.PB(),
-					Directs: s.getDirectAddrs(),
-					Relays:  s.getRelayAddrs(),
-				},
+				Destination: dstReq,
 			}); err != nil {
 				return kleverr.Ret(err)
 			}
@@ -417,7 +441,7 @@ func (s *clientSession) runDestination(ctx context.Context, fwd model.Forward) e
 	return g.Wait()
 }
 
-func (s *clientSession) runSource(ctx context.Context, fwd model.Forward) error {
+func (s *clientSession) runSource(ctx context.Context, fwd model.Forward, opt model.RouteOption) error {
 	srcServer := s.client.sourceServers[fwd]
 
 	stream, err := s.conn.OpenStreamSync(ctx)
@@ -445,23 +469,27 @@ func (s *clientSession) runSource(ctx context.Context, fwd model.Forward) error 
 		}
 
 		directs := map[string]*x509.Certificate{}
-		for _, direct := range resp.Source.Directs {
-			route, err := model.NewRouteFromPB(direct)
-			if err != nil {
-				s.logger.Warn("cannot parse route", "err", err)
-				continue
+		if opt.AllowDirect() {
+			for _, direct := range resp.Source.Directs {
+				route, err := model.NewRouteFromPB(direct)
+				if err != nil {
+					s.logger.Warn("cannot parse route", "err", err)
+					continue
+				}
+				directs[route.Hostport] = route.Certificate
 			}
-			directs[route.Hostport] = route.Certificate
 		}
 
 		relays := map[string]*x509.Certificate{}
-		for _, relay := range resp.Source.Relays {
-			route, err := model.NewRouteFromPB(relay)
-			if err != nil {
-				s.logger.Warn("cannot parse route", "err", err)
-				continue
+		if opt.AllowRelay() {
+			for _, relay := range resp.Source.Relays {
+				route, err := model.NewRouteFromPB(relay)
+				if err != nil {
+					s.logger.Warn("cannot parse route", "err", err)
+					continue
+				}
+				relays[route.Hostport] = route.Certificate
 			}
-			relays[route.Hostport] = route.Certificate
 		}
 
 		srcServer.setRoutes(directs, relays)
@@ -477,10 +505,15 @@ type clientConfig struct {
 
 	directAddr *net.UDPAddr
 
-	destinations map[model.Forward]string
-	sources      map[string]model.Forward
+	destinations map[model.Forward]clientForwardConfig
+	sources      map[model.Forward]clientForwardConfig
 
 	logger *slog.Logger
+}
+
+type clientForwardConfig struct {
+	addr  string
+	route model.RouteOption
 }
 
 type ClientOption func(cfg *clientConfig) error
@@ -541,22 +574,22 @@ func ClientDirectAddress(address string) ClientOption {
 	}
 }
 
-func ClientDestination(name, addr string) ClientOption {
+func ClientDestination(name, addr string, route model.RouteOption) ClientOption {
 	return func(cfg *clientConfig) error {
 		if cfg.destinations == nil {
-			cfg.destinations = map[model.Forward]string{}
+			cfg.destinations = map[model.Forward]clientForwardConfig{}
 		}
-		cfg.destinations[model.NewForward(name)] = addr
+		cfg.destinations[model.NewForward(name)] = clientForwardConfig{addr, route}
 		return nil
 	}
 }
 
-func ClientSource(name, addr string) ClientOption {
+func ClientSource(name, addr string, route model.RouteOption) ClientOption {
 	return func(cfg *clientConfig) error {
 		if cfg.sources == nil {
-			cfg.sources = map[string]model.Forward{}
+			cfg.sources = map[model.Forward]clientForwardConfig{}
 		}
-		cfg.sources[addr] = model.NewForward(name)
+		cfg.sources[model.NewForward(name)] = clientForwardConfig{addr, route}
 		return nil
 	}
 }

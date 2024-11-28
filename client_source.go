@@ -186,6 +186,7 @@ func (s *clientSourceServer) run(ctx context.Context) error {
 
 func (s *clientSourceServer) runConn(ctx context.Context, conn net.Conn) {
 	defer conn.Close()
+	s.logger.Debug("received conn", "remote", conn.RemoteAddr())
 
 	if err := s.runConnErr(ctx, conn); err != nil {
 		s.logger.Warn("error handling conn", "err", err)

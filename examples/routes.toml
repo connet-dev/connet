@@ -1,0 +1,26 @@
+log_level = "debug"
+
+[server]
+tokens_file = "examples/token.secret"
+cert_file = ".direnv/localhost/cert.pem"
+key_file = ".direnv/localhost/key.pem"
+
+[client]
+token = "xxyxx"
+server_cas = ".direnv/localhost/cert.pem"
+
+[client.destinations.sws-direct]
+addr = ":8081"
+route = "direct"
+
+[client.sources.sws-direct]
+addr = ":9999"
+route = "direct"
+
+[client.destinations.sws-relay]
+addr = ":8081"
+route = "relay"
+
+[client.sources.sws-relay]
+addr = ":9998"
+route = "relay"

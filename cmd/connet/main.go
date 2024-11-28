@@ -9,6 +9,7 @@ import (
 
 	"github.com/BurntSushi/toml"
 	"github.com/keihaya-com/connet"
+	"github.com/keihaya-com/connet/model"
 	"github.com/klev-dev/kleverr"
 )
 
@@ -74,7 +75,11 @@ func main() {
 		os.Exit(2)
 	}
 
-	logger := logger(cfg)
+	logger, err := logger(cfg)
+	if err != nil {
+		fmt.Printf("Could not parse '%s' config file: %v\n", args[2], err)
+		os.Exit(2)
+	}
 
 	switch args[1] {
 	case "server":
@@ -102,7 +107,7 @@ func main() {
 	}
 }
 
-func logger(cfg Config) *slog.Logger {
+func logger(cfg Config) (*slog.Logger, error) {
 	logLevel := slog.LevelInfo
 	switch cfg.LogLevel {
 	case "debug":
@@ -111,21 +116,23 @@ func logger(cfg Config) *slog.Logger {
 		logLevel = slog.LevelWarn
 	case "error":
 		logLevel = slog.LevelError
-	case "info":
+	case "info", "":
 		logLevel = slog.LevelInfo
+	default:
+		return nil, kleverr.Newf("'%s' is not a valid log level (one of debug|info|warn|error)", cfg.LogLevel)
 	}
 
 	switch cfg.LogFormat {
 	case "json":
 		return slog.New(slog.NewJSONHandler(os.Stderr, &slog.HandlerOptions{
 			Level: logLevel,
-		}))
-	case "text":
-		fallthrough
-	default:
+		})), nil
+	case "text", "":
 		return slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{
 			Level: logLevel,
-		}))
+		})), nil
+	default:
+		return nil, kleverr.Newf("'%s' is not a valid log format (one of json|text)", cfg.LogFormat)
 	}
 }
 
@@ -197,10 +204,18 @@ func client(cfg ClientConfig, logger *slog.Logger) error {
 	}
 
 	for name, fc := range cfg.Destinations {
-		opts = append(opts, connet.ClientDestination(name, fc.Addr))
+		route, err := parseRouteOption(fc.Route)
+		if err != nil {
+			return err
+		}
+		opts = append(opts, connet.ClientDestination(name, fc.Addr, route))
 	}
 	for name, fc := range cfg.Sources {
-		opts = append(opts, connet.ClientSource(name, fc.Addr))
+		route, err := parseRouteOption(fc.Route)
+		if err != nil {
+			return err
+		}
+		opts = append(opts, connet.ClientSource(name, fc.Addr, route))
 	}
 
 	opts = append(opts, connet.ClientLogger(logger))
@@ -227,4 +242,11 @@ func loadTokens(tokensFile string) ([]string, error) {
 		return nil, kleverr.Newf("cannot read tokens file: %w", err)
 	}
 	return tokens, nil
+}
+
+func parseRouteOption(s string) (model.RouteOption, error) {
+	if s == "" {
+		return model.RouteAny, nil
+	}
+	return model.ParseRouteOption(s)
 }
