@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"io"
 	"log/slog"
+	"math/rand/v2"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -76,7 +77,8 @@ func TestE2E(t *testing.T) {
 	ports := slices.Repeat([]int{9990, 9991}, 10)
 	for i, port := range ports {
 		t.Run(fmt.Sprintf("%d:%d", i, port), func(t *testing.T) {
-			url := fmt.Sprintf("http://localhost:%d?rand=%d", port, 123)
+			rnd := rand.Uint64()
+			url := fmt.Sprintf("http://localhost:%d?rand=%d", port, rnd)
 
 			resp, err := httpcl.Get(url)
 			require.NoError(t, err)
@@ -85,7 +87,7 @@ func TestE2E(t *testing.T) {
 			defer resp.Body.Close()
 			require.NoError(t, err)
 
-			require.Equal(t, "hello:123", string(respData))
+			require.Equal(t, fmt.Sprintf("hello:%d", rnd), string(respData))
 		})
 	}
 

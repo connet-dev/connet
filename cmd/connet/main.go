@@ -7,10 +7,10 @@ import (
 	"log/slog"
 	"os"
 
-	"github.com/BurntSushi/toml"
 	"github.com/keihaya-com/connet"
 	"github.com/keihaya-com/connet/model"
 	"github.com/klev-dev/kleverr"
+	"github.com/pelletier/go-toml/v2"
 	"github.com/spf13/cobra"
 )
 
@@ -98,15 +98,9 @@ func rootCmd() *cobra.Command {
 	cmd.Flags().StringVar(&srcCfg.Route, "src-route", "", "source route")
 
 	cmd.RunE = func(cmd *cobra.Command, args []string) error {
-		var cfg Config
-		if *filename != "" {
-			md, err := toml.DecodeFile(*filename, &cfg)
-			if err != nil {
-				return kleverr.Ret(err)
-			}
-			if len(md.Undecoded()) > 0 {
-				return kleverr.Newf("undecoded keys in config: %v", md.Undecoded())
-			}
+		cfg, err := loadConfig(*filename)
+		if err != nil {
+			return err
 		}
 
 		if dstName != "" {
@@ -157,15 +151,9 @@ func serverCmd() *cobra.Command {
 	cmd.Flags().StringVar(&flagsConfig.Server.Relay.Key, "relay-key-file", "", "relay server key to use")
 
 	cmd.RunE = func(cmd *cobra.Command, args []string) error {
-		var cfg Config
-		if *filename != "" {
-			md, err := toml.DecodeFile(*filename, &cfg)
-			if err != nil {
-				return kleverr.Ret(err)
-			}
-			if len(md.Undecoded()) > 0 {
-				return kleverr.Newf("undecoded keys in config: %v", md.Undecoded())
-			}
+		cfg, err := loadConfig(*filename)
+		if err != nil {
+			return err
 		}
 
 		cfg.merge(flagsConfig)
@@ -189,11 +177,9 @@ func checkCmd() *cobra.Command {
 	}
 
 	cmd.RunE = func(cmd *cobra.Command, args []string) error {
-		var cfg Config
-		if md, err := toml.DecodeFile(args[0], &cfg); err != nil {
-			return kleverr.Ret(err)
-		} else if len(md.Undecoded()) > 0 {
-			return kleverr.Newf("undecoded keys in config: %v", md.Undecoded())
+		cfg, err := loadConfig(args[0])
+		if err != nil {
+			return err
 		}
 
 		if _, err := logger(cfg); err != nil {
@@ -204,6 +190,21 @@ func checkCmd() *cobra.Command {
 	}
 
 	return cmd
+}
+
+func loadConfig(file string) (Config, error) {
+	var cfg Config
+	if file == "" {
+		return cfg, nil
+	}
+	f, err := os.Open(file)
+	if err != nil {
+		return cfg, err
+	}
+	dec := toml.NewDecoder(f)
+	dec = dec.DisallowUnknownFields()
+	err = dec.Decode(&cfg)
+	return cfg, err
 }
 
 func logger(cfg Config) (*slog.Logger, error) {

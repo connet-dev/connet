@@ -3,8 +3,8 @@ module github.com/keihaya-com/connet
 go 1.23.2
 
 require (
-	github.com/BurntSushi/toml v1.4.0
 	github.com/klev-dev/kleverr v0.0.0-20241020235355-094c0f6ca824
+	github.com/pelletier/go-toml/v2 v2.2.3
 	github.com/quic-go/quic-go v0.48.2
 	github.com/segmentio/ksuid v1.0.4
 	github.com/spf13/cobra v1.8.1
