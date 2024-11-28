@@ -27,7 +27,7 @@ func TestE2E(t *testing.T) {
 	}))
 	defer hts.Close()
 
-	logger := slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{Level: slog.LevelDebug}))
+	logger := slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{Level: slog.LevelWarn}))
 
 	srv, err := NewServer(
 		ServerTokens("test-token"),
@@ -70,11 +70,15 @@ func TestE2E(t *testing.T) {
 	time.Sleep(10 * time.Millisecond) // time for clients to come online
 
 	// actual test
+	httpcl := &http.Client{}
+	httpcl.Transport = &http.Transport{DisableKeepAlives: true}
+
 	ports := slices.Repeat([]int{9990, 9991}, 10)
 	for i, port := range ports {
 		t.Run(fmt.Sprintf("%d:%d", i, port), func(t *testing.T) {
 			url := fmt.Sprintf("http://localhost:%d?rand=%d", port, 123)
-			resp, err := http.Get(url)
+
+			resp, err := httpcl.Get(url)
 			require.NoError(t, err)
 
 			respData, err := io.ReadAll(resp.Body)
