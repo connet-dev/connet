@@ -10,6 +10,7 @@ import (
 	"maps"
 	"math/rand/v2"
 	"net"
+	"net/netip"
 	"os"
 	"strings"
 	"sync"
@@ -17,6 +18,7 @@ import (
 
 	"github.com/keihaya-com/connet/certc"
 	"github.com/keihaya-com/connet/model"
+	"github.com/keihaya-com/connet/netc"
 	"github.com/keihaya-com/connet/notify"
 	"github.com/keihaya-com/connet/pb"
 	"github.com/keihaya-com/connet/pbs"
@@ -201,7 +203,17 @@ func (c *Client) connect(ctx context.Context, transport *quic.Transport) (*clien
 		return nil, kleverr.Ret(resp.Error)
 	}
 
-	c.logger.Info("authenticated", "origin", resp.Public.AsNetip())
+	localAddrs, err := netc.LocalAddrs()
+	if err != nil {
+		return nil, kleverr.Ret(err)
+	}
+	localAddrPorts := make([]netip.AddrPort, len(localAddrs))
+	for i, addr := range localAddrs {
+		localAddrPorts[i] = netip.AddrPortFrom(addr, c.clientConfig.directAddr.AddrPort().Port())
+	}
+	localAddrPortPBs := pb.AsAddrPorts(localAddrPorts)
+
+	c.logger.Info("authenticated", "local", localAddrPorts, "stun", resp.Public.AsNetip())
 
 	sid := ksuid.New()
 	return &clientSession{
@@ -209,7 +221,7 @@ func (c *Client) connect(ctx context.Context, transport *quic.Transport) (*clien
 		id:               sid,
 		transport:        transport,
 		conn:             conn,
-		directAddrs:      []*pb.AddrPort{resp.Public},
+		directAddrs:      append(localAddrPortPBs, resp.Public),
 		relayAddrsNotify: notify.New(),
 		activeRelays:     map[string]*clientRelayServer{},
 		logger:           c.logger.With("connection-id", sid),
@@ -374,12 +386,24 @@ func (s *clientSession) setRelayAddrs(addrs map[string]*x509.Certificate) {
 	s.relayAddrs = maps.Clone(addrs)
 }
 
-func (s *clientSession) getDirectAddrs() []*pbs.Route {
+func (s *clientSession) getDestinationDirectAddrs() []*pbs.Route {
 	var directs []*pbs.Route
 	for _, direct := range s.directAddrs {
 		directs = append(directs, &pbs.Route{
 			Hostport:    direct.AsNetip().String(),
 			Certificate: s.client.serverCert.Leaf.Raw,
+		})
+	}
+
+	return directs
+}
+
+func (s *clientSession) getSourceDirectAddrs() []*pbs.Route {
+	var directs []*pbs.Route
+	for _, direct := range s.directAddrs {
+		directs = append(directs, &pbs.Route{
+			Hostport:    direct.AsNetip().String(),
+			Certificate: s.client.clientCert.Leaf.Raw,
 		})
 	}
 
@@ -412,12 +436,12 @@ func (s *clientSession) runDestination(ctx context.Context, fwd model.Forward, o
 	}
 	defer stream.Close()
 
-	dstReq := &pbs.Request_Destination{From: fwd.PB()}
+	dstReq := &pbs.Request_Destination{From: fwd.PB(), Peer: &pbs.Peer{}}
 	if opt.AllowDirect() {
-		dstReq.Directs = s.getDirectAddrs()
+		dstReq.Peer.Directs = s.getDestinationDirectAddrs()
 	}
 	if opt.AllowRelay() {
-		dstReq.Relays = s.getRelayAddrs()
+		dstReq.Peer.Relays = s.getRelayAddrs()
 	}
 
 	if err := pb.Write(stream, &pbs.Request{
@@ -437,14 +461,14 @@ func (s *clientSession) runDestination(ctx context.Context, fwd model.Forward, o
 	g.Go(func() error {
 		defer s.logger.Debug("completed destinations notify")
 		return s.relayAddrsNotify.Listen(ctx, func() error {
-			dstReq := &pbs.Request_Destination{From: fwd.PB()}
+			dstReq := &pbs.Request_Destination{From: fwd.PB(), Peer: &pbs.Peer{}}
 			if opt.AllowDirect() {
-				dstReq.Directs = s.getDirectAddrs()
+				dstReq.Peer.Directs = s.getDestinationDirectAddrs()
 			}
 			if opt.AllowRelay() {
-				dstReq.Relays = s.getRelayAddrs()
+				dstReq.Peer.Relays = s.getRelayAddrs()
 			}
-			s.logger.Debug("updated destinations", "direct", len(dstReq.Directs), "relays", len(dstReq.Relays))
+			s.logger.Debug("updated destinations", "direct", len(dstReq.Peer.Directs), "relays", len(dstReq.Peer.Relays))
 			if err := pb.Write(stream, &pbs.Request{
 				Destination: dstReq,
 			}); err != nil {
@@ -465,11 +489,13 @@ func (s *clientSession) runDestination(ctx context.Context, fwd model.Forward, o
 			}
 
 			pool := x509.NewCertPool()
-			for _, certData := range resp.Destination.Certificates {
-				if cert, err := x509.ParseCertificate(certData); err != nil {
-					return kleverr.Newf("failed to parse cert: %w", err)
-				} else {
-					pool.AddCert(cert)
+			for _, peer := range resp.Destination.Sources {
+				for _, route := range peer.Directs {
+					if cert, err := x509.ParseCertificate(route.Certificate); err != nil {
+						return kleverr.Newf("failed to parse cert: %w", err)
+					} else {
+						pool.AddCert(cert)
+					}
 				}
 			}
 			s.client.directServer.clientCA.Store(pool)
@@ -488,11 +514,16 @@ func (s *clientSession) runSource(ctx context.Context, fwd model.Forward, opt mo
 	}
 	defer stream.Close()
 
+	srcReq := &pbs.Request_Source{To: fwd.PB(), Peer: &pbs.Peer{}}
+	if opt.AllowDirect() {
+		srcReq.Peer.Directs = s.getSourceDirectAddrs()
+	}
+	if opt.AllowRelay() {
+		srcReq.Peer.Relays = s.getRelayAddrs()
+	}
+
 	if err := pb.Write(stream, &pbs.Request{
-		Source: &pbs.Request_Source{
-			To:          fwd.PB(),
-			Certificate: s.client.clientCert.Leaf.Raw,
-		},
+		Source: srcReq,
 	}); err != nil {
 		return kleverr.Ret(err)
 	}
@@ -503,6 +534,26 @@ func (s *clientSession) runSource(ctx context.Context, fwd model.Forward, opt mo
 		<-ctx.Done()
 		stream.CancelRead(0)
 		return nil
+	})
+
+	g.Go(func() error {
+		defer s.logger.Debug("completed sources notify")
+		return s.relayAddrsNotify.Listen(ctx, func() error {
+			srcReq := &pbs.Request_Source{To: fwd.PB(), Peer: &pbs.Peer{}}
+			if opt.AllowDirect() {
+				srcReq.Peer.Directs = s.getSourceDirectAddrs()
+			}
+			if opt.AllowRelay() {
+				srcReq.Peer.Relays = s.getRelayAddrs()
+			}
+			s.logger.Debug("updated sources", "direct", len(srcReq.Peer.Directs), "relays", len(srcReq.Peer.Relays))
+			if err := pb.Write(stream, &pbs.Request{
+				Source: srcReq,
+			}); err != nil {
+				return kleverr.Ret(err)
+			}
+			return nil
+		})
 	})
 
 	g.Go(func() error {
@@ -517,25 +568,29 @@ func (s *clientSession) runSource(ctx context.Context, fwd model.Forward, opt mo
 
 			directs := map[string]*x509.Certificate{}
 			if opt.AllowDirect() {
-				for _, direct := range resp.Source.Directs {
-					route, err := model.NewRouteFromPB(direct)
-					if err != nil {
-						s.logger.Warn("cannot parse route", "err", err)
-						continue
+				for _, peer := range resp.Source.Destinations {
+					for _, direct := range peer.Directs {
+						route, err := model.NewRouteFromPB(direct)
+						if err != nil {
+							s.logger.Warn("cannot parse route", "err", err)
+							continue
+						}
+						directs[route.Hostport] = route.Certificate
 					}
-					directs[route.Hostport] = route.Certificate
 				}
 			}
 
 			relays := map[string]*x509.Certificate{}
 			if opt.AllowRelay() {
-				for _, relay := range resp.Source.Relays {
-					route, err := model.NewRouteFromPB(relay)
-					if err != nil {
-						s.logger.Warn("cannot parse route", "err", err)
-						continue
+				for _, peer := range resp.Source.Destinations {
+					for _, relay := range peer.Relays {
+						route, err := model.NewRouteFromPB(relay)
+						if err != nil {
+							s.logger.Warn("cannot parse route", "err", err)
+							continue
+						}
+						relays[route.Hostport] = route.Certificate
 					}
-					relays[route.Hostport] = route.Certificate
 				}
 			}
 

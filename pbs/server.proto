@@ -28,12 +28,11 @@ message Request {
   }
   message Destination {
     shared.Forward from = 1;
-    repeated Route directs = 2; // the set of routes for direct connections
-    repeated Route relays = 3; // the set of routes for relay connections
+    Peer peer = 2;
   }
   message Source {
     shared.Forward to = 1;
-    bytes certificate = 2; // certificate that this client uses for direct connections
+    Peer peer = 2;
   }
 }
 
@@ -48,12 +47,16 @@ message Response {
     repeated Route relays = 1; // set of relay addresses that follow this server
   }
   message Destination {
-    repeated bytes certificates = 1; // certificates that the clients will present when connecting directly for this destination
+    repeated Peer sources = 1;
   }
   message Source {
-    repeated Route directs = 1;
-    repeated Route relays = 2;
+    repeated Peer destinations = 1;
   }
+}
+
+message Peer {
+  repeated Route directs = 1;
+  repeated Route relays = 2;
 }
 
 message Route {

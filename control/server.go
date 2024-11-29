@@ -292,14 +292,14 @@ func (s *controlStream) destination(ctx context.Context, req *pbs.Request_Destin
 		return err
 	}
 
-	direct, relays, err := s.readDestination(req)
+	peer, err := model.NewPeerFromPB(req.Peer)
 	if err != nil {
 		respErr := pb.NewError(pb.Error_DestinationInvalidCertificate, "cannot parse certificate: %v", err)
 		return pb.Write(s.stream, &pbs.Response{Error: respErr})
 	}
 
 	w := s.conn.server.whisperer.For(from)
-	w.AddDestination(s.conn.id, direct, relays)
+	w.AddDestination(s.conn.id, peer)
 	defer w.RemoveDestination(s.conn.id)
 
 	g, ctx := errgroup.WithContext(ctx)
@@ -318,59 +318,34 @@ func (s *controlStream) destination(ctx context.Context, req *pbs.Request_Destin
 				return respErr
 			}
 
-			direct, relays, err := s.readDestination(req.Destination)
+			peer, err := model.NewPeerFromPB(req.Destination.Peer)
 			if err != nil {
 				respErr := pb.NewError(pb.Error_DestinationInvalidCertificate, "cannot parse certificate: %v", err)
 				return pb.Write(s.stream, &pbs.Response{Error: respErr})
 			}
 
-			w.AddDestination(s.conn.id, direct, relays)
+			w.AddDestination(s.conn.id, peer)
 		}
 	})
 
 	g.Go(func() error {
 		defer s.logger.Debug("completed sources notify")
-		return w.Sources(ctx, func(certs []*x509.Certificate) error {
-			s.logger.Debug("updated sources list", "certs", len(certs))
-			var certData [][]byte
-			for _, cert := range certs {
-				certData = append(certData, cert.Raw)
-			}
+		return w.Sources(ctx, func(peers []model.Peer) error {
+			s.logger.Debug("updated sources list", "peers", len(peers))
+
 			if err := pb.Write(s.stream, &pbs.Response{
 				Destination: &pbs.Response_Destination{
-					Certificates: certData,
+					Sources: model.PeersToPB(peers),
 				},
 			}); err != nil {
 				return kleverr.Ret(err)
 			}
+
 			return nil
 		})
 	})
 
 	return g.Wait()
-}
-
-func (s *controlStream) readDestination(req *pbs.Request_Destination) ([]model.Route, []model.Route, error) {
-	var directs []model.Route
-	var relays []model.Route
-
-	for _, d := range req.Directs {
-		if mr, err := model.NewRouteFromPB(d); err != nil {
-			return nil, nil, err
-		} else {
-			directs = append(directs, mr)
-		}
-	}
-
-	for _, r := range req.Relays {
-		if mr, err := model.NewRouteFromPB(r); err != nil {
-			return nil, nil, err
-		} else {
-			relays = append(relays, mr)
-		}
-	}
-
-	return directs, relays, nil
 }
 
 func (s *controlStream) source(ctx context.Context, req *pbs.Request_Source) error {
@@ -383,14 +358,14 @@ func (s *controlStream) source(ctx context.Context, req *pbs.Request_Source) err
 		return err
 	}
 
-	cert, err := x509.ParseCertificate(req.Certificate)
+	peer, err := model.NewPeerFromPB(req.Peer)
 	if err != nil {
 		respErr := pb.NewError(pb.Error_SourceInvalidCertificate, "cannot parse certificate: %v", err)
 		return pb.Write(s.stream, &pbs.Response{Error: respErr})
 	}
 
 	w := s.conn.server.whisperer.For(to)
-	w.AddSource(s.conn.id, cert)
+	w.AddSource(s.conn.id, peer)
 	defer w.RemoveSource(s.conn.id)
 
 	g, ctx := errgroup.WithContext(ctx)
@@ -409,7 +384,7 @@ func (s *controlStream) source(ctx context.Context, req *pbs.Request_Source) err
 				return respErr
 			}
 
-			cert, err := x509.ParseCertificate(req.Source.Certificate)
+			peer, err := model.NewPeerFromPB(req.Source.Peer)
 			if err != nil {
 				respErr := pb.NewError(pb.Error_SourceInvalidCertificate, "cannot parse certificate: %v", err)
 				if err := pb.Write(s.stream, &pbs.Response{Error: respErr}); err != nil {
@@ -417,28 +392,23 @@ func (s *controlStream) source(ctx context.Context, req *pbs.Request_Source) err
 				}
 				return respErr
 			}
-			w.AddSource(s.conn.id, cert)
+			w.AddSource(s.conn.id, peer)
 		}
 	})
 
 	g.Go(func() error {
 		defer s.logger.Debug("completed destinations notify")
-		return w.Destinations(ctx, func(direct []model.Route, relays []model.Route) error {
-			s.logger.Debug("updated destinations list", "direct", len(direct), "relay", len(relays))
-			resp := &pbs.Response_Source{}
-
-			for _, dst := range direct {
-				resp.Directs = append(resp.Directs, dst.PB())
-			}
-			for _, dst := range relays {
-				resp.Relays = append(resp.Relays, dst.PB())
-			}
+		return w.Destinations(ctx, func(peers []model.Peer) error {
+			s.logger.Debug("updated destinations list", "peers", len(peers))
 
 			if err := pb.Write(s.stream, &pbs.Response{
-				Source: resp,
+				Source: &pbs.Response_Source{
+					Destinations: model.PeersToPB(peers),
+				},
 			}); err != nil {
 				return kleverr.Ret(err)
 			}
+
 			return nil
 		})
 	})

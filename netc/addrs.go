@@ -3,7 +3,6 @@ package netc
 import (
 	"net"
 	"net/netip"
-	"strings"
 
 	"github.com/klev-dev/kleverr"
 )
@@ -16,9 +15,6 @@ func LocalAddrs() ([]netip.Addr, error) {
 
 	var localAddrs []netip.Addr
 	for _, iface := range ifaces {
-		if iface.Name == "lo" || strings.HasPrefix(iface.Name, "wg") {
-			continue
-		}
 		addrs, err := iface.Addrs()
 		if err != nil {
 			continue

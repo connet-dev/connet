@@ -2,7 +2,8 @@ package control
 
 import (
 	"context"
-	"crypto/x509"
+	"maps"
+	"slices"
 	"sync"
 
 	"github.com/keihaya-com/connet/model"
@@ -39,9 +40,9 @@ func (w *whisperer) For(fwd model.Forward) *whisper {
 
 	wh = &whisper{
 		forward:            fwd,
-		destinations:       map[ksuid.KSUID]*whisperDestination{},
+		destinations:       map[ksuid.KSUID]model.Peer{},
 		destinationsNotify: notify.New(),
-		sources:            map[ksuid.KSUID]*whisperSource{},
+		sources:            map[ksuid.KSUID]model.Peer{},
 		sourcesNotify:      notify.New(),
 	}
 	w.whispers[fwd] = wh
@@ -50,33 +51,21 @@ func (w *whisperer) For(fwd model.Forward) *whisper {
 
 type whisper struct {
 	forward            model.Forward
-	destinations       map[ksuid.KSUID]*whisperDestination
+	destinations       map[ksuid.KSUID]model.Peer
 	destinationsMu     sync.RWMutex
 	destinationsNotify *notify.N
-	sources            map[ksuid.KSUID]*whisperSource
+	sources            map[ksuid.KSUID]model.Peer
 	sourcesMu          sync.RWMutex
 	sourcesNotify      *notify.N
 }
 
-type whisperDestination struct {
-	directs []model.Route
-	relays  []model.Route
-}
-
-type whisperSource struct {
-	cert *x509.Certificate
-}
-
-func (w *whisper) AddDestination(id ksuid.KSUID, directs []model.Route, relays []model.Route) {
+func (w *whisper) AddDestination(id ksuid.KSUID, peer model.Peer) {
 	defer w.destinationsNotify.Updated()
 
 	w.destinationsMu.Lock()
 	defer w.destinationsMu.Unlock()
 
-	w.destinations[id] = &whisperDestination{
-		directs: directs,
-		relays:  relays,
-	}
+	w.destinations[id] = peer
 }
 
 func (w *whisper) RemoveDestination(id ksuid.KSUID) {
@@ -88,15 +77,26 @@ func (w *whisper) RemoveDestination(id ksuid.KSUID) {
 	delete(w.destinations, id)
 }
 
-func (w *whisper) AddSource(id ksuid.KSUID, cert *x509.Certificate) {
+func (w *whisper) getDestinations() []model.Peer {
+	w.destinationsMu.RLock()
+	defer w.destinationsMu.RUnlock()
+
+	return slices.Collect(maps.Values(w.destinations))
+}
+
+func (w *whisper) Destinations(ctx context.Context, f func([]model.Peer) error) error {
+	return w.destinationsNotify.Listen(ctx, func() error {
+		return f(w.getDestinations())
+	})
+}
+
+func (w *whisper) AddSource(id ksuid.KSUID, peer model.Peer) {
 	defer w.sourcesNotify.Updated()
 
 	w.sourcesMu.Lock()
 	defer w.sourcesMu.Unlock()
 
-	w.sources[id] = &whisperSource{
-		cert: cert,
-	}
+	w.sources[id] = peer
 }
 
 func (w *whisper) RemoveSource(id ksuid.KSUID) {
@@ -108,41 +108,15 @@ func (w *whisper) RemoveSource(id ksuid.KSUID) {
 	delete(w.sources, id)
 }
 
-func (w *whisper) getSources() []*x509.Certificate {
+func (w *whisper) getSources() []model.Peer {
 	w.sourcesMu.RLock()
 	defer w.sourcesMu.RUnlock()
 
-	var result []*x509.Certificate
-	for _, src := range w.sources {
-		result = append(result, src.cert)
-	}
-
-	return result
+	return slices.Collect(maps.Values(w.sources))
 }
 
-func (w *whisper) Sources(ctx context.Context, f func([]*x509.Certificate) error) error {
+func (w *whisper) Sources(ctx context.Context, f func([]model.Peer) error) error {
 	return w.sourcesNotify.Listen(ctx, func() error {
 		return f(w.getSources())
-	})
-}
-
-func (w *whisper) getDestinations() ([]model.Route, []model.Route) {
-	w.destinationsMu.RLock()
-	defer w.destinationsMu.RUnlock()
-
-	var directs []model.Route
-	var relays []model.Route
-
-	for _, dst := range w.destinations {
-		directs = append(directs, dst.directs...)
-		relays = append(relays, dst.relays...)
-	}
-
-	return directs, relays
-}
-
-func (w *whisper) Destinations(ctx context.Context, f func([]model.Route, []model.Route) error) error {
-	return w.destinationsNotify.Listen(ctx, func() error {
-		return f(w.getDestinations())
 	})
 }
