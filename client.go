@@ -17,6 +17,7 @@ import (
 	"time"
 
 	"github.com/keihaya-com/connet/certc"
+	"github.com/keihaya-com/connet/client"
 	"github.com/keihaya-com/connet/model"
 	"github.com/keihaya-com/connet/netc"
 	"github.com/keihaya-com/connet/notify"
@@ -37,6 +38,9 @@ type Client struct {
 
 	directServer  *clientDirectServer
 	sourceServers map[model.Forward]*clientSourceServer
+
+	dsts map[model.Forward]*client.Destination
+	srcs map[model.Forward]*client.Source
 }
 
 func NewClient(opts ...ClientOption) (*Client, error) {
@@ -132,12 +136,36 @@ func (c *Client) Run(ctx context.Context) error {
 		}
 	}
 
+	c.dsts = map[model.Forward]*client.Destination{}
+	for fwd, cfg := range c.destinations {
+		c.dsts[fwd], err = client.NewDestination(fwd, cfg.addr, cfg.route, c.serverCert.Leaf)
+		if err != nil {
+			return kleverr.Ret(err)
+		}
+	}
+
+	c.srcs = map[model.Forward]*client.Source{}
+	for fwd, cfg := range c.sources {
+		c.srcs[fwd], err = client.NewSource(fwd, cfg.addr, cfg.route, c.clientCert.Leaf)
+		if err != nil {
+			return kleverr.Ret(err)
+		}
+	}
+
 	g, ctx := errgroup.WithContext(ctx)
 
 	g.Go(func() error { return c.directServer.run(ctx) })
 
 	for _, srv := range c.sourceServers {
 		g.Go(func() error { return srv.run(ctx) })
+	}
+
+	for _, dst := range c.dsts {
+		g.Go(func() error { return dst.Run(ctx) })
+	}
+
+	for _, src := range c.srcs {
+		g.Go(func() error { return src.Run(ctx) })
 	}
 
 	g.Go(func() error { return c.run(ctx, directTransport) })
@@ -211,6 +239,15 @@ func (c *Client) connect(ctx context.Context, transport *quic.Transport) (*clien
 	for i, addr := range localAddrs {
 		localAddrPorts[i] = netip.AddrPortFrom(addr, c.clientConfig.directAddr.AddrPort().Port())
 	}
+
+	directAddrs := append(localAddrPorts, resp.Public.AsNetip())
+	for _, d := range c.dsts {
+		d.SetDirectAddrs(directAddrs)
+	}
+	for _, s := range c.srcs {
+		s.SetDirectAddrs(directAddrs)
+	}
+
 	localAddrPortPBs := pb.AsAddrPorts(localAddrPorts)
 
 	c.logger.Info("authenticated", "local", localAddrPorts, "stun", resp.Public.AsNetip())
@@ -224,7 +261,7 @@ func (c *Client) connect(ctx context.Context, transport *quic.Transport) (*clien
 		directAddrs:      append(localAddrPortPBs, resp.Public),
 		relayAddrsNotify: notify.New(),
 		activeRelays:     map[string]*clientRelayServer{},
-		logger:           c.logger.With("connection-id", sid),
+		logger:           c.logger,
 	}, nil
 }
 
@@ -276,8 +313,9 @@ func (s *clientSession) run(ctx context.Context) error {
 	g.Go(func() error { return s.runRelays(ctx) })
 	g.Go(func() error { return s.runRelayConns(ctx) })
 
-	for dst, cfg := range s.client.destinations {
-		g.Go(func() error { return s.runDestination(ctx, dst, cfg.route) })
+	// TODO maybe move to destination server?
+	for dst := range s.client.destinations {
+		g.Go(func() error { return s.runDestination(ctx, dst) })
 	}
 
 	for src, cfg := range s.client.sources {
@@ -336,45 +374,27 @@ func (s *clientSession) runRelays(ctx context.Context) error {
 				return kleverr.Newf("unexpected response")
 			}
 
+			routes, err := model.RoutesFromPB(resp.Relay.Relays)
+			if err != nil {
+				return kleverr.Newf("could not create routes: %w", err)
+			}
+
 			addrs := map[string]*x509.Certificate{}
-			for _, relay := range resp.Relay.Relays {
-				route, err := model.NewRouteFromPB(relay)
-				if err != nil {
-					s.logger.Warn("cannot parse route", "err", err)
-					continue
-				}
-				addrs[route.Hostport] = route.Certificate
+			for _, r := range routes {
+				addrs[r.Hostport] = r.Certificate
 			}
 			s.setRelayAddrs(addrs)
+
+			for _, d := range s.client.dsts {
+				d.SetRelays(routes)
+			}
+			for _, s := range s.client.srcs {
+				s.SetRelays(routes)
+			}
 		}
 	})
 
 	return g.Wait()
-}
-
-func (s *clientSession) runRelayConns(ctx context.Context) error {
-	defer s.logger.Debug("completed relays notify")
-	return s.relayAddrsNotify.Listen(ctx, func() error {
-		relays := s.getRelayAddrs()
-		s.logger.Debug("updated relays", "relays", len(relays))
-		for _, addr := range s.getRelayAddrs() {
-			if _, ok := s.activeRelays[addr.Hostport]; ok {
-				continue
-			}
-
-			srv := &clientRelayServer{
-				hostport:  addr.Hostport,
-				transport: s.transport,
-				cert:      s.client.clientCert,
-				relayCAs:  s.client.controlCAs,
-				dialer:    s.client.dialer,
-				logger:    s.client.logger.With("component", "relay", "addr", addr.Hostport),
-			}
-			s.activeRelays[addr.Hostport] = srv
-			go srv.run(ctx)
-		}
-		return nil
-	})
 }
 
 func (s *clientSession) setRelayAddrs(addrs map[string]*x509.Certificate) {
@@ -384,30 +404,6 @@ func (s *clientSession) setRelayAddrs(addrs map[string]*x509.Certificate) {
 	defer s.relayAddrsMu.Unlock()
 
 	s.relayAddrs = maps.Clone(addrs)
-}
-
-func (s *clientSession) getDestinationDirectAddrs() []*pbs.Route {
-	var directs []*pbs.Route
-	for _, direct := range s.directAddrs {
-		directs = append(directs, &pbs.Route{
-			Hostport:    direct.AsNetip().String(),
-			Certificate: s.client.serverCert.Leaf.Raw,
-		})
-	}
-
-	return directs
-}
-
-func (s *clientSession) getSourceDirectAddrs() []*pbs.Route {
-	var directs []*pbs.Route
-	for _, direct := range s.directAddrs {
-		directs = append(directs, &pbs.Route{
-			Hostport:    direct.AsNetip().String(),
-			Certificate: s.client.clientCert.Leaf.Raw,
-		})
-	}
-
-	return directs
 }
 
 func (s *clientSession) getRelayAddrs() []*pbs.Route {
@@ -429,26 +425,39 @@ func (s *clientSession) getRelayAddrs() []*pbs.Route {
 	return relays
 }
 
-func (s *clientSession) runDestination(ctx context.Context, fwd model.Forward, opt model.RouteOption) error {
+func (s *clientSession) runRelayConns(ctx context.Context) error {
+	defer s.logger.Debug("completed relays notify")
+	return s.relayAddrsNotify.Listen(ctx, func() error {
+		relays := s.getRelayAddrs()
+		s.logger.Debug("updated relays", "relays", len(relays))
+		for _, addr := range relays {
+			if _, ok := s.activeRelays[addr.Hostport]; ok {
+				continue
+			}
+
+			srv := &clientRelayServer{
+				hostport:  addr.Hostport,
+				transport: s.transport,
+				cert:      s.client.clientCert,
+				relayCAs:  s.client.controlCAs,
+				dialer:    s.client.dialer,
+				logger:    s.client.logger.With("component", "relay", "addr", addr.Hostport),
+			}
+			s.activeRelays[addr.Hostport] = srv
+			go srv.run(ctx)
+		}
+		return nil
+	})
+}
+
+func (s *clientSession) runDestination(ctx context.Context, fwd model.Forward) error {
+	dstServer := s.client.dsts[fwd]
+
 	stream, err := s.conn.OpenStreamSync(ctx)
 	if err != nil {
 		return kleverr.Ret(err)
 	}
 	defer stream.Close()
-
-	dstReq := &pbs.Request_Destination{From: fwd.PB(), Peer: &pbs.Peer{}}
-	if opt.AllowDirect() {
-		dstReq.Peer.Directs = s.getDestinationDirectAddrs()
-	}
-	if opt.AllowRelay() {
-		dstReq.Peer.Relays = s.getRelayAddrs()
-	}
-
-	if err := pb.Write(stream, &pbs.Request{
-		Destination: dstReq,
-	}); err != nil {
-		return kleverr.Ret(err)
-	}
 
 	g, ctx := errgroup.WithContext(ctx)
 
@@ -459,22 +468,15 @@ func (s *clientSession) runDestination(ctx context.Context, fwd model.Forward, o
 	})
 
 	g.Go(func() error {
-		defer s.logger.Debug("completed destinations notify")
-		return s.relayAddrsNotify.Listen(ctx, func() error {
-			dstReq := &pbs.Request_Destination{From: fwd.PB(), Peer: &pbs.Peer{}}
-			if opt.AllowDirect() {
-				dstReq.Peer.Directs = s.getDestinationDirectAddrs()
-			}
-			if opt.AllowRelay() {
-				dstReq.Peer.Relays = s.getRelayAddrs()
-			}
-			s.logger.Debug("updated destinations", "direct", len(dstReq.Peer.Directs), "relays", len(dstReq.Peer.Relays))
-			if err := pb.Write(stream, &pbs.Request{
-				Destination: dstReq,
-			}); err != nil {
-				return kleverr.Ret(err)
-			}
-			return nil
+		defer s.logger.Debug("completed destination notify", "fwd", fwd)
+		return dstServer.Destination(ctx, func(peer model.Peer) error {
+			s.logger.Debug("updated destination", "fwd", fwd, "direct", len(peer.Directs), "relay", len(peer.Relays))
+			return pb.Write(stream, &pbs.Request{
+				Destination: &pbs.Request_Destination{
+					From: fwd.PB(),
+					Peer: peer.PB(),
+				},
+			})
 		})
 	})
 
@@ -499,6 +501,12 @@ func (s *clientSession) runDestination(ctx context.Context, fwd model.Forward, o
 				}
 			}
 			s.client.directServer.clientCA.Store(pool)
+
+			srcs, err := model.PeersFromPB(resp.Destination.Sources)
+			if err != nil {
+				return kleverr.Newf("cannot load peers: %w", err)
+			}
+			dstServer.Sources(srcs)
 		}
 	})
 
@@ -506,27 +514,14 @@ func (s *clientSession) runDestination(ctx context.Context, fwd model.Forward, o
 }
 
 func (s *clientSession) runSource(ctx context.Context, fwd model.Forward, opt model.RouteOption) error {
-	srcServer := s.client.sourceServers[fwd]
+	srcServer := s.client.srcs[fwd]
+	srcServerLegacy := s.client.sourceServers[fwd]
 
 	stream, err := s.conn.OpenStreamSync(ctx)
 	if err != nil {
 		return kleverr.Ret(err)
 	}
 	defer stream.Close()
-
-	srcReq := &pbs.Request_Source{To: fwd.PB(), Peer: &pbs.Peer{}}
-	if opt.AllowDirect() {
-		srcReq.Peer.Directs = s.getSourceDirectAddrs()
-	}
-	if opt.AllowRelay() {
-		srcReq.Peer.Relays = s.getRelayAddrs()
-	}
-
-	if err := pb.Write(stream, &pbs.Request{
-		Source: srcReq,
-	}); err != nil {
-		return kleverr.Ret(err)
-	}
 
 	g, ctx := errgroup.WithContext(ctx)
 
@@ -537,22 +532,15 @@ func (s *clientSession) runSource(ctx context.Context, fwd model.Forward, opt mo
 	})
 
 	g.Go(func() error {
-		defer s.logger.Debug("completed sources notify")
-		return s.relayAddrsNotify.Listen(ctx, func() error {
-			srcReq := &pbs.Request_Source{To: fwd.PB(), Peer: &pbs.Peer{}}
-			if opt.AllowDirect() {
-				srcReq.Peer.Directs = s.getSourceDirectAddrs()
-			}
-			if opt.AllowRelay() {
-				srcReq.Peer.Relays = s.getRelayAddrs()
-			}
-			s.logger.Debug("updated sources", "direct", len(srcReq.Peer.Directs), "relays", len(srcReq.Peer.Relays))
-			if err := pb.Write(stream, &pbs.Request{
-				Source: srcReq,
-			}); err != nil {
-				return kleverr.Ret(err)
-			}
-			return nil
+		defer s.logger.Debug("completed source notify", "fwd", fwd)
+		return srcServer.Source(ctx, func(peer model.Peer) error {
+			s.logger.Debug("updated source", "fwd", fwd, "direct", len(peer.Directs), "relay", len(peer.Relays))
+			return pb.Write(stream, &pbs.Request{
+				Source: &pbs.Request_Source{
+					To:   fwd.PB(),
+					Peer: peer.PB(),
+				},
+			})
 		})
 	})
 
@@ -594,7 +582,13 @@ func (s *clientSession) runSource(ctx context.Context, fwd model.Forward, opt mo
 				}
 			}
 
-			srcServer.setRoutes(directs, relays)
+			srcServerLegacy.setRoutes(directs, relays)
+
+			dsts, err := model.PeersFromPB(resp.Source.Destinations)
+			if err != nil {
+				return kleverr.Newf("cannot load peers: %w", err)
+			}
+			srcServer.Destinations(dsts)
 		}
 	})
 

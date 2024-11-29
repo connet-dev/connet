@@ -8,22 +8,14 @@ type Peer struct {
 }
 
 func NewPeerFromPB(peer *pbs.Peer) (Peer, error) {
-	directs := make([]Route, len(peer.Directs))
-	for i, pb := range peer.Directs {
-		if r, err := NewRouteFromPB(pb); err != nil {
-			return Peer{}, err
-		} else {
-			directs[i] = r
-		}
+	directs, err := RoutesFromPB(peer.Directs)
+	if err != nil {
+		return Peer{}, err
 	}
 
-	relays := make([]Route, len(peer.Relays))
-	for i, pb := range peer.Relays {
-		if r, err := NewRouteFromPB(pb); err != nil {
-			return Peer{}, err
-		} else {
-			relays[i] = r
-		}
+	relays, err := RoutesFromPB(peer.Relays)
+	if err != nil {
+		return Peer{}, err
 	}
 
 	return Peer{Directs: directs, Relays: relays}, nil
@@ -46,4 +38,16 @@ func PeersToPB(peers []Peer) []*pbs.Peer {
 		result[i] = p.PB()
 	}
 	return result
+}
+
+func PeersFromPB(peers []*pbs.Peer) ([]Peer, error) {
+	var err error
+	result := make([]Peer, len(peers))
+	for i, p := range peers {
+		result[i], err = NewPeerFromPB(p)
+		if err != nil {
+			return nil, err
+		}
+	}
+	return result, nil
 }

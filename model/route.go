@@ -36,6 +36,18 @@ func (r Route) PB() *pbs.Route {
 	}
 }
 
+func RoutesFromPB(routes []*pbs.Route) ([]Route, error) {
+	result := make([]Route, len(routes))
+	for i, pb := range routes {
+		if r, err := NewRouteFromPB(pb); err != nil {
+			return nil, err
+		} else {
+			result[i] = r
+		}
+	}
+	return result, nil
+}
+
 type RouteOption struct{ string }
 
 var (
