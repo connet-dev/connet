@@ -4,9 +4,11 @@ import (
 	"context"
 	"crypto/tls"
 	"crypto/x509"
+	"errors"
 	"fmt"
 	"log/slog"
 	"maps"
+	"math/rand/v2"
 	"net"
 	"os"
 	"strings"
@@ -155,7 +157,11 @@ func (c *Client) run(ctx context.Context, transport *quic.Transport) error {
 	for {
 		if err := sess.run(ctx); err != nil {
 			c.logger.Error("session ended", "err", err)
-			return err // TODO should not exit on all errors
+			switch {
+			case errors.Is(err, context.Canceled):
+				return err
+				// TODO other terminal errors
+			}
 		}
 
 		if sess, err = c.reconnect(ctx, transport); err != nil {
@@ -216,15 +222,32 @@ func (c *Client) connect(ctx context.Context, transport *quic.Transport) (*clien
 }
 
 func (c *Client) reconnect(ctx context.Context, transport *quic.Transport) (*clientSession, error) {
+	d := 10 * time.Millisecond
+	t := time.NewTimer(d)
+	defer t.Stop()
 	for {
-		time.Sleep(time.Second) // TODO backoff and such
+		c.logger.Debug("backoff wait", "d", d)
+		select {
+		case <-ctx.Done():
+			return nil, ctx.Err()
+		case <-t.C:
+		}
 
 		if sess, err := c.connect(ctx, transport); err != nil {
 			c.logger.Debug("reconnect failed, retrying", "err", err)
 		} else {
 			return sess, nil
 		}
+
+		d = jitterBackoff(d, 10*time.Millisecond, 15*time.Second)
+		t.Reset(d)
 	}
+}
+
+func jitterBackoff(d, jmin, jmax time.Duration) time.Duration {
+	dt := int64(d*3 - jmin)
+	nd := jmin + time.Duration(rand.Int64N(dt))
+	return min(jmax, nd)
 }
 
 type clientSession struct {
