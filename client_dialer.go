@@ -14,19 +14,19 @@ import (
 )
 
 type destinationsDialer struct {
-	destinations map[model.Forward]string
+	destinations map[model.Forward]clientForwardConfig
 	logger       *slog.Logger
 }
 
-func (s *destinationsDialer) runRequest(ctx context.Context, stream quic.Stream) {
+func (s *destinationsDialer) runRequest(ctx context.Context, stream quic.Stream, from model.RouteOption) {
 	defer stream.Close()
 
-	if err := s.runRequestErr(ctx, stream); err != nil {
+	if err := s.runRequestErr(ctx, stream, from); err != nil {
 		s.logger.Warn("error handling conn", "err", err)
 	}
 }
 
-func (s *destinationsDialer) runRequestErr(ctx context.Context, stream quic.Stream) error {
+func (s *destinationsDialer) runRequestErr(ctx context.Context, stream quic.Stream, from model.RouteOption) error {
 	req, err := pbc.ReadRequest(stream)
 	if err != nil {
 		return err
@@ -34,15 +34,15 @@ func (s *destinationsDialer) runRequestErr(ctx context.Context, stream quic.Stre
 
 	switch {
 	case req.Connect != nil:
-		return s.connect(ctx, stream, model.NewForwardFromPB(req.Connect.To))
+		return s.connect(ctx, stream, model.NewForwardFromPB(req.Connect.To), from)
 	default:
 		return s.unknown(ctx, stream, req)
 	}
 }
 
-func (s *destinationsDialer) connect(ctx context.Context, stream quic.Stream, target model.Forward) error {
+func (s *destinationsDialer) connect(ctx context.Context, stream quic.Stream, target model.Forward, from model.RouteOption) error {
 	logger := s.logger.With("target", target)
-	addr, ok := s.destinations[target]
+	fc, ok := s.destinations[target]
 	if !ok {
 		err := pb.NewError(pb.Error_DestinationNotFound, "%s not found on this client", target)
 		if err := pb.Write(stream, &pbc.Response{Error: err}); err != nil {
@@ -50,8 +50,15 @@ func (s *destinationsDialer) connect(ctx context.Context, stream quic.Stream, ta
 		}
 		return err
 	}
+	if !fc.route.AllowFrom(from) {
+		err := pb.NewError(pb.Error_DestinationNotFound, "%s not found on this client", target)
+		if err := pb.Write(stream, &pbc.Response{Error: err}); err != nil {
+			return kleverr.Newf("could not write error response: %w", err)
+		}
+		return err
+	}
 
-	conn, err := net.Dial("tcp", addr)
+	conn, err := net.Dial("tcp", fc.addr)
 	if err != nil {
 		err := pb.NewError(pb.Error_DestinationDialFailed, "%s could not be dialed: %v", target, err)
 		if err := pb.Write(stream, &pbc.Response{Error: err}); err != nil {

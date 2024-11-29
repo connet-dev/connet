@@ -56,6 +56,16 @@ func ParseRouteOption(s string) (RouteOption, error) {
 	return RouteOption{}, kleverr.Newf("unknown route option: %s", s)
 }
 
+func (r RouteOption) AllowFrom(from RouteOption) bool {
+	switch from {
+	case RouteDirect:
+		return r.AllowDirect()
+	case RouteRelay:
+		return r.AllowRelay()
+	}
+	return false
+}
+
 func (r RouteOption) AllowDirect() bool {
 	return r == RouteAny || r == RouteDirect
 }

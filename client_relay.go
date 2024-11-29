@@ -8,6 +8,7 @@ import (
 	"net"
 	"time"
 
+	"github.com/keihaya-com/connet/model"
 	"github.com/klev-dev/kleverr"
 	"github.com/quic-go/quic-go"
 )
@@ -47,9 +48,9 @@ func (s *clientRelayServer) run(ctx context.Context) error {
 	for {
 		stream, err := conn.AcceptStream(ctx)
 		if err != nil {
-			return nil
+			return err
 		}
 		s.logger.Debug("accepted stream")
-		go s.dialer.runRequest(ctx, stream)
+		go s.dialer.runRequest(ctx, stream, model.RouteRelay)
 	}
 }

@@ -87,18 +87,13 @@ func NewClient(opts ...ClientOption) (*Client, error) {
 	}
 	cfg.logger.Debug("generated client cert")
 
-	dsts := map[model.Forward]string{}
-	for dst, cfg := range cfg.destinations {
-		dsts[dst] = cfg.addr
-	}
-
 	return &Client{
 		clientConfig: *cfg,
 
 		serverCert: serverTLSCert,
 		clientCert: clientTLSCert,
 		dialer: &destinationsDialer{
-			destinations: dsts,
+			destinations: cfg.destinations,
 			logger:       cfg.logger.With("component", "dialer"),
 		},
 

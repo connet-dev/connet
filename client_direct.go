@@ -9,6 +9,7 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/keihaya-com/connet/model"
 	"github.com/klev-dev/kleverr"
 	"github.com/quic-go/quic-go"
 )
@@ -70,6 +71,6 @@ func (s *clientDirectServer) runConnErr(ctx context.Context, conn quic.Connectio
 			return err
 		}
 		s.logger.Debug("serving direct conn", "remote", conn.RemoteAddr())
-		go s.dialer.runRequest(ctx, stream)
+		go s.dialer.runRequest(ctx, stream, model.RouteDirect)
 	}
 }
