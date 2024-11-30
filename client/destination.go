@@ -18,41 +18,27 @@ import (
 )
 
 type Destination struct {
-	fwd  model.Forward
-	addr string
-	opt  model.RouteOption
-
-	serverCert *certc.Cert
-	clientCert *certc.Cert
-	logger     *slog.Logger
+	fwd    model.Forward
+	addr   string
+	opt    model.RouteOption
+	logger *slog.Logger
 
 	peer *peer
 }
 
 func NewDestination(fwd model.Forward, addr string, opt model.RouteOption, direct *DirectServer, root *certc.Cert, logger *slog.Logger) (*Destination, error) {
-	serverCert, err := root.NewServer(certc.CertOpts{Domains: []string{"connet-direct"}})
-	if err != nil {
-		return nil, err
-	}
-	clientCert, err := root.NewClient(certc.CertOpts{})
-	if err != nil {
-		return nil, err
-	}
-	clientTLSCert, err := clientCert.TLSCert()
+	p, err := newPeer(direct, root, logger.With("destination", fwd))
 	if err != nil {
 		return nil, err
 	}
 
 	return &Destination{
-		fwd:  fwd,
-		addr: addr,
-		opt:  opt,
+		fwd:    fwd,
+		addr:   addr,
+		opt:    opt,
+		logger: logger.With("destination", fwd),
 
-		serverCert: serverCert,
-		clientCert: clientCert,
-		logger:     logger.With("destination", fwd),
-
-		peer: newPeer(direct, clientTLSCert, logger.With("destination", fwd)),
+		peer: p,
 	}, nil
 }
 
@@ -61,11 +47,7 @@ func (d *Destination) SetDirectAddrs(addrs []netip.AddrPort) {
 		return
 	}
 
-	d.peer.setDirect(&pbs.DirectRoute{
-		Addresses:         pb.AsAddrPorts(addrs),
-		ServerCertificate: d.serverCert.Raw(),
-		ClientCertificate: d.clientCert.Raw(),
-	})
+	d.peer.setDirectAddrs(addrs)
 }
 
 func (d *Destination) Run(ctx context.Context) error {
@@ -224,7 +206,7 @@ func (d *Destination) runRelay(ctx context.Context, conn quic.Connection) error 
 	if err := pb.Write(stream, &pbs.Request{
 		DestinationRelay: &pbs.Request_DestinationRelay{
 			From:        d.fwd.PB(),
-			Certificate: d.clientCert.Raw(),
+			Certificate: d.peer.clientCert.Leaf.Raw,
 		},
 	}); err != nil {
 		return err

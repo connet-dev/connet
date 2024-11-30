@@ -9,7 +9,9 @@ import (
 	"net/netip"
 	"time"
 
+	"github.com/keihaya-com/connet/certc"
 	"github.com/keihaya-com/connet/notify"
+	"github.com/keihaya-com/connet/pb"
 	"github.com/keihaya-com/connet/pbs"
 	"github.com/quic-go/quic-go"
 )
@@ -20,11 +22,29 @@ type peer struct {
 	active *notify.V[map[netip.AddrPort]quic.Connection]
 
 	direct     *DirectServer
+	serverCert tls.Certificate
 	clientCert tls.Certificate
 	logger     *slog.Logger
 }
 
-func newPeer(direct *DirectServer, clientCert tls.Certificate, logger *slog.Logger) *peer {
+func newPeer(direct *DirectServer, root *certc.Cert, logger *slog.Logger) (*peer, error) {
+	serverCert, err := root.NewServer(certc.CertOpts{Domains: []string{"connet-direct"}})
+	if err != nil {
+		return nil, err
+	}
+	serverTLSCert, err := serverCert.TLSCert()
+	if err != nil {
+		return nil, err
+	}
+	clientCert, err := root.NewClient(certc.CertOpts{})
+	if err != nil {
+		return nil, err
+	}
+	clientTLSCert, err := clientCert.TLSCert()
+	if err != nil {
+		return nil, err
+	}
+
 	return &peer{
 		self:  notify.NewV(notify.InitialOpt(&pbs.ClientPeer{})),
 		peers: notify.NewV[[]*pbs.ServerPeer](),
@@ -32,22 +52,25 @@ func newPeer(direct *DirectServer, clientCert tls.Certificate, logger *slog.Logg
 			notify.CopyMapOpt[map[netip.AddrPort]quic.Connection]()),
 
 		direct:     direct,
-		clientCert: clientCert,
+		serverCert: serverTLSCert,
+		clientCert: clientTLSCert,
 		logger:     logger,
-	}
+	}, nil
 }
 
-func (p *peer) setDirect(direct *pbs.DirectRoute) {
-	p.self.Update(func(cp *pbs.ClientPeer) *pbs.ClientPeer {
-		cp.Direct = direct
-		return cp
+func (p *peer) setDirectAddrs(addrs []netip.AddrPort) {
+	p.self.Modify(func(cp *pbs.ClientPeer) {
+		cp.Direct = &pbs.DirectRoute{
+			Addresses:         pb.AsAddrPorts(addrs),
+			ServerCertificate: p.serverCert.Leaf.Raw,
+			ClientCertificate: p.clientCert.Leaf.Raw,
+		}
 	})
 }
 
 func (p *peer) setRelays(relays []*pbs.RelayRoute) {
-	p.self.Update(func(cp *pbs.ClientPeer) *pbs.ClientPeer {
+	p.self.Modify(func(cp *pbs.ClientPeer) {
 		cp.Relays = relays
-		return cp
 	})
 }
 
