@@ -122,7 +122,7 @@ func (c *Client) run(ctx context.Context, transport *quic.Transport) error {
 	}
 
 	for {
-		if err := c.handle(ctx, conn); err != nil {
+		if err := c.runConnection(ctx, conn); err != nil {
 			c.logger.Error("session ended", "err", err)
 			switch {
 			case errors.Is(err, context.Canceled):
@@ -194,16 +194,14 @@ func (c *Client) connect(ctx context.Context, transport *quic.Transport) (quic.C
 	return conn, nil
 }
 
-func (c *Client) handle(ctx context.Context, conn quic.Connection) error {
+func (c *Client) runConnection(ctx context.Context, conn quic.Connection) error {
 	g, ctx := errgroup.WithContext(ctx)
 
 	for _, dstServer := range c.dsts {
-		g.Go(func() error { return dstServer.RunRelay(ctx, conn) })
 		g.Go(func() error { return dstServer.RunControl(ctx, conn) })
 	}
 
 	for _, srcServer := range c.srcs {
-		g.Go(func() error { return srcServer.RunRelay(ctx, conn) })
 		g.Go(func() error { return srcServer.RunControl(ctx, conn) })
 	}
 

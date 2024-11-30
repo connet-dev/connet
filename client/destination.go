@@ -154,52 +154,18 @@ func (d *Destination) runConnect(ctx context.Context, stream quic.Stream, target
 	return nil
 }
 
-func (d *Destination) RunRelay(ctx context.Context, conn quic.Connection) error {
-	if !d.opt.AllowRelay() {
-		return nil
-	}
-
-	stream, err := conn.OpenStreamSync(ctx)
-	if err != nil {
-		return kleverr.Ret(err)
-	}
-	defer stream.Close()
-
-	if err := pb.Write(stream, &pbs.Request{
-		DestinationRelay: &pbs.Request_DestinationRelay{
-			From:        d.fwd.PB(),
-			Certificate: d.clientCert.Raw(),
-		},
-	}); err != nil {
-		return err
-	}
-
+func (d *Destination) RunControl(ctx context.Context, conn quic.Connection) error {
 	g, ctx := errgroup.WithContext(ctx)
 
-	g.Go(func() error {
-		<-ctx.Done()
-		stream.CancelRead(0)
-		return nil
-	})
-
-	g.Go(func() error {
-		for {
-			resp, err := pbs.ReadResponse(stream)
-			if err != nil {
-				return err
-			}
-			if resp.Relay == nil {
-				return kleverr.Newf("unexpected response")
-			}
-
-			d.peer.setRelays(resp.Relay.Relays)
-		}
-	})
+	g.Go(func() error { return d.runControl(ctx, conn) })
+	if d.opt.AllowRelay() {
+		g.Go(func() error { return d.runRelay(ctx, conn) })
+	}
 
 	return g.Wait()
 }
 
-func (d *Destination) RunControl(ctx context.Context, conn quic.Connection) error {
+func (d *Destination) runControl(ctx context.Context, conn quic.Connection) error {
 	stream, err := conn.OpenStreamSync(ctx)
 	if err != nil {
 		return kleverr.Ret(err)
@@ -242,6 +208,47 @@ func (d *Destination) RunControl(ctx context.Context, conn quic.Connection) erro
 			}
 
 			d.peer.setPeers(resp.Destination.Sources)
+		}
+	})
+
+	return g.Wait()
+}
+
+func (d *Destination) runRelay(ctx context.Context, conn quic.Connection) error {
+	stream, err := conn.OpenStreamSync(ctx)
+	if err != nil {
+		return kleverr.Ret(err)
+	}
+	defer stream.Close()
+
+	if err := pb.Write(stream, &pbs.Request{
+		DestinationRelay: &pbs.Request_DestinationRelay{
+			From:        d.fwd.PB(),
+			Certificate: d.clientCert.Raw(),
+		},
+	}); err != nil {
+		return err
+	}
+
+	g, ctx := errgroup.WithContext(ctx)
+
+	g.Go(func() error {
+		<-ctx.Done()
+		stream.CancelRead(0)
+		return nil
+	})
+
+	g.Go(func() error {
+		for {
+			resp, err := pbs.ReadResponse(stream)
+			if err != nil {
+				return err
+			}
+			if resp.Relay == nil {
+				return kleverr.Newf("unexpected response")
+			}
+
+			d.peer.setRelays(resp.Relay.Relays)
 		}
 	})
 
