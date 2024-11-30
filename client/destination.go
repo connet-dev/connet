@@ -2,19 +2,13 @@ package client
 
 import (
 	"context"
-	"crypto/tls"
-	"crypto/x509"
 	"log/slog"
-	"maps"
 	"net"
 	"net/netip"
-	"sync"
-	"time"
 
 	"github.com/keihaya-com/connet/certc"
 	"github.com/keihaya-com/connet/model"
 	"github.com/keihaya-com/connet/netc"
-	"github.com/keihaya-com/connet/notify"
 	"github.com/keihaya-com/connet/pb"
 	"github.com/keihaya-com/connet/pbc"
 	"github.com/keihaya-com/connet/pbs"
@@ -28,15 +22,9 @@ type Destination struct {
 	addr string
 	opt  model.RouteOption
 
-	serverCert    *certc.Cert
-	clientCert    *certc.Cert
-	clientTLSCert tls.Certificate
-	transport     *quic.Transport
-	logger        *slog.Logger
-
-	active       map[netip.AddrPort]quic.Connection
-	activeMu     sync.RWMutex
-	activeNotify *notify.N
+	serverCert *certc.Cert
+	clientCert *certc.Cert
+	logger     *slog.Logger
 
 	peer *peer
 }
@@ -60,16 +48,11 @@ func NewDestination(fwd model.Forward, addr string, opt model.RouteOption, direc
 		addr: addr,
 		opt:  opt,
 
-		serverCert:    serverCert,
-		clientCert:    clientCert,
-		clientTLSCert: clientTLSCert,
-		transport:     direct.transport, // TODO
-		logger:        logger.With("destination", fwd),
+		serverCert: serverCert,
+		clientCert: clientCert,
+		logger:     logger.With("destination", fwd),
 
-		active:       map[netip.AddrPort]quic.Connection{},
-		activeNotify: notify.New(),
-
-		peer: newPeer(),
+		peer: newPeer(direct.transport, clientTLSCert, logger.With("destination", fwd)),
 	}, nil
 }
 
@@ -88,26 +71,14 @@ func (d *Destination) SetDirectAddrs(addrs []netip.AddrPort) {
 func (d *Destination) Run(ctx context.Context) error {
 	g, ctx := errgroup.WithContext(ctx)
 
-	g.Go(func() error { return d.runPeers(ctx) })
+	g.Go(func() error { return d.peer.run(ctx) })
 	g.Go(func() error { return d.runActive(ctx) })
 
 	return g.Wait()
 }
 
-func (d *Destination) runPeers(ctx context.Context) error {
-	return d.peer.peersListen(ctx, func(peers []*pbs.ServerPeer) error {
-		d.logger.Debug("sources updated", "peers", len(peers))
-		for _, p := range peers {
-			go d.runPeerDirect(ctx, p)
-			go d.runPeerRelay(ctx, p)
-		}
-		return nil
-	})
-}
-
 func (d *Destination) runActive(ctx context.Context) error {
-	return d.activeNotify.Listen(ctx, func() error {
-		active := d.getActive()
+	return d.peer.activeListen(ctx, func(active map[netip.AddrPort]quic.Connection) error {
 		d.logger.Debug("active conns", "len", len(active))
 		for addr, conn := range active {
 			go func() {
@@ -183,81 +154,6 @@ func (d *Destination) runConnect(ctx context.Context, stream quic.Stream, target
 	return nil
 }
 
-func (d *Destination) addActive(ap netip.AddrPort, conn quic.Connection) {
-	defer d.activeNotify.Updated()
-
-	d.activeMu.Lock()
-	defer d.activeMu.Unlock()
-
-	d.active[ap] = conn
-}
-
-func (d *Destination) getActive() map[netip.AddrPort]quic.Connection {
-	d.activeMu.Lock()
-	defer d.activeMu.Unlock()
-
-	return maps.Clone(d.active)
-}
-
-func (d *Destination) runPeerDirect(ctx context.Context, peer *pbs.ServerPeer) error {
-	for _, paddr := range peer.Direct.Addresses {
-		d.logger.Debug("dialing direct", "addr", paddr.AsNetip())
-		addr := net.UDPAddrFromAddrPort(paddr.AsNetip())
-
-		directCert, err := x509.ParseCertificate(peer.Direct.ServerCertificate)
-		if err != nil {
-			return err
-		}
-		directCAs := x509.NewCertPool()
-		directCAs.AddCert(directCert)
-
-		conn, err := d.transport.Dial(ctx, addr, &tls.Config{
-			Certificates: []tls.Certificate{d.clientTLSCert},
-			RootCAs:      directCAs,
-			ServerName:   "connet-direct",
-			NextProtos:   []string{"connet-direct"},
-		}, &quic.Config{
-			KeepAlivePeriod: 25 * time.Second,
-		})
-		if err != nil {
-			d.logger.Debug("could not direct dial", "addr", addr, "err", err)
-			continue
-		}
-		d.addActive(paddr.AsNetip(), conn)
-		break
-	}
-	return nil
-}
-
-func (d *Destination) runPeerRelay(ctx context.Context, peer *pbs.ServerPeer) error {
-	for _, r := range peer.Relays {
-		d.logger.Debug("dialing relay", "addr", r.Address.AsNetip())
-		addr := net.UDPAddrFromAddrPort(r.Address.AsNetip())
-
-		relayCert, err := x509.ParseCertificate(r.ServerCertificate)
-		if err != nil {
-			return err
-		}
-		relayCAs := x509.NewCertPool()
-		relayCAs.AddCert(relayCert)
-
-		conn, err := d.transport.Dial(ctx, addr, &tls.Config{
-			Certificates: []tls.Certificate{d.clientTLSCert},
-			RootCAs:      relayCAs,
-			ServerName:   relayCert.DNSNames[0],
-			NextProtos:   []string{"connet-relay"},
-		}, &quic.Config{
-			KeepAlivePeriod: 25 * time.Second,
-		})
-		if err != nil {
-			d.logger.Debug("could not relay dial", "addr", r.Address.AsNetip(), "err", err)
-			continue
-		}
-		d.addActive(r.Address.AsNetip(), conn)
-	}
-	return nil
-}
-
 func (d *Destination) RunRelay(ctx context.Context, conn quic.Connection) error {
 	if !d.opt.AllowRelay() {
 		return nil
@@ -321,7 +217,11 @@ func (d *Destination) RunControl(ctx context.Context, conn quic.Connection) erro
 	g.Go(func() error {
 		defer d.logger.Debug("completed destination notify")
 		return d.peer.selfListen(ctx, func(peer *pbs.ClientPeer) error {
-			d.logger.Debug("updated destination", "direct", len(peer.Direct.Addresses), "relay", len(peer.Relays))
+			directLen := 0
+			if peer.Direct != nil {
+				directLen = len(peer.Direct.Addresses)
+			}
+			d.logger.Debug("updated destination", "direct", directLen, "relay", len(peer.Relays))
 			return pb.Write(stream, &pbs.Request{
 				Destination: &pbs.Request_Destination{
 					From:        d.fwd.PB(),
