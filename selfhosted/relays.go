@@ -15,20 +15,18 @@ import (
 
 func NewRelaySync(relayAddr netip.AddrPort, cert *x509.Certificate) (*RelaySync, error) {
 	s := &RelaySync{
-		relays:       map[netip.AddrPort]*x509.Certificate{relayAddr: cert},
-		relaysNotify: notify.New(),
-		certs:        map[storeKey]*relay.Authentication{},
+		relays: notify.NewV[map[netip.AddrPort]*x509.Certificate](nil),
+		certs:  map[storeKey]*relay.Authentication{},
 	}
-	s.relaysNotify.Updated() // in local put notify at version 1, so new listens will return the static value and never fire again
+	s.relays.Set(map[netip.AddrPort]*x509.Certificate{relayAddr: cert})
 	return s, nil
 }
 
 type RelaySync struct {
-	relays       map[netip.AddrPort]*x509.Certificate
-	relaysNotify *notify.N
-	certs        map[storeKey]*relay.Authentication
-	certsMu      sync.RWMutex
-	pool         atomic.Pointer[x509.CertPool]
+	relays  *notify.V[map[netip.AddrPort]*x509.Certificate]
+	certs   map[storeKey]*relay.Authentication
+	certsMu sync.RWMutex
+	pool    atomic.Pointer[x509.CertPool]
 }
 
 type storeKey [sha256.Size]byte // TODO another key?
@@ -73,9 +71,7 @@ func (s *RelaySync) Remove(cert *x509.Certificate) {
 }
 
 func (s *RelaySync) Active(ctx context.Context, f func(map[netip.AddrPort]*x509.Certificate) error) error {
-	return s.relaysNotify.Listen(ctx, func() error {
-		return f(s.relays)
-	})
+	return s.relays.Listen(ctx, f)
 }
 
 func (s *RelaySync) Authenticate(certs []*x509.Certificate) *relay.Authentication {

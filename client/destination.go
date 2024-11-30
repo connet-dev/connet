@@ -52,7 +52,7 @@ func NewDestination(fwd model.Forward, addr string, opt model.RouteOption, direc
 		clientCert: clientCert,
 		logger:     logger.With("destination", fwd),
 
-		peer: newPeer(direct.transport, clientTLSCert, logger.With("destination", fwd)),
+		peer: newPeer(direct, clientTLSCert, logger.With("destination", fwd)),
 	}, nil
 }
 

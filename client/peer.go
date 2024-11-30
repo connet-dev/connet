@@ -8,7 +8,6 @@ import (
 	"maps"
 	"net"
 	"net/netip"
-	"sync"
 	"time"
 
 	"github.com/keihaya-com/connet/notify"
@@ -17,90 +16,61 @@ import (
 )
 
 type peer struct {
-	self       *pbs.ClientPeer
-	selfMu     sync.RWMutex
-	selfNotify *notify.N
+	self   *notify.V[*pbs.ClientPeer]
+	peers  *notify.V[[]*pbs.ServerPeer]
+	active *notify.V[map[netip.AddrPort]quic.Connection]
 
-	peers       []*pbs.ServerPeer
-	peersMu     sync.RWMutex
-	peersNotify *notify.N
-
-	active       map[netip.AddrPort]quic.Connection
-	activeMu     sync.RWMutex
-	activeNotify *notify.N
-
-	transport  *quic.Transport
+	direct     *DirectServer
 	clientCert tls.Certificate
 	logger     *slog.Logger
 }
 
-func newPeer(transport *quic.Transport, clientCert tls.Certificate, logger *slog.Logger) *peer {
+func newPeer(direct *DirectServer, clientCert tls.Certificate, logger *slog.Logger) *peer {
 	return &peer{
-		self:       &pbs.ClientPeer{},
-		selfNotify: notify.New(),
+		self:  notify.NewV[*pbs.ClientPeer](nil),
+		peers: notify.NewV[[]*pbs.ServerPeer](nil),
+		active: notify.NewV(func(m map[netip.AddrPort]quic.Connection) map[netip.AddrPort]quic.Connection {
+			return maps.Clone(m)
+		}),
 
-		peersNotify: notify.New(),
-
-		active:       map[netip.AddrPort]quic.Connection{},
-		activeNotify: notify.New(),
-
-		transport:  transport,
+		direct:     direct,
 		clientCert: clientCert,
 		logger:     logger,
 	}
 }
 
 func (p *peer) setDirect(direct *pbs.DirectRoute) {
-	defer p.selfNotify.Updated()
-
-	p.selfMu.Lock()
-	defer p.selfMu.Unlock()
-
-	p.self.Direct = direct
+	p.self.Update(func(cp *pbs.ClientPeer) *pbs.ClientPeer {
+		if cp == nil {
+			cp = &pbs.ClientPeer{}
+		}
+		cp.Direct = direct
+		return cp
+	})
 }
 
 func (p *peer) setRelays(relays []*pbs.RelayRoute) {
-	defer p.selfNotify.Updated()
-
-	p.selfMu.Lock()
-	defer p.selfMu.Unlock()
-
-	p.self.Relays = relays
-}
-
-func (p *peer) getSelf() *pbs.ClientPeer {
-	p.selfMu.RLock()
-	defer p.selfMu.RUnlock()
-
-	return p.self
+	p.self.Update(func(cp *pbs.ClientPeer) *pbs.ClientPeer {
+		if cp == nil {
+			cp = &pbs.ClientPeer{}
+		}
+		cp.Relays = relays
+		return cp
+	})
 }
 
 func (p *peer) selfListen(ctx context.Context, f func(self *pbs.ClientPeer) error) error {
-	return p.selfNotify.Listen(ctx, func() error {
-		return f(p.getSelf())
-	})
+	return p.self.Listen(ctx, f)
 }
 
 func (p *peer) setPeers(peers []*pbs.ServerPeer) {
-	defer p.peersNotify.Updated()
-
-	p.peersMu.Lock()
-	defer p.peersMu.Unlock()
-
-	p.peers = peers
-}
-
-func (p *peer) getPeers() []*pbs.ServerPeer {
-	p.peersMu.RLock()
-	defer p.peersMu.RUnlock()
-
-	return p.peers
+	p.peers.Update(func(sp []*pbs.ServerPeer) []*pbs.ServerPeer {
+		return peers
+	})
 }
 
 func (p *peer) peersListen(ctx context.Context, f func(peers []*pbs.ServerPeer) error) error {
-	return p.peersNotify.Listen(ctx, func() error {
-		return f(p.getPeers())
-	})
+	return p.peers.Listen(ctx, f)
 }
 
 func (p *peer) run(ctx context.Context) error {
@@ -115,25 +85,21 @@ func (p *peer) run(ctx context.Context) error {
 }
 
 func (p *peer) addActive(ap netip.AddrPort, conn quic.Connection) {
-	defer p.activeNotify.Updated()
-
-	p.activeMu.Lock()
-	defer p.activeMu.Unlock()
-
-	p.active[ap] = conn
+	p.active.Update(func(m map[netip.AddrPort]quic.Connection) map[netip.AddrPort]quic.Connection {
+		if m == nil {
+			m = map[netip.AddrPort]quic.Connection{}
+		}
+		m[ap] = conn
+		return m
+	})
 }
 
 func (d *peer) getActive() map[netip.AddrPort]quic.Connection {
-	d.activeMu.Lock()
-	defer d.activeMu.Unlock()
-
-	return maps.Clone(d.active)
+	return d.active.Get()
 }
 
 func (p *peer) activeListen(ctx context.Context, f func(map[netip.AddrPort]quic.Connection) error) error {
-	return p.activeNotify.Listen(ctx, func() error {
-		return f(p.getActive())
-	})
+	return p.active.Listen(ctx, f)
 }
 
 func (p *peer) runDirect(ctx context.Context, peer *pbs.ServerPeer) error {
@@ -151,7 +117,7 @@ func (p *peer) runDirect(ctx context.Context, peer *pbs.ServerPeer) error {
 		directCAs := x509.NewCertPool()
 		directCAs.AddCert(directCert)
 
-		conn, err := p.transport.Dial(ctx, addr, &tls.Config{
+		conn, err := p.direct.transport.Dial(ctx, addr, &tls.Config{
 			Certificates: []tls.Certificate{p.clientCert},
 			RootCAs:      directCAs,
 			ServerName:   "connet-direct",
@@ -181,7 +147,7 @@ func (p *peer) runRelay(ctx context.Context, peer *pbs.ServerPeer) error {
 		relayCAs := x509.NewCertPool()
 		relayCAs.AddCert(relayCert)
 
-		conn, err := p.transport.Dial(ctx, addr, &tls.Config{
+		conn, err := p.direct.transport.Dial(ctx, addr, &tls.Config{
 			Certificates: []tls.Certificate{p.clientCert},
 			RootCAs:      relayCAs,
 			ServerName:   relayCert.DNSNames[0],

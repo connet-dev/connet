@@ -52,7 +52,7 @@ func NewSource(fwd model.Forward, addr string, opt model.RouteOption, direct *Di
 		clientCert: clientCert,
 		logger:     logger.With("source", fwd),
 
-		peer: newPeer(direct.transport, clientTLSCert, logger.With("source", fwd)),
+		peer: newPeer(direct, clientTLSCert, logger.With("source", fwd)),
 	}, nil
 }
 

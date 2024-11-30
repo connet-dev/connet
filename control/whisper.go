@@ -40,92 +40,73 @@ func (w *whisperer) For(fwd model.Forward) *whisper {
 	}
 
 	wh = &whisper{
-		forward:            fwd,
-		destinations:       map[ksuid.KSUID]*pbs.ServerPeer{},
-		destinationsNotify: notify.New(),
-		sources:            map[ksuid.KSUID]*pbs.ServerPeer{},
-		sourcesNotify:      notify.New(),
+		forward:      fwd,
+		destinations: notify.NewV[map[ksuid.KSUID]*pbs.ServerPeer](nil),
+		sources:      notify.NewV[map[ksuid.KSUID]*pbs.ServerPeer](nil),
 	}
 	w.whispers[fwd] = wh
 	return wh
 }
 
 type whisper struct {
-	forward            model.Forward
-	destinations       map[ksuid.KSUID]*pbs.ServerPeer
-	destinationsMu     sync.RWMutex
-	destinationsNotify *notify.N
-	sources            map[ksuid.KSUID]*pbs.ServerPeer
-	sourcesMu          sync.RWMutex
-	sourcesNotify      *notify.N
+	forward      model.Forward
+	destinations *notify.V[map[ksuid.KSUID]*pbs.ServerPeer]
+	sources      *notify.V[map[ksuid.KSUID]*pbs.ServerPeer]
 }
 
 func (w *whisper) AddDestination(id ksuid.KSUID, peer *pbs.ClientPeer) {
-	defer w.destinationsNotify.Updated()
+	w.destinations.Update(func(m map[ksuid.KSUID]*pbs.ServerPeer) map[ksuid.KSUID]*pbs.ServerPeer {
+		if m == nil {
+			m = map[ksuid.KSUID]*pbs.ServerPeer{}
+		}
 
-	w.destinationsMu.Lock()
-	defer w.destinationsMu.Unlock()
-
-	w.destinations[id] = &pbs.ServerPeer{
-		Id:     id.String(),
-		Direct: peer.Direct,
-		Relays: peer.Relays,
-	}
+		m[id] = &pbs.ServerPeer{
+			Id:     id.String(),
+			Direct: peer.Direct,
+			Relays: peer.Relays,
+		}
+		return m
+	})
 }
 
 func (w *whisper) RemoveDestination(id ksuid.KSUID) {
-	defer w.destinationsNotify.Updated()
-
-	w.destinationsMu.Lock()
-	defer w.destinationsMu.Unlock()
-
-	delete(w.destinations, id)
-}
-
-func (w *whisper) getDestinations() []*pbs.ServerPeer {
-	w.destinationsMu.RLock()
-	defer w.destinationsMu.RUnlock()
-
-	return slices.Collect(maps.Values(w.destinations))
+	w.destinations.Update(func(m map[ksuid.KSUID]*pbs.ServerPeer) map[ksuid.KSUID]*pbs.ServerPeer {
+		delete(m, id)
+		return m
+	})
 }
 
 func (w *whisper) Destinations(ctx context.Context, f func([]*pbs.ServerPeer) error) error {
-	return w.destinationsNotify.Listen(ctx, func() error {
-		return f(w.getDestinations())
+	return w.destinations.Listen(ctx, func(t map[ksuid.KSUID]*pbs.ServerPeer) error {
+		vals := slices.Collect(maps.Values(t))
+		return f(vals)
 	})
 }
 
 func (w *whisper) AddSource(id ksuid.KSUID, peer *pbs.ClientPeer) {
-	defer w.sourcesNotify.Updated()
+	w.sources.Update(func(m map[ksuid.KSUID]*pbs.ServerPeer) map[ksuid.KSUID]*pbs.ServerPeer {
+		if m == nil {
+			m = map[ksuid.KSUID]*pbs.ServerPeer{}
+		}
 
-	w.sourcesMu.Lock()
-	defer w.sourcesMu.Unlock()
-
-	w.sources[id] = &pbs.ServerPeer{
-		Id:     id.String(),
-		Direct: peer.Direct,
-		Relays: peer.Relays,
-	}
+		m[id] = &pbs.ServerPeer{
+			Id:     id.String(),
+			Direct: peer.Direct,
+			Relays: peer.Relays,
+		}
+		return m
+	})
 }
 
 func (w *whisper) RemoveSource(id ksuid.KSUID) {
-	defer w.sourcesNotify.Updated()
-
-	w.sourcesMu.Lock()
-	defer w.sourcesMu.Unlock()
-
-	delete(w.sources, id)
-}
-
-func (w *whisper) getSources() []*pbs.ServerPeer {
-	w.sourcesMu.RLock()
-	defer w.sourcesMu.RUnlock()
-
-	return slices.Collect(maps.Values(w.sources))
+	w.sources.Modify(func(m map[ksuid.KSUID]*pbs.ServerPeer) {
+		delete(m, id)
+	})
 }
 
 func (w *whisper) Sources(ctx context.Context, f func([]*pbs.ServerPeer) error) error {
-	return w.sourcesNotify.Listen(ctx, func() error {
-		return f(w.getSources())
+	return w.sources.Listen(ctx, func(t map[ksuid.KSUID]*pbs.ServerPeer) error {
+		vals := slices.Collect(maps.Values(t))
+		return f(vals)
 	})
 }
