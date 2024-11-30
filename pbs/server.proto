@@ -17,22 +17,26 @@ message AuthenticateResp {
 
 message Request {
   // Soft one-of
-  Relay relay = 1;
+  DestinationRelay destination_relay = 1;
   Destination destination = 2;
-  Source source = 3;
+  SourceRelay source_relay = 3;
+  Source source = 4;
 
-  message Relay {
-    bytes certificate = 1; // certificate to use when connecting to a relay
-    repeated shared.Forward destinations = 2;
-    repeated shared.Forward sources = 3;
+  message DestinationRelay {
+    shared.Forward from = 1;
+    bytes certificate = 2; // certificate to use when connecting to a relay
   }
   message Destination {
     shared.Forward from = 1;
-    Peer peer = 2;
+    ClientPeer destination = 2;
+  }
+  message SourceRelay {
+    shared.Forward to = 1;
+    bytes certificate = 2; // certificate to use when connecting to a relay
   }
   message Source {
     shared.Forward to = 1;
-    Peer peer = 2;
+    ClientPeer source = 2;
   }
 }
 
@@ -44,22 +48,34 @@ message Response {
   Source source = 4;
 
   message Relay {
-    repeated Route relays = 1; // set of relay addresses that follow this server
+    repeated RelayRoute relays = 1;
   }
   message Destination {
-    repeated Peer sources = 1;
+    repeated ServerPeer sources = 1;
   }
   message Source {
-    repeated Peer destinations = 1;
+    repeated ServerPeer destinations = 1;
   }
 }
 
-message Peer {
-  repeated Route directs = 1;
-  repeated Route relays = 2;
+message ClientPeer {
+  DirectRoute direct = 1;
+  repeated RelayRoute relays = 2;
 }
 
-message Route {
-  string hostport = 1;
-  bytes certificate = 2;
+message ServerPeer {
+  string id = 1;
+  DirectRoute direct = 2;
+  repeated RelayRoute relays = 3;
+}
+
+message DirectRoute {
+  repeated shared.AddrPort addresses = 1;
+  bytes server_certificate = 2;
+  bytes client_certificate = 3;
+}
+
+message RelayRoute {
+  shared.AddrPort address = 1;
+  bytes server_certificate = 2;
 }

@@ -7,6 +7,7 @@ import (
 	"errors"
 	"log/slog"
 	"net"
+	"net/netip"
 	"time"
 
 	"github.com/keihaya-com/connet/model"
@@ -205,10 +206,12 @@ func (s *controlStream) runErr(ctx context.Context) error {
 	}
 
 	switch {
-	case req.Relay != nil:
-		return s.relay(ctx, req.Relay)
+	case req.DestinationRelay != nil:
+		return s.destinationRelay(ctx, req.DestinationRelay)
 	case req.Destination != nil:
 		return s.destination(ctx, req.Destination)
+	case req.SourceRelay != nil:
+		return s.sourceRelay(ctx, req.SourceRelay)
 	case req.Source != nil:
 		return s.source(ctx, req.Source)
 	default:
@@ -216,31 +219,14 @@ func (s *controlStream) runErr(ctx context.Context) error {
 	}
 }
 
-func (s *controlStream) relay(ctx context.Context, req *pbs.Request_Relay) error {
-	var destinations []model.Forward
-	for _, dst := range req.Destinations {
-		fwd := model.NewForwardFromPB(dst)
-		if !s.conn.auth.AllowDestination(fwd.String()) {
-			err := pb.NewError(pb.Error_RelayDestinationNotAllowed, "desination '%s' not allowed", fwd)
-			if err := pb.Write(s.stream, &pbs.Response{Error: err}); err != nil {
-				return kleverr.Newf("could not write error response: %w", err)
-			}
-			return err
+func (s *controlStream) destinationRelay(ctx context.Context, req *pbs.Request_DestinationRelay) error {
+	fwd := model.NewForwardFromPB(req.From)
+	if !s.conn.auth.AllowDestination(fwd.String()) {
+		err := pb.NewError(pb.Error_RelayDestinationNotAllowed, "desination '%s' not allowed", fwd)
+		if err := pb.Write(s.stream, &pbs.Response{Error: err}); err != nil {
+			return kleverr.Newf("could not write error response: %w", err)
 		}
-		destinations = append(destinations, fwd)
-	}
-
-	var sources []model.Forward
-	for _, src := range req.Sources {
-		fwd := model.NewForwardFromPB(src)
-		if !s.conn.auth.AllowSource(fwd.String()) {
-			err := pb.NewError(pb.Error_RelaySourceNotAllowed, "source '%s' not allowed", fwd)
-			if err := pb.Write(s.stream, &pbs.Response{Error: err}); err != nil {
-				return kleverr.Newf("could not write error response: %w", err)
-			}
-			return err
-		}
-		sources = append(sources, fwd)
+		return err
 	}
 
 	cert, err := x509.ParseCertificate(req.Certificate)
@@ -252,28 +238,28 @@ func (s *controlStream) relay(ctx context.Context, req *pbs.Request_Relay) error
 		return err
 	}
 
-	s.conn.server.relays.Add(cert, destinations, sources)
+	s.conn.server.relays.Add(cert, []model.Forward{fwd}, nil)
 	defer s.conn.server.relays.Remove(cert)
-	// TODO how to remove?
 
-	defer s.logger.Debug("completed relays notify")
-	return s.conn.server.relays.Active(ctx, func(relays map[string]*x509.Certificate) error {
-		s.logger.Debug("updated relays list", "relays", len(relays))
-		var addrs []*pbs.Route
-		for hostport, cert := range relays {
+	defer s.logger.Debug("completed destination relay notify")
+	return s.conn.server.relays.Active(ctx, func(relays map[netip.AddrPort]*x509.Certificate) error {
+		s.logger.Debug("updated destination relay list", "relays", len(relays))
+
+		var routes []*pbs.RelayRoute
+		for addr, cert := range relays {
 			var certData []byte
 			if cert != nil {
 				certData = cert.Raw
 			}
-			addrs = append(addrs, &pbs.Route{
-				Hostport:    hostport,
-				Certificate: certData,
+			routes = append(routes, &pbs.RelayRoute{
+				Address:           pb.AddrPortFromNetip(addr),
+				ServerCertificate: certData,
 			})
 		}
 
 		if err := pb.Write(s.stream, &pbs.Response{
 			Relay: &pbs.Response_Relay{
-				Relays: addrs,
+				Relays: routes,
 			},
 		}); err != nil {
 			return kleverr.Ret(err)
@@ -292,14 +278,10 @@ func (s *controlStream) destination(ctx context.Context, req *pbs.Request_Destin
 		return err
 	}
 
-	peer, err := model.NewPeerFromPB(req.Peer)
-	if err != nil {
-		respErr := pb.NewError(pb.Error_DestinationInvalidCertificate, "cannot parse certificate: %v", err)
-		return pb.Write(s.stream, &pbs.Response{Error: respErr})
-	}
+	// TODO check certificates?
 
 	w := s.conn.server.whisperer.For(from)
-	w.AddDestination(s.conn.id, peer)
+	w.AddDestination(s.conn.id, req.Destination)
 	defer w.RemoveDestination(s.conn.id)
 
 	g, ctx := errgroup.WithContext(ctx)
@@ -318,24 +300,20 @@ func (s *controlStream) destination(ctx context.Context, req *pbs.Request_Destin
 				return respErr
 			}
 
-			peer, err := model.NewPeerFromPB(req.Destination.Peer)
-			if err != nil {
-				respErr := pb.NewError(pb.Error_DestinationInvalidCertificate, "cannot parse certificate: %v", err)
-				return pb.Write(s.stream, &pbs.Response{Error: respErr})
-			}
+			// TODO check certificates?
 
-			w.AddDestination(s.conn.id, peer)
+			w.AddDestination(s.conn.id, req.Destination.Destination)
 		}
 	})
 
 	g.Go(func() error {
 		defer s.logger.Debug("completed sources notify")
-		return w.Sources(ctx, func(peers []model.Peer) error {
+		return w.Sources(ctx, func(peers []*pbs.ServerPeer) error {
 			s.logger.Debug("updated sources list", "peers", len(peers))
 
 			if err := pb.Write(s.stream, &pbs.Response{
 				Destination: &pbs.Response_Destination{
-					Sources: model.PeersToPB(peers),
+					Sources: peers,
 				},
 			}); err != nil {
 				return kleverr.Ret(err)
@@ -348,6 +326,55 @@ func (s *controlStream) destination(ctx context.Context, req *pbs.Request_Destin
 	return g.Wait()
 }
 
+func (s *controlStream) sourceRelay(ctx context.Context, req *pbs.Request_SourceRelay) error {
+	fwd := model.NewForwardFromPB(req.To)
+	if !s.conn.auth.AllowSource(fwd.String()) {
+		err := pb.NewError(pb.Error_RelaySourceNotAllowed, "source '%s' not allowed", fwd)
+		if err := pb.Write(s.stream, &pbs.Response{Error: err}); err != nil {
+			return kleverr.Newf("could not write error response: %w", err)
+		}
+		return err
+	}
+
+	cert, err := x509.ParseCertificate(req.Certificate)
+	if err != nil {
+		err := pb.NewError(pb.Error_RelayInvalidCertificate, "invalid certificate: %v", err)
+		if err := pb.Write(s.stream, &pbs.Response{Error: err}); err != nil {
+			return kleverr.Newf("could not write error response: %w", err)
+		}
+		return err
+	}
+
+	s.conn.server.relays.Add(cert, nil, []model.Forward{fwd})
+	defer s.conn.server.relays.Remove(cert)
+
+	defer s.logger.Debug("completed source relay notify")
+	return s.conn.server.relays.Active(ctx, func(relays map[netip.AddrPort]*x509.Certificate) error {
+		s.logger.Debug("updated source relay list", "relays", len(relays))
+
+		var routes []*pbs.RelayRoute
+		for addr, cert := range relays {
+			var certData []byte
+			if cert != nil {
+				certData = cert.Raw
+			}
+			routes = append(routes, &pbs.RelayRoute{
+				Address:           pb.AddrPortFromNetip(addr),
+				ServerCertificate: certData,
+			})
+		}
+
+		if err := pb.Write(s.stream, &pbs.Response{
+			Relay: &pbs.Response_Relay{
+				Relays: routes,
+			},
+		}); err != nil {
+			return kleverr.Ret(err)
+		}
+		return nil
+	})
+}
+
 func (s *controlStream) source(ctx context.Context, req *pbs.Request_Source) error {
 	to := model.NewForwardFromPB(req.To)
 	if !s.conn.auth.AllowSource(to.String()) {
@@ -358,14 +385,10 @@ func (s *controlStream) source(ctx context.Context, req *pbs.Request_Source) err
 		return err
 	}
 
-	peer, err := model.NewPeerFromPB(req.Peer)
-	if err != nil {
-		respErr := pb.NewError(pb.Error_SourceInvalidCertificate, "cannot parse certificate: %v", err)
-		return pb.Write(s.stream, &pbs.Response{Error: respErr})
-	}
+	// TODO check certificates?
 
 	w := s.conn.server.whisperer.For(to)
-	w.AddSource(s.conn.id, peer)
+	w.AddSource(s.conn.id, req.Source)
 	defer w.RemoveSource(s.conn.id)
 
 	g, ctx := errgroup.WithContext(ctx)
@@ -384,26 +407,20 @@ func (s *controlStream) source(ctx context.Context, req *pbs.Request_Source) err
 				return respErr
 			}
 
-			peer, err := model.NewPeerFromPB(req.Source.Peer)
-			if err != nil {
-				respErr := pb.NewError(pb.Error_SourceInvalidCertificate, "cannot parse certificate: %v", err)
-				if err := pb.Write(s.stream, &pbs.Response{Error: respErr}); err != nil {
-					return kleverr.Ret(err)
-				}
-				return respErr
-			}
-			w.AddSource(s.conn.id, peer)
+			// TODO check certificates?
+
+			w.AddSource(s.conn.id, req.Source.Source)
 		}
 	})
 
 	g.Go(func() error {
 		defer s.logger.Debug("completed destinations notify")
-		return w.Destinations(ctx, func(peers []model.Peer) error {
+		return w.Destinations(ctx, func(peers []*pbs.ServerPeer) error {
 			s.logger.Debug("updated destinations list", "peers", len(peers))
 
 			if err := pb.Write(s.stream, &pbs.Response{
 				Source: &pbs.Response_Source{
-					Destinations: model.PeersToPB(peers),
+					Destinations: peers,
 				},
 			}); err != nil {
 				return kleverr.Ret(err)

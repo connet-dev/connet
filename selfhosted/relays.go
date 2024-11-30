@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/sha256"
 	"crypto/x509"
+	"net/netip"
 	"sync"
 	"sync/atomic"
 
@@ -12,9 +13,9 @@ import (
 	"github.com/keihaya-com/connet/relay"
 )
 
-func NewRelaySync(hostport string, cert *x509.Certificate) (*RelaySync, error) {
+func NewRelaySync(relayAddr netip.AddrPort, cert *x509.Certificate) (*RelaySync, error) {
 	s := &RelaySync{
-		relays:       map[string]*x509.Certificate{hostport: cert},
+		relays:       map[netip.AddrPort]*x509.Certificate{relayAddr: cert},
 		relaysNotify: notify.New(),
 		certs:        map[storeKey]*relay.Authentication{},
 	}
@@ -23,7 +24,7 @@ func NewRelaySync(hostport string, cert *x509.Certificate) (*RelaySync, error) {
 }
 
 type RelaySync struct {
-	relays       map[string]*x509.Certificate
+	relays       map[netip.AddrPort]*x509.Certificate
 	relaysNotify *notify.N
 	certs        map[storeKey]*relay.Authentication
 	certsMu      sync.RWMutex
@@ -71,7 +72,7 @@ func (s *RelaySync) Remove(cert *x509.Certificate) {
 	s.pool.Store(pool)
 }
 
-func (s *RelaySync) Active(ctx context.Context, f func(map[string]*x509.Certificate) error) error {
+func (s *RelaySync) Active(ctx context.Context, f func(map[netip.AddrPort]*x509.Certificate) error) error {
 	return s.relaysNotify.Listen(ctx, func() error {
 		return f(s.relays)
 	})

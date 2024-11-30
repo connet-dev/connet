@@ -2,33 +2,50 @@ package client
 
 import (
 	"context"
-	"crypto/x509"
+	"log/slog"
 	"net/netip"
-	"sync"
 
+	"github.com/keihaya-com/connet/certc"
 	"github.com/keihaya-com/connet/model"
-	"github.com/keihaya-com/connet/notify"
+	"github.com/keihaya-com/connet/pb"
+	"github.com/keihaya-com/connet/pbs"
+	"github.com/klev-dev/kleverr"
+	"github.com/quic-go/quic-go"
+	"golang.org/x/sync/errgroup"
 )
 
 type Destination struct {
 	fwd  model.Forward
 	addr string
 	opt  model.RouteOption
-	cert *x509.Certificate
 
-	peer       model.Peer
-	peerMu     sync.RWMutex
-	peerNotify *notify.N
+	serverCert *certc.Cert
+	clientCert *certc.Cert
+	logger     *slog.Logger
+
+	peer *peer
 }
 
-func NewDestination(fwd model.Forward, addr string, opt model.RouteOption, cert *x509.Certificate) (*Destination, error) {
+func NewDestination(fwd model.Forward, addr string, opt model.RouteOption, direct *DirectServer, root *certc.Cert, logger *slog.Logger) (*Destination, error) {
+	serverCert, err := root.NewServer(certc.CertOpts{Domains: []string{"connet-direct"}})
+	if err != nil {
+		return nil, err
+	}
+	clientCert, err := root.NewClient(certc.CertOpts{})
+	if err != nil {
+		return nil, err
+	}
+
 	return &Destination{
 		fwd:  fwd,
 		addr: addr,
 		opt:  opt,
-		cert: cert,
 
-		peerNotify: notify.New(),
+		serverCert: serverCert,
+		clientCert: clientCert,
+		logger:     logger.With("destination", fwd),
+
+		peer: newPeer(),
 	}, nil
 }
 
@@ -37,52 +54,114 @@ func (d *Destination) SetDirectAddrs(addrs []netip.AddrPort) {
 		return
 	}
 
-	routes := make([]model.Route, len(addrs))
-	for i, addr := range addrs {
-		routes[i] = model.Route{
-			Hostport:    addr.String(),
-			Certificate: d.cert,
-		}
-	}
-
-	defer d.peerNotify.Updated()
-
-	d.peerMu.Lock()
-	defer d.peerMu.Unlock()
-
-	d.peer.Directs = routes
-}
-
-func (d *Destination) SetRelays(relays []model.Route) {
-	if !d.opt.AllowRelay() {
-		return
-	}
-
-	defer d.peerNotify.Updated()
-
-	d.peerMu.Lock()
-	defer d.peerMu.Unlock()
-
-	d.peer.Relays = relays
-}
-
-func (d *Destination) getPeer() model.Peer {
-	d.peerMu.RLock()
-	defer d.peerMu.RUnlock()
-
-	return d.peer // TODO maybe copy
-}
-
-func (d *Destination) Destination(ctx context.Context, f func(peer model.Peer) error) error {
-	return d.peerNotify.Listen(ctx, func() error {
-		return f(d.getPeer())
+	d.peer.setDirect(&pbs.DirectRoute{
+		Addresses:         pb.AsAddrPorts(addrs),
+		ServerCertificate: d.serverCert.Raw(),
+		ClientCertificate: d.clientCert.Raw(),
 	})
 }
 
-func (d *Destination) Sources(sources []model.Peer) {
+func (d *Destination) Run(ctx context.Context) error {
+	g, ctx := errgroup.WithContext(ctx)
 
+	g.Go(func() error { return d.runPeers(ctx) })
+
+	return g.Wait()
 }
 
-func (d *Destination) Run(ctx context.Context) error {
-	return nil
+func (d *Destination) runPeers(ctx context.Context) error {
+	return d.peer.peersListen(ctx, func(peers []*pbs.ServerPeer) error {
+		d.logger.Debug("sources updated", "peers", len(peers))
+		return nil
+	})
+}
+
+func (d *Destination) RunRelay(ctx context.Context, conn quic.Connection) error {
+	if !d.opt.AllowRelay() {
+		return nil
+	}
+
+	stream, err := conn.OpenStreamSync(ctx)
+	if err != nil {
+		return kleverr.Ret(err)
+	}
+	defer stream.Close()
+
+	if err := pb.Write(stream, &pbs.Request{
+		DestinationRelay: &pbs.Request_DestinationRelay{
+			From:        d.fwd.PB(),
+			Certificate: d.clientCert.Raw(),
+		},
+	}); err != nil {
+		return err
+	}
+
+	g, ctx := errgroup.WithContext(ctx)
+
+	g.Go(func() error {
+		<-ctx.Done()
+		stream.CancelRead(0)
+		return nil
+	})
+
+	g.Go(func() error {
+		for {
+			resp, err := pbs.ReadResponse(stream)
+			if err != nil {
+				return err
+			}
+			if resp.Relay == nil {
+				return kleverr.Newf("unexpected response")
+			}
+
+			d.peer.setRelays(resp.Relay.Relays)
+		}
+	})
+
+	return g.Wait()
+}
+
+func (d *Destination) RunControl(ctx context.Context, conn quic.Connection) error {
+	stream, err := conn.OpenStreamSync(ctx)
+	if err != nil {
+		return kleverr.Ret(err)
+	}
+	defer stream.Close()
+
+	g, ctx := errgroup.WithContext(ctx)
+
+	g.Go(func() error {
+		<-ctx.Done()
+		stream.CancelRead(0)
+		return nil
+	})
+
+	g.Go(func() error {
+		defer d.logger.Debug("completed destination notify")
+		return d.peer.selfListen(ctx, func(peer *pbs.ClientPeer) error {
+			d.logger.Debug("updated destination", "direct", len(peer.Direct.Addresses), "relay", len(peer.Relays))
+			return pb.Write(stream, &pbs.Request{
+				Destination: &pbs.Request_Destination{
+					From:        d.fwd.PB(),
+					Destination: peer,
+				},
+			})
+		})
+	})
+
+	g.Go(func() error {
+		for {
+			resp, err := pbs.ReadResponse(stream)
+			if err != nil {
+				return err
+			}
+			if resp.Destination == nil {
+				return kleverr.Newf("unexpected response")
+			}
+
+			d.peer.setPeers(resp.Destination.Sources)
+		}
+	})
+
+	return g.Wait()
 }

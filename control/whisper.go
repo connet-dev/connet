@@ -8,6 +8,7 @@ import (
 
 	"github.com/keihaya-com/connet/model"
 	"github.com/keihaya-com/connet/notify"
+	"github.com/keihaya-com/connet/pbs"
 	"github.com/segmentio/ksuid"
 )
 
@@ -40,9 +41,9 @@ func (w *whisperer) For(fwd model.Forward) *whisper {
 
 	wh = &whisper{
 		forward:            fwd,
-		destinations:       map[ksuid.KSUID]model.Peer{},
+		destinations:       map[ksuid.KSUID]*pbs.ServerPeer{},
 		destinationsNotify: notify.New(),
-		sources:            map[ksuid.KSUID]model.Peer{},
+		sources:            map[ksuid.KSUID]*pbs.ServerPeer{},
 		sourcesNotify:      notify.New(),
 	}
 	w.whispers[fwd] = wh
@@ -51,21 +52,25 @@ func (w *whisperer) For(fwd model.Forward) *whisper {
 
 type whisper struct {
 	forward            model.Forward
-	destinations       map[ksuid.KSUID]model.Peer
+	destinations       map[ksuid.KSUID]*pbs.ServerPeer
 	destinationsMu     sync.RWMutex
 	destinationsNotify *notify.N
-	sources            map[ksuid.KSUID]model.Peer
+	sources            map[ksuid.KSUID]*pbs.ServerPeer
 	sourcesMu          sync.RWMutex
 	sourcesNotify      *notify.N
 }
 
-func (w *whisper) AddDestination(id ksuid.KSUID, peer model.Peer) {
+func (w *whisper) AddDestination(id ksuid.KSUID, peer *pbs.ClientPeer) {
 	defer w.destinationsNotify.Updated()
 
 	w.destinationsMu.Lock()
 	defer w.destinationsMu.Unlock()
 
-	w.destinations[id] = peer
+	w.destinations[id] = &pbs.ServerPeer{
+		Id:     id.String(),
+		Direct: peer.Direct,
+		Relays: peer.Relays,
+	}
 }
 
 func (w *whisper) RemoveDestination(id ksuid.KSUID) {
@@ -77,26 +82,30 @@ func (w *whisper) RemoveDestination(id ksuid.KSUID) {
 	delete(w.destinations, id)
 }
 
-func (w *whisper) getDestinations() []model.Peer {
+func (w *whisper) getDestinations() []*pbs.ServerPeer {
 	w.destinationsMu.RLock()
 	defer w.destinationsMu.RUnlock()
 
 	return slices.Collect(maps.Values(w.destinations))
 }
 
-func (w *whisper) Destinations(ctx context.Context, f func([]model.Peer) error) error {
+func (w *whisper) Destinations(ctx context.Context, f func([]*pbs.ServerPeer) error) error {
 	return w.destinationsNotify.Listen(ctx, func() error {
 		return f(w.getDestinations())
 	})
 }
 
-func (w *whisper) AddSource(id ksuid.KSUID, peer model.Peer) {
+func (w *whisper) AddSource(id ksuid.KSUID, peer *pbs.ClientPeer) {
 	defer w.sourcesNotify.Updated()
 
 	w.sourcesMu.Lock()
 	defer w.sourcesMu.Unlock()
 
-	w.sources[id] = peer
+	w.sources[id] = &pbs.ServerPeer{
+		Id:     id.String(),
+		Direct: peer.Direct,
+		Relays: peer.Relays,
+	}
 }
 
 func (w *whisper) RemoveSource(id ksuid.KSUID) {
@@ -108,14 +117,14 @@ func (w *whisper) RemoveSource(id ksuid.KSUID) {
 	delete(w.sources, id)
 }
 
-func (w *whisper) getSources() []model.Peer {
+func (w *whisper) getSources() []*pbs.ServerPeer {
 	w.sourcesMu.RLock()
 	defer w.sourcesMu.RUnlock()
 
 	return slices.Collect(maps.Values(w.sources))
 }
 
-func (w *whisper) Sources(ctx context.Context, f func([]model.Peer) error) error {
+func (w *whisper) Sources(ctx context.Context, f func([]*pbs.ServerPeer) error) error {
 	return w.sourcesNotify.Listen(ctx, func() error {
 		return f(w.getSources())
 	})

@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"log/slog"
 	"net"
+	"net/netip"
 
 	"github.com/keihaya-com/connet/control"
 	"github.com/keihaya-com/connet/relay"
@@ -43,25 +44,26 @@ func NewServer(opts ...ServerOption) (*Server, error) {
 		}
 	}
 
-	if cfg.hostname == "" {
+	if cfg.publicAddr.IsUnspecified() {
 		switch {
 		case cfg.relayCert.Leaf != nil && len(cfg.relayCert.Leaf.DNSNames) > 0:
-			if err := ServerHostname(cfg.relayCert.Leaf.DNSNames[0])(cfg); err != nil {
+			if err := ServerPublicAddress(cfg.relayCert.Leaf.DNSNames[0])(cfg); err != nil {
 				return nil, err
 			}
 		case cfg.relayCert.Leaf != nil && len(cfg.relayCert.Leaf.IPAddresses) > 0:
-			if err := ServerHostname(cfg.relayCert.Leaf.IPAddresses[0].String())(cfg); err != nil {
+			if err := ServerPublicAddress(cfg.relayCert.Leaf.IPAddresses[0].String())(cfg); err != nil {
 				return nil, err
 			}
 		default:
-			if err := ServerHostname("localhost")(cfg); err != nil {
+			if err := ServerPublicAddress("127.0.0.1")(cfg); err != nil {
 				return nil, err
 			}
 		}
 	}
 
-	relayHostport := fmt.Sprintf("%s:%d", cfg.hostname, cfg.relayAddr.Port)
-	rsync, err := selfhosted.NewRelaySync(relayHostport, cfg.relayCert.Leaf)
+	relayPublicAddr := netip.AddrPortFrom(cfg.publicAddr, cfg.relayAddr.AddrPort().Port())
+	fmt.Println("pub:", relayPublicAddr)
+	rsync, err := selfhosted.NewRelaySync(relayPublicAddr, cfg.relayCert.Leaf)
 	if err != nil {
 		return nil, err
 	}
@@ -104,7 +106,7 @@ func (s *Server) Run(ctx context.Context) error {
 }
 
 type serverConfig struct {
-	hostname string
+	publicAddr netip.Addr
 
 	controlAddr *net.UDPAddr
 	controlCert tls.Certificate
@@ -125,9 +127,13 @@ func ServerTokens(tokens ...string) ServerOption {
 	}
 }
 
-func ServerHostname(hostname string) ServerOption {
+func ServerPublicAddress(addr string) ServerOption {
 	return func(cfg *serverConfig) error {
-		cfg.hostname = hostname
+		if a, err := netip.ParseAddr(addr); err != nil {
+			return err
+		} else {
+			cfg.publicAddr = a
+		}
 		return nil
 	}
 }
