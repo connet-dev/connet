@@ -5,7 +5,6 @@ import (
 	"crypto/tls"
 	"crypto/x509"
 	"log/slog"
-	"maps"
 	"net"
 	"net/netip"
 	"time"
@@ -27,11 +26,10 @@ type peer struct {
 
 func newPeer(direct *DirectServer, clientCert tls.Certificate, logger *slog.Logger) *peer {
 	return &peer{
-		self:  notify.NewV[*pbs.ClientPeer](nil),
-		peers: notify.NewV[[]*pbs.ServerPeer](nil),
-		active: notify.NewV(func(m map[netip.AddrPort]quic.Connection) map[netip.AddrPort]quic.Connection {
-			return maps.Clone(m)
-		}),
+		self:  notify.NewV(notify.InitialOpt(&pbs.ClientPeer{})),
+		peers: notify.NewV[[]*pbs.ServerPeer](),
+		active: notify.NewV(notify.InitialOpt(map[netip.AddrPort]quic.Connection{}),
+			notify.CopyMapOpt[map[netip.AddrPort]quic.Connection]()),
 
 		direct:     direct,
 		clientCert: clientCert,
@@ -41,9 +39,6 @@ func newPeer(direct *DirectServer, clientCert tls.Certificate, logger *slog.Logg
 
 func (p *peer) setDirect(direct *pbs.DirectRoute) {
 	p.self.Update(func(cp *pbs.ClientPeer) *pbs.ClientPeer {
-		if cp == nil {
-			cp = &pbs.ClientPeer{}
-		}
 		cp.Direct = direct
 		return cp
 	})
@@ -51,9 +46,6 @@ func (p *peer) setDirect(direct *pbs.DirectRoute) {
 
 func (p *peer) setRelays(relays []*pbs.RelayRoute) {
 	p.self.Update(func(cp *pbs.ClientPeer) *pbs.ClientPeer {
-		if cp == nil {
-			cp = &pbs.ClientPeer{}
-		}
 		cp.Relays = relays
 		return cp
 	})
@@ -86,9 +78,6 @@ func (p *peer) run(ctx context.Context) error {
 
 func (p *peer) addActive(ap netip.AddrPort, conn quic.Connection) {
 	p.active.Update(func(m map[netip.AddrPort]quic.Connection) map[netip.AddrPort]quic.Connection {
-		if m == nil {
-			m = map[netip.AddrPort]quic.Connection{}
-		}
 		m[ap] = conn
 		return m
 	})

@@ -15,7 +15,7 @@ import (
 
 func NewRelaySync(relayAddr netip.AddrPort, cert *x509.Certificate) (*RelaySync, error) {
 	s := &RelaySync{
-		relays: notify.NewV[map[netip.AddrPort]*x509.Certificate](nil),
+		relays: notify.NewV[map[netip.AddrPort]*x509.Certificate](),
 		certs:  map[storeKey]*relay.Authentication{},
 	}
 	s.relays.Set(map[netip.AddrPort]*x509.Certificate{relayAddr: cert})
