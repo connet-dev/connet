@@ -2,17 +2,15 @@ package client
 
 import (
 	"context"
+	"crypto/sha256"
 	"crypto/tls"
 	"crypto/x509"
+	"encoding/base64"
 	"errors"
 	"log/slog"
-	"maps"
 	"sync"
-	"sync/atomic"
 	"time"
 
-	"github.com/keihaya-com/connet/model"
-	"github.com/keihaya-com/connet/notify"
 	"github.com/klev-dev/kleverr"
 	"github.com/quic-go/quic-go"
 	"golang.org/x/sync/errgroup"
@@ -22,12 +20,14 @@ type DirectServer struct {
 	transport *quic.Transport
 	logger    *slog.Logger
 
-	dsts   map[model.Forward]directClient
-	srcs   map[model.Forward]directClient
-	mu     sync.RWMutex
-	notify *notify.N
+	serverCers   []tls.Certificate
+	serverCersMu sync.RWMutex
 
-	certs atomic.Pointer[directTLS]
+	clientCerts   map[string][]*x509.Certificate
+	clientCertsMu sync.RWMutex
+
+	activeConns   map[string]quic.Connection
+	activeConnsMu sync.RWMutex
 }
 
 func NewDirectServer(transport *quic.Transport, logger *slog.Logger) *DirectServer {
@@ -35,95 +35,56 @@ func NewDirectServer(transport *quic.Transport, logger *slog.Logger) *DirectServ
 		transport: transport,
 		logger:    logger.With("component", "direct-server"),
 
-		notify: notify.New(),
+		clientCerts: map[string][]*x509.Certificate{},
+
+		activeConns: map[string]quic.Connection{},
 	}
-}
-
-type directClient interface {
-	ServerCert() tls.Certificate
-	ClientCerts() []*x509.Certificate
-}
-
-type directTLS struct {
-	certs []tls.Certificate
-	cas   *x509.CertPool
 }
 
 func (s *DirectServer) Run(ctx context.Context) error {
 	g, ctx := errgroup.WithContext(ctx)
 
-	g.Go(func() error { return s.runClients(ctx) })
 	g.Go(func() error { return s.runServer(ctx) })
 
 	return g.Wait()
 }
 
-func (s *DirectServer) addDestination(fwd model.Forward, cl directClient) {
-	defer s.notify.Updated()
+func (s *DirectServer) addServerCert(cert tls.Certificate) {
+	s.serverCersMu.Lock()
+	defer s.serverCersMu.Unlock()
 
-	s.mu.Lock()
-	defer s.mu.Unlock()
-
-	s.dsts[fwd] = cl
+	s.logger.Debug("server cert", "cert", printCert(cert.Leaf))
+	s.serverCers = append(s.serverCers, cert)
 }
 
-func (s *DirectServer) removeDestination(fwd model.Forward) {
-	defer s.notify.Updated()
+func (s *DirectServer) getServerCerts() []tls.Certificate {
+	s.serverCersMu.RLock()
+	defer s.serverCersMu.RUnlock()
 
-	s.mu.Lock()
-	defer s.mu.Unlock()
-
-	delete(s.dsts, fwd)
+	return s.serverCers
 }
 
-func (s *DirectServer) addSource(fwd model.Forward, cl directClient) {
-	defer s.notify.Updated()
+func (s *DirectServer) setClientCerts(srv *x509.Certificate, certs []*x509.Certificate) {
+	s.clientCertsMu.Lock()
+	defer s.clientCertsMu.Unlock()
 
-	s.mu.Lock()
-	defer s.mu.Unlock()
-
-	s.srcs[fwd] = cl
+	for _, cert := range certs {
+		s.logger.Debug("client cert", "cert", printCert(cert))
+	}
+	s.clientCerts[printCert(srv)] = certs
 }
 
-func (s *DirectServer) removeSource(fwd model.Forward) {
-	defer s.notify.Updated()
+func (s *DirectServer) getClientCerts() *x509.CertPool {
+	s.clientCertsMu.RLock()
+	defer s.clientCertsMu.RUnlock()
 
-	s.mu.Lock()
-	defer s.mu.Unlock()
-
-	delete(s.srcs, fwd)
-}
-
-func (s *DirectServer) get() (map[model.Forward]directClient, map[model.Forward]directClient) {
-	s.mu.RLock()
-	defer s.mu.RUnlock()
-
-	return maps.Clone(s.dsts), maps.Clone(s.srcs)
-}
-
-func (s *DirectServer) runClients(ctx context.Context) error {
-	return s.notify.Listen(ctx, func() error {
-		dsts, srcs := s.get()
-
-		var certs []tls.Certificate
-		var cas = x509.NewCertPool()
-
-		for _, cl := range dsts {
-			certs = append(certs, cl.ServerCert())
-			for _, cert := range cl.ClientCerts() {
-				cas.AddCert(cert)
-			}
+	pool := x509.NewCertPool()
+	for _, certs := range s.clientCerts {
+		for _, cert := range certs {
+			pool.AddCert(cert)
 		}
-		for _, cl := range srcs {
-			certs = append(certs, cl.ServerCert())
-			for _, cert := range cl.ClientCerts() {
-				cas.AddCert(cert)
-			}
-		}
-
-		s.certs.Store(&directTLS{certs, cas})
-		return nil
-	})
+	}
+	return pool // TODO optimize this
 }
 
 func (s *DirectServer) runServer(ctx context.Context) error {
@@ -133,10 +94,8 @@ func (s *DirectServer) runServer(ctx context.Context) error {
 	}
 	tlsConf.GetConfigForClient = func(chi *tls.ClientHelloInfo) (*tls.Config, error) {
 		conf := tlsConf.Clone()
-		if certs := s.certs.Load(); certs != nil {
-			conf.Certificates = certs.certs
-			conf.ClientCAs = certs.cas
-		}
+		conf.Certificates = s.getServerCerts()
+		conf.ClientCAs = s.getClientCerts()
 		return conf, nil
 	}
 
@@ -157,11 +116,29 @@ func (s *DirectServer) runServer(ctx context.Context) error {
 			s.logger.Warn("accept error", "err", err)
 			return kleverr.Ret(err)
 		}
-		s.logger.Debug("accepted conn", "remote", conn.RemoteAddr())
 		go s.runConn(ctx, conn)
 	}
 }
 
 func (s *DirectServer) runConn(ctx context.Context, conn quic.Connection) {
-	defer conn.CloseWithError(0, "done")
+	s.logger.Debug("accepted conn", "remote", conn.RemoteAddr())
+
+	s.activeConnsMu.Lock()
+	defer s.activeConnsMu.Unlock()
+
+	clientCert := conn.ConnectionState().TLS.PeerCertificates[0]
+	s.activeConns[printCert(clientCert)] = conn
+}
+
+func (s *DirectServer) getActiveConn(cert *x509.Certificate) (quic.Connection, bool) {
+	s.activeConnsMu.RLock()
+	defer s.activeConnsMu.RUnlock()
+
+	conn, ok := s.activeConns[printCert(cert)]
+	return conn, ok
+}
+
+func printCert(cert *x509.Certificate) string {
+	v := sha256.Sum256(cert.Raw)
+	return base64.RawStdEncoding.EncodeToString(v[:])
 }

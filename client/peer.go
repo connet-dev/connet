@@ -66,6 +66,7 @@ func (p *peer) setDirectAddrs(addrs []netip.AddrPort) {
 			ClientCertificate: p.clientCert.Leaf.Raw,
 		}
 	})
+	p.direct.addServerCert(p.serverCert)
 }
 
 func (p *peer) setRelays(relays []*pbs.RelayRoute) {
@@ -90,10 +91,25 @@ func (p *peer) peersListen(ctx context.Context, f func(peers []*pbs.ServerPeer) 
 
 func (p *peer) run(ctx context.Context) error {
 	return p.peersListen(ctx, func(peers []*pbs.ServerPeer) error {
+		var certs []*x509.Certificate
+		for _, sp := range peers {
+			if sp.Direct != nil {
+				cert, err := x509.ParseCertificate(sp.Direct.ClientCertificate)
+				if err != nil {
+					return err
+				}
+				certs = append(certs, cert)
+			}
+		}
+		p.direct.setClientCerts(p.serverCert.Leaf, certs)
+
 		p.logger.Debug("peers updated", "len", len(peers))
-		for _, o := range peers {
-			go p.runDirect(ctx, o)
-			go p.runRelay(ctx, o)
+		for _, sp := range peers {
+			if sp.Direct != nil {
+				go p.runDirectIncoming(ctx, sp)
+				go p.runDirectOutgoing(ctx, sp)
+			}
+			go p.runRelay(ctx, sp)
 		}
 		return nil
 	})
@@ -114,10 +130,22 @@ func (p *peer) activeListen(ctx context.Context, f func(map[netip.AddrPort]quic.
 	return p.active.Listen(ctx, f)
 }
 
-func (p *peer) runDirect(ctx context.Context, peer *pbs.ServerPeer) error {
-	if peer.Direct == nil {
-		return nil
+func (p *peer) runDirectIncoming(ctx context.Context, peer *pbs.ServerPeer) error {
+	cert, err := x509.ParseCertificate(peer.Direct.ClientCertificate)
+	if err != nil {
+		return err
 	}
+	for {
+		if conn, ok := p.direct.getActiveConn(cert); ok {
+			p.addActive(peer.Direct.Addresses[0].AsNetip(), conn)
+			return nil
+		} else {
+			time.Sleep(10 * time.Millisecond)
+		}
+	}
+}
+
+func (p *peer) runDirectOutgoing(ctx context.Context, peer *pbs.ServerPeer) error {
 	for _, paddr := range peer.Direct.Addresses {
 		p.logger.Debug("dialing direct", "addr", paddr.AsNetip())
 		addr := net.UDPAddrFromAddrPort(paddr.AsNetip())

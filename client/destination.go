@@ -70,6 +70,7 @@ func (d *Destination) runActive(ctx context.Context) error {
 						d.logger.Debug("accept failed", "addr", addr)
 						return
 					}
+					d.logger.Debug("accepted stream from", "remote", conn.RemoteAddr())
 					go d.runDestination(ctx, stream)
 				}
 			}()
