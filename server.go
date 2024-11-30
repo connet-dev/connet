@@ -3,7 +3,6 @@ package connet
 import (
 	"context"
 	"crypto/tls"
-	"fmt"
 	"log/slog"
 	"net"
 	"net/netip"
@@ -62,7 +61,6 @@ func NewServer(opts ...ServerOption) (*Server, error) {
 	}
 
 	relayPublicAddr := netip.AddrPortFrom(cfg.publicAddr, cfg.relayAddr.AddrPort().Port())
-	fmt.Println("pub:", relayPublicAddr)
 	rsync, err := selfhosted.NewRelaySync(relayPublicAddr, cfg.relayCert.Leaf)
 	if err != nil {
 		return nil, err
