@@ -55,8 +55,16 @@ func (s *Source) Run(ctx context.Context) error {
 
 	g.Go(func() error { return s.runServer(ctx) })
 	g.Go(func() error { return s.peer.run(ctx) })
+	g.Go(func() error { return s.runActive(ctx) })
 
 	return g.Wait()
+}
+
+func (s *Source) runActive(ctx context.Context) error {
+	return s.peer.activeListen(ctx, func(active map[netip.AddrPort]quic.Connection) error {
+		s.logger.Debug("active conns", "len", len(active))
+		return nil
+	})
 }
 
 func (s *Source) findActive(ctx context.Context) (quic.Stream, error) {
