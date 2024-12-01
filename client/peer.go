@@ -132,16 +132,18 @@ func (p *peer) runDirectIncoming(ctx context.Context, peer *pbs.ServerPeer) erro
 	select {
 	case <-ctx.Done():
 		return ctx.Err()
-	case conn := <-ch:
-		p.logger.Debug("add direct incoming conn", "addr", peer.Direct.Addresses[0].AsNetip())
-		p.addActive(peer.Id, "incoming", conn)
+	case conn, ok := <-ch:
+		if ok {
+			p.logger.Debug("add direct incoming conn", "addr", peer.Direct.Addresses[0].AsNetip())
+			p.addActive(peer.Id, "incoming", conn)
+		}
 		return nil
 	}
 }
 
 func (p *peer) runDirectOutgoing(ctx context.Context, peer *pbs.ServerPeer) error {
 	for _, paddr := range peer.Direct.Addresses {
-		p.logger.Debug("dialing direct", "addr", paddr.AsNetip())
+		p.logger.Debug("dialing direct", "addr", paddr.AsNetip(), "cert", certKey(p.clientCert.Leaf))
 		addr := net.UDPAddrFromAddrPort(paddr.AsNetip())
 
 		directCert, err := x509.ParseCertificate(peer.Direct.ServerCertificate)

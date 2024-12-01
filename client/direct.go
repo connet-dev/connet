@@ -8,6 +8,8 @@ import (
 	"encoding/base64"
 	"errors"
 	"log/slog"
+	"maps"
+	"slices"
 	"sync"
 	"time"
 
@@ -27,13 +29,13 @@ type DirectServer struct {
 	expectCertsMu sync.RWMutex
 }
 
-func NewDirectServer(transport *quic.Transport, logger *slog.Logger) *DirectServer {
+func NewDirectServer(transport *quic.Transport, logger *slog.Logger) (*DirectServer, error) {
 	return &DirectServer{
 		transport: transport,
 		logger:    logger.With("component", "direct-server"),
 
 		expectCerts: map[string]*expectedCert{},
-	}
+	}, nil
 }
 
 type expectedCert struct {
@@ -65,14 +67,18 @@ func (s *DirectServer) getServerCerts() []tls.Certificate {
 }
 
 func (s *DirectServer) expectConn(cert *x509.Certificate) chan quic.Connection {
-	ch := make(chan quic.Connection)
-
 	s.expectCertsMu.Lock()
 	defer s.expectCertsMu.Unlock()
 
-	s.logger.Debug("client cert", "cert", certKey(cert))
-	s.expectCerts[certKey(cert)] = &expectedCert{cert: cert, ch: ch}
+	key := certKey(cert)
+	if exp, ok := s.expectCerts[key]; ok {
+		s.logger.Debug("cancel client", "cert", key)
+		close(exp.ch)
+	}
 
+	s.logger.Debug("expect client", "cert", key)
+	ch := make(chan quic.Connection)
+	s.expectCerts[key] = &expectedCert{cert: cert, ch: ch}
 	return ch
 }
 
@@ -80,6 +86,7 @@ func (s *DirectServer) getClientCerts() *x509.CertPool {
 	s.expectCertsMu.RLock()
 	defer s.expectCertsMu.RUnlock()
 
+	s.logger.Debug("expect client certs", "certs", slices.Collect(maps.Keys(s.expectCerts)))
 	pool := x509.NewCertPool()
 	for _, exp := range s.expectCerts {
 		pool.AddCert(exp.cert)
@@ -132,6 +139,7 @@ func (s *DirectServer) runConn(conn quic.Connection) {
 		conn.CloseWithError(1, "not found")
 		return
 	}
+	s.logger.Debug("accept client", "cert", key)
 	exp.ch <- conn
 	close(exp.ch)
 

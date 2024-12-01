@@ -80,7 +80,10 @@ func (c *Client) Run(ctx context.Context) error {
 		// TODO review other options
 	}
 
-	ds := client.NewDirectServer(directTransport, c.logger)
+	ds, err := client.NewDirectServer(directTransport, c.logger, c.rootCert)
+	if err != nil {
+		return kleverr.Ret(err)
+	}
 
 	c.dsts = map[model.Forward]*client.Destination{}
 	for fwd, cfg := range c.destinations {
