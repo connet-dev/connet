@@ -76,6 +76,6 @@ message DirectRoute {
 }
 
 message RelayRoute {
-  shared.AddrPort address = 1;
+  shared.HostPort address = 1;
   bytes server_certificate = 2;
 }

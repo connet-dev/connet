@@ -7,7 +7,6 @@ import (
 	"errors"
 	"log/slog"
 	"net"
-	"net/netip"
 	"time"
 
 	"github.com/keihaya-com/connet/model"
@@ -242,7 +241,7 @@ func (s *controlStream) destinationRelay(ctx context.Context, req *pbs.Request_D
 	defer s.conn.server.relays.Remove(cert)
 
 	defer s.logger.Debug("completed destination relay notify")
-	return s.conn.server.relays.Active(ctx, func(relays map[netip.AddrPort]*x509.Certificate) error {
+	return s.conn.server.relays.Active(ctx, func(relays map[model.HostPort]*x509.Certificate) error {
 		s.logger.Debug("updated destination relay list", "relays", len(relays))
 
 		var routes []*pbs.RelayRoute
@@ -252,7 +251,7 @@ func (s *controlStream) destinationRelay(ctx context.Context, req *pbs.Request_D
 				certData = cert.Raw
 			}
 			routes = append(routes, &pbs.RelayRoute{
-				Address:           pb.AddrPortFromNetip(addr),
+				Address:           addr.PB(),
 				ServerCertificate: certData,
 			})
 		}
@@ -349,7 +348,7 @@ func (s *controlStream) sourceRelay(ctx context.Context, req *pbs.Request_Source
 	defer s.conn.server.relays.Remove(cert)
 
 	defer s.logger.Debug("completed source relay notify")
-	return s.conn.server.relays.Active(ctx, func(relays map[netip.AddrPort]*x509.Certificate) error {
+	return s.conn.server.relays.Active(ctx, func(relays map[model.HostPort]*x509.Certificate) error {
 		s.logger.Debug("updated source relay list", "relays", len(relays))
 
 		var routes []*pbs.RelayRoute
@@ -359,7 +358,7 @@ func (s *controlStream) sourceRelay(ctx context.Context, req *pbs.Request_Source
 				certData = cert.Raw
 			}
 			routes = append(routes, &pbs.RelayRoute{
-				Address:           pb.AddrPortFromNetip(addr),
+				Address:           addr.PB(),
 				ServerCertificate: certData,
 			})
 		}

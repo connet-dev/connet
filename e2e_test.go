@@ -32,7 +32,6 @@ func TestE2E(t *testing.T) {
 
 	srv, err := NewServer(
 		ServerTokens("test-token"),
-		ServerPublicAddress("127.0.0.1"),
 		serverDefaultCertificate(cert),
 		ServerLogger(logger.With("test", "server")),
 	)

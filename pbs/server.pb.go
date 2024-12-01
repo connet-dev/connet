@@ -438,7 +438,7 @@ type RelayRoute struct {
 	sizeCache     protoimpl.SizeCache
 	unknownFields protoimpl.UnknownFields
 
-	Address           *pb.AddrPort `protobuf:"bytes,1,opt,name=address,proto3" json:"address,omitempty"`
+	Address           *pb.HostPort `protobuf:"bytes,1,opt,name=address,proto3" json:"address,omitempty"`
 	ServerCertificate []byte       `protobuf:"bytes,2,opt,name=server_certificate,json=serverCertificate,proto3" json:"server_certificate,omitempty"`
 }
 
@@ -472,7 +472,7 @@ func (*RelayRoute) Descriptor() ([]byte, []int) {
 	return file_server_proto_rawDescGZIP(), []int{7}
 }
 
-func (x *RelayRoute) GetAddress() *pb.AddrPort {
+func (x *RelayRoute) GetAddress() *pb.HostPort {
 	if x != nil {
 		return x.Address
 	}
@@ -936,8 +936,8 @@ var file_server_proto_rawDesc = []byte{
 	0x01, 0x28, 0x0c, 0x52, 0x11, 0x63, 0x6c, 0x69, 0x65, 0x6e, 0x74, 0x43, 0x65, 0x72, 0x74, 0x69,
 	0x66, 0x69, 0x63, 0x61, 0x74, 0x65, 0x22, 0x67, 0x0a, 0x0a, 0x52, 0x65, 0x6c, 0x61, 0x79, 0x52,
 	0x6f, 0x75, 0x74, 0x65, 0x12, 0x2a, 0x0a, 0x07, 0x61, 0x64, 0x64, 0x72, 0x65, 0x73, 0x73, 0x18,
-	0x01, 0x20, 0x01, 0x28, 0x0b, 0x32, 0x10, 0x2e, 0x73, 0x68, 0x61, 0x72, 0x65, 0x64, 0x2e, 0x41,
-	0x64, 0x64, 0x72, 0x50, 0x6f, 0x72, 0x74, 0x52, 0x07, 0x61, 0x64, 0x64, 0x72, 0x65, 0x73, 0x73,
+	0x01, 0x20, 0x01, 0x28, 0x0b, 0x32, 0x10, 0x2e, 0x73, 0x68, 0x61, 0x72, 0x65, 0x64, 0x2e, 0x48,
+	0x6f, 0x73, 0x74, 0x50, 0x6f, 0x72, 0x74, 0x52, 0x07, 0x61, 0x64, 0x64, 0x72, 0x65, 0x73, 0x73,
 	0x12, 0x2d, 0x0a, 0x12, 0x73, 0x65, 0x72, 0x76, 0x65, 0x72, 0x5f, 0x63, 0x65, 0x72, 0x74, 0x69,
 	0x66, 0x69, 0x63, 0x61, 0x74, 0x65, 0x18, 0x02, 0x20, 0x01, 0x28, 0x0c, 0x52, 0x11, 0x73, 0x65,
 	0x72, 0x76, 0x65, 0x72, 0x43, 0x65, 0x72, 0x74, 0x69, 0x66, 0x69, 0x63, 0x61, 0x74, 0x65, 0x42,
@@ -977,7 +977,8 @@ var file_server_proto_goTypes = []any{
 	(*Response_Source)(nil),          // 14: server.Response.Source
 	(*pb.Error)(nil),                 // 15: shared.Error
 	(*pb.AddrPort)(nil),              // 16: shared.AddrPort
-	(*pb.Forward)(nil),               // 17: shared.Forward
+	(*pb.HostPort)(nil),              // 17: shared.HostPort
+	(*pb.Forward)(nil),               // 18: shared.Forward
 }
 var file_server_proto_depIdxs = []int32{
 	15, // 0: server.AuthenticateResp.error:type_name -> shared.Error
@@ -995,12 +996,12 @@ var file_server_proto_depIdxs = []int32{
 	6,  // 12: server.ServerPeer.direct:type_name -> server.DirectRoute
 	7,  // 13: server.ServerPeer.relays:type_name -> server.RelayRoute
 	16, // 14: server.DirectRoute.addresses:type_name -> shared.AddrPort
-	16, // 15: server.RelayRoute.address:type_name -> shared.AddrPort
-	17, // 16: server.Request.DestinationRelay.from:type_name -> shared.Forward
-	17, // 17: server.Request.Destination.from:type_name -> shared.Forward
+	17, // 15: server.RelayRoute.address:type_name -> shared.HostPort
+	18, // 16: server.Request.DestinationRelay.from:type_name -> shared.Forward
+	18, // 17: server.Request.Destination.from:type_name -> shared.Forward
 	4,  // 18: server.Request.Destination.destination:type_name -> server.ClientPeer
-	17, // 19: server.Request.SourceRelay.to:type_name -> shared.Forward
-	17, // 20: server.Request.Source.to:type_name -> shared.Forward
+	18, // 19: server.Request.SourceRelay.to:type_name -> shared.Forward
+	18, // 20: server.Request.Source.to:type_name -> shared.Forward
 	4,  // 21: server.Request.Source.source:type_name -> server.ClientPeer
 	7,  // 22: server.Response.Relay.relays:type_name -> server.RelayRoute
 	5,  // 23: server.Response.Destination.sources:type_name -> server.ServerPeer

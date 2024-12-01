@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/keihaya-com/connet/certc"
+	"github.com/keihaya-com/connet/model"
 	"github.com/keihaya-com/connet/notify"
 	"github.com/keihaya-com/connet/pb"
 	"github.com/keihaya-com/connet/pbs"
@@ -123,7 +124,7 @@ func (p *peer) runDirectIncoming(ctx context.Context, peer *pbs.ServerPeer) erro
 	if err != nil {
 		return err
 	}
-	ch := p.direct.expectCert(cert)
+	ch := p.direct.expectConn(cert)
 	select {
 	case <-ctx.Done():
 		return ctx.Err()
@@ -165,8 +166,13 @@ func (p *peer) runDirectOutgoing(ctx context.Context, peer *pbs.ServerPeer) erro
 
 func (p *peer) runRelay(ctx context.Context, peer *pbs.ServerPeer) error {
 	for _, r := range peer.Relays {
-		p.logger.Debug("dialing relay", "addr", r.Address.AsNetip())
-		addr := net.UDPAddrFromAddrPort(r.Address.AsNetip())
+		hp := model.NewHostPortFromPB(r.Address)
+		addr, err := net.ResolveUDPAddr("udp", hp.String())
+		if err != nil {
+			return err
+		}
+
+		p.logger.Debug("dialing relay", "hostport", hp, "addr", addr)
 
 		relayCert, err := x509.ParseCertificate(r.ServerCertificate)
 		if err != nil {
@@ -184,10 +190,10 @@ func (p *peer) runRelay(ctx context.Context, peer *pbs.ServerPeer) error {
 			KeepAlivePeriod: 25 * time.Second,
 		})
 		if err != nil {
-			p.logger.Debug("could not relay dial", "addr", r.Address.AsNetip(), "err", err)
+			p.logger.Debug("could not relay dial", "hostport", hp, "addr", addr, "err", err)
 			continue
 		}
-		p.addActive(r.Address.AsNetip(), conn)
+		p.addActive(addr.AddrPort(), conn)
 	}
 	return nil
 }

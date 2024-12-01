@@ -64,7 +64,7 @@ func (s *DirectServer) getServerCerts() []tls.Certificate {
 	return s.serverCers
 }
 
-func (s *DirectServer) expectCert(cert *x509.Certificate) chan quic.Connection {
+func (s *DirectServer) expectConn(cert *x509.Certificate) chan quic.Connection {
 	ch := make(chan quic.Connection)
 
 	s.expectCertsMu.Lock()

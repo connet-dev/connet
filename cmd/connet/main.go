@@ -250,7 +250,7 @@ func server(cfg ServerConfig, logger *slog.Logger) error {
 	}
 
 	if cfg.Hostname != "" {
-		opts = append(opts, connet.ServerPublicAddress(cfg.Hostname)) // TODO
+		opts = append(opts, connet.ServerHostname(cfg.Hostname))
 	}
 	if cfg.Cert != "" {
 		opts = append(opts, connet.ServerDefaultCertificate(cfg.Cert, cfg.Key))

@@ -13,6 +13,11 @@ message AddrPort {
   uint32 port = 2; // really uint16, but not a thing in protobuf
 }
 
+message HostPort {
+  string host = 1;
+  uint32 port = 2;
+}
+
 message Forward {
   string name = 1;
 }
