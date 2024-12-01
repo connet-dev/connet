@@ -80,7 +80,7 @@ func (c *Client) Run(ctx context.Context) error {
 		// TODO review other options
 	}
 
-	ds, err := client.NewDirectServer(directTransport, c.logger, c.rootCert)
+	ds, err := client.NewDirectServer(directTransport, c.logger)
 	if err != nil {
 		return kleverr.Ret(err)
 	}

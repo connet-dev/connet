@@ -128,8 +128,8 @@ func (c *Cert) new(opts CertOpts, typ certType) (*Cert, error) {
 		certTemplate.KeyUsage = x509.KeyUsageDigitalSignature | x509.KeyUsageKeyEncipherment | x509.KeyUsageContentCommitment
 		certTemplate.ExtKeyUsage = []x509.ExtKeyUsage{x509.ExtKeyUsageServerAuth}
 	case clientCert:
-		certTemplate.KeyUsage = x509.KeyUsageDigitalSignature | x509.KeyUsageKeyEncipherment | x509.KeyUsageContentCommitment
-		certTemplate.ExtKeyUsage = []x509.ExtKeyUsage{}
+		certTemplate.KeyUsage = x509.KeyUsageDigitalSignature | x509.KeyUsageKeyAgreement | x509.KeyUsageContentCommitment
+		certTemplate.ExtKeyUsage = []x509.ExtKeyUsage{x509.ExtKeyUsageClientAuth}
 	}
 
 	der, err := x509.CreateCertificate(rand.Reader, certTemplate, parent, csr.PublicKey, c.pk)
