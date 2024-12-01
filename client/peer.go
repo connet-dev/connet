@@ -91,18 +91,6 @@ func (p *peer) peersListen(ctx context.Context, f func(peers []*pbs.ServerPeer) 
 
 func (p *peer) run(ctx context.Context) error {
 	return p.peersListen(ctx, func(peers []*pbs.ServerPeer) error {
-		var certs []*x509.Certificate
-		for _, sp := range peers {
-			if sp.Direct != nil {
-				cert, err := x509.ParseCertificate(sp.Direct.ClientCertificate)
-				if err != nil {
-					return err
-				}
-				certs = append(certs, cert)
-			}
-		}
-		p.direct.setClientCerts(p.serverCert.Leaf, certs)
-
 		p.logger.Debug("peers updated", "len", len(peers))
 		for _, sp := range peers {
 			if sp.Direct != nil {
@@ -135,13 +123,13 @@ func (p *peer) runDirectIncoming(ctx context.Context, peer *pbs.ServerPeer) erro
 	if err != nil {
 		return err
 	}
-	for {
-		if conn, ok := p.direct.getActiveConn(cert); ok {
-			p.addActive(peer.Direct.Addresses[0].AsNetip(), conn)
-			return nil
-		} else {
-			time.Sleep(10 * time.Millisecond)
-		}
+	ch := p.direct.expectCert(cert)
+	select {
+	case <-ctx.Done():
+		return ctx.Err()
+	case conn := <-ch:
+		p.addActive(peer.Direct.Addresses[0].AsNetip(), conn)
+		return nil
 	}
 }
 
