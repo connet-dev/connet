@@ -20,12 +20,17 @@ import (
 type peer struct {
 	self   *notify.V[*pbs.ClientPeer]
 	peers  *notify.V[[]*pbs.ServerPeer]
-	active *notify.V[map[netip.AddrPort]quic.Connection]
+	active *notify.V[map[peerConnKey]quic.Connection]
 
 	direct     *DirectServer
 	serverCert tls.Certificate
 	clientCert tls.Certificate
 	logger     *slog.Logger
+}
+
+type peerConnKey struct {
+	id    string
+	style string
 }
 
 func newPeer(direct *DirectServer, root *certc.Cert, logger *slog.Logger) (*peer, error) {
@@ -49,8 +54,8 @@ func newPeer(direct *DirectServer, root *certc.Cert, logger *slog.Logger) (*peer
 	return &peer{
 		self:  notify.NewV(notify.InitialOpt(&pbs.ClientPeer{})),
 		peers: notify.NewV[[]*pbs.ServerPeer](),
-		active: notify.NewV(notify.InitialOpt(map[netip.AddrPort]quic.Connection{}),
-			notify.CopyMapOpt[map[netip.AddrPort]quic.Connection]()),
+		active: notify.NewV(notify.InitialOpt(map[peerConnKey]quic.Connection{}),
+			notify.CopyMapOpt[map[peerConnKey]quic.Connection]()),
 
 		direct:     direct,
 		serverCert: serverTLSCert,
@@ -104,18 +109,17 @@ func (p *peer) run(ctx context.Context) error {
 	})
 }
 
-func (p *peer) addActive(ap netip.AddrPort, conn quic.Connection) {
-	p.active.Update(func(m map[netip.AddrPort]quic.Connection) map[netip.AddrPort]quic.Connection {
-		m[ap] = conn
-		return m
+func (p *peer) addActive(id string, style string, conn quic.Connection) {
+	p.active.Modify(func(m map[peerConnKey]quic.Connection) {
+		m[peerConnKey{id, style}] = conn
 	})
 }
 
-func (d *peer) getActive() map[netip.AddrPort]quic.Connection {
+func (d *peer) getActive() map[peerConnKey]quic.Connection {
 	return d.active.Get()
 }
 
-func (p *peer) activeListen(ctx context.Context, f func(map[netip.AddrPort]quic.Connection) error) error {
+func (p *peer) activeListen(ctx context.Context, f func(map[peerConnKey]quic.Connection) error) error {
 	return p.active.Listen(ctx, f)
 }
 
@@ -129,7 +133,8 @@ func (p *peer) runDirectIncoming(ctx context.Context, peer *pbs.ServerPeer) erro
 	case <-ctx.Done():
 		return ctx.Err()
 	case conn := <-ch:
-		p.addActive(peer.Direct.Addresses[0].AsNetip(), conn)
+		p.logger.Debug("add direct incoming conn", "addr", peer.Direct.Addresses[0].AsNetip())
+		p.addActive(peer.Id, "incoming", conn)
 		return nil
 	}
 }
@@ -158,7 +163,8 @@ func (p *peer) runDirectOutgoing(ctx context.Context, peer *pbs.ServerPeer) erro
 			p.logger.Debug("could not direct dial", "addr", addr, "err", err)
 			continue
 		}
-		p.addActive(paddr.AsNetip(), conn)
+		p.logger.Debug("add direct outgoing conn", "addr", addr)
+		p.addActive(peer.Id, "outgoing", conn)
 		break
 	}
 	return nil
@@ -193,7 +199,8 @@ func (p *peer) runRelay(ctx context.Context, peer *pbs.ServerPeer) error {
 			p.logger.Debug("could not relay dial", "hostport", hp, "addr", addr, "err", err)
 			continue
 		}
-		p.addActive(addr.AddrPort(), conn)
+		p.logger.Debug("add relay conn", "hostport", hp)
+		p.addActive(peer.Id, "proxy", conn)
 	}
 	return nil
 }

@@ -60,17 +60,17 @@ func (d *Destination) Run(ctx context.Context) error {
 }
 
 func (d *Destination) runActive(ctx context.Context) error {
-	return d.peer.activeListen(ctx, func(active map[netip.AddrPort]quic.Connection) error {
+	return d.peer.activeListen(ctx, func(active map[peerConnKey]quic.Connection) error {
 		d.logger.Debug("active conns", "len", len(active))
-		for addr, conn := range active {
+		for peer, conn := range active {
 			go func() {
 				for {
 					stream, err := conn.AcceptStream(ctx)
 					if err != nil {
-						d.logger.Debug("accept failed", "addr", addr)
+						d.logger.Debug("accept failed", "peer", peer.id, "style", peer.style, "err", err)
 						return
 					}
-					d.logger.Debug("accepted stream from", "remote", conn.RemoteAddr())
+					d.logger.Debug("accepted stream from", "peer", peer.id, "style", peer.style)
 					go d.runDestination(ctx, stream)
 				}
 			}()

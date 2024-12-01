@@ -61,7 +61,7 @@ func (s *Source) Run(ctx context.Context) error {
 }
 
 func (s *Source) runActive(ctx context.Context) error {
-	return s.peer.activeListen(ctx, func(active map[netip.AddrPort]quic.Connection) error {
+	return s.peer.activeListen(ctx, func(active map[peerConnKey]quic.Connection) error {
 		s.logger.Debug("active conns", "len", len(active))
 		return nil
 	})
@@ -69,10 +69,11 @@ func (s *Source) runActive(ctx context.Context) error {
 
 func (s *Source) findActive(ctx context.Context) (quic.Stream, error) {
 	active := s.peer.getActive()
-	for _, conn := range active {
+	for peer, conn := range active {
 		if stream, err := conn.OpenStreamSync(ctx); err != nil {
 			// not active
 		} else {
+			s.logger.Debug("found active conn", "peer", peer.id, "style", peer.style)
 			return stream, nil
 		}
 	}
