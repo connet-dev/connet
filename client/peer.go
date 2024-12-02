@@ -4,8 +4,10 @@ import (
 	"context"
 	"crypto/tls"
 	"crypto/x509"
+	"encoding/binary"
 	"fmt"
 	"log/slog"
+	"math/rand/v2"
 	"net"
 	"net/netip"
 	"time"
@@ -15,8 +17,8 @@ import (
 	"github.com/keihaya-com/connet/notify"
 	"github.com/keihaya-com/connet/pb"
 	"github.com/keihaya-com/connet/pbs"
+	"github.com/mr-tron/base58"
 	"github.com/quic-go/quic-go"
-	"github.com/segmentio/ksuid"
 )
 
 type peer struct {
@@ -40,7 +42,7 @@ type peerStyle int
 const (
 	peerOutgoing peerStyle = 0
 	peerIncoming peerStyle = 1
-	peerProxy    peerStyle = 2
+	peerRelay    peerStyle = 2
 )
 
 func (s peerStyle) String() string {
@@ -49,8 +51,8 @@ func (s peerStyle) String() string {
 		return "outgoing"
 	case peerIncoming:
 		return "incoming"
-	case peerProxy:
-		return "proxy"
+	case peerRelay:
+		return "relay"
 	default:
 		panic("unknown style")
 	}
@@ -58,7 +60,7 @@ func (s peerStyle) String() string {
 
 func newPeer(direct *DirectServer, root *certc.Cert, logger *slog.Logger) (*peer, error) {
 	serverCert, err := root.NewServer(certc.CertOpts{Domains: []string{
-		fmt.Sprintf("connet-direct-%s", ksuid.New()),
+		genServerName(),
 	}})
 	if err != nil {
 		return nil, err
@@ -168,7 +170,7 @@ func (p *peer) runDirectIncoming(ctx context.Context, peer *pbs.ServerPeer) erro
 
 func (p *peer) runDirectOutgoing(ctx context.Context, peer *pbs.ServerPeer) error {
 	for _, paddr := range peer.Direct.Addresses {
-		p.logger.Debug("dialing direct", "addr", paddr.AsNetip(), "cert", certKey(p.clientCert.Leaf))
+		p.logger.Debug("attempt outgoing", "addr", paddr.AsNetip(), "cert", certKey(p.clientCert.Leaf))
 		addr := net.UDPAddrFromAddrPort(paddr.AsNetip())
 
 		directCert, err := x509.ParseCertificate(peer.Direct.ServerCertificate)
@@ -178,6 +180,7 @@ func (p *peer) runDirectOutgoing(ctx context.Context, peer *pbs.ServerPeer) erro
 		directCAs := x509.NewCertPool()
 		directCAs.AddCert(directCert)
 
+		p.logger.Debug("dialing direct", "server", directCert.DNSNames[0], "cert", certKey(directCert))
 		conn, err := p.direct.transport.Dial(ctx, addr, &tls.Config{
 			Certificates: []tls.Certificate{p.clientCert},
 			RootCAs:      directCAs,
@@ -204,7 +207,7 @@ func (p *peer) runRelay(ctx context.Context, peer *pbs.ServerPeer) error {
 			return err
 		}
 
-		p.logger.Debug("dialing relay", "hostport", hp, "addr", addr)
+		p.logger.Debug("attempt relay", "hostport", hp, "addr", addr)
 
 		relayCert, err := x509.ParseCertificate(r.ServerCertificate)
 		if err != nil {
@@ -213,6 +216,7 @@ func (p *peer) runRelay(ctx context.Context, peer *pbs.ServerPeer) error {
 		relayCAs := x509.NewCertPool()
 		relayCAs.AddCert(relayCert)
 
+		p.logger.Debug("dialing relay", "server", relayCert.DNSNames[0], "cert", certKey(relayCert))
 		conn, err := p.direct.transport.Dial(ctx, addr, &tls.Config{
 			Certificates: []tls.Certificate{p.clientCert},
 			RootCAs:      relayCAs,
@@ -225,7 +229,12 @@ func (p *peer) runRelay(ctx context.Context, peer *pbs.ServerPeer) error {
 			p.logger.Debug("could not relay dial", "hostport", hp, "addr", addr, "err", err)
 			continue
 		}
-		p.addActive(peer.Id, peerProxy, conn)
+		p.addActive(peer.Id, peerRelay, conn)
 	}
 	return nil
+}
+
+func genServerName() string {
+	v := binary.BigEndian.AppendUint64(nil, uint64(rand.Int64()))
+	return fmt.Sprintf("connet-direct-%s", base58.Encode(v))
 }

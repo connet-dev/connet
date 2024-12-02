@@ -5,7 +5,6 @@ import (
 	"crypto/sha256"
 	"crypto/tls"
 	"crypto/x509"
-	"encoding/base64"
 	"errors"
 	"log/slog"
 	"maps"
@@ -14,6 +13,7 @@ import (
 	"time"
 
 	"github.com/klev-dev/kleverr"
+	"github.com/mr-tron/base58"
 	"github.com/quic-go/quic-go"
 	"golang.org/x/sync/errgroup"
 )
@@ -55,7 +55,7 @@ func (s *DirectServer) addServerCert(cert tls.Certificate) {
 	s.serverCersMu.Lock()
 	defer s.serverCersMu.Unlock()
 
-	s.logger.Debug("server cert", "cert", certKey(cert.Leaf))
+	s.logger.Debug("add server cert", "server", cert.Leaf.DNSNames[0], "cert", certKey(cert.Leaf))
 	s.serverCers = append(s.serverCers, cert)
 }
 
@@ -157,5 +157,5 @@ func (s *DirectServer) runConn(conn quic.Connection) {
 
 func certKey(cert *x509.Certificate) string {
 	v := sha256.Sum256(cert.Raw)
-	return base64.RawStdEncoding.EncodeToString(v[:])
+	return base58.Encode(v[:])
 }
