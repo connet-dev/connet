@@ -67,10 +67,11 @@ func (s *DirectServer) getServerCerts() []tls.Certificate {
 }
 
 func (s *DirectServer) expectConn(cert *x509.Certificate) chan quic.Connection {
+	key := certKey(cert)
+
 	s.expectCertsMu.Lock()
 	defer s.expectCertsMu.Unlock()
 
-	key := certKey(cert)
 	if exp, ok := s.expectCerts[key]; ok {
 		s.logger.Debug("cancel client", "cert", key)
 		close(exp.ch)
@@ -80,6 +81,19 @@ func (s *DirectServer) expectConn(cert *x509.Certificate) chan quic.Connection {
 	ch := make(chan quic.Connection)
 	s.expectCerts[key] = &expectedCert{cert: cert, ch: ch}
 	return ch
+}
+
+func (s *DirectServer) pollExpectedConn(cert *x509.Certificate) *expectedCert {
+	key := certKey(cert)
+
+	s.expectCertsMu.Lock()
+	defer s.expectCertsMu.Unlock()
+
+	if exp, ok := s.expectCerts[key]; ok {
+		delete(s.expectCerts, key)
+		return exp
+	}
+	return nil
 }
 
 func (s *DirectServer) getClientCerts() *x509.CertPool {
@@ -128,22 +142,17 @@ func (s *DirectServer) runServer(ctx context.Context) error {
 }
 
 func (s *DirectServer) runConn(conn quic.Connection) {
-	s.logger.Debug("accepted conn", "remote", conn.RemoteAddr())
-
-	s.expectCertsMu.Lock()
-	defer s.expectCertsMu.Unlock()
-
 	key := certKey(conn.ConnectionState().TLS.PeerCertificates[0])
-	exp := s.expectCerts[key]
-	if exp == nil {
-		conn.CloseWithError(1, "not found")
-		return
-	}
-	s.logger.Debug("accept client", "cert", key)
-	exp.ch <- conn
-	close(exp.ch)
+	s.logger.Debug("accepted conn", "cert", key, "remote", conn.RemoteAddr())
 
-	delete(s.expectCerts, key)
+	if exp := s.pollExpectedConn(conn.ConnectionState().TLS.PeerCertificates[0]); exp != nil {
+		// TODO do we ping/pong to verify?
+		s.logger.Debug("accept client", "cert", key)
+		exp.ch <- conn
+		close(exp.ch)
+	} else {
+		conn.CloseWithError(1, "not found")
+	}
 }
 
 func certKey(cert *x509.Certificate) string {
