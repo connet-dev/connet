@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/tls"
 	"crypto/x509"
+	"fmt"
 	"log/slog"
 	"net"
 	"net/netip"
@@ -15,6 +16,7 @@ import (
 	"github.com/keihaya-com/connet/pb"
 	"github.com/keihaya-com/connet/pbs"
 	"github.com/quic-go/quic-go"
+	"github.com/segmentio/ksuid"
 )
 
 type peer struct {
@@ -30,11 +32,34 @@ type peer struct {
 
 type peerConnKey struct {
 	id    string
-	style string
+	style peerStyle
+}
+
+type peerStyle int
+
+const (
+	peerOutgoing peerStyle = 0
+	peerIncoming peerStyle = 1
+	peerProxy    peerStyle = 2
+)
+
+func (s peerStyle) String() string {
+	switch s {
+	case peerOutgoing:
+		return "outgoing"
+	case peerIncoming:
+		return "incoming"
+	case peerProxy:
+		return "proxy"
+	default:
+		panic("unknown style")
+	}
 }
 
 func newPeer(direct *DirectServer, root *certc.Cert, logger *slog.Logger) (*peer, error) {
-	serverCert, err := root.NewServer(certc.CertOpts{Domains: []string{"connet-direct"}})
+	serverCert, err := root.NewServer(certc.CertOpts{Domains: []string{
+		fmt.Sprintf("connet-direct-%s", ksuid.New()),
+	}})
 	if err != nil {
 		return nil, err
 	}
@@ -109,7 +134,8 @@ func (p *peer) run(ctx context.Context) error {
 	})
 }
 
-func (p *peer) addActive(id string, style string, conn quic.Connection) {
+func (p *peer) addActive(id string, style peerStyle, conn quic.Connection) {
+	p.logger.Debug("add active connection", "peer", id, "style", style, "addr", conn.RemoteAddr())
 	p.active.Modify(func(m map[peerConnKey]quic.Connection) {
 		m[peerConnKey{id, style}] = conn
 	})
@@ -134,8 +160,7 @@ func (p *peer) runDirectIncoming(ctx context.Context, peer *pbs.ServerPeer) erro
 		return ctx.Err()
 	case conn, ok := <-ch:
 		if ok {
-			p.logger.Debug("add direct incoming conn", "addr", peer.Direct.Addresses[0].AsNetip())
-			p.addActive(peer.Id, "incoming", conn)
+			p.addActive(peer.Id, peerIncoming, conn)
 		}
 		return nil
 	}
@@ -156,7 +181,7 @@ func (p *peer) runDirectOutgoing(ctx context.Context, peer *pbs.ServerPeer) erro
 		conn, err := p.direct.transport.Dial(ctx, addr, &tls.Config{
 			Certificates: []tls.Certificate{p.clientCert},
 			RootCAs:      directCAs,
-			ServerName:   "connet-direct",
+			ServerName:   directCert.DNSNames[0],
 			NextProtos:   []string{"connet-direct"},
 		}, &quic.Config{
 			KeepAlivePeriod: 25 * time.Second,
@@ -165,8 +190,7 @@ func (p *peer) runDirectOutgoing(ctx context.Context, peer *pbs.ServerPeer) erro
 			p.logger.Debug("could not direct dial", "addr", addr, "err", err)
 			continue
 		}
-		p.logger.Debug("add direct outgoing conn", "addr", addr)
-		p.addActive(peer.Id, "outgoing", conn)
+		p.addActive(peer.Id, peerOutgoing, conn)
 		break
 	}
 	return nil
@@ -201,8 +225,7 @@ func (p *peer) runRelay(ctx context.Context, peer *pbs.ServerPeer) error {
 			p.logger.Debug("could not relay dial", "hostport", hp, "addr", addr, "err", err)
 			continue
 		}
-		p.logger.Debug("add relay conn", "hostport", hp)
-		p.addActive(peer.Id, "proxy", conn)
+		p.addActive(peer.Id, peerProxy, conn)
 	}
 	return nil
 }

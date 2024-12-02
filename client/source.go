@@ -3,8 +3,10 @@ package client
 import (
 	"context"
 	"log/slog"
+	"maps"
 	"net"
 	"net/netip"
+	"slices"
 
 	"github.com/keihaya-com/connet/certc"
 	"github.com/keihaya-com/connet/model"
@@ -69,7 +71,11 @@ func (s *Source) runActive(ctx context.Context) error {
 
 func (s *Source) findActive(ctx context.Context) (quic.Stream, error) {
 	active := s.peer.getActive()
-	for peer, conn := range active {
+	activeKeys := slices.SortedFunc(maps.Keys(active), func(l, r peerConnKey) int {
+		return int(l.style - r.style)
+	})
+	for _, peer := range activeKeys {
+		conn := active[peer]
 		if stream, err := conn.OpenStreamSync(ctx); err != nil {
 			// not active
 		} else {

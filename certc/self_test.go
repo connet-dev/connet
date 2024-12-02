@@ -105,6 +105,76 @@ func TestExchange(t *testing.T) {
 	testConnectivityDyn(t, serverTLS, clientCA, clientTLS, serverCA)
 }
 
+func TestMulti(t *testing.T) {
+	root, err := NewRoot()
+	require.NoError(t, err)
+
+	serverCert1, err := root.NewServer(CertOpts{
+		Domains: []string{"zzz1"},
+	})
+	require.NoError(t, err)
+	serverTLS1, err := serverCert1.TLSCert()
+	require.NoError(t, err)
+	serverCA1, err := serverCert1.CertPool()
+	require.NoError(t, err)
+
+	clientCert1, err := root.NewClient(CertOpts{
+		Domains: []string{"zzz1"},
+	})
+	require.NoError(t, err)
+	clientTLS1, err := clientCert1.TLSCert()
+	require.NoError(t, err)
+
+	serverCert2, err := root.NewServer(CertOpts{
+		Domains: []string{"zzz2"},
+	})
+	require.NoError(t, err)
+	serverTLS2, err := serverCert2.TLSCert()
+	require.NoError(t, err)
+	serverCA2, err := serverCert2.CertPool()
+	require.NoError(t, err)
+
+	clientCert2, err := root.NewClient(CertOpts{
+		Domains: []string{"zzz2"},
+	})
+	require.NoError(t, err)
+	clientTLS2, err := clientCert2.TLSCert()
+	require.NoError(t, err)
+
+	clientCA := x509.NewCertPool()
+	clientXCert1, err := clientCert1.Cert()
+	require.NoError(t, err)
+	clientCA.AddCert(clientXCert1)
+	clientXCert2, err := clientCert2.Cert()
+	require.NoError(t, err)
+	clientCA.AddCert(clientXCert2)
+
+	serverConf := &tls.Config{
+		Certificates: []tls.Certificate{serverTLS1, serverTLS2},
+		ClientCAs:    clientCA,
+		ClientAuth:   tls.RequireAndVerifyClientCert,
+		NextProtos:   []string{"test"},
+	}
+
+	clientConf1 := &tls.Config{
+		Certificates: []tls.Certificate{clientTLS1},
+		RootCAs:      serverCA1,
+		ServerName:   "zzz1",
+		NextProtos:   []string{"test"},
+	}
+
+	testConnectivityTLS(t, serverConf, clientConf1)
+
+	clientConf2 := &tls.Config{
+		Certificates: []tls.Certificate{clientTLS2},
+		RootCAs:      serverCA2,
+		ServerName:   "zzz2",
+		NextProtos:   []string{"test"},
+	}
+
+	testConnectivityTLS(t, serverConf, clientConf2)
+}
+
 func testConnectivity(t *testing.T, serverCert tls.Certificate, clientCA *x509.CertPool, clientCert tls.Certificate, rootCA *x509.CertPool) {
 	serverConf := &tls.Config{
 		Certificates: []tls.Certificate{serverCert},
