@@ -63,14 +63,14 @@ func (s *Source) Run(ctx context.Context) error {
 }
 
 func (s *Source) runActive(ctx context.Context) error {
-	return s.peer.activeListen(ctx, func(active map[peerConnKey]quic.Connection) error {
+	return s.peer.activeConnsListen(ctx, func(active map[peerConnKey]quic.Connection) error {
 		s.logger.Debug("active conns", "len", len(active))
 		return nil
 	})
 }
 
 func (s *Source) findActive(ctx context.Context) (quic.Stream, error) {
-	active := s.peer.getActive()
+	active := s.peer.getActiveConns()
 	activeKeys := slices.SortedFunc(maps.Keys(active), func(l, r peerConnKey) int {
 		return int(l.style - r.style)
 	})

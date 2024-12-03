@@ -60,7 +60,7 @@ func (d *Destination) Run(ctx context.Context) error {
 }
 
 func (d *Destination) runActive(ctx context.Context) error {
-	return d.peer.activeListen(ctx, func(active map[peerConnKey]quic.Connection) error {
+	return d.peer.activeConnsListen(ctx, func(active map[peerConnKey]quic.Connection) error {
 		d.logger.Debug("active conns", "len", len(active))
 		for peer, conn := range active {
 			go func() {

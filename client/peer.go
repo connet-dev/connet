@@ -22,9 +22,9 @@ import (
 )
 
 type peer struct {
-	self   *notify.V[*pbs.ClientPeer]
-	peers  *notify.V[[]*pbs.ServerPeer]
-	active *notify.V[map[peerConnKey]quic.Connection]
+	self        *notify.V[*pbs.ClientPeer]
+	peers       *notify.V[[]*pbs.ServerPeer]
+	activeConns *notify.V[map[peerConnKey]quic.Connection]
 
 	direct     *DirectServer
 	serverCert tls.Certificate
@@ -81,7 +81,7 @@ func newPeer(direct *DirectServer, root *certc.Cert, logger *slog.Logger) (*peer
 	return &peer{
 		self:  notify.NewV(notify.InitialOpt(&pbs.ClientPeer{})),
 		peers: notify.NewV[[]*pbs.ServerPeer](),
-		active: notify.NewV(notify.InitialOpt(map[peerConnKey]quic.Connection{}),
+		activeConns: notify.NewV(notify.InitialOpt(map[peerConnKey]quic.Connection{}),
 			notify.CopyMapOpt[map[peerConnKey]quic.Connection]()),
 
 		direct:     direct,
@@ -136,19 +136,19 @@ func (p *peer) run(ctx context.Context) error {
 	})
 }
 
-func (p *peer) addActive(id string, style peerStyle, conn quic.Connection) {
+func (p *peer) addActiveConn(id string, style peerStyle, conn quic.Connection) {
 	p.logger.Debug("add active connection", "peer", id, "style", style, "addr", conn.RemoteAddr())
-	p.active.Modify(func(m map[peerConnKey]quic.Connection) {
+	p.activeConns.Modify(func(m map[peerConnKey]quic.Connection) {
 		m[peerConnKey{id, style}] = conn
 	})
 }
 
-func (d *peer) getActive() map[peerConnKey]quic.Connection {
-	return d.active.Get()
+func (d *peer) getActiveConns() map[peerConnKey]quic.Connection {
+	return d.activeConns.Get()
 }
 
-func (p *peer) activeListen(ctx context.Context, f func(map[peerConnKey]quic.Connection) error) error {
-	return p.active.Listen(ctx, f)
+func (p *peer) activeConnsListen(ctx context.Context, f func(map[peerConnKey]quic.Connection) error) error {
+	return p.activeConns.Listen(ctx, f)
 }
 
 func (p *peer) runDirectIncoming(ctx context.Context, peer *pbs.ServerPeer) error {
@@ -156,13 +156,14 @@ func (p *peer) runDirectIncoming(ctx context.Context, peer *pbs.ServerPeer) erro
 	if err != nil {
 		return err
 	}
+
 	ch := p.direct.expectConn(cert)
 	select {
 	case <-ctx.Done():
 		return ctx.Err()
 	case conn, ok := <-ch:
 		if ok {
-			p.addActive(peer.Id, peerIncoming, conn)
+			p.addActiveConn(peer.Id, peerIncoming, conn)
 		}
 		return nil
 	}
@@ -193,7 +194,7 @@ func (p *peer) runDirectOutgoing(ctx context.Context, peer *pbs.ServerPeer) erro
 			p.logger.Debug("could not direct dial", "addr", addr, "err", err)
 			continue
 		}
-		p.addActive(peer.Id, peerOutgoing, conn)
+		p.addActiveConn(peer.Id, peerOutgoing, conn)
 		break
 	}
 	return nil
@@ -229,7 +230,7 @@ func (p *peer) runRelay(ctx context.Context, peer *pbs.ServerPeer) error {
 			p.logger.Debug("could not relay dial", "hostport", hp, "addr", addr, "err", err)
 			continue
 		}
-		p.addActive(peer.Id, peerRelay, conn)
+		p.addActiveConn(peer.Id, peerRelay, conn)
 	}
 	return nil
 }
