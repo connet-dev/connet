@@ -51,10 +51,10 @@ message Response {
     repeated RelayRoute relays = 1;
   }
   message Destination {
-    repeated ServerPeer sources = 1;
+    repeated ServerPeer peers = 1;
   }
   message Source {
-    repeated ServerPeer destinations = 1;
+    repeated ServerPeer peers = 1;
   }
 }
 

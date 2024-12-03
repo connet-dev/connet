@@ -199,7 +199,7 @@ func (s *Source) runControl(ctx context.Context, conn quic.Connection) error {
 				return kleverr.Newf("unexpected response")
 			}
 
-			s.peer.setPeers(resp.Source.Destinations)
+			s.peer.setPeers(resp.Source.Peers)
 		}
 	})
 

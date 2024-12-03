@@ -312,7 +312,7 @@ func (s *controlStream) destination(ctx context.Context, req *pbs.Request_Destin
 
 			if err := pb.Write(s.stream, &pbs.Response{
 				Destination: &pbs.Response_Destination{
-					Sources: peers,
+					Peers: peers,
 				},
 			}); err != nil {
 				return kleverr.Ret(err)
@@ -419,7 +419,7 @@ func (s *controlStream) source(ctx context.Context, req *pbs.Request_Source) err
 
 			if err := pb.Write(s.stream, &pbs.Response{
 				Source: &pbs.Response_Source{
-					Destinations: peers,
+					Peers: peers,
 				},
 			}); err != nil {
 				return kleverr.Ret(err)
