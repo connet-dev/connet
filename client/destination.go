@@ -173,8 +173,8 @@ func (d *Destination) runControl(ctx context.Context, conn quic.Connection) erro
 			d.logger.Debug("updated destination", "direct", directLen, "relay", len(peer.Relays))
 			return pb.Write(stream, &pbs.Request{
 				Destination: &pbs.Request_Destination{
-					From:        d.fwd.PB(),
-					Destination: peer,
+					From: d.fwd.PB(),
+					Peer: peer,
 				},
 			})
 		})

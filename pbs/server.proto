@@ -28,7 +28,7 @@ message Request {
   }
   message Destination {
     shared.Forward from = 1;
-    ClientPeer destination = 2;
+    ClientPeer peer = 2;
   }
   message SourceRelay {
     shared.Forward to = 1;
@@ -36,7 +36,7 @@ message Request {
   }
   message Source {
     shared.Forward to = 1;
-    ClientPeer source = 2;
+    ClientPeer peer = 2;
   }
 }
 

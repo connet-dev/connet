@@ -280,7 +280,7 @@ func (s *controlStream) destination(ctx context.Context, req *pbs.Request_Destin
 	// TODO check certificates?
 
 	w := s.conn.server.whisperer.For(from)
-	w.AddDestination(s.conn.id, req.Destination)
+	w.AddDestination(s.conn.id, req.Peer)
 	defer w.RemoveDestination(s.conn.id)
 
 	g, ctx := errgroup.WithContext(ctx)
@@ -301,7 +301,7 @@ func (s *controlStream) destination(ctx context.Context, req *pbs.Request_Destin
 
 			// TODO check certificates?
 
-			w.AddDestination(s.conn.id, req.Destination.Destination)
+			w.AddDestination(s.conn.id, req.Destination.Peer)
 		}
 	})
 
@@ -387,7 +387,7 @@ func (s *controlStream) source(ctx context.Context, req *pbs.Request_Source) err
 	// TODO check certificates?
 
 	w := s.conn.server.whisperer.For(to)
-	w.AddSource(s.conn.id, req.Source)
+	w.AddSource(s.conn.id, req.Peer)
 	defer w.RemoveSource(s.conn.id)
 
 	g, ctx := errgroup.WithContext(ctx)
@@ -408,7 +408,7 @@ func (s *controlStream) source(ctx context.Context, req *pbs.Request_Source) err
 
 			// TODO check certificates?
 
-			w.AddSource(s.conn.id, req.Source.Source)
+			w.AddSource(s.conn.id, req.Source.Peer)
 		}
 	})
 

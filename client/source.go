@@ -182,8 +182,8 @@ func (s *Source) runControl(ctx context.Context, conn quic.Connection) error {
 			s.logger.Debug("updated source", "direct", directLen, "relay", len(peer.Relays))
 			return pb.Write(stream, &pbs.Request{
 				Source: &pbs.Request_Source{
-					To:     s.fwd.PB(),
-					Source: peer,
+					To:   s.fwd.PB(),
+					Peer: peer,
 				},
 			})
 		})
