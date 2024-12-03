@@ -316,10 +316,10 @@ func (p *peering) runDirectOutgoing(ctx context.Context) error {
 		directCAs.AddCert(out.cert)
 
 		for paddr := range out.addrs {
-			p.logger.Debug("attempt outgoing", "addr", paddr, "cert", certKey(p.local.clientCert.Leaf))
+			p.logger.Debug("attempt outgoing", "addr", paddr, "cert", certc.NewKey(p.local.clientCert.Leaf))
 			addr := net.UDPAddrFromAddrPort(paddr)
 
-			p.logger.Debug("dialing direct", "server", out.cert.DNSNames[0], "cert", certKey(out.cert))
+			p.logger.Debug("dialing direct", "server", out.cert.DNSNames[0], "cert", certc.NewKey(out.cert))
 			conn, err := p.local.direct.transport.Dial(ctx, addr, &tls.Config{
 				Certificates: []tls.Certificate{p.local.clientCert},
 				RootCAs:      directCAs,
@@ -356,7 +356,7 @@ func (p *peering) runRelay(ctx context.Context) error {
 			relayCAs := x509.NewCertPool()
 			relayCAs.AddCert(relayCert)
 
-			p.logger.Debug("dialing relay", "server", relayCert.DNSNames[0], "cert", certKey(relayCert))
+			p.logger.Debug("dialing relay", "server", relayCert.DNSNames[0], "cert", certc.NewKey(relayCert))
 			conn, err := p.local.direct.transport.Dial(ctx, addr, &tls.Config{
 				Certificates: []tls.Certificate{p.local.clientCert},
 				RootCAs:      relayCAs,

@@ -2,11 +2,11 @@ package selfhosted
 
 import (
 	"context"
-	"crypto/sha256"
 	"crypto/x509"
 	"sync"
 	"sync/atomic"
 
+	"github.com/keihaya-com/connet/certc"
 	"github.com/keihaya-com/connet/model"
 	"github.com/keihaya-com/connet/notify"
 	"github.com/keihaya-com/connet/relay"
@@ -15,7 +15,7 @@ import (
 func NewRelaySync(relayAddr model.HostPort, cert *x509.Certificate) (*RelaySync, error) {
 	s := &RelaySync{
 		relays: notify.NewV[map[model.HostPort]*x509.Certificate](),
-		certs:  map[storeKey]*relay.Authentication{},
+		certs:  map[certc.Key]*relay.Authentication{},
 	}
 	s.relays.Set(map[model.HostPort]*x509.Certificate{relayAddr: cert})
 	return s, nil
@@ -23,12 +23,10 @@ func NewRelaySync(relayAddr model.HostPort, cert *x509.Certificate) (*RelaySync,
 
 type RelaySync struct {
 	relays  *notify.V[map[model.HostPort]*x509.Certificate]
-	certs   map[storeKey]*relay.Authentication
+	certs   map[certc.Key]*relay.Authentication
 	certsMu sync.RWMutex
 	pool    atomic.Pointer[x509.CertPool]
 }
-
-type storeKey [sha256.Size]byte // TODO another key?
 
 func (s *RelaySync) Add(cert *x509.Certificate, destinations []model.Forward, sources []model.Forward) {
 	s.certsMu.Lock()
@@ -46,7 +44,7 @@ func (s *RelaySync) Add(cert *x509.Certificate, destinations []model.Forward, so
 		auth.Sources[src] = struct{}{}
 	}
 
-	s.certs[sha256.Sum256(cert.Raw)] = auth
+	s.certs[certc.NewKey(cert)] = auth
 
 	pool := x509.NewCertPool()
 	for _, cfg := range s.certs {
@@ -59,8 +57,7 @@ func (s *RelaySync) Remove(cert *x509.Certificate) {
 	s.certsMu.Lock()
 	defer s.certsMu.Unlock()
 
-	hash := sha256.Sum256(cert.Raw)
-	delete(s.certs, hash)
+	delete(s.certs, certc.NewKey(cert))
 
 	pool := x509.NewCertPool()
 	for _, cfg := range s.certs {
@@ -78,7 +75,7 @@ func (s *RelaySync) Authenticate(certs []*x509.Certificate) *relay.Authenticatio
 	defer s.certsMu.RUnlock()
 
 	for _, cert := range certs {
-		if auth := s.certs[sha256.Sum256(cert.Raw)]; auth != nil && auth.Certificate.Equal(cert) {
+		if auth := s.certs[certc.NewKey(cert)]; auth != nil && auth.Certificate.Equal(cert) {
 			return auth
 		}
 	}

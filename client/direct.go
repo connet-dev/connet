@@ -2,7 +2,6 @@ package client
 
 import (
 	"context"
-	"crypto/sha256"
 	"crypto/tls"
 	"crypto/x509"
 	"errors"
@@ -12,8 +11,8 @@ import (
 	"sync"
 	"time"
 
+	"github.com/keihaya-com/connet/certc"
 	"github.com/klev-dev/kleverr"
-	"github.com/mr-tron/base58"
 	"github.com/quic-go/quic-go"
 	"golang.org/x/sync/errgroup"
 )
@@ -25,7 +24,7 @@ type DirectServer struct {
 	serverCers   []tls.Certificate
 	serverCersMu sync.RWMutex
 
-	expectCerts   map[string]*expectedCert
+	expectCerts   map[certc.Key]*expectedCert
 	expectCertsMu sync.RWMutex
 }
 
@@ -34,7 +33,7 @@ func NewDirectServer(transport *quic.Transport, logger *slog.Logger) (*DirectSer
 		transport: transport,
 		logger:    logger.With("component", "direct-server"),
 
-		expectCerts: map[string]*expectedCert{},
+		expectCerts: map[certc.Key]*expectedCert{},
 	}, nil
 }
 
@@ -55,7 +54,7 @@ func (s *DirectServer) addServerCert(cert tls.Certificate) {
 	s.serverCersMu.Lock()
 	defer s.serverCersMu.Unlock()
 
-	s.logger.Debug("add server cert", "server", cert.Leaf.DNSNames[0], "cert", certKey(cert.Leaf))
+	s.logger.Debug("add server cert", "server", cert.Leaf.DNSNames[0], "cert", certc.NewKey(cert.Leaf))
 	s.serverCers = append(s.serverCers, cert)
 }
 
@@ -67,7 +66,7 @@ func (s *DirectServer) getServerCerts() []tls.Certificate {
 }
 
 func (s *DirectServer) expectConn(cert *x509.Certificate) chan quic.Connection {
-	key := certKey(cert)
+	key := certc.NewKey(cert)
 
 	s.expectCertsMu.Lock()
 	defer s.expectCertsMu.Unlock()
@@ -84,7 +83,7 @@ func (s *DirectServer) expectConn(cert *x509.Certificate) chan quic.Connection {
 }
 
 func (s *DirectServer) pollExpectedConn(cert *x509.Certificate) *expectedCert {
-	key := certKey(cert)
+	key := certc.NewKey(cert)
 
 	s.expectCertsMu.Lock()
 	defer s.expectCertsMu.Unlock()
@@ -142,7 +141,7 @@ func (s *DirectServer) runServer(ctx context.Context) error {
 }
 
 func (s *DirectServer) runConn(conn quic.Connection) {
-	key := certKey(conn.ConnectionState().TLS.PeerCertificates[0])
+	key := certc.NewKey(conn.ConnectionState().TLS.PeerCertificates[0])
 	s.logger.Debug("accepted conn", "cert", key, "remote", conn.RemoteAddr())
 
 	if exp := s.pollExpectedConn(conn.ConnectionState().TLS.PeerCertificates[0]); exp != nil {
@@ -153,9 +152,4 @@ func (s *DirectServer) runConn(conn quic.Connection) {
 	} else {
 		conn.CloseWithError(1, "not found")
 	}
-}
-
-func certKey(cert *x509.Certificate) string {
-	v := sha256.Sum256(cert.Raw)
-	return base58.Encode(v[:])
 }
