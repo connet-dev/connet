@@ -169,16 +169,16 @@ func (p *peer) runDirectIncoming(ctx context.Context, peer *pbs.ServerPeer) erro
 }
 
 func (p *peer) runDirectOutgoing(ctx context.Context, peer *pbs.ServerPeer) error {
+	directCert, err := x509.ParseCertificate(peer.Direct.ServerCertificate)
+	if err != nil {
+		return err
+	}
+	directCAs := x509.NewCertPool()
+	directCAs.AddCert(directCert)
+
 	for _, paddr := range peer.Direct.Addresses {
 		p.logger.Debug("attempt outgoing", "addr", paddr.AsNetip(), "cert", certKey(p.clientCert.Leaf))
 		addr := net.UDPAddrFromAddrPort(paddr.AsNetip())
-
-		directCert, err := x509.ParseCertificate(peer.Direct.ServerCertificate)
-		if err != nil {
-			return err
-		}
-		directCAs := x509.NewCertPool()
-		directCAs.AddCert(directCert)
 
 		p.logger.Debug("dialing direct", "server", directCert.DNSNames[0], "cert", certKey(directCert))
 		conn, err := p.direct.transport.Dial(ctx, addr, &tls.Config{
