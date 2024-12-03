@@ -186,7 +186,6 @@ func (c *Client) connect(ctx context.Context, transport *quic.Transport) (quic.C
 	}
 
 	directAddrs := append(localAddrPorts, resp.Public.AsNetip())
-	// directAddrs := []netip.AddrPort{resp.Public.AsNetip()} // TODO revert
 	for _, d := range c.dsts {
 		d.SetDirectAddrs(directAddrs)
 	}
