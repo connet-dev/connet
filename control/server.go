@@ -267,6 +267,19 @@ func (s *controlStream) destinationRelay(ctx context.Context, req *pbs.Request_D
 	})
 }
 
+func validateDestinationCert(from model.Forward, peer *pbs.ClientPeer) *pb.Error {
+	if peer.Direct == nil {
+		return nil
+	}
+	if _, err := x509.ParseCertificate(peer.Direct.ClientCertificate); err != nil {
+		return pb.NewError(pb.Error_DestinationInvalidCertificate, "desination '%s' client cert is invalid", from)
+	}
+	if _, err := x509.ParseCertificate(peer.Direct.ServerCertificate); err != nil {
+		return pb.NewError(pb.Error_DestinationInvalidCertificate, "desination '%s' client cert is invalid", from)
+	}
+	return nil
+}
+
 func (s *controlStream) destination(ctx context.Context, req *pbs.Request_Destination) error {
 	from := model.NewForwardFromPB(req.From)
 	if !s.conn.auth.AllowDestination(from.String()) {
@@ -277,7 +290,12 @@ func (s *controlStream) destination(ctx context.Context, req *pbs.Request_Destin
 		return err
 	}
 
-	// TODO check certificates?
+	if err := validateDestinationCert(from, req.Peer); err != nil {
+		if err := pb.Write(s.stream, &pbs.Response{Error: err}); err != nil {
+			return kleverr.Newf("could not write error response: %w", err)
+		}
+		return err
+	}
 
 	w := s.conn.server.whisperer.For(from)
 	w.AddDestination(s.conn.id, req.Peer)
@@ -299,7 +317,12 @@ func (s *controlStream) destination(ctx context.Context, req *pbs.Request_Destin
 				return respErr
 			}
 
-			// TODO check certificates?
+			if err := validateDestinationCert(from, req.Destination.Peer); err != nil {
+				if err := pb.Write(s.stream, &pbs.Response{Error: err}); err != nil {
+					return kleverr.Newf("could not write error response: %w", err)
+				}
+				return err
+			}
 
 			w.AddDestination(s.conn.id, req.Destination.Peer)
 		}
@@ -374,6 +397,19 @@ func (s *controlStream) sourceRelay(ctx context.Context, req *pbs.Request_Source
 	})
 }
 
+func validateSourceCert(to model.Forward, peer *pbs.ClientPeer) *pb.Error {
+	if peer.Direct == nil {
+		return nil
+	}
+	if _, err := x509.ParseCertificate(peer.Direct.ServerCertificate); err != nil {
+		return pb.NewError(pb.Error_SourceInvalidCertificate, "source '%s' server cert is invalid", to)
+	}
+	if _, err := x509.ParseCertificate(peer.Direct.ClientCertificate); err != nil {
+		return pb.NewError(pb.Error_SourceInvalidCertificate, "source '%s' client cert is invalid", to)
+	}
+	return nil
+}
+
 func (s *controlStream) source(ctx context.Context, req *pbs.Request_Source) error {
 	to := model.NewForwardFromPB(req.To)
 	if !s.conn.auth.AllowSource(to.String()) {
@@ -384,7 +420,12 @@ func (s *controlStream) source(ctx context.Context, req *pbs.Request_Source) err
 		return err
 	}
 
-	// TODO check certificates?
+	if err := validateSourceCert(to, req.Peer); err != nil {
+		if err := pb.Write(s.stream, &pbs.Response{Error: err}); err != nil {
+			return kleverr.Newf("could not write error response: %w", err)
+		}
+		return err
+	}
 
 	w := s.conn.server.whisperer.For(to)
 	w.AddSource(s.conn.id, req.Peer)
@@ -406,7 +447,12 @@ func (s *controlStream) source(ctx context.Context, req *pbs.Request_Source) err
 				return respErr
 			}
 
-			// TODO check certificates?
+			if err := validateSourceCert(to, req.Source.Peer); err != nil {
+				if err := pb.Write(s.stream, &pbs.Response{Error: err}); err != nil {
+					return kleverr.Newf("could not write error response: %w", err)
+				}
+				return err
+			}
 
 			w.AddSource(s.conn.id, req.Source.Peer)
 		}
