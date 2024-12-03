@@ -6,6 +6,8 @@ import (
 	"fmt"
 	"log/slog"
 	"os"
+	"os/signal"
+	"syscall"
 
 	"github.com/keihaya-com/connet"
 	"github.com/keihaya-com/connet/model"
@@ -57,7 +59,11 @@ type ForwardConfig struct {
 }
 
 func main() {
-	if err := rootCmd().ExecuteContext(context.Background()); err != nil {
+	ctx, cancel := signal.NotifyContext(context.Background(),
+		syscall.SIGINT, syscall.SIGTERM)
+	defer cancel()
+
+	if err := rootCmd().ExecuteContext(ctx); err != nil {
 		fmt.Fprintln(os.Stderr, err)
 		os.Exit(1)
 	}
@@ -117,7 +123,7 @@ func rootCmd() *cobra.Command {
 			return kleverr.Ret(err)
 		}
 
-		return client(cfg.Client, logger)
+		return client(cmd.Context(), cfg.Client, logger)
 	}
 
 	return cmd
@@ -163,7 +169,7 @@ func serverCmd() *cobra.Command {
 			return kleverr.Ret(err)
 		}
 
-		return server(cfg.Server, logger)
+		return server(cmd.Context(), cfg.Server, logger)
 	}
 
 	return cmd
@@ -236,7 +242,7 @@ func logger(cfg Config) (*slog.Logger, error) {
 	}
 }
 
-func server(cfg ServerConfig, logger *slog.Logger) error {
+func server(ctx context.Context, cfg ServerConfig, logger *slog.Logger) error {
 	var opts []connet.ServerOption
 
 	if cfg.TokensFile != "" {
@@ -276,10 +282,10 @@ func server(cfg ServerConfig, logger *slog.Logger) error {
 	if err != nil {
 		return err
 	}
-	return srv.Run(context.Background())
+	return srv.Run(ctx)
 }
 
-func client(cfg ClientConfig, logger *slog.Logger) error {
+func client(ctx context.Context, cfg ClientConfig, logger *slog.Logger) error {
 	var opts []connet.ClientOption
 
 	if cfg.TokenFile != "" {
@@ -324,7 +330,7 @@ func client(cfg ClientConfig, logger *slog.Logger) error {
 	if err != nil {
 		return err
 	}
-	return cl.Run(context.Background())
+	return cl.Run(ctx)
 }
 
 func loadTokens(tokensFile string) ([]string, error) {

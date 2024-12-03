@@ -60,6 +60,13 @@ func (v *V[T]) Get() T {
 	return v.cp(v.value)
 }
 
+func (v *V[T]) Inspect(f func(T)) {
+	v.mu.RLock()
+	defer v.mu.RUnlock()
+
+	f(v.value)
+}
+
 func (v *V[T]) Listen(ctx context.Context, f func(t T) error) error {
 	return v.n.Listen(ctx, func() error {
 		return f(v.Get())
