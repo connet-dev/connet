@@ -23,7 +23,8 @@ type Destination struct {
 	opt    model.RouteOption
 	logger *slog.Logger
 
-	peer *peer
+	peer  *peer
+	conns map[peerConnKey]*destinationConn
 }
 
 func NewDestination(fwd model.Forward, addr string, opt model.RouteOption, direct *DirectServer, root *certc.Cert, logger *slog.Logger) (*Destination, error) {
@@ -38,7 +39,8 @@ func NewDestination(fwd model.Forward, addr string, opt model.RouteOption, direc
 		opt:    opt,
 		logger: logger.With("destination", fwd),
 
-		peer: p,
+		peer:  p,
+		conns: map[peerConnKey]*destinationConn{},
 	}, nil
 }
 
@@ -63,20 +65,45 @@ func (d *Destination) runActive(ctx context.Context) error {
 	return d.peer.activeConnsListen(ctx, func(active map[peerConnKey]quic.Connection) error {
 		d.logger.Debug("active conns", "len", len(active))
 		for peer, conn := range active {
-			go func() {
-				for {
-					stream, err := conn.AcceptStream(ctx)
-					if err != nil {
-						d.logger.Debug("accept failed", "peer", peer.id, "style", peer.style, "err", err)
-						return
-					}
-					d.logger.Debug("accepted stream from", "peer", peer.id, "style", peer.style)
-					go d.runDestination(ctx, stream)
-				}
-			}()
+			if dc := d.conns[peer]; dc != nil {
+				// TODO update conn?
+				continue
+			}
+			dc := &destinationConn{d, peer, conn}
+			d.conns[peer] = dc
+			go dc.run(ctx)
+		}
+
+		for peer, conn := range d.conns {
+			if _, ok := active[peer]; !ok {
+				conn.close()
+				delete(d.conns, peer)
+			}
 		}
 		return nil
 	})
+}
+
+type destinationConn struct {
+	dst  *Destination
+	peer peerConnKey
+	conn quic.Connection
+}
+
+func (d *destinationConn) run(ctx context.Context) {
+	for {
+		stream, err := d.conn.AcceptStream(ctx)
+		if err != nil {
+			d.dst.logger.Debug("accept failed", "peer", d.peer.id, "style", d.peer.style, "err", err)
+			return
+		}
+		d.dst.logger.Debug("accepted stream from", "peer", d.peer.id, "style", d.peer.style)
+		go d.dst.runDestination(ctx, stream)
+	}
+}
+
+func (d *destinationConn) close() {
+	d.conn.CloseWithError(1, "done")
 }
 
 func (d *Destination) runDestination(ctx context.Context, stream quic.Stream) {

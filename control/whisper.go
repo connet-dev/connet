@@ -57,7 +57,7 @@ type whisper struct {
 }
 
 func (w *whisper) AddDestination(id ksuid.KSUID, peer *pbs.ClientPeer) {
-	w.destinations.Modify(func(m map[ksuid.KSUID]*pbs.ServerPeer) {
+	w.destinations.Update(func(m map[ksuid.KSUID]*pbs.ServerPeer) {
 		m[id] = &pbs.ServerPeer{
 			Id:     id.String(),
 			Direct: peer.Direct,
@@ -67,7 +67,7 @@ func (w *whisper) AddDestination(id ksuid.KSUID, peer *pbs.ClientPeer) {
 }
 
 func (w *whisper) RemoveDestination(id ksuid.KSUID) {
-	w.destinations.Modify(func(m map[ksuid.KSUID]*pbs.ServerPeer) {
+	w.destinations.Update(func(m map[ksuid.KSUID]*pbs.ServerPeer) {
 		delete(m, id)
 	})
 }
@@ -80,7 +80,7 @@ func (w *whisper) Destinations(ctx context.Context, f func([]*pbs.ServerPeer) er
 }
 
 func (w *whisper) AddSource(id ksuid.KSUID, peer *pbs.ClientPeer) {
-	w.sources.Modify(func(m map[ksuid.KSUID]*pbs.ServerPeer) {
+	w.sources.Update(func(m map[ksuid.KSUID]*pbs.ServerPeer) {
 		m[id] = &pbs.ServerPeer{
 			Id:     id.String(),
 			Direct: peer.Direct,
@@ -90,7 +90,7 @@ func (w *whisper) AddSource(id ksuid.KSUID, peer *pbs.ClientPeer) {
 }
 
 func (w *whisper) RemoveSource(id ksuid.KSUID) {
-	w.sources.Modify(func(m map[ksuid.KSUID]*pbs.ServerPeer) {
+	w.sources.Update(func(m map[ksuid.KSUID]*pbs.ServerPeer) {
 		delete(m, id)
 	})
 }

@@ -35,7 +35,7 @@ func (v *V[T]) Set(t T) {
 	v.value = t
 }
 
-func (v *V[T]) Update(f func(T) T) {
+func (v *V[T]) Replace(f func(T) T) {
 	defer v.n.Updated()
 
 	v.mu.Lock()
@@ -44,7 +44,7 @@ func (v *V[T]) Update(f func(T) T) {
 	v.value = f(v.value)
 }
 
-func (v *V[T]) Modify(f func(T)) {
+func (v *V[T]) Update(f func(T)) {
 	defer v.n.Updated()
 
 	v.mu.Lock()

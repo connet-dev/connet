@@ -7,6 +7,7 @@ import (
 	"net"
 	"net/netip"
 	"slices"
+	"sync/atomic"
 
 	"github.com/keihaya-com/connet/certc"
 	"github.com/keihaya-com/connet/model"
@@ -25,7 +26,13 @@ type Source struct {
 	opt    model.RouteOption
 	logger *slog.Logger
 
-	peer *peer
+	peer  *peer
+	conns atomic.Pointer[[]sourceConn]
+}
+
+type sourceConn struct {
+	peer peerConnKey
+	conn quic.Connection
 }
 
 func NewSource(fwd model.Forward, addr string, opt model.RouteOption, direct *DirectServer, root *certc.Cert, logger *slog.Logger) (*Source, error) {
@@ -65,25 +72,35 @@ func (s *Source) Run(ctx context.Context) error {
 func (s *Source) runActive(ctx context.Context) error {
 	return s.peer.activeConnsListen(ctx, func(active map[peerConnKey]quic.Connection) error {
 		s.logger.Debug("active conns", "len", len(active))
+		activePeers := slices.SortedFunc(maps.Keys(active), func(l, r peerConnKey) int {
+			return int(l.style - r.style)
+		})
+
+		var conns = make([]sourceConn, len(activePeers))
+		for i, peer := range activePeers {
+			conns[i] = sourceConn{peer, active[peer]}
+		}
+		s.conns.Store(&conns)
 		return nil
 	})
 }
 
 func (s *Source) findActive(ctx context.Context) (quic.Stream, error) {
-	active := s.peer.getActiveConns()
-	activeKeys := slices.SortedFunc(maps.Keys(active), func(l, r peerConnKey) int {
-		return int(l.style - r.style)
-	})
-	for _, peer := range activeKeys {
-		conn := active[peer]
-		if stream, err := conn.OpenStreamSync(ctx); err != nil {
-			// not active
+	conns := s.conns.Load()
+	if conns == nil || len(*conns) == 0 {
+		return nil, kleverr.New("no active conns")
+	}
+
+	for _, sc := range *conns {
+		if stream, err := sc.conn.OpenStreamSync(ctx); err != nil {
+			s.logger.Debug("could not open active conn stream", "peer", sc.peer.id, "style", sc.peer.style, "err", err)
 		} else {
-			s.logger.Debug("found active conn", "peer", peer.id, "style", peer.style)
+			s.logger.Debug("found active conn", "peer", sc.peer.id, "style", sc.peer.style)
 			return stream, nil
 		}
 	}
-	return nil, kleverr.New("could not find conn")
+
+	return nil, kleverr.New("could not open conn stream")
 }
 
 func (s *Source) runServer(ctx context.Context) error {
@@ -134,12 +151,11 @@ func (s *Source) runConnErr(ctx context.Context, conn net.Conn) error {
 		return kleverr.Newf("could not write request: %w", err)
 	}
 
-	resp, err := pbc.ReadResponse(stream)
-	if err != nil {
+	if _, err := pbc.ReadResponse(stream); err != nil {
 		return kleverr.Newf("could not read response: %w", err)
 	}
 
-	s.logger.Debug("joining to server", "connect", resp)
+	s.logger.Debug("joining to server")
 	err = netc.Join(ctx, conn, stream)
 	s.logger.Debug("disconnected to server", "err", err)
 

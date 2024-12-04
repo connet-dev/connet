@@ -4,6 +4,7 @@ go 1.23.2
 
 require (
 	github.com/klev-dev/kleverr v0.0.0-20241020235355-094c0f6ca824
+	github.com/mr-tron/base58 v1.2.0
 	github.com/pelletier/go-toml/v2 v2.2.3
 	github.com/quic-go/quic-go v0.48.2
 	github.com/segmentio/ksuid v1.0.4
@@ -18,7 +19,6 @@ require (
 	github.com/go-task/slim-sprig/v3 v3.0.0 // indirect
 	github.com/google/pprof v0.0.0-20241122213907-cbe949e5a41b // indirect
 	github.com/inconshreveable/mousetrap v1.1.0 // indirect
-	github.com/mr-tron/base58 v1.2.0 // indirect
 	github.com/onsi/ginkgo/v2 v2.22.0 // indirect
 	github.com/pmezard/go-difflib v1.0.0 // indirect
 	github.com/spf13/pflag v1.0.5 // indirect

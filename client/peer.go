@@ -97,7 +97,7 @@ func newPeer(direct *DirectServer, root *certc.Cert, logger *slog.Logger) (*peer
 }
 
 func (p *peer) setDirectAddrs(addrs []netip.AddrPort) {
-	p.self.Modify(func(cp *pbs.ClientPeer) {
+	p.self.Update(func(cp *pbs.ClientPeer) {
 		cp.Direct = &pbs.DirectRoute{
 			Addresses:         pb.AsAddrPorts(addrs),
 			ServerCertificate: p.serverCert.Leaf.Raw,
@@ -108,7 +108,7 @@ func (p *peer) setDirectAddrs(addrs []netip.AddrPort) {
 }
 
 func (p *peer) setRelays(relays []*pbs.RelayRoute) {
-	p.self.Modify(func(cp *pbs.ClientPeer) {
+	p.self.Update(func(cp *pbs.ClientPeer) {
 		cp.Relays = relays
 	})
 }
@@ -118,9 +118,7 @@ func (p *peer) selfListen(ctx context.Context, f func(self *pbs.ClientPeer) erro
 }
 
 func (p *peer) setPeers(peers []*pbs.ServerPeer) {
-	p.peers.Update(func(sp []*pbs.ServerPeer) []*pbs.ServerPeer {
-		return peers
-	})
+	p.peers.Set(peers)
 }
 
 func (p *peer) peersListen(ctx context.Context, f func(peers []*pbs.ServerPeer) error) error {
@@ -145,7 +143,7 @@ func (p *peer) run(ctx context.Context) error {
 
 		for id, prg := range p.activePeers {
 			if _, ok := activeIds[id]; !ok {
-				prg.stop(ctx)
+				prg.stop()
 				delete(p.activePeers, id)
 			}
 		}
@@ -155,28 +153,30 @@ func (p *peer) run(ctx context.Context) error {
 
 func (p *peer) addActiveConn(id string, style peerStyle, key string, conn quic.Connection) {
 	p.logger.Debug("add active connection", "peer", id, "style", style, "addr", conn.RemoteAddr())
-	p.activeConns.Modify(func(m map[peerConnKey]quic.Connection) {
-		m[peerConnKey{id, style, key}] = conn
+	p.activeConns.Update(func(active map[peerConnKey]quic.Connection) {
+		active[peerConnKey{id, style, key}] = conn
 	})
 }
 
 func (p *peer) hasActiveConn(id string, style peerStyle, key string) bool {
 	var ok bool
-	p.activeConns.Inspect(func(m map[peerConnKey]quic.Connection) {
-		_, ok = m[peerConnKey{id, style, key}]
+	p.activeConns.Inspect(func(active map[peerConnKey]quic.Connection) {
+		_, ok = active[peerConnKey{id, style, key}]
 	})
 	return ok
 }
 
-func (p *peer) closeActiveConns(id string) {
-	p.activeConns.Modify(func(m map[peerConnKey]quic.Connection) {
-		for k, conn := range m {
+func (p *peer) removeActiveConns(id string) map[peerConnKey]quic.Connection {
+	removed := map[peerConnKey]quic.Connection{}
+	p.activeConns.Update(func(active map[peerConnKey]quic.Connection) {
+		for k, conn := range active {
 			if k.id == id {
-				conn.CloseWithError(0, "done")
-				delete(m, k)
+				removed[k] = conn
+				delete(active, k)
 			}
 		}
 	})
+	return removed
 }
 
 func (p *peer) getActiveConns() map[peerConnKey]quic.Connection {
@@ -227,7 +227,12 @@ func newPeering(local *peer, remote *pbs.ServerPeer, logger *slog.Logger) *peeri
 var errPeeringStop = errors.New("peering stopped")
 
 func (p *peering) run(ctx context.Context) {
-	defer p.closeConns()
+	defer func() {
+		active := p.local.removeActiveConns(p.remoteId)
+		for _, conn := range active {
+			conn.CloseWithError(1, "depeered")
+		}
+	}()
 
 	g, ctx := errgroup.WithContext(ctx)
 
@@ -245,12 +250,8 @@ func (p *peering) run(ctx context.Context) {
 	}
 }
 
-func (p *peering) stop(ctx context.Context) {
+func (p *peering) stop() {
 	close(p.closer)
-}
-
-func (p *peering) closeConns() {
-	p.local.closeActiveConns(p.remoteId)
 }
 
 func (p *peering) runRemote(ctx context.Context) error {
