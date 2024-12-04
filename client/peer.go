@@ -321,10 +321,9 @@ func (p *peering) runDirectOutgoing(ctx context.Context) error {
 
 		// TODO retry direct outgong conns to accomodate for network instability and NAT behavior
 		for paddr := range out.addrs {
-			p.logger.Debug("attempt outgoing", "addr", paddr, "cert", certc.NewKey(p.local.clientCert.Leaf))
 			addr := net.UDPAddrFromAddrPort(paddr)
 
-			p.logger.Debug("dialing direct", "server", out.cert.DNSNames[0], "cert", certc.NewKey(out.cert))
+			p.logger.Debug("dialing direct", "addr", addr, "server", out.cert.DNSNames[0], "cert", certc.NewKey(out.cert))
 			conn, err := p.local.direct.transport.Dial(ctx, addr, &tls.Config{
 				Certificates: []tls.Certificate{p.local.clientCert},
 				RootCAs:      directCAs,
@@ -334,7 +333,7 @@ func (p *peering) runDirectOutgoing(ctx context.Context) error {
 				KeepAlivePeriod: 25 * time.Second,
 			})
 			if err != nil {
-				p.logger.Debug("could not direct dial", "addr", addr, "err", err)
+				p.logger.Debug("could not dial direct", "addr", addr, "err", err)
 				continue
 			}
 			p.local.addActiveConn(p.remoteId, peerOutgoing, "", conn)
@@ -354,15 +353,14 @@ func (p *peering) runRelay(ctx context.Context) error {
 			// TODO retry relays to accomodate for network instability
 			addr, err := net.ResolveUDPAddr("udp", hp.String())
 			if err != nil {
-				return err
+				p.logger.Debug("failed to resolve relay addr", "relay", hp, "err", err)
+				continue
 			}
-
-			p.logger.Debug("attempt relay", "hostport", hp, "addr", addr)
 
 			relayCAs := x509.NewCertPool()
 			relayCAs.AddCert(relayCert)
 
-			p.logger.Debug("dialing relay", "server", relayCert.DNSNames[0], "cert", certc.NewKey(relayCert))
+			p.logger.Debug("dialing relay", "relay", hp, "addr", addr, "server", relayCert.DNSNames[0], "cert", certc.NewKey(relayCert))
 			conn, err := p.local.direct.transport.Dial(ctx, addr, &tls.Config{
 				Certificates: []tls.Certificate{p.local.clientCert},
 				RootCAs:      relayCAs,
@@ -372,7 +370,7 @@ func (p *peering) runRelay(ctx context.Context) error {
 				KeepAlivePeriod: 25 * time.Second,
 			})
 			if err != nil {
-				p.logger.Debug("could not relay dial", "hostport", hp, "addr", addr, "err", err)
+				p.logger.Debug("could not dial relay", "relay", hp, "addr", addr, "err", err)
 				continue
 			}
 			p.local.addActiveConn(p.remoteId, peerRelay, hp.String(), conn)

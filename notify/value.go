@@ -53,6 +53,10 @@ func (v *V[T]) Update(f func(T)) {
 	f(v.value)
 }
 
+func (v *V[T]) Touch() {
+	v.n.Updated()
+}
+
 func (v *V[T]) Get() T {
 	v.mu.RLock()
 	defer v.mu.RUnlock()
