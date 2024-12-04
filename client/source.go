@@ -36,16 +36,20 @@ type sourceConn struct {
 }
 
 func NewSource(fwd model.Forward, addr string, opt model.RouteOption, direct *DirectServer, root *certc.Cert, logger *slog.Logger) (*Source, error) {
-	p, err := newPeer(direct, root, logger.With("source", fwd))
+	logger = logger.With("source", fwd)
+	p, err := newPeer(direct, root, logger)
 	if err != nil {
 		return nil, err
+	}
+	if opt.AllowDirect() {
+		p.expectDirect()
 	}
 
 	return &Source{
 		fwd:    fwd,
 		addr:   addr,
 		opt:    opt,
-		logger: logger.With("source", fwd),
+		logger: logger,
 
 		peer: p,
 	}, nil
@@ -215,6 +219,8 @@ func (s *Source) runControl(ctx context.Context, conn quic.Connection) error {
 				return kleverr.Newf("unexpected response")
 			}
 
+			// TODO on server restart peers is reset and client loses active peers
+			// only for them to come back at the next tick, with different ID
 			s.peer.setPeers(resp.Source.Peers)
 		}
 	})

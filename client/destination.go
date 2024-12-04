@@ -28,16 +28,20 @@ type Destination struct {
 }
 
 func NewDestination(fwd model.Forward, addr string, opt model.RouteOption, direct *DirectServer, root *certc.Cert, logger *slog.Logger) (*Destination, error) {
-	p, err := newPeer(direct, root, logger.With("destination", fwd))
+	logger = logger.With("destination", fwd)
+	p, err := newPeer(direct, root, logger)
 	if err != nil {
 		return nil, err
+	}
+	if opt.AllowDirect() {
+		p.expectDirect()
 	}
 
 	return &Destination{
 		fwd:    fwd,
 		addr:   addr,
 		opt:    opt,
-		logger: logger.With("destination", fwd),
+		logger: logger,
 
 		peer:  p,
 		conns: map[peerConnKey]*destinationConn{},
@@ -217,6 +221,8 @@ func (d *Destination) runControl(ctx context.Context, conn quic.Connection) erro
 				return kleverr.Newf("unexpected response")
 			}
 
+			// TODO on server restart peers is reset and client loses active peers
+			// only for them to come back at the next tick, with different ID
 			d.peer.setPeers(resp.Destination.Peers)
 		}
 	})

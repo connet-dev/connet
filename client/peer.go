@@ -96,6 +96,10 @@ func newPeer(direct *DirectServer, root *certc.Cert, logger *slog.Logger) (*peer
 	}, nil
 }
 
+func (p *peer) expectDirect() {
+	p.direct.addServerCert(p.serverCert)
+}
+
 func (p *peer) setDirectAddrs(addrs []netip.AddrPort) {
 	p.self.Update(func(cp *pbs.ClientPeer) {
 		cp.Direct = &pbs.DirectRoute{
@@ -104,7 +108,6 @@ func (p *peer) setDirectAddrs(addrs []netip.AddrPort) {
 			ClientCertificate: p.clientCert.Leaf.Raw,
 		}
 	})
-	p.direct.addServerCert(p.serverCert)
 }
 
 func (p *peer) setRelays(relays []*pbs.RelayRoute) {
