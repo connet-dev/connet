@@ -22,7 +22,6 @@
             gopls
             protobuf
             protoc-gen-go
-            buf-language-server
             static-web-server
             process-compose
             (pkgs.writeShellScriptBin "gen-local-certs" ''
