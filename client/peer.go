@@ -319,6 +319,7 @@ func (p *peering) runDirectOutgoing(ctx context.Context) error {
 		directCAs := x509.NewCertPool()
 		directCAs.AddCert(out.cert)
 
+		// TODO retry direct outgong conns to accomodate for network instability and NAT behavior
 		for paddr := range out.addrs {
 			p.logger.Debug("attempt outgoing", "addr", paddr, "cert", certc.NewKey(p.local.clientCert.Leaf))
 			addr := net.UDPAddrFromAddrPort(paddr)
@@ -350,6 +351,7 @@ func (p *peering) runRelay(ctx context.Context) error {
 				continue
 			}
 
+			// TODO retry relays to accomodate for network instability
 			addr, err := net.ResolveUDPAddr("udp", hp.String())
 			if err != nil {
 				return err
