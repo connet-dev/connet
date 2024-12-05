@@ -6,9 +6,8 @@ import (
 	"crypto/x509"
 	"errors"
 	"log/slog"
-	"maps"
-	"slices"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/keihaya-com/connet/certc"
@@ -21,11 +20,8 @@ type DirectServer struct {
 	transport *quic.Transport
 	logger    *slog.Logger
 
-	serverCers   []tls.Certificate
-	serverCersMu sync.RWMutex
-
-	expectCerts   map[certc.Key]*expectedCert
-	expectCertsMu sync.RWMutex
+	servers   map[string]*vServer
+	serversMu sync.RWMutex
 }
 
 func NewDirectServer(transport *quic.Transport, logger *slog.Logger) (*DirectServer, error) {
@@ -33,13 +29,44 @@ func NewDirectServer(transport *quic.Transport, logger *slog.Logger) (*DirectSer
 		transport: transport,
 		logger:    logger.With("component", "direct-server"),
 
-		expectCerts: map[certc.Key]*expectedCert{},
+		servers: map[string]*vServer{},
 	}, nil
 }
 
-type expectedCert struct {
+type vServer struct {
+	serverName string
+	serverCert tls.Certificate
+	clients    map[certc.Key]*vClient
+	clientCA   atomic.Pointer[x509.CertPool]
+	mu         sync.RWMutex
+}
+
+type vClient struct {
 	cert *x509.Certificate
 	ch   chan quic.Connection
+}
+
+func (s *vServer) dequeue(key certc.Key) *vClient {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	if exp, ok := s.clients[key]; ok {
+		delete(s.clients, key)
+		return exp
+	}
+
+	return nil
+}
+
+func (s *vServer) updateClientCA() {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+
+	clientCA := x509.NewCertPool()
+	for _, exp := range s.clients {
+		clientCA.AddCert(exp.cert)
+	}
+	s.clientCA.Store(clientCA)
 }
 
 func (s *DirectServer) Run(ctx context.Context) error {
@@ -51,60 +78,44 @@ func (s *DirectServer) Run(ctx context.Context) error {
 }
 
 func (s *DirectServer) addServerCert(cert tls.Certificate) {
-	s.serverCersMu.Lock()
-	defer s.serverCersMu.Unlock()
+	serverName := cert.Leaf.DNSNames[0]
 
-	s.logger.Debug("add server cert", "server", cert.Leaf.DNSNames[0], "cert", certc.NewKey(cert.Leaf))
-	s.serverCers = append(s.serverCers, cert)
+	s.serversMu.Lock()
+	defer s.serversMu.Unlock()
+
+	s.logger.Debug("add server cert", "server", serverName, "cert", certc.NewKey(cert.Leaf))
+	s.servers[serverName] = &vServer{
+		serverName: serverName,
+		serverCert: cert,
+		clients:    map[certc.Key]*vClient{},
+	}
 }
 
-func (s *DirectServer) getServerCerts() []tls.Certificate {
-	s.serverCersMu.RLock()
-	defer s.serverCersMu.RUnlock()
+func (s *DirectServer) getServer(serverName string) *vServer {
+	s.serversMu.RLock()
+	defer s.serversMu.RUnlock()
 
-	return s.serverCers
+	return s.servers[serverName]
 }
 
-func (s *DirectServer) expectConn(cert *x509.Certificate) chan quic.Connection {
+func (s *DirectServer) expectConn(serverCert tls.Certificate, cert *x509.Certificate) chan quic.Connection {
 	key := certc.NewKey(cert)
+	srv := s.getServer(serverCert.Leaf.DNSNames[0])
 
-	s.expectCertsMu.Lock()
-	defer s.expectCertsMu.Unlock()
+	defer srv.updateClientCA()
 
-	if exp, ok := s.expectCerts[key]; ok {
-		s.logger.Debug("cancel client", "cert", key)
+	srv.mu.Lock()
+	defer srv.mu.Unlock()
+
+	if exp, ok := srv.clients[key]; ok {
+		s.logger.Debug("cancel client", "server", srv.serverName, "cert", key)
 		close(exp.ch)
 	}
 
-	s.logger.Debug("expect client", "cert", key)
+	s.logger.Debug("expect client", "server", srv.serverName, "cert", key)
 	ch := make(chan quic.Connection)
-	s.expectCerts[key] = &expectedCert{cert: cert, ch: ch}
+	srv.clients[key] = &vClient{cert: cert, ch: ch}
 	return ch
-}
-
-func (s *DirectServer) pollExpectedConn(cert *x509.Certificate) *expectedCert {
-	key := certc.NewKey(cert)
-
-	s.expectCertsMu.Lock()
-	defer s.expectCertsMu.Unlock()
-
-	if exp, ok := s.expectCerts[key]; ok {
-		delete(s.expectCerts, key)
-		return exp
-	}
-	return nil
-}
-
-func (s *DirectServer) getClientCerts() *x509.CertPool {
-	s.expectCertsMu.RLock()
-	defer s.expectCertsMu.RUnlock()
-
-	s.logger.Debug("expect client certs", "certs", slices.Collect(maps.Keys(s.expectCerts)))
-	pool := x509.NewCertPool()
-	for _, exp := range s.expectCerts {
-		pool.AddCert(exp.cert)
-	}
-	return pool // TODO optimize this
 }
 
 func (s *DirectServer) runServer(ctx context.Context) error {
@@ -113,9 +124,13 @@ func (s *DirectServer) runServer(ctx context.Context) error {
 		NextProtos: []string{"connet-direct"},
 	}
 	tlsConf.GetConfigForClient = func(chi *tls.ClientHelloInfo) (*tls.Config, error) {
+		sni := s.getServer(chi.ServerName)
+		if sni == nil {
+			return nil, kleverr.Newf("server not found: %s", chi.ServerName)
+		}
 		conf := tlsConf.Clone()
-		conf.Certificates = s.getServerCerts()
-		conf.ClientCAs = s.getClientCerts()
+		conf.Certificates = []tls.Certificate{sni.serverCert}
+		conf.ClientCAs = sni.clientCA.Load()
 		return conf, nil
 	}
 
@@ -141,15 +156,24 @@ func (s *DirectServer) runServer(ctx context.Context) error {
 }
 
 func (s *DirectServer) runConn(conn quic.Connection) {
-	key := certc.NewKey(conn.ConnectionState().TLS.PeerCertificates[0])
-	s.logger.Debug("accepted conn", "cert", key, "remote", conn.RemoteAddr())
-
-	if exp := s.pollExpectedConn(conn.ConnectionState().TLS.PeerCertificates[0]); exp != nil {
-		// TODO do we ping/pong to verify?
-		s.logger.Debug("accept client", "cert", key)
-		exp.ch <- conn
-		close(exp.ch)
-	} else {
-		conn.CloseWithError(1, "not found")
+	srv := s.getServer(conn.ConnectionState().TLS.ServerName)
+	if srv == nil {
+		conn.CloseWithError(1, "server not found")
+		return
 	}
+
+	key := certc.NewKey(conn.ConnectionState().TLS.PeerCertificates[0])
+	s.logger.Debug("accepted conn", "server", srv.serverName, "cert", key, "remote", conn.RemoteAddr())
+
+	exp := srv.dequeue(key)
+	if exp == nil {
+		conn.CloseWithError(2, "client not found")
+		return
+	}
+
+	s.logger.Debug("accept client", "server", srv.serverName, "cert", key)
+	exp.ch <- conn
+	close(exp.ch)
+
+	srv.updateClientCA()
 }

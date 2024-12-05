@@ -297,7 +297,7 @@ func (p *peering) runDirectIncoming(ctx context.Context) error {
 			return nil
 		}
 
-		ch := p.local.direct.expectConn(cert)
+		ch := p.local.direct.expectConn(p.local.serverCert, cert)
 		select {
 		case <-ctx.Done():
 			return ctx.Err()
