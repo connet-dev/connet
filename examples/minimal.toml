@@ -6,7 +6,7 @@ cert_file = ".direnv/localhost/cert.pem"
 key_file = ".direnv/localhost/key.pem"
 
 [client]
-token = "xxyxx"
+token_file = "examples/token.secret"
 server_cas = ".direnv/localhost/cert.pem"
 
 [client.destinations.sws]

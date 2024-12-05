@@ -2,7 +2,6 @@ package relay
 
 import (
 	"context"
-	"crypto/sha256"
 	"crypto/tls"
 	"crypto/x509"
 	"errors"
@@ -56,8 +55,6 @@ type Server struct {
 	destinations   map[model.Forward]map[ksuid.KSUID]*relayConn
 	destinationsMu sync.RWMutex
 }
-
-type relayClientConfigKey [sha256.Size]byte
 
 type relayClientConfig struct {
 	cert         *x509.Certificate

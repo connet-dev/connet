@@ -124,13 +124,13 @@ func (s *DirectServer) runServer(ctx context.Context) error {
 		NextProtos: []string{"connet-direct"},
 	}
 	tlsConf.GetConfigForClient = func(chi *tls.ClientHelloInfo) (*tls.Config, error) {
-		sni := s.getServer(chi.ServerName)
-		if sni == nil {
+		srv := s.getServer(chi.ServerName)
+		if srv == nil {
 			return nil, kleverr.Newf("server not found: %s", chi.ServerName)
 		}
 		conf := tlsConf.Clone()
-		conf.Certificates = []tls.Certificate{sni.serverCert}
-		conf.ClientCAs = sni.clientCA.Load()
+		conf.Certificates = []tls.Certificate{srv.serverCert}
+		conf.ClientCAs = srv.clientCA.Load()
 		return conf, nil
 	}
 
