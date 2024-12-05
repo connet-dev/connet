@@ -197,7 +197,7 @@ type peering struct {
 	remote         *notify.V[*pbs.ServerPeer]
 	directIncoming *notify.V[*x509.Certificate]
 	directOutgoing *notify.V[*peeringOutoing]
-	relays         *notify.V[map[model.HostPort]*x509.Certificate]
+	relays         *notify.V[map[model.HostPort]*peeringRelay]
 
 	closer chan struct{}
 
@@ -205,8 +205,16 @@ type peering struct {
 }
 
 type peeringOutoing struct {
-	cert  *x509.Certificate
-	addrs map[netip.AddrPort]struct{}
+	serverKey  certc.Key
+	serverName string
+	serverCA   *x509.CertPool
+	addrs      map[netip.AddrPort]struct{}
+}
+
+type peeringRelay struct {
+	serverKey  certc.Key
+	serverName string
+	serverCA   *x509.CertPool
 }
 
 func newPeering(local *peer, remote *pbs.ServerPeer, logger *slog.Logger) *peering {
@@ -217,7 +225,7 @@ func newPeering(local *peer, remote *pbs.ServerPeer, logger *slog.Logger) *peeri
 		remote:         notify.NewV[*pbs.ServerPeer](),
 		directIncoming: notify.NewV[*x509.Certificate](),
 		directOutgoing: notify.NewV[*peeringOutoing](),
-		relays:         notify.NewV(notify.CopyMapOpt[map[model.HostPort]*x509.Certificate]()),
+		relays:         notify.NewV(notify.CopyMapOpt[map[model.HostPort]*peeringRelay]()),
 
 		closer: make(chan struct{}),
 
@@ -270,20 +278,33 @@ func (p *peering) runRemote(ctx context.Context) error {
 			if err != nil {
 				return err
 			}
+			remoteCA := x509.NewCertPool()
+			remoteCA.AddCert(remoteServerCert)
 			addrs := map[netip.AddrPort]struct{}{}
 			for _, addr := range remote.Direct.Addresses {
 				addrs[addr.AsNetip()] = struct{}{}
 			}
-			p.directOutgoing.Set(&peeringOutoing{remoteServerCert, addrs})
+			p.directOutgoing.Set(&peeringOutoing{
+				certc.NewKey(remoteServerCert),
+				remoteServerCert.DNSNames[0],
+				remoteCA,
+				addrs,
+			})
 		}
 
-		relays := map[model.HostPort]*x509.Certificate{}
+		relays := map[model.HostPort]*peeringRelay{}
 		for _, relay := range remote.Relays {
-			cert, err := x509.ParseCertificate(relay.ServerCertificate)
+			relayServerCert, err := x509.ParseCertificate(relay.ServerCertificate)
 			if err != nil {
 				return err
 			}
-			relays[model.NewHostPortFromPB(relay.Address)] = cert
+			relayServerCA := x509.NewCertPool()
+			relayServerCA.AddCert(relayServerCert)
+			relays[model.NewHostPortFromPB(relay.Address)] = &peeringRelay{
+				certc.NewKey(relayServerCert),
+				relayServerCert.DNSNames[0],
+				relayServerCA,
+			}
 		}
 		p.relays.Set(relays)
 
@@ -292,12 +313,12 @@ func (p *peering) runRemote(ctx context.Context) error {
 }
 
 func (p *peering) runDirectIncoming(ctx context.Context) error {
-	return p.directIncoming.Listen(ctx, func(cert *x509.Certificate) error {
+	return p.directIncoming.Listen(ctx, func(clientCert *x509.Certificate) error {
 		if p.local.hasActiveConn(p.remoteId, peerIncoming, "") {
 			return nil
 		}
 
-		ch := p.local.direct.expectConn(p.local.serverCert, cert)
+		ch := p.local.direct.expectConn(p.local.serverCert, clientCert)
 		select {
 		case <-ctx.Done():
 			return ctx.Err()
@@ -316,18 +337,15 @@ func (p *peering) runDirectOutgoing(ctx context.Context) error {
 			return nil
 		}
 
-		directCAs := x509.NewCertPool()
-		directCAs.AddCert(out.cert)
-
 		// TODO retry direct outgong conns to accomodate for network instability and NAT behavior
 		for paddr := range out.addrs {
 			addr := net.UDPAddrFromAddrPort(paddr)
 
-			p.logger.Debug("dialing direct", "addr", addr, "server", out.cert.DNSNames[0], "cert", certc.NewKey(out.cert))
+			p.logger.Debug("dialing direct", "addr", addr, "server", out.serverName, "cert", out.serverKey)
 			conn, err := p.local.direct.transport.Dial(ctx, addr, &tls.Config{
 				Certificates: []tls.Certificate{p.local.clientCert},
-				RootCAs:      directCAs,
-				ServerName:   out.cert.DNSNames[0],
+				RootCAs:      out.serverCA,
+				ServerName:   out.serverName,
 				NextProtos:   []string{"connet-direct"},
 			}, &quic.Config{
 				KeepAlivePeriod: 25 * time.Second,
@@ -344,8 +362,8 @@ func (p *peering) runDirectOutgoing(ctx context.Context) error {
 }
 
 func (p *peering) runRelay(ctx context.Context) error {
-	return p.relays.Listen(ctx, func(relays map[model.HostPort]*x509.Certificate) error {
-		for hp, relayCert := range relays {
+	return p.relays.Listen(ctx, func(relays map[model.HostPort]*peeringRelay) error {
+		for hp, relay := range relays {
 			if p.local.hasActiveConn(p.remoteId, peerRelay, hp.String()) {
 				continue
 			}
@@ -357,14 +375,11 @@ func (p *peering) runRelay(ctx context.Context) error {
 				continue
 			}
 
-			relayCAs := x509.NewCertPool()
-			relayCAs.AddCert(relayCert)
-
-			p.logger.Debug("dialing relay", "relay", hp, "addr", addr, "server", relayCert.DNSNames[0], "cert", certc.NewKey(relayCert))
+			p.logger.Debug("dialing relay", "relay", hp, "addr", addr, "server", relay.serverName, "cert", relay.serverKey)
 			conn, err := p.local.direct.transport.Dial(ctx, addr, &tls.Config{
 				Certificates: []tls.Certificate{p.local.clientCert},
-				RootCAs:      relayCAs,
-				ServerName:   relayCert.DNSNames[0],
+				RootCAs:      relay.serverCA,
+				ServerName:   relay.serverName,
 				NextProtos:   []string{"connet-relay"},
 			}, &quic.Config{
 				KeepAlivePeriod: 25 * time.Second,
