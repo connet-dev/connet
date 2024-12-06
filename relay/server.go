@@ -3,7 +3,6 @@ package relay
 import (
 	"context"
 	"crypto/tls"
-	"crypto/x509"
 	"errors"
 	"log/slog"
 	"maps"
@@ -56,36 +55,26 @@ type Server struct {
 	destinationsMu sync.RWMutex
 }
 
-type relayClientConfig struct {
-	cert         *x509.Certificate
-	sources      []model.Forward
-	destinations []model.Forward
-}
-
 func (s *Server) addDestinations(conn *relayConn) {
 	s.destinationsMu.Lock()
 	defer s.destinationsMu.Unlock()
 
-	for fwd := range conn.auth.Destinations {
-		fwdDest := s.destinations[fwd]
-		if fwdDest == nil {
-			fwdDest = map[ksuid.KSUID]*relayConn{}
-			s.destinations[fwd] = fwdDest
-		}
-		fwdDest[conn.id] = conn
+	fwdDest := s.destinations[conn.auth.Forward()]
+	if fwdDest == nil {
+		fwdDest = map[ksuid.KSUID]*relayConn{}
+		s.destinations[conn.auth.Forward()] = fwdDest
 	}
+	fwdDest[conn.id] = conn
 }
 
 func (s *Server) removeDestinations(conn *relayConn) {
 	s.destinationsMu.Lock()
 	defer s.destinationsMu.Unlock()
 
-	for fwd := range conn.auth.Destinations {
-		fwdDest := s.destinations[fwd]
-		delete(fwdDest, conn.id)
-		if len(fwdDest) == 0 {
-			delete(s.destinations, fwd)
-		}
+	fwdDest := s.destinations[conn.auth.Forward()]
+	delete(fwdDest, conn.id)
+	if len(fwdDest) == 0 {
+		delete(s.destinations, conn.auth.Forward())
 	}
 }
 
@@ -101,8 +90,11 @@ func (s *Server) findDestinations(fwd model.Forward) []*relayConn {
 }
 
 func (s *Server) tlsConfigWithClientCA(chi *tls.ClientHelloInfo) (*tls.Config, error) {
+	certs, cas := s.auth.TLSConfig(chi.ServerName)
+
 	cfg := s.tlsConf.Clone()
-	cfg.ClientCAs = s.auth.CertificateAuthority()
+	cfg.Certificates = certs
+	cfg.ClientCAs = cas
 	return cfg, nil
 }
 
@@ -158,7 +150,7 @@ type relayConn struct {
 	conn   quic.Connection
 	logger *slog.Logger
 
-	auth *Authentication
+	auth Authentication
 }
 
 func (c *relayConn) run(ctx context.Context) {
@@ -170,23 +162,38 @@ func (c *relayConn) run(ctx context.Context) {
 }
 
 func (c *relayConn) runErr(ctx context.Context) error {
+	serverName := c.conn.ConnectionState().TLS.ServerName
 	certs := c.conn.ConnectionState().TLS.PeerCertificates
-	if auth := c.server.auth.Authenticate(certs); auth == nil {
+	if auth := c.server.auth.Authenticate(serverName, certs); auth == nil {
 		c.conn.CloseWithError(1, "auth failed")
 		return nil
 	} else {
 		c.auth = auth
 	}
 
-	c.server.addDestinations(c)
-	defer c.server.removeDestinations(c)
+	switch {
+	case c.auth.IsDestination():
+		c.server.addDestinations(c)
+		defer c.server.removeDestinations(c)
 
-	for {
-		stream, err := c.conn.AcceptStream(ctx)
-		if err != nil {
-			return err
+		// TODO ping stream
+		for {
+			stream, err := c.conn.AcceptStream(ctx)
+			if err != nil {
+				return err
+			}
+			stream.Close()
 		}
-		go c.runStream(ctx, stream)
+	case c.auth.IsSource():
+		for {
+			stream, err := c.conn.AcceptStream(ctx)
+			if err != nil {
+				return err
+			}
+			go c.runStream(ctx, stream)
+		}
+	default:
+		return kleverr.Newf("invalid authentication, not destination or source")
 	}
 }
 
@@ -207,11 +214,6 @@ func (c *relayConn) runStream(ctx context.Context, stream quic.Stream) error {
 }
 
 func (c *relayConn) connect(ctx context.Context, stream quic.Stream, fwd model.Forward) error {
-	if !c.auth.AllowSource(fwd) {
-		err := pb.NewError(pb.Error_DestinationNotFound, "not allowed")
-		return pb.Write(stream, &pbc.Response{Error: err})
-	}
-
 	dests := c.server.findDestinations(fwd)
 	for _, dest := range dests {
 		if err := c.connectDestination(ctx, stream, fwd, dest); err != nil {

@@ -228,7 +228,7 @@ func (s *controlStream) destinationRelay(ctx context.Context, req *pbs.Request_D
 		return err
 	}
 
-	cert, err := x509.ParseCertificate(req.Certificate)
+	clientCert, err := x509.ParseCertificate(req.ClientCertificate)
 	if err != nil {
 		err := pb.NewError(pb.Error_RelayInvalidCertificate, "invalid certificate: %v", err)
 		if err := pb.Write(s.stream, &pbs.Response{Error: err}); err != nil {
@@ -237,28 +237,29 @@ func (s *controlStream) destinationRelay(ctx context.Context, req *pbs.Request_D
 		return err
 	}
 
-	s.conn.server.relays.Add(cert, []model.Forward{fwd}, nil)
-	defer s.conn.server.relays.Remove(cert)
+	serverCert, err := s.conn.server.relays.AddDestination(fwd, clientCert)
+	if err != nil {
+		err := pb.NewError(pb.Error_Unknown, "certificate create failed: %v", err)
+		if err := pb.Write(s.stream, &pbs.Response{Error: err}); err != nil {
+			return kleverr.Newf("could not write error response: %w", err)
+		}
+		return err
+	}
+	defer s.conn.server.relays.RemoveDestination(fwd, clientCert)
 
 	defer s.logger.Debug("completed destination relay notify")
-	return s.conn.server.relays.Active(ctx, func(relays map[model.HostPort]*x509.Certificate) error {
+	return s.conn.server.relays.Active(ctx, func(relays map[model.HostPort]struct{}) error {
 		s.logger.Debug("updated destination relay list", "relays", len(relays))
 
-		var routes []*pbs.RelayRoute
-		for addr, cert := range relays {
-			var certData []byte
-			if cert != nil {
-				certData = cert.Raw
-			}
-			routes = append(routes, &pbs.RelayRoute{
-				Address:           addr.PB(),
-				ServerCertificate: certData,
-			})
+		var addrs []*pb.HostPort
+		for hp := range relays {
+			addrs = append(addrs, hp.PB())
 		}
 
 		if err := pb.Write(s.stream, &pbs.Response{
-			Relay: &pbs.Response_Relay{
-				Relays: routes,
+			Relay: &pbs.Relays{
+				Addresses:         addrs,
+				ServerCertificate: serverCert.Raw,
 			},
 		}); err != nil {
 			return kleverr.Ret(err)
@@ -358,7 +359,7 @@ func (s *controlStream) sourceRelay(ctx context.Context, req *pbs.Request_Source
 		return err
 	}
 
-	cert, err := x509.ParseCertificate(req.Certificate)
+	clientCert, err := x509.ParseCertificate(req.ClientCertificate)
 	if err != nil {
 		err := pb.NewError(pb.Error_RelayInvalidCertificate, "invalid certificate: %v", err)
 		if err := pb.Write(s.stream, &pbs.Response{Error: err}); err != nil {
@@ -367,28 +368,29 @@ func (s *controlStream) sourceRelay(ctx context.Context, req *pbs.Request_Source
 		return err
 	}
 
-	s.conn.server.relays.Add(cert, nil, []model.Forward{fwd})
-	defer s.conn.server.relays.Remove(cert)
+	serverCert, err := s.conn.server.relays.AddSource(fwd, clientCert)
+	if err != nil {
+		err := pb.NewError(pb.Error_Unknown, "certificate create failed: %v", err)
+		if err := pb.Write(s.stream, &pbs.Response{Error: err}); err != nil {
+			return kleverr.Newf("could not write error response: %w", err)
+		}
+		return err
+	}
+	defer s.conn.server.relays.RemoveSource(fwd, clientCert)
 
 	defer s.logger.Debug("completed source relay notify")
-	return s.conn.server.relays.Active(ctx, func(relays map[model.HostPort]*x509.Certificate) error {
+	return s.conn.server.relays.Active(ctx, func(relays map[model.HostPort]struct{}) error {
 		s.logger.Debug("updated source relay list", "relays", len(relays))
 
-		var routes []*pbs.RelayRoute
-		for addr, cert := range relays {
-			var certData []byte
-			if cert != nil {
-				certData = cert.Raw
-			}
-			routes = append(routes, &pbs.RelayRoute{
-				Address:           addr.PB(),
-				ServerCertificate: certData,
-			})
+		var addrs []*pb.HostPort
+		for hp := range relays {
+			addrs = append(addrs, hp.PB())
 		}
 
 		if err := pb.Write(s.stream, &pbs.Response{
-			Relay: &pbs.Response_Relay{
-				Relays: routes,
+			Relay: &pbs.Relays{
+				Addresses:         addrs,
+				ServerCertificate: serverCert.Raw,
 			},
 		}); err != nil {
 			return kleverr.Ret(err)

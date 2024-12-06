@@ -237,8 +237,8 @@ func (s *Source) runRelay(ctx context.Context, conn quic.Connection) error {
 
 	if err := pb.Write(stream, &pbs.Request{
 		SourceRelay: &pbs.Request_SourceRelay{
-			To:          s.fwd.PB(),
-			Certificate: s.peer.clientCert.Leaf.Raw,
+			To:                s.fwd.PB(),
+			ClientCertificate: s.peer.clientCert.Leaf.Raw,
 		},
 	}); err != nil {
 		return err
@@ -262,7 +262,7 @@ func (s *Source) runRelay(ctx context.Context, conn quic.Connection) error {
 				return kleverr.Newf("unexpected response")
 			}
 
-			s.peer.setRelays(resp.Relay.Relays)
+			s.peer.setRelays(resp.Relay)
 		}
 	})
 

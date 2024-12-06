@@ -61,7 +61,7 @@ func NewServer(opts ...ServerOption) (*Server, error) {
 	}
 
 	relayPublicAddr := model.HostPort{Host: cfg.hostname, Port: cfg.relayAddr.AddrPort().Port()}
-	rsync, err := selfhosted.NewRelaySync(relayPublicAddr, cfg.relayCert.Leaf)
+	localRelay, err := selfhosted.NewLocalRelay(relayPublicAddr)
 	if err != nil {
 		return nil, err
 	}
@@ -70,14 +70,14 @@ func NewServer(opts ...ServerOption) (*Server, error) {
 		Addr:   cfg.controlAddr,
 		Cert:   cfg.controlCert,
 		Auth:   cfg.auth,
-		Relays: rsync,
+		Relays: localRelay,
 		Logger: cfg.logger,
 	})
 
 	relay, err := relay.NewServer(relay.Config{
 		Addr:   cfg.relayAddr,
 		Cert:   cfg.relayCert,
-		Auth:   rsync,
+		Auth:   localRelay,
 		Logger: cfg.logger,
 	})
 	if err != nil {

@@ -24,7 +24,7 @@ message Request {
 
   message DestinationRelay {
     shared.Forward from = 1;
-    bytes certificate = 2; // certificate to use when connecting to a relay
+    bytes client_certificate = 2; // certificate to use when connecting to a relay
   }
   message Destination {
     shared.Forward from = 1;
@@ -32,7 +32,7 @@ message Request {
   }
   message SourceRelay {
     shared.Forward to = 1;
-    bytes certificate = 2; // certificate to use when connecting to a relay
+    bytes client_certificate = 2; // certificate to use when connecting to a relay
   }
   message Source {
     shared.Forward to = 1;
@@ -43,13 +43,11 @@ message Request {
 message Response {
   shared.Error error = 1;
 
-  Relay relay = 2;
+  // Soft one-of if error is nil
+  Relays relay = 2;
   Destination destination = 3;
   Source source = 4;
 
-  message Relay {
-    repeated RelayRoute relays = 1;
-  }
   message Destination {
     repeated ServerPeer peers = 1;
   }
@@ -58,24 +56,24 @@ message Response {
   }
 }
 
+message Relays {
+  repeated shared.HostPort addresses = 1;
+  bytes server_certificate = 2;
+}
+
 message ClientPeer {
   DirectRoute direct = 1;
-  repeated RelayRoute relays = 2;
+  repeated shared.HostPort relays = 2;
 }
 
 message ServerPeer {
   string id = 1;
   DirectRoute direct = 2;
-  repeated RelayRoute relays = 3;
+  repeated shared.HostPort relays = 3;
 }
 
 message DirectRoute {
   repeated shared.AddrPort addresses = 1;
   bytes server_certificate = 2;
   bytes client_certificate = 3;
-}
-
-message RelayRoute {
-  shared.HostPort address = 1;
-  bytes server_certificate = 2;
 }

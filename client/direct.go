@@ -50,6 +50,7 @@ func (s *vServer) dequeue(key certc.Key) *vClient {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
+	// TODO compare the whole key?
 	if exp, ok := s.clients[key]; ok {
 		delete(s.clients, key)
 		return exp

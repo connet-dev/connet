@@ -8,8 +8,11 @@ import (
 )
 
 type Relays interface {
-	Add(cert *x509.Certificate, destinations []model.Forward, sources []model.Forward)
-	Remove(cert *x509.Certificate)
+	AddDestination(fwd model.Forward, cert *x509.Certificate) (*x509.Certificate, error)
+	RemoveDestination(fwd model.Forward, cert *x509.Certificate)
 
-	Active(ctx context.Context, f func(addrs map[model.HostPort]*x509.Certificate) error) error
+	AddSource(fwd model.Forward, cert *x509.Certificate) (*x509.Certificate, error)
+	RemoveSource(fwd model.Forward, cert *x509.Certificate)
+
+	Active(ctx context.Context, f func(addrs map[model.HostPort]struct{}) error) error
 }

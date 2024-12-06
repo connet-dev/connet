@@ -24,10 +24,13 @@ import (
 )
 
 type peer struct {
-	self        *notify.V[*pbs.ClientPeer]
-	peers       *notify.V[[]*pbs.ServerPeer]
-	activePeers map[string]*peering
-	activeConns *notify.V[map[peerConnKey]quic.Connection]
+	self             *notify.V[*pbs.ClientPeer]
+	relays           *notify.V[*pbs.Relays]
+	activeRelays     map[model.HostPort]*relaying
+	activeRelayConns *notify.V[map[model.HostPort]quic.Connection]
+	peers            *notify.V[[]*pbs.ServerPeer]
+	activePeers      map[string]*peering
+	activeConns      *notify.V[map[peerConnKey]quic.Connection]
 
 	direct     *DirectServer
 	serverCert tls.Certificate
@@ -83,7 +86,11 @@ func newPeer(direct *DirectServer, root *certc.Cert, logger *slog.Logger) (*peer
 	}
 
 	return &peer{
-		self:        notify.NewV(notify.InitialOpt(&pbs.ClientPeer{})),
+		self:         notify.NewV(notify.InitialOpt(&pbs.ClientPeer{})),
+		relays:       notify.NewV[*pbs.Relays](),
+		activeRelays: map[model.HostPort]*relaying{},
+		activeRelayConns: notify.NewV(notify.InitialOpt(map[model.HostPort]quic.Connection{}),
+			notify.CopyMapOpt[map[model.HostPort]quic.Connection]()),
 		peers:       notify.NewV[[]*pbs.ServerPeer](),
 		activePeers: map[string]*peering{},
 		activeConns: notify.NewV(notify.InitialOpt(map[peerConnKey]quic.Connection{}),
@@ -110,10 +117,11 @@ func (p *peer) setDirectAddrs(addrs []netip.AddrPort) {
 	})
 }
 
-func (p *peer) setRelays(relays []*pbs.RelayRoute) {
-	p.self.Update(func(cp *pbs.ClientPeer) {
-		cp.Relays = relays
-	})
+func (p *peer) setRelays(relays *pbs.Relays) {
+	p.relays.Set(relays)
+	// p.self.Update(func(cp *pbs.ClientPeer) {
+	// 	cp.Relays = relays
+	// })
 }
 
 func (p *peer) selfListen(ctx context.Context, f func(self *pbs.ClientPeer) error) error {
@@ -124,13 +132,68 @@ func (p *peer) setPeers(peers []*pbs.ServerPeer) {
 	p.peers.Set(peers)
 }
 
-func (p *peer) peersListen(ctx context.Context, f func(peers []*pbs.ServerPeer) error) error {
-	return p.peers.Listen(ctx, f)
+func (p *peer) run(ctx context.Context) error {
+	g, ctx := errgroup.WithContext(ctx)
+
+	g.Go(func() error { return p.runRelays(ctx) })
+	g.Go(func() error { return p.runShareRelays(ctx) })
+	g.Go(func() error { return p.runPeers(ctx) })
+
+	return g.Wait()
 }
 
-func (p *peer) run(ctx context.Context) error {
-	return p.peersListen(ctx, func(peers []*pbs.ServerPeer) error {
+func (p *peer) runRelays(ctx context.Context) error {
+	return p.relays.Listen(ctx, func(relays *pbs.Relays) error {
+		p.logger.Debug("relays updated", "len", len(relays.Addresses))
+
+		relayServerCert, err := x509.ParseCertificate(relays.ServerCertificate)
+		if err != nil {
+			return err
+		}
+
+		activeRelays := map[model.HostPort]struct{}{}
+		for _, pbhp := range relays.Addresses {
+			hp := model.NewHostPortFromPB(pbhp)
+			activeRelays[hp] = struct{}{}
+			relay := p.activeRelays[hp]
+			if relay != nil {
+				// TODO refresh cert?
+			} else {
+				relay = newRelaying(p, hp, relayServerCert, p.logger)
+				p.activeRelays[hp] = relay
+				go relay.run(ctx)
+			}
+		}
+
+		for hp, relay := range p.activeRelays {
+			if _, ok := activeRelays[hp]; !ok {
+				relay.stop()
+				delete(p.activeRelays, hp)
+			}
+		}
+
+		return nil
+	})
+}
+
+func (p *peer) runShareRelays(ctx context.Context) error {
+	return p.activeRelayConns.Listen(ctx, func(conns map[model.HostPort]quic.Connection) error {
+		p.logger.Debug("relays conns updated", "len", len(conns))
+		var hps []*pb.HostPort
+		for hp := range conns {
+			hps = append(hps, hp.PB())
+		}
+		p.self.Update(func(cp *pbs.ClientPeer) {
+			cp.Relays = hps
+		})
+		return nil
+	})
+}
+
+func (p *peer) runPeers(ctx context.Context) error {
+	return p.peers.Listen(ctx, func(peers []*pbs.ServerPeer) error {
 		p.logger.Debug("peers updated", "len", len(peers))
+
 		activeIds := map[string]struct{}{}
 		for _, sp := range peers {
 			activeIds[sp.Id] = struct{}{}
@@ -150,6 +213,7 @@ func (p *peer) run(ctx context.Context) error {
 				delete(p.activePeers, id)
 			}
 		}
+
 		return nil
 	})
 }
@@ -190,6 +254,85 @@ func (p *peer) activeConnsListen(ctx context.Context, f func(map[peerConnKey]qui
 	return p.activeConns.Listen(ctx, f)
 }
 
+type relaying struct {
+	local *peer
+
+	serverHostport model.HostPort
+	serverCertKey  certc.Key
+	serverName     string
+	serverCA       *x509.CertPool
+	// TODO optimize above fields to be passed once for all peers
+
+	closer chan struct{}
+
+	logger *slog.Logger
+}
+
+func newRelaying(local *peer, hp model.HostPort, cert *x509.Certificate, logger *slog.Logger) *relaying {
+	cas := x509.NewCertPool()
+	cas.AddCert(cert)
+	return &relaying{
+		local:          local,
+		serverHostport: hp,
+		serverCertKey:  certc.NewKey(cert),
+		serverName:     cert.DNSNames[0],
+		serverCA:       cas,
+		closer:         make(chan struct{}),
+		logger:         logger,
+	}
+}
+
+func (r *relaying) run(ctx context.Context) {
+	defer func() {
+		r.local.activeRelayConns.Update(func(conns map[model.HostPort]quic.Connection) {
+			delete(conns, r.serverHostport)
+		})
+	}()
+
+	g, ctx := errgroup.WithContext(ctx)
+
+	g.Go(func() error { return r.runConn(ctx) })
+	g.Go(func() error {
+		<-r.closer
+		return errPeeringStop
+	})
+
+	if err := g.Wait(); err != nil {
+		r.logger.Warn("error while running relaying", "err", err)
+	}
+}
+
+func (r *relaying) runConn(ctx context.Context) error {
+	addr, err := net.ResolveUDPAddr("udp", r.serverHostport.String())
+	if err != nil {
+		r.logger.Debug("failed to resolve relay addr", "relay", r.serverHostport, "err", err)
+		return err // TODO retries
+	}
+
+	r.logger.Debug("dialing relay", "relay", r.serverHostport, "addr", addr, "server", r.serverName, "cert", r.serverCertKey)
+	conn, err := r.local.direct.transport.Dial(ctx, addr, &tls.Config{
+		Certificates: []tls.Certificate{r.local.clientCert},
+		RootCAs:      r.serverCA,
+		ServerName:   r.serverName,
+		NextProtos:   []string{"connet-relay"},
+	}, &quic.Config{
+		KeepAlivePeriod: 25 * time.Second,
+	})
+	if err != nil {
+		r.logger.Debug("could not dial relay", "relay", r.serverHostport, "addr", addr, "err", err)
+		return err // TODO retries
+	}
+	r.local.activeRelayConns.Update(func(conns map[model.HostPort]quic.Connection) {
+		conns[r.serverHostport] = conn
+	})
+	// TODO keep alive?
+	return nil
+}
+
+func (r *relaying) stop() {
+	close(r.closer)
+}
+
 type peering struct {
 	local *peer
 
@@ -197,7 +340,7 @@ type peering struct {
 	remote         *notify.V[*pbs.ServerPeer]
 	directIncoming *notify.V[*x509.Certificate]
 	directOutgoing *notify.V[*peeringOutoing]
-	relays         *notify.V[map[model.HostPort]*peeringRelay]
+	relays         *notify.V[map[model.HostPort]struct{}]
 
 	closer chan struct{}
 
@@ -211,12 +354,6 @@ type peeringOutoing struct {
 	addrs      map[netip.AddrPort]struct{}
 }
 
-type peeringRelay struct {
-	serverKey  certc.Key
-	serverName string
-	serverCA   *x509.CertPool
-}
-
 func newPeering(local *peer, remote *pbs.ServerPeer, logger *slog.Logger) *peering {
 	p := &peering{
 		local: local,
@@ -225,7 +362,7 @@ func newPeering(local *peer, remote *pbs.ServerPeer, logger *slog.Logger) *peeri
 		remote:         notify.NewV[*pbs.ServerPeer](),
 		directIncoming: notify.NewV[*x509.Certificate](),
 		directOutgoing: notify.NewV[*peeringOutoing](),
-		relays:         notify.NewV(notify.CopyMapOpt[map[model.HostPort]*peeringRelay]()),
+		relays:         notify.NewV(notify.CopyMapOpt[map[model.HostPort]struct{}]()),
 
 		closer: make(chan struct{}),
 
@@ -292,19 +429,9 @@ func (p *peering) runRemote(ctx context.Context) error {
 			})
 		}
 
-		relays := map[model.HostPort]*peeringRelay{}
+		relays := map[model.HostPort]struct{}{}
 		for _, relay := range remote.Relays {
-			relayServerCert, err := x509.ParseCertificate(relay.ServerCertificate)
-			if err != nil {
-				return err
-			}
-			relayServerCA := x509.NewCertPool()
-			relayServerCA.AddCert(relayServerCert)
-			relays[model.NewHostPortFromPB(relay.Address)] = &peeringRelay{
-				certc.NewKey(relayServerCert),
-				relayServerCert.DNSNames[0],
-				relayServerCA,
-			}
+			relays[model.NewHostPortFromPB(relay)] = struct{}{}
 		}
 		p.relays.Set(relays)
 
@@ -362,36 +489,41 @@ func (p *peering) runDirectOutgoing(ctx context.Context) error {
 }
 
 func (p *peering) runRelay(ctx context.Context) error {
-	return p.relays.Listen(ctx, func(relays map[model.HostPort]*peeringRelay) error {
-		for hp, relay := range relays {
-			if p.local.hasActiveConn(p.remoteId, peerRelay, hp.String()) {
-				continue
-			}
+	g, ctx := errgroup.WithContext(ctx)
 
-			// TODO retry relays to accomodate for network instability
-			addr, err := net.ResolveUDPAddr("udp", hp.String())
-			if err != nil {
-				p.logger.Debug("failed to resolve relay addr", "relay", hp, "err", err)
-				continue
+	g.Go(func() error {
+		return p.local.activeRelayConns.Listen(ctx, func(relays map[model.HostPort]quic.Connection) error {
+			p.logger.Debug("update local relays", "len", len(relays))
+			peered := p.relays.Get()
+			for hp := range peered {
+				if p.local.hasActiveConn(p.remoteId, peerRelay, hp.String()) {
+					continue
+				}
+				if conn := relays[hp]; conn != nil {
+					p.local.addActiveConn(p.remoteId, peerRelay, hp.String(), conn)
+				}
 			}
-
-			p.logger.Debug("dialing relay", "relay", hp, "addr", addr, "server", relay.serverName, "cert", relay.serverKey)
-			conn, err := p.local.direct.transport.Dial(ctx, addr, &tls.Config{
-				Certificates: []tls.Certificate{p.local.clientCert},
-				RootCAs:      relay.serverCA,
-				ServerName:   relay.serverName,
-				NextProtos:   []string{"connet-relay"},
-			}, &quic.Config{
-				KeepAlivePeriod: 25 * time.Second,
-			})
-			if err != nil {
-				p.logger.Debug("could not dial relay", "relay", hp, "addr", addr, "err", err)
-				continue
-			}
-			p.local.addActiveConn(p.remoteId, peerRelay, hp.String(), conn)
-		}
-		return nil
+			return nil
+		})
 	})
+
+	g.Go(func() error {
+		return p.relays.Listen(ctx, func(relays map[model.HostPort]struct{}) error {
+			p.logger.Debug("update peer relays", "len", len(relays))
+			active := p.local.activeRelayConns.Get()
+			for hp := range relays {
+				if p.local.hasActiveConn(p.remoteId, peerRelay, hp.String()) {
+					continue
+				}
+				if conn := active[hp]; conn != nil {
+					p.local.addActiveConn(p.remoteId, peerRelay, hp.String(), conn)
+				}
+			}
+			return nil
+		})
+	})
+
+	return g.Wait()
 }
 
 func genServerName() string {

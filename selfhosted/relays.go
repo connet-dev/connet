@@ -2,6 +2,7 @@ package selfhosted
 
 import (
 	"context"
+	"crypto/tls"
 	"crypto/x509"
 	"sync"
 	"sync/atomic"
@@ -12,77 +13,198 @@ import (
 	"github.com/keihaya-com/connet/relay"
 )
 
-func NewRelaySync(relayAddr model.HostPort, cert *x509.Certificate) (*RelaySync, error) {
-	s := &RelaySync{
-		relays: notify.NewV[map[model.HostPort]*x509.Certificate](),
-		certs:  map[certc.Key]*relay.Authentication{},
+func NewLocalRelay(relayAddr model.HostPort) (*LocalRelay, error) {
+	root, err := certc.NewRoot()
+	if err != nil {
+		return nil, err
 	}
-	s.relays.Set(map[model.HostPort]*x509.Certificate{relayAddr: cert})
+	s := &LocalRelay{
+		root:    root,
+		relays:  notify.NewV[map[model.HostPort]struct{}](),
+		servers: map[string]*relayServer{},
+	}
+	s.relays.Set(map[model.HostPort]struct{}{relayAddr: {}})
 	return s, nil
 }
 
-type RelaySync struct {
-	relays  *notify.V[map[model.HostPort]*x509.Certificate]
-	certs   map[certc.Key]*relay.Authentication
-	certsMu sync.RWMutex
-	pool    atomic.Pointer[x509.CertPool]
+type LocalRelay struct {
+	root      *certc.Cert
+	relays    *notify.V[map[model.HostPort]struct{}]
+	servers   map[string]*relayServer
+	serversMu sync.RWMutex
 }
 
-func (s *RelaySync) Add(cert *x509.Certificate, destinations []model.Forward, sources []model.Forward) {
-	s.certsMu.Lock()
-	defer s.certsMu.Unlock()
+type relayServer struct {
+	fwd  model.Forward
+	cert *x509.Certificate
 
-	auth := &relay.Authentication{
-		Certificate:  cert,
-		Destinations: map[model.Forward]struct{}{},
-		Sources:      map[model.Forward]struct{}{},
-	}
-	for _, dst := range destinations {
-		auth.Destinations[dst] = struct{}{}
-	}
-	for _, src := range sources {
-		auth.Sources[src] = struct{}{}
-	}
+	desinations map[certc.Key]*x509.Certificate
+	sources     map[certc.Key]*x509.Certificate
+	mu          sync.RWMutex
 
-	s.certs[certc.NewKey(cert)] = auth
-
-	pool := x509.NewCertPool()
-	for _, cfg := range s.certs {
-		pool.AddCert(cfg.Certificate)
-	}
-	s.pool.Store(pool)
+	tls []tls.Certificate
+	cas atomic.Pointer[x509.CertPool]
 }
 
-func (s *RelaySync) Remove(cert *x509.Certificate) {
-	s.certsMu.Lock()
-	defer s.certsMu.Unlock()
+func (s *relayServer) refreshCA() {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
 
-	delete(s.certs, certc.NewKey(cert))
-
-	pool := x509.NewCertPool()
-	for _, cfg := range s.certs {
-		pool.AddCert(cfg.Certificate)
+	cas := x509.NewCertPool()
+	for _, cert := range s.desinations {
+		cas.AddCert(cert)
 	}
-	s.pool.Store(pool)
+	for _, cert := range s.sources {
+		cas.AddCert(cert)
+	}
+	s.cas.Store(cas)
 }
 
-func (s *RelaySync) Active(ctx context.Context, f func(map[model.HostPort]*x509.Certificate) error) error {
+func (s *LocalRelay) createServer(fwd model.Forward) (*relayServer, error) {
+	s.serversMu.RLock()
+	srv := s.servers[fwd.String()]
+	s.serversMu.RUnlock()
+
+	if srv != nil {
+		return srv, nil
+	}
+
+	s.serversMu.Lock()
+	defer s.serversMu.Unlock()
+
+	srv = s.servers[fwd.String()]
+	if srv != nil {
+		return srv, nil
+	}
+
+	serverRoot, err := s.root.NewServer(certc.CertOpts{Domains: []string{fwd.String()}})
+	if err != nil {
+		return nil, err
+	}
+
+	serverCert, err := serverRoot.TLSCert()
+	if err != nil {
+		return nil, err
+	}
+
+	srv = &relayServer{
+		fwd:  fwd,
+		cert: serverCert.Leaf,
+
+		desinations: map[certc.Key]*x509.Certificate{},
+		sources:     map[certc.Key]*x509.Certificate{},
+
+		tls: []tls.Certificate{serverCert},
+	}
+	s.servers[fwd.String()] = srv
+	return srv, nil
+}
+
+func (s *LocalRelay) getServer(serverName string) *relayServer {
+	s.serversMu.RLock()
+	defer s.serversMu.RUnlock()
+
+	return s.servers[serverName]
+}
+
+func (s *LocalRelay) AddDestination(fwd model.Forward, cert *x509.Certificate) (*x509.Certificate, error) {
+	srv, err := s.createServer(fwd)
+	if err != nil {
+		return nil, err
+	}
+
+	defer srv.refreshCA()
+
+	srv.mu.Lock()
+	defer srv.mu.Unlock()
+
+	srv.desinations[certc.NewKey(cert)] = cert
+
+	return srv.cert, nil
+}
+
+func (s *LocalRelay) RemoveDestination(fwd model.Forward, cert *x509.Certificate) {
+	srv := s.getServer(fwd.String())
+
+	defer srv.refreshCA()
+
+	srv.mu.Lock()
+	defer srv.mu.Unlock()
+
+	delete(srv.desinations, certc.NewKey(cert))
+}
+
+func (s *LocalRelay) AddSource(fwd model.Forward, cert *x509.Certificate) (*x509.Certificate, error) {
+	srv, err := s.createServer(fwd)
+	if err != nil {
+		return nil, err
+	}
+
+	defer srv.refreshCA()
+
+	srv.mu.Lock()
+	defer srv.mu.Unlock()
+
+	srv.sources[certc.NewKey(cert)] = cert
+
+	return srv.cert, nil
+}
+
+func (s *LocalRelay) RemoveSource(fwd model.Forward, cert *x509.Certificate) {
+	srv := s.getServer(fwd.String())
+
+	defer srv.refreshCA()
+
+	srv.mu.Lock()
+	defer srv.mu.Unlock()
+
+	delete(srv.sources, certc.NewKey(cert))
+}
+
+func (s *LocalRelay) Active(ctx context.Context, f func(map[model.HostPort]struct{}) error) error {
 	return s.relays.Listen(ctx, f)
 }
 
-func (s *RelaySync) Authenticate(certs []*x509.Certificate) *relay.Authentication {
-	s.certsMu.RLock()
-	defer s.certsMu.RUnlock()
+func (s *LocalRelay) TLSConfig(serverName string) ([]tls.Certificate, *x509.CertPool) {
+	if srv := s.getServer(serverName); srv != nil {
+		return srv.tls, srv.cas.Load()
+	}
+	return nil, nil
+}
 
-	for _, cert := range certs {
-		if auth := s.certs[certc.NewKey(cert)]; auth != nil && auth.Certificate.Equal(cert) {
-			return auth
-		}
+func (s *LocalRelay) Authenticate(serverName string, certs []*x509.Certificate) relay.Authentication {
+	srv := s.getServer(serverName)
+	if srv == nil {
+		return nil
+	}
+
+	srv.mu.RLock()
+	defer srv.mu.RUnlock()
+
+	key := certc.NewKey(certs[0])
+	if dst := srv.desinations[key]; dst != nil {
+		return &localAuth{srv.fwd, true}
+	}
+	if src := srv.sources[key]; src != nil {
+		return &localAuth{srv.fwd, false}
 	}
 
 	return nil
 }
 
-func (s *RelaySync) CertificateAuthority() *x509.CertPool {
-	return s.pool.Load()
+type localAuth struct {
+	fwd model.Forward
+	dst bool
+}
+
+func (l *localAuth) Forward() model.Forward {
+	return l.fwd
+}
+
+func (l *localAuth) IsDestination() bool {
+	return l.dst
+}
+
+func (l *localAuth) IsSource() bool {
+	return !l.dst
 }
