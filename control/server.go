@@ -251,15 +251,17 @@ func (s *controlStream) destinationRelay(ctx context.Context, req *pbs.Request_D
 	return s.conn.server.relays.Active(ctx, func(relays map[model.HostPort]struct{}) error {
 		s.logger.Debug("updated destination relay list", "relays", len(relays))
 
-		var addrs []*pb.HostPort
+		var addrs []*pbs.Relay
 		for hp := range relays {
-			addrs = append(addrs, hp.PB())
+			addrs = append(addrs, &pbs.Relay{
+				Address:           hp.PB(),
+				ServerCertificate: serverCert.Raw,
+			})
 		}
 
 		if err := pb.Write(s.stream, &pbs.Response{
-			Relay: &pbs.Relays{
-				Addresses:         addrs,
-				ServerCertificate: serverCert.Raw,
+			Relay: &pbs.Response_Relays{
+				Relays: addrs,
 			},
 		}); err != nil {
 			return kleverr.Ret(err)
@@ -382,15 +384,17 @@ func (s *controlStream) sourceRelay(ctx context.Context, req *pbs.Request_Source
 	return s.conn.server.relays.Active(ctx, func(relays map[model.HostPort]struct{}) error {
 		s.logger.Debug("updated source relay list", "relays", len(relays))
 
-		var addrs []*pb.HostPort
+		var addrs []*pbs.Relay
 		for hp := range relays {
-			addrs = append(addrs, hp.PB())
+			addrs = append(addrs, &pbs.Relay{
+				Address:           hp.PB(),
+				ServerCertificate: serverCert.Raw,
+			})
 		}
 
 		if err := pb.Write(s.stream, &pbs.Response{
-			Relay: &pbs.Relays{
-				Addresses:         addrs,
-				ServerCertificate: serverCert.Raw,
+			Relay: &pbs.Response_Relays{
+				Relays: addrs,
 			},
 		}); err != nil {
 			return kleverr.Ret(err)

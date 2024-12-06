@@ -48,6 +48,9 @@ message Response {
   Destination destination = 3;
   Source source = 4;
 
+  message Relays {
+    repeated Relay relays = 1;
+  }
   message Destination {
     repeated ServerPeer peers = 1;
   }
@@ -56,8 +59,8 @@ message Response {
   }
 }
 
-message Relays {
-  repeated shared.HostPort addresses = 1;
+message Relay {
+  shared.HostPort address = 1;
   bytes server_certificate = 2;
 }
 

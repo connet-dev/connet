@@ -25,7 +25,7 @@ import (
 
 type peer struct {
 	self             *notify.V[*pbs.ClientPeer]
-	relays           *notify.V[*pbs.Relays]
+	relays           *notify.V[[]*pbs.Relay]
 	activeRelays     map[model.HostPort]*relaying
 	activeRelayConns *notify.V[map[model.HostPort]quic.Connection]
 	peers            *notify.V[[]*pbs.ServerPeer]
@@ -87,7 +87,7 @@ func newPeer(direct *DirectServer, root *certc.Cert, logger *slog.Logger) (*peer
 
 	return &peer{
 		self:         notify.NewV(notify.InitialOpt(&pbs.ClientPeer{})),
-		relays:       notify.NewV[*pbs.Relays](),
+		relays:       notify.NewV[[]*pbs.Relay](),
 		activeRelays: map[model.HostPort]*relaying{},
 		activeRelayConns: notify.NewV(notify.InitialOpt(map[model.HostPort]quic.Connection{}),
 			notify.CopyMapOpt[map[model.HostPort]quic.Connection]()),
@@ -117,11 +117,8 @@ func (p *peer) setDirectAddrs(addrs []netip.AddrPort) {
 	})
 }
 
-func (p *peer) setRelays(relays *pbs.Relays) {
+func (p *peer) setRelays(relays []*pbs.Relay) {
 	p.relays.Set(relays)
-	// p.self.Update(func(cp *pbs.ClientPeer) {
-	// 	cp.Relays = relays
-	// })
 }
 
 func (p *peer) selfListen(ctx context.Context, f func(self *pbs.ClientPeer) error) error {
@@ -143,25 +140,25 @@ func (p *peer) run(ctx context.Context) error {
 }
 
 func (p *peer) runRelays(ctx context.Context) error {
-	return p.relays.Listen(ctx, func(relays *pbs.Relays) error {
-		p.logger.Debug("relays updated", "len", len(relays.Addresses))
-
-		relayServerCert, err := x509.ParseCertificate(relays.ServerCertificate)
-		if err != nil {
-			return err
-		}
+	return p.relays.Listen(ctx, func(relays []*pbs.Relay) error {
+		p.logger.Debug("relays updated", "len", len(relays))
 
 		activeRelays := map[model.HostPort]struct{}{}
-		for _, pbhp := range relays.Addresses {
-			hp := model.NewHostPortFromPB(pbhp)
+		for _, relay := range relays {
+			hp := model.NewHostPortFromPB(relay.Address)
 			activeRelays[hp] = struct{}{}
-			relay := p.activeRelays[hp]
-			if relay != nil {
+			rlg := p.activeRelays[hp]
+			if rlg != nil {
 				// TODO refresh cert?
 			} else {
-				relay = newRelaying(p, hp, relayServerCert, p.logger)
-				p.activeRelays[hp] = relay
-				go relay.run(ctx)
+				cert, err := x509.ParseCertificate(relay.ServerCertificate)
+				if err != nil {
+					return err
+				}
+
+				rlg = newRelaying(p, hp, cert, p.logger)
+				p.activeRelays[hp] = rlg
+				go rlg.run(ctx)
 			}
 		}
 

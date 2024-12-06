@@ -264,7 +264,7 @@ func (d *Destination) runRelay(ctx context.Context, conn quic.Connection) error 
 				return kleverr.Newf("unexpected response")
 			}
 
-			d.peer.setRelays(resp.Relay)
+			d.peer.setRelays(resp.Relay.Relays)
 		}
 	})
 
