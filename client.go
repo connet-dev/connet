@@ -7,7 +7,6 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
-	"math/rand/v2"
 	"net"
 	"net/netip"
 	"os"
@@ -212,7 +211,7 @@ func (c *Client) runConnection(ctx context.Context, conn quic.Connection) error 
 }
 
 func (c *Client) reconnect(ctx context.Context, transport *quic.Transport) (quic.Connection, error) {
-	d := 10 * time.Millisecond
+	d := netc.MinBackoff
 	t := time.NewTimer(d)
 	defer t.Stop()
 	for {
@@ -229,15 +228,9 @@ func (c *Client) reconnect(ctx context.Context, transport *quic.Transport) (quic
 			return sess, nil
 		}
 
-		d = jitterBackoff(d, 10*time.Millisecond, 15*time.Second)
+		d = netc.NextBackoff(d)
 		t.Reset(d)
 	}
-}
-
-func jitterBackoff(d, jmin, jmax time.Duration) time.Duration {
-	dt := int64(d*3 - jmin)
-	nd := jmin + time.Duration(rand.Int64N(dt))
-	return min(jmax, nd)
 }
 
 type clientConfig struct {

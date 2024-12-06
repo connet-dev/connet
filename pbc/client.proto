@@ -2,18 +2,25 @@ syntax = "proto3";
 package client;
 
 import "shared.proto";
+import "google/protobuf/timestamp.proto";
 
 option go_package = "github.com/keihaya-com/connet/pbc";
 
 message Request {
   // Soft one-of
   Connect connect = 1;
+  Heartbeat heartbeat = 2;
 
   message Connect {
-    shared.Forward to = 1;
   }
 }
 
 message Response {
   shared.Error error = 1;
+
+  Heartbeat heartbeat = 2;
+}
+
+message Heartbeat {
+  google.protobuf.Timestamp time = 1;
 }

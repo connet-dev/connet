@@ -485,6 +485,7 @@ func (s *controlStream) source(ctx context.Context, req *pbs.Request_Source) err
 }
 
 func (s *controlStream) unknown(ctx context.Context, req *pbs.Request) error {
+	s.logger.Error("unknown request", "req", req)
 	err := pb.NewError(pb.Error_RequestUnknown, "unknown request: %v", req)
 	return pb.Write(s.stream, &pbc.Response{Error: err})
 }

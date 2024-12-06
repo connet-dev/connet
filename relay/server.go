@@ -18,6 +18,7 @@ import (
 	"github.com/klev-dev/kleverr"
 	"github.com/quic-go/quic-go"
 	"github.com/segmentio/ksuid"
+	"golang.org/x/sync/errgroup"
 )
 
 type Config struct {
@@ -176,13 +177,12 @@ func (c *relayConn) runErr(ctx context.Context) error {
 		c.server.addDestinations(c)
 		defer c.server.removeDestinations(c)
 
-		// TODO ping stream
 		for {
 			stream, err := c.conn.AcceptStream(ctx)
 			if err != nil {
 				return err
 			}
-			stream.Close()
+			go c.runDestinationStream(ctx, stream)
 		}
 	case c.auth.IsSource():
 		for {
@@ -190,14 +190,30 @@ func (c *relayConn) runErr(ctx context.Context) error {
 			if err != nil {
 				return err
 			}
-			go c.runStream(ctx, stream)
+			go c.runSourceStream(ctx, stream)
 		}
 	default:
 		return kleverr.Newf("invalid authentication, not destination or source")
 	}
 }
 
-func (c *relayConn) runStream(ctx context.Context, stream quic.Stream) error {
+func (c *relayConn) runDestinationStream(ctx context.Context, stream quic.Stream) error {
+	defer stream.Close()
+
+	req, err := pbc.ReadRequest(stream)
+	if err != nil {
+		return err
+	}
+
+	switch {
+	case req.Heartbeat != nil:
+		return c.heartbeat(ctx, stream, req.Heartbeat)
+	default:
+		return c.unknown(ctx, stream, req)
+	}
+}
+
+func (c *relayConn) runSourceStream(ctx context.Context, stream quic.Stream) error {
 	defer stream.Close()
 
 	req, err := pbc.ReadRequest(stream)
@@ -207,16 +223,19 @@ func (c *relayConn) runStream(ctx context.Context, stream quic.Stream) error {
 
 	switch {
 	case req.Connect != nil:
-		return c.connect(ctx, stream, model.NewForwardFromPB(req.Connect.To))
+		return c.connect(ctx, stream)
+	case req.Heartbeat != nil:
+		return c.heartbeat(ctx, stream, req.Heartbeat)
 	default:
 		return c.unknown(ctx, stream, req)
 	}
 }
 
-func (c *relayConn) connect(ctx context.Context, stream quic.Stream, fwd model.Forward) error {
-	dests := c.server.findDestinations(fwd)
+func (c *relayConn) connect(ctx context.Context, stream quic.Stream) error {
+	// TODO get destination only once
+	dests := c.server.findDestinations(c.auth.Forward())
 	for _, dest := range dests {
-		if err := c.connectDestination(ctx, stream, fwd, dest); err != nil {
+		if err := c.connectDestination(ctx, stream, dest); err != nil {
 			c.logger.Debug("could not dial destination", "err", err)
 		} else {
 			// connect was success
@@ -228,16 +247,14 @@ func (c *relayConn) connect(ctx context.Context, stream quic.Stream, fwd model.F
 	return pb.Write(stream, &pbc.Response{Error: err})
 }
 
-func (c *relayConn) connectDestination(ctx context.Context, srcStream quic.Stream, fwd model.Forward, dest *relayConn) error {
+func (c *relayConn) connectDestination(ctx context.Context, srcStream quic.Stream, dest *relayConn) error {
 	dstStream, err := dest.conn.OpenStreamSync(ctx)
 	if err != nil {
 		return kleverr.Newf("could not open stream: %w", err)
 	}
 
 	if err := pb.Write(dstStream, &pbc.Request{
-		Connect: &pbc.Request_Connect{
-			To: fwd.PB(),
-		},
+		Connect: &pbc.Request_Connect{},
 	}); err != nil {
 		return kleverr.Newf("could not write request: %w", err)
 	}
@@ -250,10 +267,46 @@ func (c *relayConn) connectDestination(ctx context.Context, srcStream quic.Strea
 		return kleverr.Newf("could not write response: %w", err)
 	}
 
-	c.logger.Debug("joining conns", "forward", fwd)
+	c.logger.Debug("joining conns", "forward", c.auth.Forward())
 	err = netc.Join(ctx, srcStream, dstStream)
-	c.logger.Debug("disconnected conns", "forward", fwd, "err", err)
+	c.logger.Debug("disconnected conns", "forward", c.auth.Forward(), "err", err)
 	return nil
+}
+
+func (c *relayConn) heartbeat(ctx context.Context, stream quic.Stream, hbt *pbc.Heartbeat) error {
+	if err := pb.Write(stream, &pbc.Response{Heartbeat: hbt}); err != nil {
+		return err
+	}
+
+	g, ctx := errgroup.WithContext(ctx)
+
+	g.Go(func() error {
+		<-ctx.Done()
+		stream.CancelRead(0)
+		return nil
+	})
+
+	g.Go(func() error {
+		for {
+			req, err := pbc.ReadRequest(stream)
+			if err != nil {
+				return err
+			}
+			if req.Heartbeat == nil {
+				respErr := pb.NewError(pb.Error_RequestUnknown, "unexpected request")
+				if err := pb.Write(stream, &pbc.Response{Error: respErr}); err != nil {
+					return kleverr.Ret(err)
+				}
+				return respErr
+			}
+
+			if err := pb.Write(stream, &pbc.Response{Heartbeat: req.Heartbeat}); err != nil {
+				return err
+			}
+		}
+	})
+
+	return g.Wait()
 }
 
 func (c *relayConn) unknown(ctx context.Context, stream quic.Stream, req *pbc.Request) error {

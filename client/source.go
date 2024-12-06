@@ -148,9 +148,7 @@ func (s *Source) runConnErr(ctx context.Context, conn net.Conn) error {
 	defer stream.Close()
 
 	if err := pb.Write(stream, &pbc.Request{
-		Connect: &pbc.Request_Connect{
-			To: s.fwd.PB(),
-		},
+		Connect: &pbc.Request_Connect{},
 	}); err != nil {
 		return kleverr.Newf("could not write request: %w", err)
 	}
