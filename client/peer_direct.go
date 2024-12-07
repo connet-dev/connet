@@ -37,18 +37,16 @@ type directPeer struct {
 }
 
 func newPeering(local *peer, remote *pbs.ServerPeer, logger *slog.Logger) *directPeer {
-	p := &directPeer{
+	return &directPeer{
 		local: local,
 
 		remoteId: remote.Id,
-		remote:   notify.New[*pbs.ServerPeer](),
+		remote:   notify.New(remote),
 
 		closer: make(chan struct{}),
 
 		logger: logger.With("peer", remote.Id),
 	}
-	p.remote.Set(remote)
-	return p
 }
 
 var errPeeringStop = errors.New("peering stopped")
@@ -382,10 +380,9 @@ func newDirectPeerRelays(ctx context.Context, parent *directPeer, remotes map[mo
 	}
 	p := &directPeerRelays{
 		parent:   parent,
-		remotes:  notify.New[map[model.HostPort]struct{}](),
+		remotes:  notify.New(remotes),
 		closerCh: make(chan struct{}),
 	}
-	p.remotes.Set(remotes)
 	go p.run(ctx)
 	return p
 }

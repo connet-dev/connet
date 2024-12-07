@@ -8,52 +8,52 @@ import (
 )
 
 type V[T any] struct {
-	value   atomic.Pointer[nvalue[T]]
-	barrier chan *nversion[T]
+	value   atomic.Pointer[value[T]]
+	barrier chan *version[T]
 }
 
-type nvalue[T any] struct {
+type value[T any] struct {
 	value   T
 	version uint64
 }
 
-type nversion[T any] struct {
+type version[T any] struct {
 	value   T
 	version uint64
 	waiter  chan struct{}
 }
 
-func New[T any]() *V[T] {
-	n := &V[T]{
-		barrier: make(chan *nversion[T], 1),
+func NewEmpty[T any]() *V[T] {
+	v := &V[T]{
+		barrier: make(chan *version[T], 1),
 	}
-	n.barrier <- &nversion[T]{waiter: make(chan struct{})}
-	return n
+	v.barrier <- &version[T]{waiter: make(chan struct{})}
+	return v
 }
 
-func NewValue[T any](t T) *V[T] {
-	n := &V[T]{
-		barrier: make(chan *nversion[T], 1),
+func New[T any](t T) *V[T] {
+	v := &V[T]{
+		barrier: make(chan *version[T], 1),
 	}
-	n.barrier <- &nversion[T]{waiter: make(chan struct{})}
-	n.value.Store(&nvalue[T]{t, 0})
-	return n
+	v.barrier <- &version[T]{waiter: make(chan struct{})}
+	v.value.Store(&value[T]{t, 0})
+	return v
 }
 
-func (n *V[T]) Get(ctx context.Context, version uint64) (T, uint64, error) {
-	if current := n.value.Load(); current != nil && current.version > version {
+func (v *V[T]) Get(ctx context.Context, version uint64) (T, uint64, error) {
+	if current := v.value.Load(); current != nil && current.version > version {
 		return current.value, current.version, nil
 	}
 
-	next, ok := <-n.barrier
+	next, ok := <-v.barrier
 	if !ok {
 		var t T
 		return t, 0, kleverr.New("already closed")
 	}
 
-	current := n.value.Load()
+	current := v.value.Load()
 
-	n.barrier <- next
+	v.barrier <- next
 
 	if current != nil && current.version > version {
 		return current.value, current.version, nil
@@ -68,20 +68,20 @@ func (n *V[T]) Get(ctx context.Context, version uint64) (T, uint64, error) {
 	}
 }
 
-func (n *V[T]) GetAny(ctx context.Context) (T, uint64, error) {
-	if current := n.value.Load(); current != nil {
+func (v *V[T]) GetAny(ctx context.Context) (T, uint64, error) {
+	if current := v.value.Load(); current != nil {
 		return current.value, current.version, nil
 	}
 
-	next, ok := <-n.barrier
+	next, ok := <-v.barrier
 	if !ok {
 		var t T
 		return t, 0, kleverr.New("already closed")
 	}
 
-	current := n.value.Load()
+	current := v.value.Load()
 
-	n.barrier <- next
+	v.barrier <- next
 
 	if current != nil {
 		return current.value, current.version, nil
@@ -96,34 +96,34 @@ func (n *V[T]) GetAny(ctx context.Context) (T, uint64, error) {
 	}
 }
 
-func (n *V[T]) Set(t T) {
-	n.Update(func(_ T) T {
+func (v *V[T]) Set(t T) {
+	v.Update(func(_ T) T {
 		return t
 	})
 }
 
-func (n *V[T]) Update(f func(t T) T) {
-	next, ok := <-n.barrier
+func (v *V[T]) Update(f func(t T) T) {
+	next, ok := <-v.barrier
 	if !ok {
 		return
 	}
 
-	if current := n.value.Load(); current != nil {
+	if current := v.value.Load(); current != nil {
 		next.value = f(current.value)
 		next.version = current.version + 1
 	} else {
 		var t T
 		next.value = f(t)
 	}
-	n.value.Store(&nvalue[T]{next.value, next.version})
+	v.value.Store(&value[T]{next.value, next.version})
 
 	close(next.waiter)
 
-	n.barrier <- &nversion[T]{waiter: make(chan struct{})}
+	v.barrier <- &version[T]{waiter: make(chan struct{})}
 }
 
-func (n *V[T]) Listen(ctx context.Context, f func(t T) error) error {
-	t, v, err := n.GetAny(ctx)
+func (v *V[T]) Listen(ctx context.Context, f func(t T) error) error {
+	t, ver, err := v.GetAny(ctx)
 	if err != nil {
 		return err
 	}
@@ -131,7 +131,7 @@ func (n *V[T]) Listen(ctx context.Context, f func(t T) error) error {
 		return err
 	}
 	for {
-		t, v, err = n.Get(ctx, v)
+		t, ver, err = v.Get(ctx, ver)
 		if err != nil {
 			return err
 		}
@@ -141,14 +141,31 @@ func (n *V[T]) Listen(ctx context.Context, f func(t T) error) error {
 	}
 }
 
-func (n *V[T]) Notify(ctx context.Context) <-chan T {
+func (v *V[T]) Notify(ctx context.Context) <-chan T {
 	ch := make(chan T, 1)
 	go func() {
 		defer close(ch)
-		n.Listen(ctx, func(t T) error {
+		v.Listen(ctx, func(t T) error {
 			ch <- t
 			return nil
 		})
 	}()
 	return ch
+}
+
+func (v *V[T]) Copying(f func(T) T) *C[T] {
+	return &C[T]{v, f}
+}
+
+type C[T any] struct {
+	*V[T]
+	copier func(T) T
+}
+
+func (c *C[T]) Update(f func(t T)) {
+	c.V.Update(func(t T) T {
+		t = c.copier(t)
+		f(t)
+		return t
+	})
 }

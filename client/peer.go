@@ -24,9 +24,9 @@ import (
 type peer struct {
 	self       *notify.V[*pbs.ClientPeer]
 	relays     *notify.V[[]*pbs.Relay]
-	relayConns *notify.V[map[model.HostPort]quic.Connection]
+	relayConns *notify.C[map[model.HostPort]quic.Connection]
 	peers      *notify.V[[]*pbs.ServerPeer]
-	peerConns  *notify.V[map[peerConnKey]quic.Connection]
+	peerConns  *notify.C[map[peerConnKey]quic.Connection]
 
 	direct     *DirectServer
 	serverCert tls.Certificate
@@ -82,12 +82,11 @@ func newPeer(direct *DirectServer, root *certc.Cert, logger *slog.Logger) (*peer
 	}
 
 	return &peer{
-		self:       notify.NewValue(&pbs.ClientPeer{}),
-		relays:     notify.New[[]*pbs.Relay](),
-		relayConns: notify.NewValue(map[model.HostPort]quic.Connection{}),
-		peers:      notify.New[[]*pbs.ServerPeer](),
-		peerConns:  notify.NewValue(map[peerConnKey]quic.Connection{}),
-		// notify.CopyMapOpt[map[peerConnKey]quic.Connection]()),
+		self:       notify.New(&pbs.ClientPeer{}),
+		relays:     notify.NewEmpty[[]*pbs.Relay](),
+		relayConns: notify.New(map[model.HostPort]quic.Connection{}).Copying(maps.Clone),
+		peers:      notify.NewEmpty[[]*pbs.ServerPeer](),
+		peerConns:  notify.New(map[peerConnKey]quic.Connection{}).Copying(maps.Clone),
 
 		direct:     direct,
 		serverCert: serverTLSCert,
@@ -216,36 +215,42 @@ func (p *peer) runPeers(ctx context.Context) error {
 	})
 }
 
+func (p *peer) addRelayConn(hostport model.HostPort, conn quic.Connection) {
+	p.relayConns.Update(func(conns map[model.HostPort]quic.Connection) {
+		conns[hostport] = conn
+	})
+}
+
+func (p *peer) removeRelayConn(hostport model.HostPort) {
+	p.relayConns.Update(func(conns map[model.HostPort]quic.Connection) {
+		delete(conns, hostport)
+	})
+}
+
 func (p *peer) addActiveConn(id string, style peerStyle, key string, conn quic.Connection) {
 	p.logger.Debug("add active connection", "peer", id, "style", style, "addr", conn.RemoteAddr())
-	// TODO maybe update opt?
-	p.peerConns.Update(func(active map[peerConnKey]quic.Connection) map[peerConnKey]quic.Connection {
-		active = maps.Clone(active)
+	p.peerConns.Update(func(active map[peerConnKey]quic.Connection) {
 		active[peerConnKey{id, style, key}] = conn
-		return active
 	})
 }
 
 func (p *peer) removeActiveConn(id string, style peerStyle, key string) {
-	// TODO maybe update opt?
-	p.peerConns.Update(func(active map[peerConnKey]quic.Connection) map[peerConnKey]quic.Connection {
-		active = maps.Clone(active)
+	p.logger.Debug("remove active connection", "peer", id, "style", style)
+	p.peerConns.Update(func(active map[peerConnKey]quic.Connection) {
 		delete(active, peerConnKey{id, style, key})
-		return active
 	})
 }
 
 func (p *peer) removeActiveConns(id string) map[peerConnKey]quic.Connection {
+	p.logger.Debug("remove active peer", "peer", id)
 	removed := map[peerConnKey]quic.Connection{}
-	p.peerConns.Update(func(active map[peerConnKey]quic.Connection) map[peerConnKey]quic.Connection {
-		active = maps.Clone(active)
+	p.peerConns.Update(func(active map[peerConnKey]quic.Connection) {
 		for k, conn := range active {
 			if k.id == id {
 				removed[k] = conn
 				delete(active, k)
 			}
 		}
-		return active
 	})
 	return removed
 }

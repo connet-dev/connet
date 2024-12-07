@@ -5,7 +5,6 @@ import (
 	"crypto/tls"
 	"errors"
 	"log/slog"
-	"maps"
 	"net"
 	"sync/atomic"
 	"time"
@@ -42,14 +41,6 @@ func newRelayPeer(local *peer, hp model.HostPort, serverConf *serverTLSConfig, l
 }
 
 func (r *relayPeer) run(ctx context.Context) {
-	defer func() {
-		r.local.relayConns.Update(func(conns map[model.HostPort]quic.Connection) map[model.HostPort]quic.Connection {
-			conns = maps.Clone(conns)
-			delete(conns, r.serverHostport)
-			return conns
-		})
-	}()
-
 	g, ctx := errgroup.WithContext(ctx)
 
 	g.Go(func() error { return r.runConn(ctx) })
@@ -81,8 +72,8 @@ func (r *relayPeer) runConn(ctx context.Context) error {
 			}
 			continue
 		}
-
 		boff = netc.MinBackoff
+
 		if err := r.keepalive(ctx, conn); err != nil {
 			r.logger.Debug("disconnected relay", "relay", r.serverHostport, "err", err)
 		}
@@ -116,18 +107,8 @@ func (r *relayPeer) keepalive(ctx context.Context, conn quic.Connection) error {
 		return err
 	}
 
-	r.local.relayConns.Update(func(conns map[model.HostPort]quic.Connection) map[model.HostPort]quic.Connection {
-		conns = maps.Clone(conns)
-		conns[r.serverHostport] = conn
-		return conns
-	})
-	defer func() {
-		r.local.relayConns.Update(func(conns map[model.HostPort]quic.Connection) map[model.HostPort]quic.Connection {
-			conns = maps.Clone(conns)
-			delete(conns, r.serverHostport)
-			return conns
-		})
-	}()
+	r.local.addRelayConn(r.serverHostport, conn)
+	defer r.local.removeRelayConn(r.serverHostport)
 
 	for {
 		select {
