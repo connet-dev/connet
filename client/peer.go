@@ -7,6 +7,7 @@ import (
 	"encoding/binary"
 	"fmt"
 	"log/slog"
+	"maps"
 	"math/rand/v2"
 	"net/netip"
 
@@ -23,7 +24,7 @@ import (
 type peer struct {
 	self       *notify.V[*pbs.ClientPeer]
 	relays     *notify.V[[]*pbs.Relay]
-	relayConns *notify.NV[map[model.HostPort]quic.Connection]
+	relayConns *notify.V[map[model.HostPort]quic.Connection]
 	peers      *notify.V[[]*pbs.ServerPeer]
 	peerConns  *notify.V[map[peerConnKey]quic.Connection]
 
@@ -81,12 +82,12 @@ func newPeer(direct *DirectServer, root *certc.Cert, logger *slog.Logger) (*peer
 	}
 
 	return &peer{
-		self:       notify.NewV(notify.InitialOpt(&pbs.ClientPeer{})),
-		relays:     notify.NewV[[]*pbs.Relay](),
-		relayConns: notify.NewNV[map[model.HostPort]quic.Connection](),
-		peers:      notify.NewV[[]*pbs.ServerPeer](),
-		peerConns: notify.NewV(notify.InitialOpt(map[peerConnKey]quic.Connection{}),
-			notify.CopyMapOpt[map[peerConnKey]quic.Connection]()),
+		self:       notify.NewValue(&pbs.ClientPeer{}),
+		relays:     notify.New[[]*pbs.Relay](),
+		relayConns: notify.NewValue(map[model.HostPort]quic.Connection{}),
+		peers:      notify.New[[]*pbs.ServerPeer](),
+		peerConns:  notify.NewValue(map[peerConnKey]quic.Connection{}),
+		// notify.CopyMapOpt[map[peerConnKey]quic.Connection]()),
 
 		direct:     direct,
 		serverCert: serverTLSCert,
@@ -100,11 +101,14 @@ func (p *peer) expectDirect() {
 }
 
 func (p *peer) setDirectAddrs(addrs []netip.AddrPort) {
-	p.self.Update(func(cp *pbs.ClientPeer) {
-		cp.Direct = &pbs.DirectRoute{
-			Addresses:         pb.AsAddrPorts(addrs),
-			ServerCertificate: p.serverCert.Leaf.Raw,
-			ClientCertificate: p.clientCert.Leaf.Raw,
+	p.self.Update(func(cp *pbs.ClientPeer) *pbs.ClientPeer {
+		return &pbs.ClientPeer{
+			Direct: &pbs.DirectRoute{
+				Addresses:         pb.AsAddrPorts(addrs),
+				ServerCertificate: p.serverCert.Leaf.Raw,
+				ClientCertificate: p.clientCert.Leaf.Raw,
+			},
+			Relays: cp.Relays,
 		}
 	})
 }
@@ -173,8 +177,11 @@ func (p *peer) runShareRelays(ctx context.Context) error {
 		for hp := range conns {
 			hps = append(hps, hp.PB())
 		}
-		p.self.Update(func(cp *pbs.ClientPeer) {
-			cp.Relays = hps
+		p.self.Update(func(cp *pbs.ClientPeer) *pbs.ClientPeer {
+			return &pbs.ClientPeer{
+				Direct: cp.Direct,
+				Relays: hps,
+			}
 		})
 		return nil
 	})
@@ -212,41 +219,35 @@ func (p *peer) runPeers(ctx context.Context) error {
 func (p *peer) addActiveConn(id string, style peerStyle, key string, conn quic.Connection) {
 	p.logger.Debug("add active connection", "peer", id, "style", style, "addr", conn.RemoteAddr())
 	// TODO maybe update opt?
-	p.peerConns.Update(func(active map[peerConnKey]quic.Connection) {
+	p.peerConns.Update(func(active map[peerConnKey]quic.Connection) map[peerConnKey]quic.Connection {
+		active = maps.Clone(active)
 		active[peerConnKey{id, style, key}] = conn
+		return active
 	})
-}
-
-func (p *peer) hasActiveConn(id string, style peerStyle, key string) bool {
-	var ok bool
-	p.peerConns.Read(func(active map[peerConnKey]quic.Connection) {
-		_, ok = active[peerConnKey{id, style, key}]
-	})
-	return ok
 }
 
 func (p *peer) removeActiveConn(id string, style peerStyle, key string) {
 	// TODO maybe update opt?
-	p.peerConns.Update(func(active map[peerConnKey]quic.Connection) {
+	p.peerConns.Update(func(active map[peerConnKey]quic.Connection) map[peerConnKey]quic.Connection {
+		active = maps.Clone(active)
 		delete(active, peerConnKey{id, style, key})
+		return active
 	})
 }
 
 func (p *peer) removeActiveConns(id string) map[peerConnKey]quic.Connection {
 	removed := map[peerConnKey]quic.Connection{}
-	p.peerConns.Update(func(active map[peerConnKey]quic.Connection) {
+	p.peerConns.Update(func(active map[peerConnKey]quic.Connection) map[peerConnKey]quic.Connection {
+		active = maps.Clone(active)
 		for k, conn := range active {
 			if k.id == id {
 				removed[k] = conn
 				delete(active, k)
 			}
 		}
+		return active
 	})
 	return removed
-}
-
-func (p *peer) getActiveConns() map[peerConnKey]quic.Connection {
-	return p.peerConns.Get()
 }
 
 func (p *peer) activeConnsListen(ctx context.Context, f func(map[peerConnKey]quic.Connection) error) error {

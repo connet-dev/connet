@@ -40,11 +40,9 @@ func (w *whisperer) For(fwd model.Forward) *whisper {
 	}
 
 	wh = &whisper{
-		forward: fwd,
-		destinations: notify.NewV(notify.InitialOpt(map[ksuid.KSUID]*pbs.ServerPeer{}),
-			notify.CopyMapOpt[map[ksuid.KSUID]*pbs.ServerPeer]()),
-		sources: notify.NewV(notify.InitialOpt(map[ksuid.KSUID]*pbs.ServerPeer{}),
-			notify.CopyMapOpt[map[ksuid.KSUID]*pbs.ServerPeer]()),
+		forward:      fwd,
+		destinations: notify.NewValue(map[ksuid.KSUID]*pbs.ServerPeer{}),
+		sources:      notify.NewValue(map[ksuid.KSUID]*pbs.ServerPeer{}),
 	}
 	w.whispers[fwd] = wh
 	return wh
@@ -57,18 +55,22 @@ type whisper struct {
 }
 
 func (w *whisper) AddDestination(id ksuid.KSUID, peer *pbs.ClientPeer) {
-	w.destinations.Update(func(m map[ksuid.KSUID]*pbs.ServerPeer) {
-		m[id] = &pbs.ServerPeer{
+	w.destinations.Update(func(dsts map[ksuid.KSUID]*pbs.ServerPeer) map[ksuid.KSUID]*pbs.ServerPeer {
+		dsts = maps.Clone(dsts)
+		dsts[id] = &pbs.ServerPeer{
 			Id:     id.String(),
 			Direct: peer.Direct,
 			Relays: peer.Relays,
 		}
+		return dsts
 	})
 }
 
 func (w *whisper) RemoveDestination(id ksuid.KSUID) {
-	w.destinations.Update(func(m map[ksuid.KSUID]*pbs.ServerPeer) {
-		delete(m, id)
+	w.destinations.Update(func(dsts map[ksuid.KSUID]*pbs.ServerPeer) map[ksuid.KSUID]*pbs.ServerPeer {
+		dsts = maps.Clone(dsts)
+		delete(dsts, id)
+		return dsts
 	})
 }
 
@@ -80,18 +82,22 @@ func (w *whisper) Destinations(ctx context.Context, f func([]*pbs.ServerPeer) er
 }
 
 func (w *whisper) AddSource(id ksuid.KSUID, peer *pbs.ClientPeer) {
-	w.sources.Update(func(m map[ksuid.KSUID]*pbs.ServerPeer) {
-		m[id] = &pbs.ServerPeer{
+	w.sources.Update(func(srcs map[ksuid.KSUID]*pbs.ServerPeer) map[ksuid.KSUID]*pbs.ServerPeer {
+		srcs = maps.Clone(srcs)
+		srcs[id] = &pbs.ServerPeer{
 			Id:     id.String(),
 			Direct: peer.Direct,
 			Relays: peer.Relays,
 		}
+		return srcs
 	})
 }
 
 func (w *whisper) RemoveSource(id ksuid.KSUID) {
-	w.sources.Update(func(m map[ksuid.KSUID]*pbs.ServerPeer) {
-		delete(m, id)
+	w.sources.Update(func(srcs map[ksuid.KSUID]*pbs.ServerPeer) map[ksuid.KSUID]*pbs.ServerPeer {
+		srcs = maps.Clone(srcs)
+		delete(srcs, id)
+		return srcs
 	})
 }
 

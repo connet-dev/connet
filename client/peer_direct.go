@@ -41,7 +41,7 @@ func newPeering(local *peer, remote *pbs.ServerPeer, logger *slog.Logger) *direc
 		local: local,
 
 		remoteId: remote.Id,
-		remote:   notify.NewV[*pbs.ServerPeer](),
+		remote:   notify.New[*pbs.ServerPeer](),
 
 		closer: make(chan struct{}),
 
@@ -184,13 +184,13 @@ func (p *directPeerIncoming) run(ctx context.Context) {
 }
 
 func (p *directPeerIncoming) connect(ctx context.Context) (quic.Connection, quic.Stream, error) {
-	ch := p.parent.local.direct.expect(p.parent.local.serverCert, p.clientCert)
+	ch, cancel := p.parent.local.direct.expect(p.parent.local.serverCert, p.clientCert)
 	select {
 	case <-ctx.Done():
-		p.parent.local.direct.unexpect(p.parent.local.serverCert, p.clientCert)
+		cancel()
 		return nil, nil, ctx.Err()
 	case <-p.closer:
-		p.parent.local.direct.unexpect(p.parent.local.serverCert, p.clientCert)
+		cancel()
 		return nil, nil, errClosed
 	case conn := <-ch:
 		stream, err := conn.AcceptStream(ctx)
@@ -372,7 +372,7 @@ func (p *directPeerOutgoing) heartbeat(ctx context.Context, stream quic.Stream) 
 
 type directPeerRelays struct {
 	parent   *directPeer
-	remotes  *notify.NV[map[model.HostPort]struct{}]
+	remotes  *notify.V[map[model.HostPort]struct{}]
 	closerCh chan struct{}
 }
 
@@ -382,7 +382,7 @@ func newDirectPeerRelays(ctx context.Context, parent *directPeer, remotes map[mo
 	}
 	p := &directPeerRelays{
 		parent:   parent,
-		remotes:  notify.NewNV[map[model.HostPort]struct{}](),
+		remotes:  notify.New[map[model.HostPort]struct{}](),
 		closerCh: make(chan struct{}),
 	}
 	p.remotes.Set(remotes)

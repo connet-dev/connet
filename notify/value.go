@@ -2,84 +2,153 @@ package notify
 
 import (
 	"context"
-	"maps"
-	"sync"
+	"sync/atomic"
+
+	"github.com/klev-dev/kleverr"
 )
 
 type V[T any] struct {
-	value T
-	mu    sync.RWMutex
-	n     *N
-	cp    func(T) T
+	value   atomic.Pointer[nvalue[T]]
+	barrier chan *nversion[T]
 }
 
-func NewV[T any](opts ...VOpt[T]) *V[T] {
-	v := &V[T]{
-		n: New(),
+type nvalue[T any] struct {
+	value   T
+	version uint64
+}
+
+type nversion[T any] struct {
+	value   T
+	version uint64
+	waiter  chan struct{}
+}
+
+func New[T any]() *V[T] {
+	n := &V[T]{
+		barrier: make(chan *nversion[T], 1),
 	}
-	for _, opt := range opts {
-		opt(v)
+	n.barrier <- &nversion[T]{waiter: make(chan struct{})}
+	return n
+}
+
+func NewValue[T any](t T) *V[T] {
+	n := &V[T]{
+		barrier: make(chan *nversion[T], 1),
 	}
-	if v.cp == nil {
-		v.cp = func(t T) T { return t }
+	n.barrier <- &nversion[T]{waiter: make(chan struct{})}
+	n.value.Store(&nvalue[T]{t, 0})
+	return n
+}
+
+func (n *V[T]) Get(ctx context.Context, version uint64) (T, uint64, error) {
+	if current := n.value.Load(); current != nil && current.version > version {
+		return current.value, current.version, nil
 	}
-	return v
+
+	next, ok := <-n.barrier
+	if !ok {
+		var t T
+		return t, 0, kleverr.New("already closed")
+	}
+
+	current := n.value.Load()
+
+	n.barrier <- next
+
+	if current != nil && current.version > version {
+		return current.value, current.version, nil
+	}
+
+	select {
+	case <-next.waiter:
+		return next.value, next.version, nil
+	case <-ctx.Done():
+		var t T
+		return t, 0, kleverr.Newf("context closed: %w", ctx.Err())
+	}
 }
 
-func (v *V[T]) Set(t T) {
-	defer v.n.Updated()
+func (n *V[T]) GetAny(ctx context.Context) (T, uint64, error) {
+	if current := n.value.Load(); current != nil {
+		return current.value, current.version, nil
+	}
 
-	v.mu.Lock()
-	defer v.mu.Unlock()
+	next, ok := <-n.barrier
+	if !ok {
+		var t T
+		return t, 0, kleverr.New("already closed")
+	}
 
-	v.value = t
+	current := n.value.Load()
+
+	n.barrier <- next
+
+	if current != nil {
+		return current.value, current.version, nil
+	}
+
+	select {
+	case <-next.waiter:
+		return next.value, next.version, nil
+	case <-ctx.Done():
+		var t T
+		return t, 0, kleverr.Newf("context closed: %w", ctx.Err())
+	}
 }
 
-func (v *V[T]) Update(f func(T)) {
-	defer v.n.Updated()
-
-	v.mu.Lock()
-	defer v.mu.Unlock()
-
-	f(v.value)
-}
-
-func (v *V[T]) Get() T {
-	v.mu.RLock()
-	defer v.mu.RUnlock()
-
-	return v.cp(v.value)
-}
-
-func (v *V[T]) Read(f func(T)) {
-	v.mu.RLock()
-	defer v.mu.RUnlock()
-
-	f(v.value)
-}
-
-func (v *V[T]) Listen(ctx context.Context, f func(t T) error) error {
-	return v.n.Listen(ctx, func() error {
-		return f(v.Get())
+func (n *V[T]) Set(t T) {
+	n.Update(func(_ T) T {
+		return t
 	})
 }
 
-type VOpt[T any] func(*V[T])
+func (n *V[T]) Update(f func(t T) T) {
+	next, ok := <-n.barrier
+	if !ok {
+		return
+	}
 
-func CopyOpt[T any](cp func(T) T) VOpt[T] {
-	return func(v *V[T]) {
-		v.cp = cp
+	if current := n.value.Load(); current != nil {
+		next.value = f(current.value)
+		next.version = current.version + 1
+	} else {
+		var t T
+		next.value = f(t)
+	}
+	n.value.Store(&nvalue[T]{next.value, next.version})
+
+	close(next.waiter)
+
+	n.barrier <- &nversion[T]{waiter: make(chan struct{})}
+}
+
+func (n *V[T]) Listen(ctx context.Context, f func(t T) error) error {
+	t, v, err := n.GetAny(ctx)
+	if err != nil {
+		return err
+	}
+	if err := f(t); err != nil {
+		return err
+	}
+	for {
+		t, v, err = n.Get(ctx, v)
+		if err != nil {
+			return err
+		}
+		if err := f(t); err != nil {
+			return err
+		}
 	}
 }
 
-func CopyMapOpt[T map[K]R, K comparable, R any]() VOpt[T] {
-	return func(v *V[T]) {
-		v.cp = maps.Clone
-	}
-}
-
-func InitialOpt[T any](t T) VOpt[T] {
-	return func(v *V[T]) {
-		v.value = t
-	}
+func (n *V[T]) Notify(ctx context.Context) <-chan T {
+	ch := make(chan T, 1)
+	go func() {
+		defer close(ch)
+		n.Listen(ctx, func(t T) error {
+			ch <- t
+			return nil
+		})
+	}()
+	return ch
 }

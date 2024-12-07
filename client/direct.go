@@ -99,7 +99,7 @@ func (s *DirectServer) getServer(serverName string) *vServer {
 	return s.servers[serverName]
 }
 
-func (s *DirectServer) expect(serverCert tls.Certificate, cert *x509.Certificate) chan quic.Connection {
+func (s *DirectServer) expect(serverCert tls.Certificate, cert *x509.Certificate) (chan quic.Connection, func()) {
 	key := certc.NewKey(cert)
 	srv := s.getServer(serverCert.Leaf.DNSNames[0])
 
@@ -111,22 +111,15 @@ func (s *DirectServer) expect(serverCert tls.Certificate, cert *x509.Certificate
 	s.logger.Debug("expect client", "server", srv.serverName, "cert", key)
 	ch := make(chan quic.Connection)
 	srv.clients[key] = &vClient{cert: cert, ch: ch}
-	return ch
-}
+	return ch, func() {
+		srv.mu.Lock()
+		defer srv.mu.Unlock()
 
-func (s *DirectServer) unexpect(serverCert tls.Certificate, cert *x509.Certificate) {
-	key := certc.NewKey(cert)
-	srv := s.getServer(serverCert.Leaf.DNSNames[0])
-
-	defer srv.updateClientCA()
-
-	srv.mu.Lock()
-	defer srv.mu.Unlock()
-
-	if exp, ok := srv.clients[key]; ok {
-		s.logger.Debug("unexpect client", "server", srv.serverName, "cert", key)
-		close(exp.ch)
-		delete(srv.clients, key)
+		if exp, ok := srv.clients[key]; ok {
+			s.logger.Debug("unexpect client", "server", srv.serverName, "cert", key)
+			close(exp.ch)
+			delete(srv.clients, key)
+		}
 	}
 }
 

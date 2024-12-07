@@ -9,7 +9,7 @@ import (
 )
 
 func TestNV(t *testing.T) {
-	n := NewNV[int]()
+	n := New[int]()
 
 	go func() {
 		for i := 0; i <= 1000; i++ {
