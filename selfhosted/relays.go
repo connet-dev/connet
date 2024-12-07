@@ -107,7 +107,23 @@ func (s *LocalRelay) getServer(serverName string) *relayServer {
 	return s.servers[serverName]
 }
 
-func (s *LocalRelay) AddDestination(fwd model.Forward, cert *x509.Certificate) (*x509.Certificate, error) {
+func (s *LocalRelay) Destination(ctx context.Context, fwd model.Forward, cert *x509.Certificate, notify func(map[model.HostPort]*x509.Certificate) error) error {
+	cert, err := s.addDestination(fwd, cert)
+	if err != nil {
+		return err
+	}
+	defer s.removeDestination(fwd, cert)
+
+	return s.relays.Listen(ctx, func(local map[model.HostPort]struct{}) error {
+		relays := map[model.HostPort]*x509.Certificate{}
+		for hp := range local {
+			relays[hp] = cert
+		}
+		return notify(relays)
+	})
+}
+
+func (s *LocalRelay) addDestination(fwd model.Forward, cert *x509.Certificate) (*x509.Certificate, error) {
 	srv, err := s.createServer(fwd)
 	if err != nil {
 		return nil, err
@@ -123,7 +139,7 @@ func (s *LocalRelay) AddDestination(fwd model.Forward, cert *x509.Certificate) (
 	return srv.cert, nil
 }
 
-func (s *LocalRelay) RemoveDestination(fwd model.Forward, cert *x509.Certificate) {
+func (s *LocalRelay) removeDestination(fwd model.Forward, cert *x509.Certificate) {
 	srv := s.getServer(fwd.String())
 
 	defer srv.refreshCA()
@@ -134,7 +150,23 @@ func (s *LocalRelay) RemoveDestination(fwd model.Forward, cert *x509.Certificate
 	delete(srv.desinations, certc.NewKey(cert))
 }
 
-func (s *LocalRelay) AddSource(fwd model.Forward, cert *x509.Certificate) (*x509.Certificate, error) {
+func (s *LocalRelay) Source(ctx context.Context, fwd model.Forward, cert *x509.Certificate, notify func(map[model.HostPort]*x509.Certificate) error) error {
+	cert, err := s.addSource(fwd, cert)
+	if err != nil {
+		return err
+	}
+	defer s.removeSource(fwd, cert)
+
+	return s.relays.Listen(ctx, func(local map[model.HostPort]struct{}) error {
+		relays := map[model.HostPort]*x509.Certificate{}
+		for hp := range local {
+			relays[hp] = cert
+		}
+		return notify(relays)
+	})
+}
+
+func (s *LocalRelay) addSource(fwd model.Forward, cert *x509.Certificate) (*x509.Certificate, error) {
 	srv, err := s.createServer(fwd)
 	if err != nil {
 		return nil, err
@@ -150,7 +182,7 @@ func (s *LocalRelay) AddSource(fwd model.Forward, cert *x509.Certificate) (*x509
 	return srv.cert, nil
 }
 
-func (s *LocalRelay) RemoveSource(fwd model.Forward, cert *x509.Certificate) {
+func (s *LocalRelay) removeSource(fwd model.Forward, cert *x509.Certificate) {
 	srv := s.getServer(fwd.String())
 
 	defer srv.refreshCA()
@@ -159,10 +191,6 @@ func (s *LocalRelay) RemoveSource(fwd model.Forward, cert *x509.Certificate) {
 	defer srv.mu.Unlock()
 
 	delete(srv.sources, certc.NewKey(cert))
-}
-
-func (s *LocalRelay) Active(ctx context.Context, f func(map[model.HostPort]struct{}) error) error {
-	return s.relays.Listen(ctx, f)
 }
 
 func (s *LocalRelay) TLSConfig(serverName string) ([]tls.Certificate, *x509.CertPool) {
