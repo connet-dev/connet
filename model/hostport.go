@@ -18,13 +18,13 @@ func NewHostPortFromPB(h *pb.HostPort) HostPort {
 	}
 }
 
-func (h *HostPort) PB() *pb.HostPort {
+func (h HostPort) PB() *pb.HostPort {
 	return &pb.HostPort{
 		Host: h.Host,
 		Port: uint32(h.Port),
 	}
 }
 
-func (h *HostPort) String() string {
+func (h HostPort) String() string {
 	return fmt.Sprintf("%s:%d", h.Host, h.Port)
 }

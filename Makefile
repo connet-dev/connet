@@ -1,4 +1,4 @@
-.PHONY: all build test
+.PHONY: all build test test-always
 
 default: all
 
@@ -9,6 +9,9 @@ build:
 
 test:
 	go test -v -cover -timeout 10s ./...
+
+test-always:
+	go test -v -cover -timeout 10s -count 1 ./...
 
 gen:
 	fd --extension ".pb.go" . --exec-batch rm {}

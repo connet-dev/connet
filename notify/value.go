@@ -35,15 +35,6 @@ func (v *V[T]) Set(t T) {
 	v.value = t
 }
 
-func (v *V[T]) Replace(f func(T) T) {
-	defer v.n.Updated()
-
-	v.mu.Lock()
-	defer v.mu.Unlock()
-
-	v.value = f(v.value)
-}
-
 func (v *V[T]) Update(f func(T)) {
 	defer v.n.Updated()
 
@@ -51,10 +42,6 @@ func (v *V[T]) Update(f func(T)) {
 	defer v.mu.Unlock()
 
 	f(v.value)
-}
-
-func (v *V[T]) Touch() {
-	v.n.Updated()
 }
 
 func (v *V[T]) Get() T {

@@ -21,13 +21,11 @@ import (
 )
 
 type peer struct {
-	self             *notify.V[*pbs.ClientPeer]
-	relays           *notify.V[[]*pbs.Relay]
-	activeRelays     map[model.HostPort]*relayPeer
-	activeRelayConns *notify.V[map[model.HostPort]quic.Connection]
-	peers            *notify.V[[]*pbs.ServerPeer]
-	activePeers      map[string]*directPeer
-	activeConns      *notify.V[map[peerConnKey]quic.Connection]
+	self       *notify.V[*pbs.ClientPeer]
+	relays     *notify.V[[]*pbs.Relay]
+	relayConns *notify.NV[map[model.HostPort]quic.Connection]
+	peers      *notify.V[[]*pbs.ServerPeer]
+	peerConns  *notify.V[map[peerConnKey]quic.Connection]
 
 	direct     *DirectServer
 	serverCert tls.Certificate
@@ -83,14 +81,11 @@ func newPeer(direct *DirectServer, root *certc.Cert, logger *slog.Logger) (*peer
 	}
 
 	return &peer{
-		self:         notify.NewV(notify.InitialOpt(&pbs.ClientPeer{})),
-		relays:       notify.NewV[[]*pbs.Relay](),
-		activeRelays: map[model.HostPort]*relayPeer{},
-		activeRelayConns: notify.NewV(notify.InitialOpt(map[model.HostPort]quic.Connection{}),
-			notify.CopyMapOpt[map[model.HostPort]quic.Connection]()),
-		peers:       notify.NewV[[]*pbs.ServerPeer](),
-		activePeers: map[string]*directPeer{},
-		activeConns: notify.NewV(notify.InitialOpt(map[peerConnKey]quic.Connection{}),
+		self:       notify.NewV(notify.InitialOpt(&pbs.ClientPeer{})),
+		relays:     notify.NewV[[]*pbs.Relay](),
+		relayConns: notify.NewNV[map[model.HostPort]quic.Connection](),
+		peers:      notify.NewV[[]*pbs.ServerPeer](),
+		peerConns: notify.NewV(notify.InitialOpt(map[peerConnKey]quic.Connection{}),
 			notify.CopyMapOpt[map[peerConnKey]quic.Connection]()),
 
 		direct:     direct,
@@ -137,6 +132,7 @@ func (p *peer) run(ctx context.Context) error {
 }
 
 func (p *peer) runRelays(ctx context.Context) error {
+	relayPeers := map[model.HostPort]*relayPeer{}
 	return p.relays.Listen(ctx, func(relays []*pbs.Relay) error {
 		p.logger.Debug("relays updated", "len", len(relays))
 
@@ -144,7 +140,7 @@ func (p *peer) runRelays(ctx context.Context) error {
 		for _, relay := range relays {
 			hp := model.NewHostPortFromPB(relay.Address)
 			activeRelays[hp] = struct{}{}
-			rlg := p.activeRelays[hp]
+			rlg := relayPeers[hp]
 
 			cfg, err := newServerTLSConfig(relay.ServerCertificate)
 			if err != nil {
@@ -154,15 +150,15 @@ func (p *peer) runRelays(ctx context.Context) error {
 				rlg.serverConf.Store(cfg)
 			} else {
 				rlg = newRelayPeer(p, hp, cfg, p.logger)
-				p.activeRelays[hp] = rlg
+				relayPeers[hp] = rlg
 				go rlg.run(ctx)
 			}
 		}
 
-		for hp, relay := range p.activeRelays {
+		for hp, relay := range relayPeers {
 			if _, ok := activeRelays[hp]; !ok {
 				relay.stop()
-				delete(p.activeRelays, hp)
+				delete(relayPeers, hp)
 			}
 		}
 
@@ -171,7 +167,7 @@ func (p *peer) runRelays(ctx context.Context) error {
 }
 
 func (p *peer) runShareRelays(ctx context.Context) error {
-	return p.activeRelayConns.Listen(ctx, func(conns map[model.HostPort]quic.Connection) error {
+	return p.relayConns.Listen(ctx, func(conns map[model.HostPort]quic.Connection) error {
 		p.logger.Debug("relays conns updated", "len", len(conns))
 		var hps []*pb.HostPort
 		for hp := range conns {
@@ -185,26 +181,27 @@ func (p *peer) runShareRelays(ctx context.Context) error {
 }
 
 func (p *peer) runPeers(ctx context.Context) error {
+	peersByID := map[string]*directPeer{}
 	return p.peers.Listen(ctx, func(peers []*pbs.ServerPeer) error {
 		p.logger.Debug("peers updated", "len", len(peers))
 
 		activeIds := map[string]struct{}{}
 		for _, sp := range peers {
 			activeIds[sp.Id] = struct{}{}
-			prg := p.activePeers[sp.Id]
+			prg := peersByID[sp.Id]
 			if prg != nil {
 				prg.remote.Set(sp)
 			} else {
 				prg = newPeering(p, sp, p.logger)
-				p.activePeers[sp.Id] = prg
+				peersByID[sp.Id] = prg
 				go prg.run(ctx)
 			}
 		}
 
-		for id, prg := range p.activePeers {
+		for id, prg := range peersByID {
 			if _, ok := activeIds[id]; !ok {
 				prg.stop()
-				delete(p.activePeers, id)
+				delete(peersByID, id)
 			}
 		}
 
@@ -215,14 +212,14 @@ func (p *peer) runPeers(ctx context.Context) error {
 func (p *peer) addActiveConn(id string, style peerStyle, key string, conn quic.Connection) {
 	p.logger.Debug("add active connection", "peer", id, "style", style, "addr", conn.RemoteAddr())
 	// TODO maybe update opt?
-	p.activeConns.Update(func(active map[peerConnKey]quic.Connection) {
+	p.peerConns.Update(func(active map[peerConnKey]quic.Connection) {
 		active[peerConnKey{id, style, key}] = conn
 	})
 }
 
 func (p *peer) hasActiveConn(id string, style peerStyle, key string) bool {
 	var ok bool
-	p.activeConns.Read(func(active map[peerConnKey]quic.Connection) {
+	p.peerConns.Read(func(active map[peerConnKey]quic.Connection) {
 		_, ok = active[peerConnKey{id, style, key}]
 	})
 	return ok
@@ -230,14 +227,14 @@ func (p *peer) hasActiveConn(id string, style peerStyle, key string) bool {
 
 func (p *peer) removeActiveConn(id string, style peerStyle, key string) {
 	// TODO maybe update opt?
-	p.activeConns.Update(func(active map[peerConnKey]quic.Connection) {
+	p.peerConns.Update(func(active map[peerConnKey]quic.Connection) {
 		delete(active, peerConnKey{id, style, key})
 	})
 }
 
 func (p *peer) removeActiveConns(id string) map[peerConnKey]quic.Connection {
 	removed := map[peerConnKey]quic.Connection{}
-	p.activeConns.Update(func(active map[peerConnKey]quic.Connection) {
+	p.peerConns.Update(func(active map[peerConnKey]quic.Connection) {
 		for k, conn := range active {
 			if k.id == id {
 				removed[k] = conn
@@ -249,11 +246,11 @@ func (p *peer) removeActiveConns(id string) map[peerConnKey]quic.Connection {
 }
 
 func (p *peer) getActiveConns() map[peerConnKey]quic.Connection {
-	return p.activeConns.Get()
+	return p.peerConns.Get()
 }
 
 func (p *peer) activeConnsListen(ctx context.Context, f func(map[peerConnKey]quic.Connection) error) error {
-	return p.activeConns.Listen(ctx, f)
+	return p.peerConns.Listen(ctx, f)
 }
 
 type serverTLSConfig struct {

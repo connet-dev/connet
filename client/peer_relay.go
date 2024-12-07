@@ -34,7 +34,7 @@ func newRelayPeer(local *peer, hp model.HostPort, serverConf *serverTLSConfig, l
 		local:          local,
 		serverHostport: hp,
 		closer:         make(chan struct{}),
-		logger:         logger,
+		logger:         logger.With("relay", hp),
 	}
 	r.serverConf.Store(serverConf)
 	return r
@@ -42,7 +42,7 @@ func newRelayPeer(local *peer, hp model.HostPort, serverConf *serverTLSConfig, l
 
 func (r *relayPeer) run(ctx context.Context) {
 	defer func() {
-		r.local.activeRelayConns.Update(func(conns map[model.HostPort]quic.Connection) {
+		r.local.relayConns.Update(func(conns map[model.HostPort]quic.Connection) {
 			delete(conns, r.serverHostport)
 		})
 	}()
@@ -74,8 +74,8 @@ func (r *relayPeer) runConn(ctx context.Context) error {
 			case <-ctx.Done():
 				return ctx.Err()
 			case <-time.After(boff):
+				boff = netc.NextBackoff(boff)
 			}
-			boff = netc.NextBackoff(boff)
 			continue
 		}
 
@@ -113,22 +113,24 @@ func (r *relayPeer) keepalive(ctx context.Context, conn quic.Connection) error {
 		return err
 	}
 
-	r.local.activeRelayConns.Update(func(conns map[model.HostPort]quic.Connection) {
+	r.local.relayConns.SetFunc(func(conns map[model.HostPort]quic.Connection) map[model.HostPort]quic.Connection {
+		if conns == nil {
+			conns = map[model.HostPort]quic.Connection{}
+		}
 		conns[r.serverHostport] = conn
+		return conns
 	})
 	defer func() {
-		r.local.activeRelayConns.Update(func(conns map[model.HostPort]quic.Connection) {
+		r.local.relayConns.Update(func(conns map[model.HostPort]quic.Connection) {
 			delete(conns, r.serverHostport)
 		})
 	}()
 
-	t := time.NewTicker(10 * time.Second) // TODO vary time
-	defer t.Stop()
 	for {
 		select {
 		case <-ctx.Done():
 			return ctx.Err()
-		case <-t.C:
+		case <-time.After(10 * time.Second):
 		}
 		if err := r.heartbeat(ctx, stream); err != nil {
 			return err
@@ -146,7 +148,7 @@ func (r *relayPeer) heartbeat(ctx context.Context, stream quic.Stream) error {
 		return err
 	} else {
 		dur := time.Since(resp.Heartbeat.Time.AsTime())
-		r.logger.Debug("relay heartbeat", "relay", r.serverHostport, "dur", dur)
+		r.logger.Debug("relay heartbeat", "dur", dur)
 		return nil
 	}
 }
