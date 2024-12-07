@@ -8,6 +8,7 @@ import (
 	"log/slog"
 	"net"
 	"net/netip"
+	"sync"
 	"time"
 
 	"github.com/keihaya-com/connet/model"
@@ -167,37 +168,44 @@ func (p *directPeer) runDirectOutgoing(ctx context.Context) error {
 }
 
 func (p *directPeer) runRelay(ctx context.Context) error {
+	var updateMu sync.Mutex
+	var update = func(local map[model.HostPort]quic.Connection, remote map[model.HostPort]struct{}) error {
+		updateMu.Lock()
+		defer updateMu.Unlock()
+
+		for hp := range remote {
+			if conn := local[hp]; conn != nil {
+				// exists in both, so it is active
+				p.local.addActiveConn(p.remoteId, peerRelay, hp.String(), conn)
+			} else {
+				// remote reports it is connected, but we are not
+				p.local.removeActiveConn(p.remoteId, peerRelay, hp.String())
+			}
+		}
+
+		for hp := range local {
+			if _, ok := remote[hp]; !ok {
+				// local connected, but not the remote
+				p.local.removeActiveConn(p.remoteId, peerRelay, hp.String())
+			}
+		}
+
+		return nil
+	}
+
 	g, ctx := errgroup.WithContext(ctx)
 
 	g.Go(func() error {
-		return p.local.activeRelayConns.Listen(ctx, func(relays map[model.HostPort]quic.Connection) error {
-			p.logger.Debug("update local relays", "len", len(relays))
-			peered := p.relays.Get()
-			for hp := range peered {
-				if p.local.hasActiveConn(p.remoteId, peerRelay, hp.String()) {
-					continue
-				}
-				if conn := relays[hp]; conn != nil {
-					p.local.addActiveConn(p.remoteId, peerRelay, hp.String(), conn)
-				}
-			}
-			return nil
+		return p.local.activeRelayConns.Listen(ctx, func(local map[model.HostPort]quic.Connection) error {
+			p.logger.Debug("update local relays", "len", len(local))
+			return update(local, p.relays.Get())
 		})
 	})
 
 	g.Go(func() error {
 		return p.relays.Listen(ctx, func(relays map[model.HostPort]struct{}) error {
 			p.logger.Debug("update peer relays", "len", len(relays))
-			active := p.local.activeRelayConns.Get()
-			for hp := range relays {
-				if p.local.hasActiveConn(p.remoteId, peerRelay, hp.String()) {
-					continue
-				}
-				if conn := active[hp]; conn != nil {
-					p.local.addActiveConn(p.remoteId, peerRelay, hp.String(), conn)
-				}
-			}
-			return nil
+			return update(p.local.activeRelayConns.Get(), relays)
 		})
 	})
 

@@ -64,7 +64,7 @@ func (v *V[T]) Get() T {
 	return v.cp(v.value)
 }
 
-func (v *V[T]) Inspect(f func(T)) {
+func (v *V[T]) Read(f func(T)) {
 	v.mu.RLock()
 	defer v.mu.RUnlock()
 

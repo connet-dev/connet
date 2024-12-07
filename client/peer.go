@@ -214,6 +214,7 @@ func (p *peer) runPeers(ctx context.Context) error {
 
 func (p *peer) addActiveConn(id string, style peerStyle, key string, conn quic.Connection) {
 	p.logger.Debug("add active connection", "peer", id, "style", style, "addr", conn.RemoteAddr())
+	// TODO maybe update opt?
 	p.activeConns.Update(func(active map[peerConnKey]quic.Connection) {
 		active[peerConnKey{id, style, key}] = conn
 	})
@@ -221,10 +222,17 @@ func (p *peer) addActiveConn(id string, style peerStyle, key string, conn quic.C
 
 func (p *peer) hasActiveConn(id string, style peerStyle, key string) bool {
 	var ok bool
-	p.activeConns.Inspect(func(active map[peerConnKey]quic.Connection) {
+	p.activeConns.Read(func(active map[peerConnKey]quic.Connection) {
 		_, ok = active[peerConnKey{id, style, key}]
 	})
 	return ok
+}
+
+func (p *peer) removeActiveConn(id string, style peerStyle, key string) {
+	// TODO maybe update opt?
+	p.activeConns.Update(func(active map[peerConnKey]quic.Connection) {
+		delete(active, peerConnKey{id, style, key})
+	})
 }
 
 func (p *peer) removeActiveConns(id string) map[peerConnKey]quic.Connection {
