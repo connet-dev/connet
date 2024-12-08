@@ -2,9 +2,12 @@ package control
 
 import (
 	"context"
+	"crypto/rand"
+	"crypto/sha256"
 	"crypto/tls"
 	"crypto/x509"
 	"errors"
+	"io"
 	"log/slog"
 	"net"
 	"time"
@@ -16,6 +19,7 @@ import (
 	"github.com/klev-dev/kleverr"
 	"github.com/quic-go/quic-go"
 	"github.com/segmentio/ksuid"
+	"golang.org/x/crypto/nacl/secretbox"
 	"golang.org/x/sync/errgroup"
 )
 
@@ -87,24 +91,22 @@ func (s *Server) Run(ctx context.Context) error {
 		}
 		s.logger.Info("client connected", "local", conn.LocalAddr(), "remote", conn.RemoteAddr())
 
-		cID := ksuid.New()
 		cc := &controlConn{
-			id:     cID,
 			server: s,
 			conn:   conn,
-			logger: s.logger.With("conn-id", cID),
+			logger: s.logger,
 		}
 		go cc.run(ctx)
 	}
 }
 
 type controlConn struct {
-	id     ksuid.KSUID
 	server *Server
 	conn   quic.Connection
 	logger *slog.Logger
 
 	auth Authentication
+	id   ksuid.KSUID
 }
 
 func (c *controlConn) run(ctx context.Context) {
@@ -116,11 +118,13 @@ func (c *controlConn) run(ctx context.Context) {
 }
 
 func (c *controlConn) runErr(ctx context.Context) error {
-	if auth, err := c.authenticate(ctx); err != nil {
+	if auth, id, err := c.authenticate(ctx); err != nil {
 		c.conn.CloseWithError(1, "auth failed")
 		return kleverr.Ret(err)
 	} else {
 		c.auth = auth
+		c.id = id
+		c.logger = c.logger.With("client-id", id)
 	}
 
 	for {
@@ -129,20 +133,17 @@ func (c *controlConn) runErr(ctx context.Context) error {
 			return err
 		}
 
-		sID := ksuid.New()
 		cs := &controlStream{
-			id:     sID,
 			conn:   c,
 			stream: stream,
-			logger: c.logger.With("stream-id", sID),
 		}
 		go cs.run(ctx)
 	}
 }
 
-var retAuth = kleverr.Ret1[Authentication]
+var retAuth = kleverr.Ret2[Authentication, ksuid.KSUID]
 
-func (c *controlConn) authenticate(ctx context.Context) (Authentication, error) {
+func (c *controlConn) authenticate(ctx context.Context) (Authentication, ksuid.KSUID, error) {
 	c.logger.Debug("waiting for authentication")
 	authStream, err := c.conn.AcceptStream(ctx)
 	if err != nil {
@@ -164,6 +165,17 @@ func (c *controlConn) authenticate(ctx context.Context) (Authentication, error) 
 		return retAuth(err)
 	}
 
+	var id ksuid.KSUID
+	if plain, err := c.decodeReconnect(req.Token, req.ReconnectToken); err != nil {
+		c.logger.Debug("decode failed", "err", err)
+		id = ksuid.New()
+	} else if sid, err := ksuid.FromBytes(plain); err != nil {
+		c.logger.Debug("decode failed", "err", err)
+		id = ksuid.New()
+	} else {
+		id = sid
+	}
+
 	origin, err := pb.AddrPortFromNet(c.conn.RemoteAddr())
 	if err != nil {
 		err := pb.NewError(pb.Error_AuthenticationFailed, "cannot resolve origin: %v", err)
@@ -173,28 +185,65 @@ func (c *controlConn) authenticate(ctx context.Context) (Authentication, error) 
 		return retAuth(err)
 	}
 
+	retoken, err := c.encodeReconnect(req.Token, id.Bytes())
+	if err != nil {
+		c.logger.Debug("encrypting failed", "err", err)
+		retoken = nil
+	}
 	if err := pb.Write(authStream, &pbs.AuthenticateResp{
-		Public: origin,
+		Public:         origin,
+		ReconnectToken: retoken,
 	}); err != nil {
 		return retAuth(err)
 	}
 
 	c.logger.Debug("authentication completed", "local", c.conn.LocalAddr(), "remote", c.conn.RemoteAddr())
-	return auth, nil
+	return auth, id, nil
+}
+
+func (c *controlConn) secretKey(token string) [32]byte {
+	// TODO reevaluate this
+	data := append([]byte(token), c.server.tlsConf.Certificates[0].Leaf.Signature...)
+	return sha256.Sum256(data)
+}
+
+func (c *controlConn) encodeReconnect(token string, id []byte) ([]byte, error) {
+	secretKey := c.secretKey(token)
+
+	var nonce [24]byte
+	if _, err := io.ReadFull(rand.Reader, nonce[:]); err != nil {
+		return nil, kleverr.Newf("could not read rand: %w", err)
+	}
+
+	data := secretbox.Seal(nonce[:], id, &nonce, &secretKey)
+	return data, nil
+}
+
+func (c *controlConn) decodeReconnect(token string, encrypted []byte) ([]byte, error) {
+	if len(encrypted) < 24 {
+		return nil, kleverr.New("missing encrypted data")
+	}
+	secretKey := c.secretKey(token)
+
+	var decryptNonce [24]byte
+	copy(decryptNonce[:], encrypted[:24])
+	decrypted, ok := secretbox.Open(nil, encrypted[24:], &decryptNonce, &secretKey)
+	if !ok {
+		return nil, kleverr.New("cannot open secretbox")
+	}
+	return decrypted, nil
 }
 
 type controlStream struct {
-	id     ksuid.KSUID
 	conn   *controlConn
 	stream quic.Stream
-	logger *slog.Logger
 }
 
 func (s *controlStream) run(ctx context.Context) {
 	defer s.stream.Close()
 
 	if err := s.runErr(ctx); err != nil {
-		s.logger.Warn("error while running", "err", err)
+		s.conn.logger.Warn("error while running", "err", err)
 	}
 }
 
@@ -237,9 +286,9 @@ func (s *controlStream) destinationRelay(ctx context.Context, req *pbs.Request_D
 		return err
 	}
 
-	defer s.logger.Debug("completed destination relay notify")
+	defer s.conn.logger.Debug("completed destination relay notify")
 	return s.conn.server.relays.Destination(ctx, fwd, clientCert, func(relays map[model.HostPort]*x509.Certificate) error {
-		s.logger.Debug("updated destination relay list", "relays", len(relays))
+		s.conn.logger.Debug("updated destination relay list", "relays", len(relays))
 
 		var addrs []*pbs.Relay
 		for hp, cert := range relays {
@@ -322,9 +371,9 @@ func (s *controlStream) destination(ctx context.Context, req *pbs.Request_Destin
 	})
 
 	g.Go(func() error {
-		defer s.logger.Debug("completed sources notify")
+		defer s.conn.logger.Debug("completed sources notify")
 		return w.Sources(ctx, func(peers []*pbs.ServerPeer) error {
-			s.logger.Debug("updated sources list", "peers", len(peers))
+			s.conn.logger.Debug("updated sources list", "peers", len(peers))
 
 			if err := pb.Write(s.stream, &pbs.Response{
 				Destination: &pbs.Response_Destination{
@@ -360,9 +409,9 @@ func (s *controlStream) sourceRelay(ctx context.Context, req *pbs.Request_Source
 		return err
 	}
 
-	defer s.logger.Debug("completed source relay notify")
+	defer s.conn.logger.Debug("completed source relay notify")
 	return s.conn.server.relays.Source(ctx, fwd, clientCert, func(relays map[model.HostPort]*x509.Certificate) error {
-		s.logger.Debug("updated source relay list", "relays", len(relays))
+		s.conn.logger.Debug("updated source relay list", "relays", len(relays))
 
 		var addrs []*pbs.Relay
 		for hp, cert := range relays {
@@ -445,9 +494,9 @@ func (s *controlStream) source(ctx context.Context, req *pbs.Request_Source) err
 	})
 
 	g.Go(func() error {
-		defer s.logger.Debug("completed destinations notify")
+		defer s.conn.logger.Debug("completed destinations notify")
 		return w.Destinations(ctx, func(peers []*pbs.ServerPeer) error {
-			s.logger.Debug("updated destinations list", "peers", len(peers))
+			s.conn.logger.Debug("updated destinations list", "peers", len(peers))
 
 			if err := pb.Write(s.stream, &pbs.Response{
 				Source: &pbs.Response_Source{
@@ -465,7 +514,7 @@ func (s *controlStream) source(ctx context.Context, req *pbs.Request_Source) err
 }
 
 func (s *controlStream) unknown(ctx context.Context, req *pbs.Request) error {
-	s.logger.Error("unknown request", "req", req)
+	s.conn.logger.Error("unknown request", "req", req)
 	err := pb.NewError(pb.Error_RequestUnknown, "unknown request: %v", req)
 	return pb.Write(s.stream, &pbc.Response{Error: err})
 }

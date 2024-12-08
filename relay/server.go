@@ -11,13 +11,13 @@ import (
 	"sync"
 	"time"
 
+	"github.com/keihaya-com/connet/certc"
 	"github.com/keihaya-com/connet/model"
 	"github.com/keihaya-com/connet/netc"
 	"github.com/keihaya-com/connet/pb"
 	"github.com/keihaya-com/connet/pbc"
 	"github.com/klev-dev/kleverr"
 	"github.com/quic-go/quic-go"
-	"github.com/segmentio/ksuid"
 	"golang.org/x/sync/errgroup"
 )
 
@@ -39,7 +39,7 @@ func NewServer(cfg Config) (*Server, error) {
 		},
 		logger: cfg.Logger.With("relay", cfg.Addr),
 
-		destinations: map[model.Forward]map[ksuid.KSUID]*relayConn{},
+		destinations: map[model.Forward]map[certc.Key]*relayConn{},
 	}
 	s.tlsConf.GetConfigForClient = s.tlsConfigWithClientCA
 
@@ -52,7 +52,7 @@ type Server struct {
 	tlsConf *tls.Config
 	logger  *slog.Logger
 
-	destinations   map[model.Forward]map[ksuid.KSUID]*relayConn
+	destinations   map[model.Forward]map[certc.Key]*relayConn
 	destinationsMu sync.RWMutex
 }
 
@@ -62,10 +62,10 @@ func (s *Server) addDestinations(conn *relayConn) {
 
 	fwdDest := s.destinations[conn.auth.Forward()]
 	if fwdDest == nil {
-		fwdDest = map[ksuid.KSUID]*relayConn{}
+		fwdDest = map[certc.Key]*relayConn{}
 		s.destinations[conn.auth.Forward()] = fwdDest
 	}
-	fwdDest[conn.id] = conn
+	fwdDest[conn.key] = conn
 }
 
 func (s *Server) removeDestinations(conn *relayConn) {
@@ -73,7 +73,7 @@ func (s *Server) removeDestinations(conn *relayConn) {
 	defer s.destinationsMu.Unlock()
 
 	fwdDest := s.destinations[conn.auth.Forward()]
-	delete(fwdDest, conn.id)
+	delete(fwdDest, conn.key)
 	if len(fwdDest) == 0 {
 		delete(s.destinations, conn.auth.Forward())
 	}
@@ -134,24 +134,22 @@ func (s *Server) Run(ctx context.Context) error {
 		}
 		s.logger.Info("client connected", "local", conn.LocalAddr(), "remote", conn.RemoteAddr())
 
-		rcID := ksuid.New()
 		rc := &relayConn{
-			id:     rcID,
 			server: s,
 			conn:   conn,
-			logger: s.logger.With("conn-id", rcID),
+			logger: s.logger,
 		}
 		go rc.run(ctx)
 	}
 }
 
 type relayConn struct {
-	id     ksuid.KSUID
 	server *Server
 	conn   quic.Connection
 	logger *slog.Logger
 
 	auth Authentication
+	key  certc.Key
 }
 
 func (c *relayConn) run(ctx context.Context) {
@@ -170,6 +168,7 @@ func (c *relayConn) runErr(ctx context.Context) error {
 		return nil
 	} else {
 		c.auth = auth
+		c.key = certc.NewKey(certs[0])
 	}
 
 	switch {

@@ -118,7 +118,7 @@ func (c *Client) Run(ctx context.Context) error {
 }
 
 func (c *Client) run(ctx context.Context, transport *quic.Transport) error {
-	conn, err := c.connect(ctx, transport)
+	conn, retoken, err := c.connect(ctx, transport, nil)
 	if err != nil {
 		return err
 	}
@@ -133,13 +133,15 @@ func (c *Client) run(ctx context.Context, transport *quic.Transport) error {
 			}
 		}
 
-		if conn, err = c.reconnect(ctx, transport); err != nil {
+		if conn, retoken, err = c.reconnect(ctx, transport, retoken); err != nil {
 			return err
 		}
 	}
 }
 
-func (c *Client) connect(ctx context.Context, transport *quic.Transport) (quic.Connection, error) {
+var retConnect = kleverr.Ret2[quic.Connection, []byte]
+
+func (c *Client) connect(ctx context.Context, transport *quic.Transport, retoken []byte) (quic.Connection, []byte, error) {
 	c.logger.Debug("dialing target", "addr", c.controlAddr)
 	// TODO dial timeout if server is not accessible?
 	conn, err := transport.Dial(ctx, c.controlAddr, &tls.Config{
@@ -150,34 +152,35 @@ func (c *Client) connect(ctx context.Context, transport *quic.Transport) (quic.C
 		KeepAlivePeriod: 25 * time.Second,
 	})
 	if err != nil {
-		return nil, kleverr.Ret(err)
+		return retConnect(err)
 	}
 
 	c.logger.Debug("authenticating", "addr", c.controlAddr)
 
 	authStream, err := conn.OpenStreamSync(ctx)
 	if err != nil {
-		return nil, kleverr.Ret(err)
+		return retConnect(err)
 	}
 	defer authStream.Close()
 
 	if err := pb.Write(authStream, &pbs.Authenticate{
-		Token: c.token,
+		Token:          c.token,
+		ReconnectToken: retoken,
 	}); err != nil {
-		return nil, kleverr.Ret(err)
+		return retConnect(err)
 	}
 
 	resp := &pbs.AuthenticateResp{}
 	if err := pb.Read(authStream, resp); err != nil {
-		return nil, kleverr.Ret(err)
+		return retConnect(err)
 	}
 	if resp.Error != nil {
-		return nil, kleverr.Ret(resp.Error)
+		return retConnect(resp.Error)
 	}
 
 	localAddrs, err := netc.LocalAddrs()
 	if err != nil {
-		return nil, kleverr.Ret(err)
+		return retConnect(err)
 	}
 	localAddrPorts := make([]netip.AddrPort, len(localAddrs))
 	for i, addr := range localAddrs {
@@ -193,7 +196,7 @@ func (c *Client) connect(ctx context.Context, transport *quic.Transport) (quic.C
 	}
 
 	c.logger.Info("authenticated", "addrs", directAddrs)
-	return conn, nil
+	return conn, resp.ReconnectToken, nil
 }
 
 func (c *Client) runConnection(ctx context.Context, conn quic.Connection) error {
@@ -210,7 +213,7 @@ func (c *Client) runConnection(ctx context.Context, conn quic.Connection) error 
 	return g.Wait()
 }
 
-func (c *Client) reconnect(ctx context.Context, transport *quic.Transport) (quic.Connection, error) {
+func (c *Client) reconnect(ctx context.Context, transport *quic.Transport, retoken []byte) (quic.Connection, []byte, error) {
 	d := netc.MinBackoff
 	t := time.NewTimer(d)
 	defer t.Stop()
@@ -218,14 +221,14 @@ func (c *Client) reconnect(ctx context.Context, transport *quic.Transport) (quic
 		c.logger.Debug("backoff wait", "d", d)
 		select {
 		case <-ctx.Done():
-			return nil, ctx.Err()
+			return nil, nil, ctx.Err()
 		case <-t.C:
 		}
 
-		if sess, err := c.connect(ctx, transport); err != nil {
+		if sess, retoken, err := c.connect(ctx, transport, retoken); err != nil {
 			c.logger.Debug("reconnect failed, retrying", "err", err)
 		} else {
-			return sess, nil
+			return sess, retoken, nil
 		}
 
 		d = netc.NextBackoff(d)
