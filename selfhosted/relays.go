@@ -18,12 +18,11 @@ func NewLocalRelay(relayAddr model.HostPort) (*LocalRelay, error) {
 	if err != nil {
 		return nil, err
 	}
-	s := &LocalRelay{
+	return &LocalRelay{
 		root:    root,
 		relays:  notify.New(map[model.HostPort]struct{}{relayAddr: {}}),
 		servers: map[string]*relayServer{},
-	}
-	return s, nil
+	}, nil
 }
 
 type LocalRelay struct {
