@@ -29,10 +29,10 @@ type staticAuthentication struct {
 	token string
 }
 
-func (a *staticAuthentication) AllowDestination(dst model.Forward) (bool, model.Forward) {
-	return true, dst
+func (a *staticAuthentication) ValidateDestination(dst model.Forward) (model.Forward, error) {
+	return dst, nil
 }
 
-func (a *staticAuthentication) AllowSource(src model.Forward) (bool, model.Forward) {
-	return true, src
+func (a *staticAuthentication) ValidateSource(src model.Forward) (model.Forward, error) {
+	return src, nil
 }

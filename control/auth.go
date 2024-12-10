@@ -7,6 +7,6 @@ type Authenticator interface {
 }
 
 type Authentication interface {
-	AllowDestination(dst model.Forward) (bool, model.Forward)
-	AllowSource(src model.Forward) (bool, model.Forward)
+	ValidateDestination(dst model.Forward) (model.Forward, error)
+	ValidateSource(src model.Forward) (model.Forward, error)
 }

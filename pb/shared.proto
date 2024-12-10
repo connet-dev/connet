@@ -36,15 +36,15 @@ message Error {
 
     // Relay
     RelayInvalidCertificate = 200;
-    RelayDestinationNotAllowed = 201;
-    RelaySourceNotAllowed = 202;
+    RelayDestinationValidationFailed = 201;
+    RelaySourceValidationFailed = 202;
 
     // Destination
-    DestinationNotAllowed = 300;
+    DestinationValidationFailed = 300;
     DestinationInvalidCertificate = 301;
 
     // Source
-    SourceNotAllowed = 400;
+    SourceValidationFailed = 400;
     SourceInvalidCertificate = 401;
 
     // Client connect codes
