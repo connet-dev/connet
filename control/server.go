@@ -3,7 +3,6 @@ package control
 import (
 	"context"
 	"crypto/rand"
-	"crypto/sha256"
 	"crypto/tls"
 	"crypto/x509"
 	"errors"
@@ -19,6 +18,7 @@ import (
 	"github.com/klev-dev/kleverr"
 	"github.com/quic-go/quic-go"
 	"github.com/segmentio/ksuid"
+	"golang.org/x/crypto/blake2s"
 	"golang.org/x/crypto/nacl/secretbox"
 	"golang.org/x/sync/errgroup"
 )
@@ -203,8 +203,8 @@ func (c *controlConn) authenticate(ctx context.Context) (Authentication, ksuid.K
 
 func (c *controlConn) secretKey(token string) [32]byte {
 	// TODO reevaluate this
-	data := append([]byte(token), c.server.tlsConf.Certificates[0].Leaf.Signature...)
-	return sha256.Sum256(data)
+	data := append([]byte(token), c.server.tlsConf.Certificates[0].Leaf.Raw...)
+	return blake2s.Sum256(data)
 }
 
 func (c *controlConn) encodeReconnect(token string, id []byte) ([]byte, error) {

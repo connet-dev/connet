@@ -1,6 +1,13 @@
 package model
 
-import "github.com/keihaya-com/connet/pb"
+import (
+	"crypto/rand"
+	"fmt"
+	"io"
+
+	"github.com/keihaya-com/connet/pb"
+	"github.com/mr-tron/base58"
+)
 
 type Forward struct{ string }
 
@@ -26,4 +33,12 @@ func PBFromForwards(fwds []Forward) []*pb.Forward {
 		pbs[i] = fwd.PB()
 	}
 	return pbs
+}
+
+func GenServerName(prefix string) string {
+	var data = make([]byte, 32)
+	if _, err := io.ReadFull(rand.Reader, data); err != nil {
+		panic(err)
+	}
+	return fmt.Sprintf("%s-%s", prefix, base58.Encode(data))
 }

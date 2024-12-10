@@ -19,17 +19,20 @@ func NewLocalRelay(relayAddr model.HostPort) (*LocalRelay, error) {
 		return nil, err
 	}
 	return &LocalRelay{
-		root:    root,
-		relays:  notify.New(map[model.HostPort]struct{}{relayAddr: {}}),
-		servers: map[string]*relayServer{},
+		root:             root,
+		relays:           notify.New(map[model.HostPort]struct{}{relayAddr: {}}),
+		serversByName:    map[string]*relayServer{},
+		serversByForward: map[model.Forward]*relayServer{},
 	}, nil
 }
 
 type LocalRelay struct {
-	root      *certc.Cert
-	relays    *notify.V[map[model.HostPort]struct{}]
-	servers   map[string]*relayServer
-	serversMu sync.RWMutex
+	root   *certc.Cert
+	relays *notify.V[map[model.HostPort]struct{}]
+
+	serversByName    map[string]*relayServer
+	serversByForward map[model.Forward]*relayServer
+	serversMu        sync.RWMutex
 }
 
 type relayServer struct {
@@ -60,7 +63,7 @@ func (s *relayServer) refreshCA() {
 
 func (s *LocalRelay) createServer(fwd model.Forward) (*relayServer, error) {
 	s.serversMu.RLock()
-	srv := s.servers[fwd.String()]
+	srv := s.serversByForward[fwd]
 	s.serversMu.RUnlock()
 
 	if srv != nil {
@@ -70,13 +73,13 @@ func (s *LocalRelay) createServer(fwd model.Forward) (*relayServer, error) {
 	s.serversMu.Lock()
 	defer s.serversMu.Unlock()
 
-	srv = s.servers[fwd.String()]
+	srv = s.serversByForward[fwd]
 	if srv != nil {
 		return srv, nil
 	}
 
 	serverRoot, err := s.root.NewServer(certc.CertOpts{
-		Domains: []string{fwd.String()}, // TODO this is leaking the name
+		Domains: []string{model.GenServerName("connet-relay")},
 	})
 	if err != nil {
 		return nil, err
@@ -96,15 +99,23 @@ func (s *LocalRelay) createServer(fwd model.Forward) (*relayServer, error) {
 
 		tls: []tls.Certificate{serverCert},
 	}
-	s.servers[fwd.String()] = srv
+	s.serversByName[serverCert.Leaf.DNSNames[0]] = srv
+	s.serversByForward[fwd] = srv
 	return srv, nil
 }
 
-func (s *LocalRelay) getServer(serverName string) *relayServer {
+func (s *LocalRelay) getServerByName(serverName string) *relayServer {
 	s.serversMu.RLock()
 	defer s.serversMu.RUnlock()
 
-	return s.servers[serverName]
+	return s.serversByName[serverName]
+}
+
+func (s *LocalRelay) getServerByForward(fwd model.Forward) *relayServer {
+	s.serversMu.RLock()
+	defer s.serversMu.RUnlock()
+
+	return s.serversByForward[fwd]
 }
 
 func (s *LocalRelay) Destination(ctx context.Context, fwd model.Forward, cert *x509.Certificate, notify func(map[model.HostPort]*x509.Certificate) error) error {
@@ -140,7 +151,7 @@ func (s *LocalRelay) addDestination(fwd model.Forward, cert *x509.Certificate) (
 }
 
 func (s *LocalRelay) removeDestination(fwd model.Forward, cert *x509.Certificate) {
-	srv := s.getServer(fwd.String())
+	srv := s.getServerByForward(fwd)
 
 	defer srv.refreshCA()
 
@@ -183,7 +194,7 @@ func (s *LocalRelay) addSource(fwd model.Forward, cert *x509.Certificate) (*x509
 }
 
 func (s *LocalRelay) removeSource(fwd model.Forward, cert *x509.Certificate) {
-	srv := s.getServer(fwd.String())
+	srv := s.getServerByForward(fwd)
 
 	defer srv.refreshCA()
 
@@ -194,14 +205,14 @@ func (s *LocalRelay) removeSource(fwd model.Forward, cert *x509.Certificate) {
 }
 
 func (s *LocalRelay) TLSConfig(serverName string) ([]tls.Certificate, *x509.CertPool) {
-	if srv := s.getServer(serverName); srv != nil {
+	if srv := s.getServerByName(serverName); srv != nil {
 		return srv.tls, srv.cas.Load()
 	}
 	return nil, nil
 }
 
 func (s *LocalRelay) Authenticate(serverName string, certs []*x509.Certificate) relay.Authentication {
-	srv := s.getServer(serverName)
+	srv := s.getServerByName(serverName)
 	if srv == nil {
 		return nil
 	}

@@ -4,11 +4,8 @@ import (
 	"context"
 	"crypto/tls"
 	"crypto/x509"
-	"encoding/binary"
-	"fmt"
 	"log/slog"
 	"maps"
-	"math/rand/v2"
 	"net/netip"
 
 	"github.com/keihaya-com/connet/certc"
@@ -16,7 +13,6 @@ import (
 	"github.com/keihaya-com/connet/notify"
 	"github.com/keihaya-com/connet/pb"
 	"github.com/keihaya-com/connet/pbs"
-	"github.com/mr-tron/base58"
 	"github.com/quic-go/quic-go"
 	"golang.org/x/sync/errgroup"
 )
@@ -62,9 +58,9 @@ func (s peerStyle) String() string {
 }
 
 func newPeer(direct *DirectServer, root *certc.Cert, logger *slog.Logger) (*peer, error) {
-	serverCert, err := root.NewServer(certc.CertOpts{Domains: []string{
-		genServerName(),
-	}})
+	serverCert, err := root.NewServer(certc.CertOpts{
+		Domains: []string{model.GenServerName("connet-direct")},
+	})
 	if err != nil {
 		return nil, err
 	}
@@ -277,9 +273,4 @@ func newServerTLSConfig(serverCert []byte) (*serverTLSConfig, error) {
 		name: cert.DNSNames[0],
 		cas:  cas,
 	}, nil
-}
-
-func genServerName() string {
-	v := binary.BigEndian.AppendUint64(nil, uint64(rand.Int64()))
-	return fmt.Sprintf("connet-direct-%s", base58.Encode(v))
 }
