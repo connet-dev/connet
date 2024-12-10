@@ -2,8 +2,11 @@ package certc
 
 import (
 	"crypto"
+	"crypto/ecdsa"
 	"crypto/ed25519"
+	"crypto/elliptic"
 	"crypto/rand"
+	"crypto/rsa"
 	"crypto/tls"
 	"crypto/x509"
 	"crypto/x509/pkix"
@@ -73,7 +76,15 @@ func (c *Cert) new(opts CertOpts, typ certType) (*Cert, error) {
 		return nil, err
 	}
 
-	_, priv, err := ed25519.GenerateKey(rand.Reader)
+	var priv crypto.PrivateKey
+	switch parent.PublicKeyAlgorithm {
+	case x509.RSA:
+		priv, err = rsa.GenerateKey(rand.Reader, 4096)
+	case x509.ECDSA:
+		priv, err = ecdsa.GenerateKey(elliptic.P384(), rand.Reader)
+	case x509.Ed25519:
+		_, priv, err = ed25519.GenerateKey(rand.Reader)
+	}
 	if err != nil {
 		return nil, err
 	}

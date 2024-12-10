@@ -269,12 +269,14 @@ func (s *controlStream) runErr(ctx context.Context) error {
 
 func (s *controlStream) destinationRelay(ctx context.Context, req *pbs.Request_DestinationRelay) error {
 	fwd := model.NewForwardFromPB(req.From)
-	if !s.conn.auth.AllowDestination(fwd.String()) {
+	if allow, newFwd := s.conn.auth.AllowDestination(fwd); !allow {
 		err := pb.NewError(pb.Error_RelayDestinationNotAllowed, "desination '%s' not allowed", fwd)
 		if err := pb.Write(s.stream, &pbs.Response{Error: err}); err != nil {
 			return kleverr.Newf("could not write error response: %w", err)
 		}
 		return err
+	} else {
+		fwd = newFwd
 	}
 
 	clientCert, err := x509.ParseCertificate(req.ClientCertificate)
@@ -324,12 +326,14 @@ func validateDestinationCert(from model.Forward, peer *pbs.ClientPeer) *pb.Error
 
 func (s *controlStream) destination(ctx context.Context, req *pbs.Request_Destination) error {
 	from := model.NewForwardFromPB(req.From)
-	if !s.conn.auth.AllowDestination(from.String()) {
+	if allow, newFrom := s.conn.auth.AllowDestination(from); !allow {
 		err := pb.NewError(pb.Error_DestinationNotAllowed, "desination '%s' not allowed", from)
 		if err := pb.Write(s.stream, &pbs.Response{Error: err}); err != nil {
 			return kleverr.Newf("could not write error response: %w", err)
 		}
 		return err
+	} else {
+		from = newFrom
 	}
 
 	if err := validateDestinationCert(from, req.Peer); err != nil {
@@ -392,12 +396,14 @@ func (s *controlStream) destination(ctx context.Context, req *pbs.Request_Destin
 
 func (s *controlStream) sourceRelay(ctx context.Context, req *pbs.Request_SourceRelay) error {
 	fwd := model.NewForwardFromPB(req.To)
-	if !s.conn.auth.AllowSource(fwd.String()) {
+	if allow, newFwd := s.conn.auth.AllowSource(fwd); !allow {
 		err := pb.NewError(pb.Error_RelaySourceNotAllowed, "source '%s' not allowed", fwd)
 		if err := pb.Write(s.stream, &pbs.Response{Error: err}); err != nil {
 			return kleverr.Newf("could not write error response: %w", err)
 		}
 		return err
+	} else {
+		fwd = newFwd
 	}
 
 	clientCert, err := x509.ParseCertificate(req.ClientCertificate)
@@ -447,12 +453,14 @@ func validateSourceCert(to model.Forward, peer *pbs.ClientPeer) *pb.Error {
 
 func (s *controlStream) source(ctx context.Context, req *pbs.Request_Source) error {
 	to := model.NewForwardFromPB(req.To)
-	if !s.conn.auth.AllowSource(to.String()) {
+	if allow, newTo := s.conn.auth.AllowSource(to); !allow {
 		err := pb.NewError(pb.Error_SourceNotAllowed, "source '%s' not allowed", to)
 		if err := pb.Write(s.stream, &pbs.Response{Error: err}); err != nil {
 			return kleverr.Newf("could not write error response: %w", err)
 		}
 		return err
+	} else {
+		to = newTo
 	}
 
 	if err := validateSourceCert(to, req.Peer); err != nil {

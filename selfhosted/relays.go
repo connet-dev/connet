@@ -75,7 +75,9 @@ func (s *LocalRelay) createServer(fwd model.Forward) (*relayServer, error) {
 		return srv, nil
 	}
 
-	serverRoot, err := s.root.NewServer(certc.CertOpts{Domains: []string{fwd.String()}})
+	serverRoot, err := s.root.NewServer(certc.CertOpts{
+		Domains: []string{fwd.String()}, // TODO this is leaking the name
+	})
 	if err != nil {
 		return nil, err
 	}

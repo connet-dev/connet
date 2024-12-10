@@ -2,6 +2,7 @@ package selfhosted
 
 import (
 	"github.com/keihaya-com/connet/control"
+	"github.com/keihaya-com/connet/model"
 	"github.com/klev-dev/kleverr"
 )
 
@@ -28,10 +29,10 @@ type staticAuthentication struct {
 	token string
 }
 
-func (a *staticAuthentication) AllowDestination(name string) bool {
-	return true
+func (a *staticAuthentication) AllowDestination(dst model.Forward) (bool, model.Forward) {
+	return true, dst
 }
 
-func (a *staticAuthentication) AllowSource(name string) bool {
-	return true
+func (a *staticAuthentication) AllowSource(src model.Forward) (bool, model.Forward) {
+	return true, src
 }
