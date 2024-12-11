@@ -99,7 +99,7 @@ type serverConfig struct {
 	relayHostname string
 
 	logger *slog.Logger
-	auth   control.Authenticator
+	auth   control.ClientAuthenticator
 }
 
 type ServerOption func(*serverConfig) error
