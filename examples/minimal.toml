@@ -1,13 +1,13 @@
-log_level = "debug"
+log-level = "debug"
 
 [server]
-tokens_file = "examples/token.secret"
-cert_file = ".direnv/localhost/cert.pem"
-key_file = ".direnv/localhost/key.pem"
+tokens-file = "examples/token.secret"
+cert-file = ".direnv/localhost/cert.pem"
+key-file = ".direnv/localhost/key.pem"
 
 [client]
-token_file = "examples/token.secret"
-server_cas = ".direnv/localhost/cert.pem"
+token-file = "examples/token.secret"
+server-cas = ".direnv/localhost/cert.pem"
 
 [client.destinations.sws]
 addr = ":8081"

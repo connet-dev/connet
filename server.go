@@ -43,24 +43,13 @@ func NewServer(opts ...ServerOption) (*Server, error) {
 		}
 	}
 
-	if cfg.hostname == "" {
-		switch {
-		case cfg.relayCert.Leaf != nil && len(cfg.relayCert.Leaf.DNSNames) > 0:
-			if err := ServerHostname(cfg.relayCert.Leaf.DNSNames[0])(cfg); err != nil {
-				return nil, err
-			}
-		case cfg.relayCert.Leaf != nil && len(cfg.relayCert.Leaf.IPAddresses) > 0:
-			if err := ServerHostname(cfg.relayCert.Leaf.IPAddresses[0].String())(cfg); err != nil {
-				return nil, err
-			}
-		default:
-			if err := ServerHostname("localhost")(cfg); err != nil {
-				return nil, err
-			}
+	if cfg.relayHostname == "" {
+		if err := ServerRelayHostname("localhost")(cfg); err != nil {
+			return nil, err
 		}
 	}
 
-	relayPublicAddr := model.HostPort{Host: cfg.hostname, Port: cfg.relayAddr.AddrPort().Port()}
+	relayPublicAddr := model.HostPort{Host: cfg.relayHostname, Port: cfg.relayAddr.AddrPort().Port()}
 	localRelay, err := selfhosted.NewLocalRelay(relayPublicAddr)
 	if err != nil {
 		return nil, err
@@ -76,7 +65,6 @@ func NewServer(opts ...ServerOption) (*Server, error) {
 
 	relay, err := relay.NewServer(relay.Config{
 		Addr:   cfg.relayAddr,
-		Cert:   cfg.relayCert,
 		Auth:   localRelay,
 		Logger: cfg.logger,
 	})
@@ -104,13 +92,11 @@ func (s *Server) Run(ctx context.Context) error {
 }
 
 type serverConfig struct {
-	hostname string
-
 	controlAddr *net.UDPAddr
 	controlCert tls.Certificate
 
-	relayAddr *net.UDPAddr
-	relayCert tls.Certificate
+	relayAddr     *net.UDPAddr
+	relayHostname string
 
 	logger *slog.Logger
 	auth   control.Authenticator
@@ -121,44 +107,6 @@ type ServerOption func(*serverConfig) error
 func ServerTokens(tokens ...string) ServerOption {
 	return func(cfg *serverConfig) error {
 		cfg.auth = selfhosted.NewStaticAuthenticator(tokens...)
-		return nil
-	}
-}
-
-func ServerHostname(hostname string) ServerOption {
-	return func(cfg *serverConfig) error {
-		cfg.hostname = hostname
-		return nil
-	}
-}
-
-func ServerDefaultCertificate(certFile, keyFile string) ServerOption {
-	return func(cfg *serverConfig) error {
-		cert, err := tls.LoadX509KeyPair(certFile, keyFile)
-		if err != nil {
-			return kleverr.Newf("default cert cannot be loaded: %w", err)
-		}
-
-		if cfg.controlCert.Leaf == nil {
-			cfg.controlCert = cert
-		}
-		if cfg.relayCert.Leaf == nil {
-			cfg.relayCert = cert
-		}
-
-		return nil
-	}
-}
-
-func serverDefaultCertificate(cert tls.Certificate) ServerOption {
-	return func(cfg *serverConfig) error {
-		if cfg.controlCert.Leaf == nil {
-			cfg.controlCert = cert
-		}
-		if cfg.relayCert.Leaf == nil {
-			cfg.relayCert = cert
-		}
-
 		return nil
 	}
 }
@@ -189,6 +137,14 @@ func ServerControlCertificate(certFile, keyFile string) ServerOption {
 	}
 }
 
+func serverControlCertificate(cert tls.Certificate) ServerOption {
+	return func(cfg *serverConfig) error {
+		cfg.controlCert = cert
+
+		return nil
+	}
+}
+
 func ServerRelayAddress(address string) ServerOption {
 	return func(cfg *serverConfig) error {
 		addr, err := net.ResolveUDPAddr("udp", address)
@@ -202,15 +158,9 @@ func ServerRelayAddress(address string) ServerOption {
 	}
 }
 
-func ServerRelayCertificate(certFile, keyFile string) ServerOption {
+func ServerRelayHostname(hostname string) ServerOption {
 	return func(cfg *serverConfig) error {
-		cert, err := tls.LoadX509KeyPair(certFile, keyFile)
-		if err != nil {
-			return kleverr.Newf("relay cert cannot be loaded: %w", err)
-		}
-
-		cfg.relayCert = cert
-
+		cfg.relayHostname = hostname
 		return nil
 	}
 }

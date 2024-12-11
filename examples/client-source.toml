@@ -1,9 +1,9 @@
-log_level = "debug"
+log-level = "debug"
 
 [client]
-token_file = "examples/token.secret"
-server_cas = ".direnv/localhost/cert.pem"
-direct_addr = ":19193"
+token-file = "examples/token.secret"
+server-cas = ".direnv/localhost/cert.pem"
+direct-addr = ":19193"
 
 [client.sources.sws]
 addr = ":9999"

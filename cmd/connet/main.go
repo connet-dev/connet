@@ -17,37 +17,31 @@ import (
 )
 
 type Config struct {
-	LogLevel  string       `toml:"log_level"`
-	LogFormat string       `toml:"log_format"`
+	LogLevel  string       `toml:"log-level"`
+	LogFormat string       `toml:"log-format"`
 	Server    ServerConfig `toml:"server"`
 	Client    ClientConfig `toml:"client"`
 }
 
 type ServerConfig struct {
 	Tokens     []string `toml:"tokens"`
-	TokensFile string   `toml:"tokens_file"`
+	TokensFile string   `toml:"tokens-file"`
 
-	Hostname string `toml:"hostname"`
-	Cert     string `toml:"cert_file"`
-	Key      string `toml:"key_file"`
+	Addr string `toml:"addr"`
+	Cert string `toml:"cert-file"`
+	Key  string `toml:"key-file"`
 
-	Control ListenerConfig `toml:"control"`
-	Relay   ListenerConfig `toml:"relay"`
-}
-
-type ListenerConfig struct {
-	Addr string `toml:"bind_addr"`
-	Cert string `toml:"cert_file"`
-	Key  string `toml:"key_file"`
+	RelayAddr     string `toml:"relay-addr"`
+	RelayHostname string `toml:"relay-hostname"`
 }
 
 type ClientConfig struct {
 	Token     string `toml:"token"`
-	TokenFile string `toml:"token_file"`
+	TokenFile string `toml:"token-file"`
 
-	ServerAddr string `toml:"server_addr"`
-	ServerCAs  string `toml:"server_cas"`
-	DirectAddr string `toml:"direct_addr"`
+	ServerAddr string `toml:"server-addr"`
+	ServerCAs  string `toml:"server-cas"`
+	DirectAddr string `toml:"direct-addr"`
 
 	Destinations map[string]ForwardConfig `toml:"destinations"`
 	Sources      map[string]ForwardConfig `toml:"sources"`
@@ -144,17 +138,12 @@ func serverCmd() *cobra.Command {
 	cmd.Flags().StringArrayVar(&flagsConfig.Server.Tokens, "tokens", nil, "tokens for clients to connect")
 	cmd.Flags().StringVar(&flagsConfig.Server.TokensFile, "tokens-file", "", "tokens file to load")
 
-	cmd.Flags().StringVar(&flagsConfig.Server.Hostname, "hostname", "", "hostname to connect to")
-	cmd.Flags().StringVar(&flagsConfig.Server.Cert, "cert-file", "", "server cert to use")
-	cmd.Flags().StringVar(&flagsConfig.Server.Key, "key-file", "", "server key to use")
+	cmd.Flags().StringVar(&flagsConfig.Server.Addr, "addr", "", "control server addr to use")
+	cmd.Flags().StringVar(&flagsConfig.Server.Cert, "cert-file", "", "control server cert to use")
+	cmd.Flags().StringVar(&flagsConfig.Server.Key, "key-file", "", "control server key to use")
 
-	cmd.Flags().StringVar(&flagsConfig.Server.Control.Addr, "control-addr", "", "control server addr to use")
-	cmd.Flags().StringVar(&flagsConfig.Server.Control.Cert, "control-cert-file", "", "control server cert to use")
-	cmd.Flags().StringVar(&flagsConfig.Server.Control.Key, "control-key-file", "", "control server key to use")
-
-	cmd.Flags().StringVar(&flagsConfig.Server.Relay.Addr, "relay-addr", "", "relay server addr to use")
-	cmd.Flags().StringVar(&flagsConfig.Server.Relay.Cert, "relay-cert-file", "", "relay server cert to use")
-	cmd.Flags().StringVar(&flagsConfig.Server.Relay.Key, "relay-key-file", "", "relay server key to use")
+	cmd.Flags().StringVar(&flagsConfig.Server.RelayAddr, "relay-addr", "", "relay server addr to use")
+	cmd.Flags().StringVar(&flagsConfig.Server.RelayHostname, "relay-hostname", "", "relay server public hostname to use")
 
 	cmd.RunE = func(cmd *cobra.Command, args []string) error {
 		cfg, err := loadConfig(*filename)
@@ -255,25 +244,18 @@ func server(ctx context.Context, cfg ServerConfig, logger *slog.Logger) error {
 		opts = append(opts, connet.ServerTokens(cfg.Tokens...))
 	}
 
-	if cfg.Hostname != "" {
-		opts = append(opts, connet.ServerHostname(cfg.Hostname))
+	if cfg.Addr != "" {
+		opts = append(opts, connet.ServerControlAddress(cfg.Addr))
 	}
 	if cfg.Cert != "" {
-		opts = append(opts, connet.ServerDefaultCertificate(cfg.Cert, cfg.Key))
+		opts = append(opts, connet.ServerControlCertificate(cfg.Cert, cfg.Key))
 	}
 
-	if cfg.Control.Addr != "" {
-		opts = append(opts, connet.ServerControlAddress(cfg.Control.Addr))
+	if cfg.RelayAddr != "" {
+		opts = append(opts, connet.ServerRelayAddress(cfg.RelayAddr))
 	}
-	if cfg.Control.Cert != "" {
-		opts = append(opts, connet.ServerControlCertificate(cfg.Control.Cert, cfg.Control.Key))
-	}
-
-	if cfg.Relay.Addr != "" {
-		opts = append(opts, connet.ServerRelayAddress(cfg.Relay.Addr))
-	}
-	if cfg.Relay.Cert != "" {
-		opts = append(opts, connet.ServerRelayCertificate(cfg.Relay.Cert, cfg.Relay.Key))
+	if cfg.RelayHostname != "" {
+		opts = append(opts, connet.ServerRelayHostname(cfg.RelayHostname))
 	}
 
 	opts = append(opts, connet.ServerLogger(logger))
@@ -369,17 +351,12 @@ func (c *ServerConfig) merge(o ServerConfig) {
 	c.Tokens = append(c.Tokens, o.Tokens...)
 	c.TokensFile = override(c.TokensFile, o.TokensFile)
 
-	c.Hostname = override(c.Hostname, o.Hostname)
+	c.Addr = override(c.Addr, o.Addr)
 	c.Cert = override(c.Cert, o.Cert)
 	c.Key = override(c.Key, o.Key)
 
-	c.Control.Addr = override(c.Control.Addr, o.Control.Addr)
-	c.Control.Cert = override(c.Control.Cert, o.Control.Cert)
-	c.Control.Key = override(c.Control.Key, o.Control.Key)
-
-	c.Relay.Addr = override(c.Relay.Addr, o.Relay.Addr)
-	c.Relay.Cert = override(c.Relay.Cert, o.Relay.Cert)
-	c.Relay.Key = override(c.Relay.Key, o.Relay.Key)
+	c.RelayAddr = override(c.RelayAddr, o.RelayAddr)
+	c.RelayHostname = override(c.RelayHostname, o.RelayHostname)
 }
 
 func (c *ClientConfig) merge(o ClientConfig) {

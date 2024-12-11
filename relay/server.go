@@ -23,7 +23,6 @@ import (
 
 type Config struct {
 	Addr   *net.UDPAddr
-	Cert   tls.Certificate
 	Auth   Authenticator
 	Logger *slog.Logger
 }
@@ -33,16 +32,14 @@ func NewServer(cfg Config) (*Server, error) {
 		addr: cfg.Addr,
 		auth: cfg.Auth,
 		tlsConf: &tls.Config{
-			Certificates: []tls.Certificate{cfg.Cert},
-			ClientAuth:   tls.RequireAndVerifyClientCert,
-			NextProtos:   []string{"connet-relay"},
+			ClientAuth: tls.RequireAndVerifyClientCert,
+			NextProtos: []string{"connet-relay"},
 		},
 		logger: cfg.Logger.With("relay", cfg.Addr),
 
 		destinations: map[model.Forward]map[certc.Key]*relayConn{},
 	}
 	s.tlsConf.GetConfigForClient = s.tlsConfigWithClientCA
-
 	return s, nil
 }
 

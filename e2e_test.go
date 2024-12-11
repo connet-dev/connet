@@ -32,7 +32,7 @@ func TestE2E(t *testing.T) {
 
 	srv, err := NewServer(
 		ServerTokens("test-token"),
-		serverDefaultCertificate(cert),
+		serverControlCertificate(cert),
 		ServerLogger(logger.With("test", "server")),
 	)
 	require.NoError(t, err)
