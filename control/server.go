@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/keihaya-com/connet/model"
+	"github.com/keihaya-com/connet/notify"
 	"github.com/klev-dev/kleverr"
 	"github.com/quic-go/quic-go"
 )
@@ -32,7 +33,7 @@ func NewServer(cfg Config) (*Server, error) {
 	}
 	s.relays = &relayServer{
 		auth:     cfg.RelayAuth,
-		requests: make(chan relayRequest),
+		relays:   notify.NewEmpty[[]relayRequest](),
 		forwards: map[model.Forward]*relayForward{},
 		logger:   cfg.Logger.With("server", "relays"),
 	}

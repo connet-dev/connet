@@ -241,27 +241,39 @@ func (s *clientStream) destinationRelay(ctx context.Context, req *pbs.Request_De
 		return err
 	}
 
-	defer s.conn.logger.Debug("completed destination relay notify")
-	return s.conn.server.relays.Destination(ctx, fwd, clientCert, func(relays map[model.HostPort]*x509.Certificate) error {
-		s.conn.logger.Debug("updated destination relay list", "relays", len(relays))
+	g, ctx := errgroup.WithContext(ctx)
 
-		var addrs []*pbs.Relay
-		for hp, cert := range relays {
-			addrs = append(addrs, &pbs.Relay{
-				Address:           hp.PB(),
-				ServerCertificate: cert.Raw,
-			})
-		}
-
-		if err := pb.Write(s.stream, &pbs.Response{
-			Relay: &pbs.Response_Relays{
-				Relays: addrs,
-			},
-		}); err != nil {
-			return kleverr.Ret(err)
-		}
-		return nil
+	g.Go(func() error {
+		connCtx := s.conn.conn.Context()
+		<-connCtx.Done()
+		return context.Cause(connCtx)
 	})
+
+	g.Go(func() error {
+		defer s.conn.logger.Debug("completed destination relay notify")
+		return s.conn.server.relays.Destination(ctx, fwd, clientCert, func(relays map[model.HostPort]*x509.Certificate) error {
+			s.conn.logger.Debug("updated destination relay list", "relays", len(relays))
+
+			var addrs []*pbs.Relay
+			for hp, cert := range relays {
+				addrs = append(addrs, &pbs.Relay{
+					Address:           hp.PB(),
+					ServerCertificate: cert.Raw,
+				})
+			}
+
+			if err := pb.Write(s.stream, &pbs.Response{
+				Relay: &pbs.Response_Relays{
+					Relays: addrs,
+				},
+			}); err != nil {
+				return kleverr.Ret(err)
+			}
+			return nil
+		})
+	})
+
+	return g.Wait()
 }
 
 func validateDestinationCert(from model.Forward, peer *pbs.ClientPeer) *pb.Error {
@@ -368,27 +380,39 @@ func (s *clientStream) sourceRelay(ctx context.Context, req *pbs.Request_SourceR
 		return err
 	}
 
-	defer s.conn.logger.Debug("completed source relay notify")
-	return s.conn.server.relays.Source(ctx, fwd, clientCert, func(relays map[model.HostPort]*x509.Certificate) error {
-		s.conn.logger.Debug("updated source relay list", "relays", len(relays))
+	g, ctx := errgroup.WithContext(ctx)
 
-		var addrs []*pbs.Relay
-		for hp, cert := range relays {
-			addrs = append(addrs, &pbs.Relay{
-				Address:           hp.PB(),
-				ServerCertificate: cert.Raw,
-			})
-		}
-
-		if err := pb.Write(s.stream, &pbs.Response{
-			Relay: &pbs.Response_Relays{
-				Relays: addrs,
-			},
-		}); err != nil {
-			return kleverr.Ret(err)
-		}
-		return nil
+	g.Go(func() error {
+		connCtx := s.conn.conn.Context()
+		<-connCtx.Done()
+		return context.Cause(connCtx)
 	})
+
+	g.Go(func() error {
+		defer s.conn.logger.Debug("completed source relay notify")
+		return s.conn.server.relays.Source(ctx, fwd, clientCert, func(relays map[model.HostPort]*x509.Certificate) error {
+			s.conn.logger.Debug("updated source relay list", "relays", len(relays))
+
+			var addrs []*pbs.Relay
+			for hp, cert := range relays {
+				addrs = append(addrs, &pbs.Relay{
+					Address:           hp.PB(),
+					ServerCertificate: cert.Raw,
+				})
+			}
+
+			if err := pb.Write(s.stream, &pbs.Response{
+				Relay: &pbs.Response_Relays{
+					Relays: addrs,
+				},
+			}); err != nil {
+				return kleverr.Ret(err)
+			}
+			return nil
+		})
+	})
+
+	return g.Wait()
 }
 
 func validateSourceCert(to model.Forward, peer *pbs.ClientPeer) *pb.Error {
