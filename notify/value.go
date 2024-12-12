@@ -104,6 +104,18 @@ func (v *V[T]) Peek() (T, error) {
 	return t, kleverr.New("empty")
 }
 
+func (v *V[T]) Sync(f func()) {
+	next, ok := <-v.barrier
+	if !ok {
+		return
+	}
+	defer func() {
+		v.barrier <- next
+	}()
+
+	f()
+}
+
 func (v *V[T]) Set(t T) {
 	v.Update(func(_ T) T {
 		return t

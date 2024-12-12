@@ -239,9 +239,9 @@ func server(ctx context.Context, cfg ServerConfig, logger *slog.Logger) error {
 		if err != nil {
 			return err
 		}
-		opts = append(opts, connet.ServerTokens(tokens...))
+		opts = append(opts, connet.ServerClientTokens(tokens...))
 	} else {
-		opts = append(opts, connet.ServerTokens(cfg.Tokens...))
+		opts = append(opts, connet.ServerClientTokens(cfg.Tokens...))
 	}
 
 	if cfg.Addr != "" {

@@ -31,7 +31,7 @@ func TestE2E(t *testing.T) {
 	logger := slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{Level: slog.LevelWarn}))
 
 	srv, err := NewServer(
-		ServerTokens("test-token"),
+		ServerClientTokens("test-token"),
 		serverControlCertificate(cert),
 		ServerLogger(logger.With("test", "server")),
 	)

@@ -50,11 +50,13 @@ func NewServer(opts ...ServerOption) (*Server, error) {
 		}
 	}
 
+	relayControlToken := model.GenServerName("relay")
+
 	control, err := control.NewServer(control.Config{
 		Addr:       cfg.controlAddr,
 		Cert:       cfg.controlCert,
-		ClientAuth: cfg.auth,
-		RelayAuth:  selfhosted.NewRelayAuthenticator("cccc"), // TODO generate this
+		ClientAuth: cfg.clientAuth,
+		RelayAuth:  selfhosted.NewRelayAuthenticator(relayControlToken),
 		Logger:     cfg.logger,
 	})
 
@@ -67,7 +69,7 @@ func NewServer(opts ...ServerOption) (*Server, error) {
 
 		ControlAddr:  cfg.controlAddr,
 		ControlHost:  "localhost",
-		ControlToken: "cccc", // TODO generate this and share with server
+		ControlToken: relayControlToken,
 		ControlCAs:   controlCAs,
 	})
 	if err != nil {
@@ -94,6 +96,8 @@ func (s *Server) Run(ctx context.Context) error {
 }
 
 type serverConfig struct {
+	clientAuth control.ClientAuthenticator
+
 	controlAddr *net.UDPAddr
 	controlCert tls.Certificate
 
@@ -101,14 +105,13 @@ type serverConfig struct {
 	relayHostname string
 
 	logger *slog.Logger
-	auth   control.ClientAuthenticator
 }
 
 type ServerOption func(*serverConfig) error
 
-func ServerTokens(tokens ...string) ServerOption {
+func ServerClientTokens(tokens ...string) ServerOption {
 	return func(cfg *serverConfig) error {
-		cfg.auth = selfhosted.NewClientAuthenticator(tokens...)
+		cfg.clientAuth = selfhosted.NewClientAuthenticator(tokens...)
 		return nil
 	}
 }
