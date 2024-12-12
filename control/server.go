@@ -8,42 +8,51 @@ import (
 	"net"
 	"time"
 
+	"github.com/keihaya-com/connet/model"
 	"github.com/klev-dev/kleverr"
 	"github.com/quic-go/quic-go"
 )
 
 type Config struct {
-	Addr   *net.UDPAddr
-	Cert   tls.Certificate
-	Auth   ClientAuthenticator
-	Relays Relays
-	Logger *slog.Logger
+	Addr       *net.UDPAddr
+	Cert       tls.Certificate
+	ClientAuth ClientAuthenticator
+	RelayAuth  RelayAuthenticator
+	Logger     *slog.Logger
 }
 
 func NewServer(cfg Config) (*Server, error) {
-	return &Server{
-		addr:       cfg.Addr,
-		clientAuth: cfg.Auth,
-		relays:     cfg.Relays,
+	s := &Server{
+		addr: cfg.Addr,
 		tlsConf: &tls.Config{
 			Certificates: []tls.Certificate{cfg.Cert},
 			NextProtos:   []string{"connet", "connet-relays"},
 		},
 		logger: cfg.Logger.With("control", cfg.Addr),
-
+	}
+	s.relays = &relayServer{
+		auth:     cfg.RelayAuth,
+		requests: make(chan relayRequest),
+		forwards: map[model.Forward]*relayForward{},
+		logger:   cfg.Logger.With("server", "relays"),
+	}
+	s.clients = &clientServer{
+		auth:      cfg.ClientAuth,
+		relays:    s.relays,
+		encode:    cfg.Cert.Leaf.Raw,
 		whisperer: newWhisperer(),
-	}, nil
+		logger:    cfg.Logger.With("server", "clients"),
+	}
+	return s, nil
 }
 
 type Server struct {
-	addr       *net.UDPAddr
-	clientAuth ClientAuthenticator
-	relayAuth  RelayAuthenticator
-	relays     Relays
-	tlsConf    *tls.Config
-	logger     *slog.Logger
+	addr    *net.UDPAddr
+	tlsConf *tls.Config
+	logger  *slog.Logger
 
-	whisperer *whisperer
+	clients *clientServer
+	relays  *relayServer
 }
 
 func (s *Server) Run(ctx context.Context) error {
@@ -83,19 +92,13 @@ func (s *Server) Run(ctx context.Context) error {
 
 		switch conn.ConnectionState().TLS.NegotiatedProtocol {
 		case "connet":
-			cc := &clientConn{
-				server: s,
-				conn:   conn,
-				logger: s.logger,
+			if err := s.clients.handle(ctx, conn); err != nil {
+				return err
 			}
-			go cc.run(ctx)
 		case "connet-relays":
-			rc := &relayConn{
-				server: s,
-				conn:   conn,
-				logger: s.logger,
+			if err := s.relays.handle(ctx, conn); err != nil {
+				return err
 			}
-			go rc.run(ctx)
 		default:
 			conn.CloseWithError(1, "unknown protocol")
 		}

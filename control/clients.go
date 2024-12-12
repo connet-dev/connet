@@ -28,8 +28,33 @@ type ClientAuthentication interface {
 	ValidateSource(src model.Forward) (model.Forward, error)
 }
 
+type ClientRelays interface {
+	Destination(ctx context.Context, fwd model.Forward, cert *x509.Certificate,
+		notify func(map[model.HostPort]*x509.Certificate) error) error
+	Source(ctx context.Context, fwd model.Forward, cert *x509.Certificate,
+		notify func(map[model.HostPort]*x509.Certificate) error) error
+}
+
+type clientServer struct {
+	auth      ClientAuthenticator
+	relays    ClientRelays
+	encode    []byte
+	whisperer *whisperer
+	logger    *slog.Logger
+}
+
+func (s *clientServer) handle(ctx context.Context, conn quic.Connection) error {
+	cc := &clientConn{
+		server: s,
+		conn:   conn,
+		logger: s.logger,
+	}
+	go cc.run(ctx)
+	return nil
+}
+
 type clientConn struct {
-	server *Server
+	server *clientServer
 	conn   quic.Connection
 	logger *slog.Logger
 
@@ -131,7 +156,7 @@ func (c *clientConn) authenticate(ctx context.Context) (ClientAuthentication, ks
 
 func (c *clientConn) secretKey(token string) [32]byte {
 	// TODO reevaluate this
-	data := append([]byte(token), c.server.tlsConf.Certificates[0].Leaf.Raw...)
+	data := append([]byte(token), c.server.encode...)
 	return blake2s.Sum256(data)
 }
 

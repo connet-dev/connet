@@ -96,6 +96,14 @@ func (v *V[T]) GetAny(ctx context.Context) (T, uint64, error) {
 	}
 }
 
+func (v *V[T]) Peek() (T, error) {
+	if current := v.value.Load(); current != nil {
+		return current.value, nil
+	}
+	var t T
+	return t, kleverr.New("empty")
+}
+
 func (v *V[T]) Set(t T) {
 	v.Update(func(_ T) T {
 		return t

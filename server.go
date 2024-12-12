@@ -3,6 +3,7 @@ package connet
 import (
 	"context"
 	"crypto/tls"
+	"crypto/x509"
 	"log/slog"
 	"net"
 
@@ -49,24 +50,25 @@ func NewServer(opts ...ServerOption) (*Server, error) {
 		}
 	}
 
-	relayPublicAddr := model.HostPort{Host: cfg.relayHostname, Port: cfg.relayAddr.AddrPort().Port()}
-	localRelay, err := selfhosted.NewLocalRelay(relayPublicAddr)
-	if err != nil {
-		return nil, err
-	}
-
 	control, err := control.NewServer(control.Config{
-		Addr:   cfg.controlAddr,
-		Cert:   cfg.controlCert,
-		Auth:   cfg.auth,
-		Relays: localRelay,
-		Logger: cfg.logger,
+		Addr:       cfg.controlAddr,
+		Cert:       cfg.controlCert,
+		ClientAuth: cfg.auth,
+		RelayAuth:  selfhosted.NewRelayAuthenticator("cccc"), // TODO generate this
+		Logger:     cfg.logger,
 	})
 
+	controlCAs := x509.NewCertPool()
+	controlCAs.AddCert(cfg.controlCert.Leaf)
 	relay, err := relay.NewServer(relay.Config{
-		Addr:   cfg.relayAddr,
-		Auth:   localRelay,
-		Logger: cfg.logger,
+		Addr:     cfg.relayAddr,
+		Hostport: model.HostPort{Host: cfg.relayHostname, Port: cfg.relayAddr.AddrPort().Port()},
+		Logger:   cfg.logger,
+
+		ControlAddr:  cfg.controlAddr,
+		ControlHost:  "localhost",
+		ControlToken: "cccc", // TODO generate this and share with server
+		ControlCAs:   controlCAs,
 	})
 	if err != nil {
 		return nil, err
@@ -106,7 +108,7 @@ type ServerOption func(*serverConfig) error
 
 func ServerTokens(tokens ...string) ServerOption {
 	return func(cfg *serverConfig) error {
-		cfg.auth = selfhosted.NewStaticAuthenticator(tokens...)
+		cfg.auth = selfhosted.NewClientAuthenticator(tokens...)
 		return nil
 	}
 }

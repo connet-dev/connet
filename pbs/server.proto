@@ -82,3 +82,39 @@ message DirectRoute {
   bytes server_certificate = 2;
   bytes client_certificate = 3;
 }
+
+message RelayAuth {
+  string token = 1;
+  shared.HostPort addr = 2;
+}
+
+message RelayAuthResp {
+  shared.Error error = 1;
+}
+
+message RelayClients {
+  repeated Change changes = 1;
+
+  message Change {
+    shared.Forward destination = 1;
+    shared.Forward source = 2;
+    bytes client_certificate = 3;
+    RelayChange change = 4;
+  }
+}
+
+enum RelayChange {
+  ChangeUnknown = 0;
+  ChangePut = 1;
+  ChangeDel = 2;
+}
+
+message RelayServers {
+  repeated Change changes = 1;
+
+  message Change {
+    shared.Forward server = 1;
+    bytes server_certificate = 2;
+    RelayChange change = 3;
+  }
+}
