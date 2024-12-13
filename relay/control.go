@@ -36,6 +36,14 @@ type controlClient struct {
 	logger *slog.Logger
 }
 
+func (s *controlClient) getByName(serverName string) *relayServer {
+	var srv *relayServer
+	s.serversByForward.Sync(func() {
+		srv = s.serversByName[serverName]
+	})
+	return srv
+}
+
 func (s *controlClient) clientTLSConfig(chi *tls.ClientHelloInfo, base *tls.Config) (*tls.Config, error) {
 	srv := s.getByName(chi.ServerName)
 	if srv != nil {
@@ -65,66 +73,6 @@ func (s *controlClient) authenticate(serverName string, certs []*x509.Certificat
 	}
 
 	return nil
-}
-
-func (s *controlClient) createServer(fwd model.Forward) (*relayServer, error) {
-	if srvs, err := s.serversByForward.Peek(); err != nil {
-		// nothing in here, add it
-	} else if srv, ok := srvs[fwd]; !ok {
-		// not in here, add it
-	} else {
-		return srv, nil
-	}
-
-	serverRoot, err := s.serversRoot.NewServer(certc.CertOpts{
-		Domains: []string{model.GenServerName("connet-relay")},
-	})
-	if err != nil {
-		return nil, err
-	}
-
-	serverCert, err := serverRoot.TLSCert()
-	if err != nil {
-		return nil, err
-	}
-
-	srv := &relayServer{
-		fwd:  fwd,
-		cert: serverCert.Leaf,
-
-		desinations: map[certc.Key]*x509.Certificate{},
-		sources:     map[certc.Key]*x509.Certificate{},
-
-		tls: []tls.Certificate{serverCert},
-	}
-
-	s.serversByForward.UpdateOpt(func(m map[model.Forward]*relayServer) (map[model.Forward]*relayServer, bool) {
-		if m == nil {
-			m = map[model.Forward]*relayServer{}
-		} else {
-			m = maps.Clone(m)
-		}
-
-		if added := m[fwd]; added != nil {
-			srv = added
-			return m, false
-		}
-
-		m[fwd] = srv
-		s.serversByName[serverCert.Leaf.DNSNames[0]] = srv
-
-		return m, true
-	})
-
-	return srv, nil
-}
-
-func (s *controlClient) getByName(serverName string) *relayServer {
-	var srv *relayServer
-	s.serversByForward.Sync(func() {
-		srv = s.serversByName[serverName]
-	})
-	return srv
 }
 
 func (s *controlClient) run(ctx context.Context, transport *quic.Transport) error {
@@ -236,25 +184,17 @@ func (s *controlClient) runForwards(ctx context.Context, conn quic.Connection) e
 			switch {
 			case change.Destination != nil:
 				fwd := model.NewForwardFromPB(change.Destination)
-				srv, err := s.createServer(fwd)
-				if err != nil {
-					return err
-				}
 				if change.Change == pbs.RelayChange_ChangeDel {
-					srv.removeDestination(cert)
-				} else {
-					srv.addDestination(cert)
+					s.removeDestination(fwd, cert)
+				} else if err := s.addDestination(fwd, cert); err != nil {
+					return err
 				}
 			case change.Source != nil:
 				fwd := model.NewForwardFromPB(change.Source)
-				srv, err := s.createServer(fwd)
-				if err != nil {
-					return err
-				}
 				if change.Change == pbs.RelayChange_ChangeDel {
-					srv.removeSource(cert)
-				} else {
-					srv.addSource(cert)
+					s.removeSource(fwd, cert)
+				} else if err := s.addSource(fwd, cert); err != nil {
+					return err
 				}
 			}
 		}
@@ -297,6 +237,126 @@ func (s *controlClient) runCerts(ctx context.Context, conn quic.Connection) erro
 	})
 }
 
+func (s *controlClient) createServer(fwd model.Forward) (*relayServer, error) {
+	if srv := s.getServer(fwd); srv != nil {
+		return srv, nil
+	}
+
+	serverRoot, err := s.serversRoot.NewServer(certc.CertOpts{
+		Domains: []string{model.GenServerName("connet-relay")},
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	serverCert, err := serverRoot.TLSCert()
+	if err != nil {
+		return nil, err
+	}
+
+	srv := &relayServer{
+		fwd:  fwd,
+		cert: serverCert.Leaf,
+
+		desinations: map[certc.Key]*x509.Certificate{},
+		sources:     map[certc.Key]*x509.Certificate{},
+
+		tls: []tls.Certificate{serverCert},
+	}
+
+	s.serversByForward.UpdateOpt(func(m map[model.Forward]*relayServer) (map[model.Forward]*relayServer, bool) {
+		if m == nil {
+			m = map[model.Forward]*relayServer{}
+		} else {
+			m = maps.Clone(m)
+		}
+
+		if added := m[fwd]; added != nil {
+			srv = added
+			return m, false
+		}
+
+		m[fwd] = srv
+		s.serversByName[serverCert.Leaf.DNSNames[0]] = srv
+
+		return m, true
+	})
+
+	return srv, nil
+}
+
+func (s *controlClient) addDestination(fwd model.Forward, cert *x509.Certificate) error {
+	for {
+		srv, err := s.createServer(fwd)
+		if err != nil {
+			return err
+		}
+		if srv.addDestination(cert) {
+			return nil
+		}
+	}
+}
+
+func (s *controlClient) addSource(fwd model.Forward, cert *x509.Certificate) error {
+	for {
+		srv, err := s.createServer(fwd)
+		if err != nil {
+			return err
+		}
+		if srv.addSource(cert) {
+			return nil
+		}
+	}
+}
+
+func (s *controlClient) getServer(fwd model.Forward) *relayServer {
+	if srvs, err := s.serversByForward.Peek(); err != nil {
+		return nil
+	} else if srv, ok := srvs[fwd]; !ok {
+		return nil
+	} else {
+		return srv
+	}
+}
+
+func (s *controlClient) removeServer(srv *relayServer) {
+	s.serversByForward.UpdateOpt(func(m map[model.Forward]*relayServer) (map[model.Forward]*relayServer, bool) {
+		srv.mu.Lock()
+		defer srv.mu.Unlock()
+
+		if !srv.empty() {
+			return m, false
+		}
+
+		srv.desinations = nil
+		srv.sources = nil
+
+		m = maps.Clone(m)
+		delete(m, srv.fwd)
+		return m, true
+	})
+}
+
+func (s *controlClient) removeDestination(fwd model.Forward, cert *x509.Certificate) {
+	srv := s.getServer(fwd)
+	if srv == nil {
+		return
+	}
+	if srv.removeDestination(cert) {
+		s.removeServer(srv)
+	}
+}
+
+func (s *controlClient) removeSource(fwd model.Forward, cert *x509.Certificate) {
+	srv := s.getServer(fwd)
+	if srv == nil {
+		return
+	}
+	if srv.removeSource(cert) {
+		s.removeServer(srv)
+	}
+}
+
 type relayServer struct {
 	fwd  model.Forward
 	cert *x509.Certificate
@@ -323,38 +383,56 @@ func (s *relayServer) refreshCA() {
 	s.cas.Store(cas)
 }
 
-func (s *relayServer) addDestination(cert *x509.Certificate) {
+func (s *relayServer) addDestination(cert *x509.Certificate) bool {
 	defer s.refreshCA()
 
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
+	if s.desinations == nil {
+		return false
+	}
+
 	s.desinations[certc.NewKey(cert)] = cert
+	return true
 }
 
-func (s *relayServer) removeDestination(cert *x509.Certificate) {
+func (s *relayServer) removeDestination(cert *x509.Certificate) bool {
 	defer s.refreshCA()
 
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
 	delete(s.desinations, certc.NewKey(cert))
+
+	return s.empty()
 }
 
-func (s *relayServer) addSource(cert *x509.Certificate) {
+func (s *relayServer) addSource(cert *x509.Certificate) bool {
 	defer s.refreshCA()
 
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
+	if s.sources == nil {
+		return false
+	}
+
 	s.sources[certc.NewKey(cert)] = cert
+	return true
 }
 
-func (s *relayServer) removeSource(cert *x509.Certificate) {
+func (s *relayServer) removeSource(cert *x509.Certificate) bool {
 	defer s.refreshCA()
 
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
 	delete(s.sources, certc.NewKey(cert))
+
+	return s.empty()
+}
+
+func (s *relayServer) empty() bool {
+	return (len(s.desinations) + len(s.sources)) == 0
 }
