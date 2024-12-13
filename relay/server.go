@@ -59,7 +59,7 @@ func NewServer(cfg Config) (*Server, error) {
 				NextProtos: []string{"connet-relay"},
 			},
 
-			destinations: map[model.Forward]map[certc.Key]*clientConn{},
+			forwards: map[model.Forward]*forwardClients{},
 
 			logger: cfg.Logger.With("relay-clients", cfg.Hostport),
 		},

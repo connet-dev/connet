@@ -199,20 +199,6 @@ func (c *Client) connect(ctx context.Context, transport *quic.Transport, retoken
 	return conn, resp.ReconnectToken, nil
 }
 
-func (c *Client) runConnection(ctx context.Context, conn quic.Connection) error {
-	g, ctx := errgroup.WithContext(ctx)
-
-	for _, dstServer := range c.dsts {
-		g.Go(func() error { return dstServer.RunControl(ctx, conn) })
-	}
-
-	for _, srcServer := range c.srcs {
-		g.Go(func() error { return srcServer.RunControl(ctx, conn) })
-	}
-
-	return g.Wait()
-}
-
 func (c *Client) reconnect(ctx context.Context, transport *quic.Transport, retoken []byte) (quic.Connection, []byte, error) {
 	d := netc.MinBackoff
 	t := time.NewTimer(d)
@@ -234,6 +220,20 @@ func (c *Client) reconnect(ctx context.Context, transport *quic.Transport, retok
 		d = netc.NextBackoff(d)
 		t.Reset(d)
 	}
+}
+
+func (c *Client) runConnection(ctx context.Context, conn quic.Connection) error {
+	g, ctx := errgroup.WithContext(ctx)
+
+	for _, dstServer := range c.dsts {
+		g.Go(func() error { return dstServer.RunControl(ctx, conn) })
+	}
+
+	for _, srcServer := range c.srcs {
+		g.Go(func() error { return srcServer.RunControl(ctx, conn) })
+	}
+
+	return g.Wait()
 }
 
 type clientConfig struct {

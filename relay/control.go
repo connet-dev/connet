@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/tls"
 	"crypto/x509"
+	"errors"
 	"log/slog"
 	"maps"
 	"net"
@@ -13,6 +14,7 @@ import (
 
 	"github.com/keihaya-com/connet/certc"
 	"github.com/keihaya-com/connet/model"
+	"github.com/keihaya-com/connet/netc"
 	"github.com/keihaya-com/connet/notify"
 	"github.com/keihaya-com/connet/pb"
 	"github.com/keihaya-com/connet/pbs"
@@ -96,18 +98,24 @@ func (s *controlClient) createServer(fwd model.Forward) (*relayServer, error) {
 		tls: []tls.Certificate{serverCert},
 	}
 
-	s.serversByForward.Update(func(m map[model.Forward]*relayServer) map[model.Forward]*relayServer {
+	s.serversByForward.UpdateOpt(func(m map[model.Forward]*relayServer) (map[model.Forward]*relayServer, bool) {
 		if m == nil {
 			m = map[model.Forward]*relayServer{}
 		} else {
 			m = maps.Clone(m)
 		}
-		m[fwd] = srv
 
+		if added := m[fwd]; added != nil {
+			srv = added
+			return m, false
+		}
+
+		m[fwd] = srv
 		s.serversByName[serverCert.Leaf.DNSNames[0]] = srv
 
-		return m
+		return m, true
 	})
+
 	return srv, nil
 }
 
@@ -119,19 +127,39 @@ func (s *controlClient) getByName(serverName string) *relayServer {
 	return srv
 }
 
-func (s *controlClient) run(ctx context.Context, tr *quic.Transport) error {
-	// TODO reconnect loop
-	conn, err := tr.Dial(ctx, s.controlAddr, s.controlTlsConf, &quic.Config{
-		KeepAlivePeriod: 25 * time.Second,
-	})
+func (s *controlClient) run(ctx context.Context, transport *quic.Transport) error {
+	conn, err := s.connect(ctx, transport)
 	if err != nil {
 		return err
 	}
-	defer conn.CloseWithError(0, "done")
+
+	for {
+		if err := s.runConnection(ctx, conn); err != nil {
+			s.logger.Error("session ended", "err", err)
+			switch {
+			case errors.Is(err, context.Canceled):
+				return err
+				// TODO other terminal errors
+			}
+		}
+
+		if conn, err = s.reconnect(ctx, transport); err != nil {
+			return err
+		}
+	}
+}
+
+func (s *controlClient) connect(ctx context.Context, transport *quic.Transport) (quic.Connection, error) {
+	conn, err := transport.Dial(ctx, s.controlAddr, s.controlTlsConf, &quic.Config{
+		KeepAlivePeriod: 25 * time.Second,
+	})
+	if err != nil {
+		return nil, err
+	}
 
 	authStream, err := conn.OpenStreamSync(ctx)
 	if err != nil {
-		return err
+		return nil, err
 	}
 	defer authStream.Close()
 
@@ -139,16 +167,45 @@ func (s *controlClient) run(ctx context.Context, tr *quic.Transport) error {
 		Token: s.controlToken,
 		Addr:  s.hostport.PB(),
 	}); err != nil {
-		return err
+		return nil, err
 	}
 
 	resp := &pbs.RelayAuthResp{}
 	if err := pb.Read(authStream, resp); err != nil {
-		return err
+		return nil, err
 	}
 	if resp.Error != nil {
-		return err
+		return nil, err
 	}
+
+	return conn, nil
+}
+
+func (c *controlClient) reconnect(ctx context.Context, transport *quic.Transport) (quic.Connection, error) {
+	d := netc.MinBackoff
+	t := time.NewTimer(d)
+	defer t.Stop()
+	for {
+		c.logger.Debug("backoff wait", "d", d)
+		select {
+		case <-ctx.Done():
+			return nil, ctx.Err()
+		case <-t.C:
+		}
+
+		if sess, err := c.connect(ctx, transport); err != nil {
+			c.logger.Debug("reconnect failed, retrying", "err", err)
+		} else {
+			return sess, nil
+		}
+
+		d = netc.NextBackoff(d)
+		t.Reset(d)
+	}
+}
+
+func (s *controlClient) runConnection(ctx context.Context, conn quic.Connection) error {
+	defer conn.CloseWithError(0, "done")
 
 	g, ctx := errgroup.WithContext(ctx)
 

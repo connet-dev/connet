@@ -31,44 +31,125 @@ type clientsServer struct {
 	tlsConf *tls.Config
 	auth    func(serverName string, certs []*x509.Certificate) *clientAuth
 
-	destinations   map[model.Forward]map[certc.Key]*clientConn
-	destinationsMu sync.RWMutex
+	forwards  map[model.Forward]*forwardClients
+	forwardMu sync.RWMutex
 
 	logger *slog.Logger
 }
 
-func (s *clientsServer) addDestinations(conn *clientConn) {
-	s.destinationsMu.Lock()
-	defer s.destinationsMu.Unlock()
-
-	fwdDest := s.destinations[conn.fwd]
-	if fwdDest == nil {
-		fwdDest = map[certc.Key]*clientConn{}
-		s.destinations[conn.fwd] = fwdDest
-	}
-	fwdDest[conn.key] = conn
+type forwardClients struct {
+	fwd          model.Forward
+	destinations map[certc.Key]*clientConn
+	sources      map[certc.Key]*clientConn
+	mu           sync.RWMutex
 }
 
-func (s *clientsServer) removeDestinations(conn *clientConn) {
-	s.destinationsMu.Lock()
-	defer s.destinationsMu.Unlock()
+func (d *forwardClients) get() []*clientConn {
+	d.mu.RLock()
+	defer d.mu.RUnlock()
 
-	fwdDest := s.destinations[conn.fwd]
-	delete(fwdDest, conn.key)
-	if len(fwdDest) == 0 {
-		delete(s.destinations, conn.fwd)
+	return slices.Collect(maps.Values(d.destinations))
+}
+
+func (d *forwardClients) removeDestination(conn *clientConn) bool {
+	d.mu.Lock()
+	defer d.mu.Unlock()
+
+	delete(d.destinations, conn.key)
+
+	return d.empty()
+}
+
+func (d *forwardClients) removeSource(conn *clientConn) bool {
+	d.mu.Lock()
+	defer d.mu.Unlock()
+
+	delete(d.sources, conn.key)
+
+	return d.empty()
+}
+
+func (d *forwardClients) empty() bool {
+	return (len(d.destinations) + len(d.sources)) == 0
+}
+
+func (s *clientsServer) getByForward(fwd model.Forward) *forwardClients {
+	s.forwardMu.RLock()
+	dst := s.forwards[fwd]
+	s.forwardMu.RUnlock()
+	if dst != nil {
+		return dst
+	}
+
+	s.forwardMu.Lock()
+	defer s.forwardMu.Unlock()
+
+	dst = s.forwards[fwd]
+	if dst != nil {
+		return dst
+	}
+
+	dst = &forwardClients{
+		fwd:          fwd,
+		destinations: map[certc.Key]*clientConn{},
+		sources:      map[certc.Key]*clientConn{},
+	}
+	s.forwards[fwd] = dst
+	return dst
+}
+
+func (s *clientsServer) addDestination(conn *clientConn) *forwardClients {
+	dst := s.getByForward(conn.fwd)
+
+	dst.mu.Lock()
+	defer dst.mu.Unlock()
+
+	dst.destinations[conn.key] = conn
+
+	return dst
+}
+
+func (s *clientsServer) removeDestination(fcs *forwardClients, conn *clientConn) {
+	if !fcs.removeDestination(conn) {
+		return
+	}
+
+	s.forwardMu.Lock()
+	defer s.forwardMu.Unlock()
+
+	fcs.mu.Lock()
+	defer fcs.mu.Unlock()
+
+	if fcs.empty() {
+		delete(s.forwards, fcs.fwd)
 	}
 }
 
-func (s *clientsServer) findDestinations(fwd model.Forward) []*clientConn {
-	s.destinationsMu.RLock()
-	defer s.destinationsMu.RUnlock()
+func (s *clientsServer) addSource(conn *clientConn) *forwardClients {
+	target := s.getByForward(conn.fwd)
 
-	fwdDest := s.destinations[fwd]
-	if fwdDest == nil {
-		return nil
+	target.mu.Lock()
+	defer target.mu.Unlock()
+
+	target.sources[conn.key] = conn
+
+	return target
+}
+
+func (s *clientsServer) removeSource(fcs *forwardClients, conn *clientConn) {
+	if !fcs.removeSource(conn) {
+		return
 	}
-	return slices.Collect(maps.Values(fwdDest))
+
+	s.forwardMu.Lock()
+	defer s.forwardMu.Unlock()
+
+	fcs.mu.Lock()
+	defer fcs.mu.Unlock()
+
+	if fcs.empty() {
+		delete(s.forwards, fcs.fwd)
+	}
 }
 
 func (s *clientsServer) run(ctx context.Context, tr *quic.Transport) error {
@@ -131,8 +212,8 @@ func (c *clientConn) runErr(ctx context.Context) error {
 		c.fwd = auth.fwd
 		c.key = certc.NewKey(certs[0])
 
-		c.server.addDestinations(c)
-		defer c.server.removeDestinations(c)
+		fcs := c.server.addDestination(c)
+		defer c.server.removeDestination(fcs, c)
 
 		for {
 			stream, err := c.conn.AcceptStream(ctx)
@@ -145,12 +226,15 @@ func (c *clientConn) runErr(ctx context.Context) error {
 		c.fwd = auth.fwd
 		c.key = certc.NewKey(certs[0])
 
+		fcs := c.server.addSource(c)
+		defer c.server.removeSource(fcs, c)
+
 		for {
 			stream, err := c.conn.AcceptStream(ctx)
 			if err != nil {
 				return err
 			}
-			go c.runSourceStream(ctx, stream)
+			go c.runSourceStream(ctx, stream, fcs)
 		}
 	default:
 		return kleverr.Newf("not a destination or a source")
@@ -173,7 +257,7 @@ func (c *clientConn) runDestinationStream(ctx context.Context, stream quic.Strea
 	}
 }
 
-func (c *clientConn) runSourceStream(ctx context.Context, stream quic.Stream) error {
+func (c *clientConn) runSourceStream(ctx context.Context, stream quic.Stream, fcs *forwardClients) error {
 	defer stream.Close()
 
 	req, err := pbc.ReadRequest(stream)
@@ -183,7 +267,7 @@ func (c *clientConn) runSourceStream(ctx context.Context, stream quic.Stream) er
 
 	switch {
 	case req.Connect != nil:
-		return c.connect(ctx, stream)
+		return c.connect(ctx, stream, fcs)
 	case req.Heartbeat != nil:
 		return c.heartbeat(ctx, stream, req.Heartbeat)
 	default:
@@ -191,9 +275,8 @@ func (c *clientConn) runSourceStream(ctx context.Context, stream quic.Stream) er
 	}
 }
 
-func (c *clientConn) connect(ctx context.Context, stream quic.Stream) error {
-	// TODO get destination only once
-	dests := c.server.findDestinations(c.fwd)
+func (c *clientConn) connect(ctx context.Context, stream quic.Stream, fcs *forwardClients) error {
+	dests := fcs.get()
 	for _, dest := range dests {
 		if err := c.connectDestination(ctx, stream, dest); err != nil {
 			c.logger.Debug("could not dial destination", "err", err)

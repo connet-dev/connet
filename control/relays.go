@@ -127,7 +127,7 @@ func (c *relayConn) runErr(ctx context.Context) error {
 	} else {
 		c.auth = auth
 		c.hostport = hp
-		c.logger = c.logger.With("relay", "???")
+		c.logger = c.logger.With("relay", hp)
 	}
 
 	g, ctx := errgroup.WithContext(ctx)

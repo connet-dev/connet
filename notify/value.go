@@ -117,29 +117,46 @@ func (v *V[T]) Sync(f func()) {
 }
 
 func (v *V[T]) Set(t T) {
-	v.Update(func(_ T) T {
-		return t
+	v.UpdateOpt(func(_ T) (T, bool) {
+		return t, true
 	})
 }
 
 func (v *V[T]) Update(f func(t T) T) {
+	v.UpdateOpt(func(t T) (T, bool) {
+		return f(t), true
+	})
+}
+
+func (v *V[T]) UpdateOpt(f func(t T) (T, bool)) bool {
 	next, ok := <-v.barrier
 	if !ok {
-		return
+		return false
 	}
 
 	if current := v.value.Load(); current != nil {
-		next.value = f(current.value)
-		next.version = current.version + 1
+		if value, updated := f(current.value); updated {
+			next.value = value
+			next.version = current.version + 1
+		} else {
+			return false
+		}
 	} else {
 		var t T
-		next.value = f(t)
+		if value, updated := f(t); updated {
+			next.value = value
+			next.version = 0
+		} else {
+			return false
+		}
 	}
 	v.value.Store(&value[T]{next.value, next.version})
 
 	close(next.waiter)
 
 	v.barrier <- &version[T]{waiter: make(chan struct{})}
+
+	return true
 }
 
 func (v *V[T]) Listen(ctx context.Context, f func(t T) error) error {
@@ -183,9 +200,9 @@ type C[T any] struct {
 }
 
 func (c *C[T]) Update(f func(t T)) {
-	c.V.Update(func(t T) T {
+	c.V.UpdateOpt(func(t T) (T, bool) {
 		t = c.copier(t)
 		f(t)
-		return t
+		return t, true
 	})
 }
