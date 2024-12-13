@@ -93,16 +93,16 @@ func (s *Server) Run(ctx context.Context) error {
 	defer conn.Close()
 
 	s.logger.Debug("start quic listener")
-	tr := &quic.Transport{
+	transport := &quic.Transport{
 		Conn: conn,
 		// TODO review other options
 	}
-	defer tr.Close()
+	defer transport.Close()
 
 	g, ctx := errgroup.WithContext(ctx)
 
-	g.Go(func() error { return s.control.run(ctx, tr) })
-	g.Go(func() error { return s.clients.run(ctx, tr) })
+	g.Go(func() error { return s.control.run(ctx, transport) })
+	g.Go(func() error { return s.clients.run(ctx, transport) })
 
 	return g.Wait()
 }

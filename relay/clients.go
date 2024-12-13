@@ -98,6 +98,18 @@ func (s *clientsServer) getByForward(fwd model.Forward) *forwardClients {
 	return dst
 }
 
+func (s *clientsServer) removeByClients(fcs *forwardClients) {
+	s.forwardMu.Lock()
+	defer s.forwardMu.Unlock()
+
+	fcs.mu.Lock()
+	defer fcs.mu.Unlock()
+
+	if fcs.empty() {
+		delete(s.forwards, fcs.fwd)
+	}
+}
+
 func (s *clientsServer) addDestination(conn *clientConn) *forwardClients {
 	dst := s.getByForward(conn.fwd)
 
@@ -110,18 +122,8 @@ func (s *clientsServer) addDestination(conn *clientConn) *forwardClients {
 }
 
 func (s *clientsServer) removeDestination(fcs *forwardClients, conn *clientConn) {
-	if !fcs.removeDestination(conn) {
-		return
-	}
-
-	s.forwardMu.Lock()
-	defer s.forwardMu.Unlock()
-
-	fcs.mu.Lock()
-	defer fcs.mu.Unlock()
-
-	if fcs.empty() {
-		delete(s.forwards, fcs.fwd)
+	if fcs.removeDestination(conn) {
+		s.removeByClients(fcs)
 	}
 }
 
@@ -137,23 +139,13 @@ func (s *clientsServer) addSource(conn *clientConn) *forwardClients {
 }
 
 func (s *clientsServer) removeSource(fcs *forwardClients, conn *clientConn) {
-	if !fcs.removeSource(conn) {
-		return
-	}
-
-	s.forwardMu.Lock()
-	defer s.forwardMu.Unlock()
-
-	fcs.mu.Lock()
-	defer fcs.mu.Unlock()
-
-	if fcs.empty() {
-		delete(s.forwards, fcs.fwd)
+	if fcs.removeSource(conn) {
+		s.removeByClients(fcs)
 	}
 }
 
-func (s *clientsServer) run(ctx context.Context, tr *quic.Transport) error {
-	l, err := tr.Listen(s.tlsConf, &quic.Config{
+func (s *clientsServer) run(ctx context.Context, transport *quic.Transport) error {
+	l, err := transport.Listen(s.tlsConf, &quic.Config{
 		KeepAlivePeriod: 25 * time.Second,
 	})
 	if err != nil {
