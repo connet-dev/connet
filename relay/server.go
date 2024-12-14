@@ -37,6 +37,7 @@ func NewServer(cfg Config) (*Server, error) {
 
 		control: &controlClient{
 			hostport: cfg.Hostport,
+			root:     root,
 
 			controlAddr:  cfg.ControlAddr,
 			controlToken: cfg.ControlToken,
@@ -46,9 +47,10 @@ func NewServer(cfg Config) (*Server, error) {
 				NextProtos: []string{"connet-relays"},
 			},
 
-			serversRoot:      root,
-			serversByForward: notify.NewEmpty[map[model.Forward]*relayServer](),
+			serversOffset:    notify.MessageOldest,
+			serversByForward: map[model.Forward]*relayServer{},
 			serversByName:    map[string]*relayServer{},
+			serversLog:       notify.NewMemoryLog[model.Forward, *x509.Certificate](),
 
 			logger: cfg.Logger.With("relay-control", cfg.Hostport),
 		},

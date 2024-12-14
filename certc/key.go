@@ -25,3 +25,7 @@ func newKey(sk [sha256.Size]byte) Key {
 func (k Key) String() string {
 	return k.string
 }
+
+func (k Key) IsValid() bool {
+	return k.string != ""
+}

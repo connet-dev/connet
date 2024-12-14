@@ -92,8 +92,20 @@ message RelayAuthResp {
   shared.Error error = 1;
 }
 
+enum RelayChange {
+  ChangeUnknown = 0;
+  ChangePut = 1;
+  ChangeDel = 2;
+}
+
+message RelayClientsReq {
+  int64 offset = 1;
+}
+
 message RelayClients {
   repeated Change changes = 1;
+  int64 offset = 2;
+  bool restat = 3;
 
   message Change {
     shared.Forward destination = 1;
@@ -103,14 +115,14 @@ message RelayClients {
   }
 }
 
-enum RelayChange {
-  ChangeUnknown = 0;
-  ChangePut = 1;
-  ChangeDel = 2;
+message RelayServersReq {
+  int64 offset = 1;
 }
 
 message RelayServers {
   repeated Change changes = 1;
+  int64 offset = 2;
+  bool restat = 3;
 
   message Change {
     shared.Forward server = 1;

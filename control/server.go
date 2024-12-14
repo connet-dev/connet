@@ -33,7 +33,7 @@ func NewServer(cfg Config) (*Server, error) {
 	}
 	s.relays = &relayServer{
 		auth:     cfg.RelayAuth,
-		relays:   notify.NewEmpty[[]relayRequest](),
+		relays:   notify.NewMemoryLog[relayKey, relayValue](),
 		forwards: map[model.Forward]*relayForward{},
 		logger:   cfg.Logger.With("server", "relays"),
 	}

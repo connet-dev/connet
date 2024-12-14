@@ -7,6 +7,7 @@ import (
 	"maps"
 	"sync"
 
+	"github.com/keihaya-com/connet/certc"
 	"github.com/keihaya-com/connet/model"
 	"github.com/keihaya-com/connet/notify"
 	"github.com/keihaya-com/connet/pb"
@@ -28,17 +29,21 @@ type relayServer struct {
 	auth   RelayAuthenticator
 	logger *slog.Logger
 
-	relays *notify.V[[]relayRequest]
+	relays notify.Log[relayKey, relayValue]
 
 	forwards   map[model.Forward]*relayForward
 	forwardsMu sync.RWMutex
 }
 
-type relayRequest struct {
+type relayKey struct {
 	fwd         model.Forward
+	destination certc.Key
+	source      certc.Key
+}
+
+type relayValue struct {
 	destination *x509.Certificate
 	source      *x509.Certificate
-	isput       bool
 }
 
 type relayForward struct {
@@ -71,25 +76,27 @@ func (s *relayServer) getForward(fwd model.Forward) *relayForward {
 	return s.forwards[fwd]
 }
 
-func (s *relayServer) notifyRelays(req relayRequest) {
-	s.relays.Update(func(t []relayRequest) []relayRequest {
-		return append(t, req)
-	})
-}
-
 func (s *relayServer) Destination(ctx context.Context, fwd model.Forward, cert *x509.Certificate,
 	notify func(map[model.HostPort]*x509.Certificate) error) error {
 	srv := s.createForward(fwd)
-	s.notifyRelays(relayRequest{fwd: fwd, destination: cert, isput: true})
-	defer s.notifyRelays(relayRequest{fwd: fwd, destination: cert, isput: false})
+
+	key := relayKey{fwd: fwd, destination: certc.NewKey(cert)}
+	val := relayValue{destination: cert}
+	s.relays.Put(key, val)
+	defer s.relays.Del(key, val)
+
 	return srv.servers.Listen(ctx, notify)
 }
 
 func (s *relayServer) Source(ctx context.Context, fwd model.Forward, cert *x509.Certificate,
 	notify func(map[model.HostPort]*x509.Certificate) error) error {
 	srv := s.createForward(fwd)
-	s.notifyRelays(relayRequest{fwd: fwd, source: cert, isput: true})
-	defer s.notifyRelays(relayRequest{fwd: fwd, source: cert, isput: false})
+
+	key := relayKey{fwd: fwd, source: certc.NewKey(cert)}
+	val := relayValue{source: cert}
+	s.relays.Put(key, val)
+	defer s.relays.Del(key, val)
+
 	return srv.servers.Listen(ctx, notify)
 }
 
@@ -171,40 +178,50 @@ func (c *relayConn) authenticate(ctx context.Context) (RelayAuthentication, mode
 }
 
 func (c *relayConn) runForwards(ctx context.Context) error {
-	stream, err := c.conn.OpenUniStreamSync(ctx)
+	stream, err := c.conn.AcceptStream(ctx)
 	if err != nil {
 		return err
 	}
 	defer stream.Close()
 
-	requests, version, err := c.server.relays.GetAny(ctx)
-	if err != nil {
-		return err
-	}
-
 	for {
-		c.logger.Debug("sending requests", "version", version, "req", requests)
-		out := &pbs.RelayClients{}
-		for _, req := range requests {
+		req := &pbs.RelayClientsReq{}
+		if err := pb.Read(stream, req); err != nil {
+			return err
+		}
+
+		msgs, nextOffset, err := c.server.relays.Consume(ctx, req.Offset)
+		if err != nil {
+			return err
+		}
+
+		// if len(msgs) == 0 && offset >= 0 && offset < nextOffset {
+		// TODO we are too far off and potentially have missed messages
+		// }
+
+		c.logger.Debug("sending relay changes", "offset", nextOffset, "changes", len(msgs))
+		resp := &pbs.RelayClients{Offset: nextOffset}
+
+		for _, msg := range msgs {
 			var dst, src *pb.Forward
 			var cert *x509.Certificate
 
 			switch {
-			case req.destination != nil:
-				dst = req.fwd.PB()
-				cert = req.destination
-			case req.source != nil:
-				src = req.fwd.PB()
-				cert = req.source
+			case msg.Key.destination.IsValid():
+				dst = msg.Key.fwd.PB()
+				cert = msg.Value.destination
+			case msg.Key.source.IsValid():
+				src = msg.Key.fwd.PB()
+				cert = msg.Value.source
 			default:
 				continue
 			}
 
-			change := pbs.RelayChange_ChangeDel
-			if req.isput {
-				change = pbs.RelayChange_ChangePut
+			change := pbs.RelayChange_ChangePut
+			if msg.Delete {
+				change = pbs.RelayChange_ChangeDel
 			}
-			out.Changes = append(out.Changes, &pbs.RelayClients_Change{
+			resp.Changes = append(resp.Changes, &pbs.RelayClients_Change{
 				Destination:       dst,
 				Source:            src,
 				ClientCertificate: cert.Raw,
@@ -212,33 +229,36 @@ func (c *relayConn) runForwards(ctx context.Context) error {
 			})
 		}
 
-		if err := pb.Write(stream, out); err != nil {
+		if err := pb.Write(stream, resp); err != nil {
 			return err
 		}
-
-		nextRequests, nextVersion, err := c.server.relays.Get(ctx, version)
-		if err != nil {
-			return err
-		}
-		requests = nextRequests[version+1:]
-		version = nextVersion
 	}
 }
 
 func (c *relayConn) runClients(ctx context.Context) error {
-	stream, err := c.conn.AcceptUniStream(ctx)
+	stream, err := c.conn.OpenStreamSync(ctx)
 	if err != nil {
 		return err
 	}
+	defer stream.Close()
 
+	offset := notify.MessageOldest
 	for {
-		req := &pbs.RelayServers{}
-		if err := pb.Read(stream, req); err != nil {
+		req := &pbs.RelayServersReq{
+			Offset: offset,
+		}
+		if err := pb.Write(stream, req); err != nil {
 			return err
 		}
 
-		for _, change := range req.Changes {
+		resp := &pbs.RelayServers{}
+		if err := pb.Read(stream, resp); err != nil {
+			return err
+		}
+
+		for _, change := range resp.Changes {
 			srv := model.NewForwardFromPB(change.Server)
+
 			cert, err := x509.ParseCertificate(change.ServerCertificate)
 			if err != nil {
 				return err
@@ -261,5 +281,7 @@ func (c *relayConn) runClients(ctx context.Context) error {
 				return t
 			})
 		}
+
+		offset = resp.Offset
 	}
 }
