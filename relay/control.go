@@ -229,16 +229,16 @@ func (s *controlClient) runCerts(ctx context.Context, conn quic.Connection) erro
 		resp := &pbs.RelayServers{Offset: nextOffset}
 
 		for _, msg := range msgs {
-			change := pbs.RelayChange_ChangePut
-			if msg.Delete {
-				change = pbs.RelayChange_ChangeDel
+			var change = &pbs.RelayServers_Change{
+				Server: msg.Key.PB(),
 			}
-
-			resp.Changes = append(resp.Changes, &pbs.RelayServers_Change{
-				Server:            msg.Key.PB(),
-				ServerCertificate: msg.Value.Raw,
-				Change:            change,
-			})
+			if msg.Delete {
+				change.Change = pbs.RelayChange_ChangeDel
+			} else {
+				change.ServerCertificate = msg.Value.Raw
+				change.Change = pbs.RelayChange_ChangePut
+			}
+			resp.Changes = append(resp.Changes, change)
 		}
 
 		if err := pb.Write(stream, resp); err != nil {
@@ -335,7 +335,7 @@ func (s *controlClient) removeServer(srv *relayServer) {
 	srv.cas.Store(nil)
 
 	delete(s.serversByForward, srv.fwd)
-	s.serversLog.PutDel(srv.fwd, srv.cert)
+	s.serversLog.Del(srv.fwd)
 }
 
 func (s *controlClient) removeDestination(fwd model.Forward, cert *x509.Certificate) {

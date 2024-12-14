@@ -269,15 +269,15 @@ func (c *relayConn) runClients(ctx context.Context) error {
 		for _, change := range resp.Changes {
 			srv := model.NewForwardFromPB(change.Server)
 
-			cert, err := x509.ParseCertificate(change.ServerCertificate)
-			if err != nil {
-				return err
-			}
-
 			srvForward := c.server.getForward(srv)
 			if change.Change == pbs.RelayChange_ChangeDel {
 				srvForward.serverLog.Del(c.hostport)
 			} else {
+				cert, err := x509.ParseCertificate(change.ServerCertificate)
+				if err != nil {
+					return err
+				}
+
 				srvForward.serverLog.Put(c.hostport, cert)
 			}
 		}

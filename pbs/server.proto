@@ -105,7 +105,7 @@ message RelayClientsReq {
 message RelayClients {
   repeated Change changes = 1;
   int64 offset = 2;
-  bool restat = 3;
+  bool restart = 3;
 
   message Change {
     shared.Forward destination = 1;
@@ -122,7 +122,7 @@ message RelayServersReq {
 message RelayServers {
   repeated Change changes = 1;
   int64 offset = 2;
-  bool restat = 3;
+  bool restart = 3;
 
   message Change {
     shared.Forward server = 1;
