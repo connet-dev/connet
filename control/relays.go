@@ -203,6 +203,10 @@ func (c *relayConn) runForwards(ctx context.Context) error {
 		resp := &pbs.RelayClients{Offset: nextOffset}
 
 		for _, msg := range msgs {
+			if !c.auth.Allow(msg.Key.fwd) {
+				continue
+			}
+
 			var dst, src *pb.Forward
 			var cert *x509.Certificate
 
