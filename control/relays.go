@@ -190,7 +190,15 @@ func (c *relayConn) runForwards(ctx context.Context) error {
 			return err
 		}
 
-		msgs, nextOffset, err := c.server.relays.Consume(ctx, req.Offset)
+		var msgs []notify.Message[relayKey, relayValue]
+		var nextOffset int64
+		if req.Offset == notify.MessageOldest {
+			msgs, nextOffset, err = notify.Latest(ctx, c.server.relays)
+			c.logger.Debug("sending initial relay changes", "offset", nextOffset, "changes", len(msgs))
+		} else {
+			msgs, nextOffset, err = c.server.relays.Consume(ctx, req.Offset)
+			c.logger.Debug("sending delta relay changes", "offset", nextOffset, "changes", len(msgs))
+		}
 		if err != nil {
 			return err
 		}
@@ -199,7 +207,6 @@ func (c *relayConn) runForwards(ctx context.Context) error {
 		// TODO we are too far off and potentially have missed messages
 		// }
 
-		c.logger.Debug("sending relay changes", "offset", nextOffset, "changes", len(msgs))
 		resp := &pbs.RelayClients{Offset: nextOffset}
 
 		for _, msg := range msgs {

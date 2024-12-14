@@ -212,14 +212,20 @@ func (s *controlClient) runCerts(ctx context.Context, conn quic.Connection) erro
 		if err := pb.Read(stream, req); err != nil {
 			return err
 		}
-		s.logger.Debug("receive control changes", "offset", req.Offset)
 
-		msgs, nextOffset, err := s.serversLog.Consume(ctx, req.Offset)
+		var msgs []notify.Message[model.Forward, *x509.Certificate]
+		var nextOffset int64
+		if req.Offset == notify.MessageOldest {
+			msgs, nextOffset, err = notify.Latest(ctx, s.serversLog)
+			s.logger.Debug("sending initial control changes", "offset", nextOffset, "changes", len(msgs))
+		} else {
+			msgs, nextOffset, err = s.serversLog.Consume(ctx, req.Offset)
+			s.logger.Debug("sending delta control changes", "offset", nextOffset, "changes", len(msgs))
+		}
 		if err != nil {
 			return err
 		}
 
-		s.logger.Debug("sending control changes", "offset", nextOffset, "changes", len(msgs))
 		resp := &pbs.RelayServers{Offset: nextOffset}
 
 		for _, msg := range msgs {

@@ -4,6 +4,7 @@ import (
 	"cmp"
 	"context"
 	"errors"
+	"maps"
 	"slices"
 	"sync"
 	"sync/atomic"
@@ -26,9 +27,64 @@ type Message[K any, V any] struct {
 
 type Log[K any, V any] interface {
 	Consume(ctx context.Context, offset int64) ([]Message[K, V], int64, error)
+	NextOffset() (int64, error)
 
 	Put(k K, v V) (int64, error)
 	Del(k K, v V) (int64, error)
+}
+
+func Map[K comparable, V any](ctx context.Context, log Log[K, V]) (map[K]V, int64, error) {
+	maxOffset, err := log.NextOffset()
+	if err != nil {
+		return nil, MessageInvalid, err
+	}
+
+	sum := map[K]V{}
+	for offset := MessageOldest; offset < maxOffset; {
+		msgs, nextOffset, err := log.Consume(ctx, offset)
+		if err != nil {
+			return nil, MessageInvalid, err
+		}
+		offset = nextOffset
+
+		for _, msg := range msgs {
+			if msg.Delete {
+				delete(sum, msg.Key)
+			} else {
+				sum[msg.Key] = msg.Value
+			}
+		}
+	}
+
+	return sum, maxOffset, nil
+}
+
+func Latest[K comparable, V any](ctx context.Context, log Log[K, V]) ([]Message[K, V], int64, error) {
+	maxOffset, err := log.NextOffset()
+	if err != nil {
+		return nil, MessageInvalid, err
+	}
+
+	sum := map[K]Message[K, V]{}
+	for offset := MessageOldest; offset < maxOffset; {
+		msgs, nextOffset, err := log.Consume(ctx, offset)
+		if err != nil {
+			return nil, MessageInvalid, err
+		}
+		offset = nextOffset
+
+		for _, msg := range msgs {
+			if msg.Delete {
+				delete(sum, msg.Key)
+			} else {
+				sum[msg.Key] = msg
+			}
+		}
+	}
+
+	return slices.SortedFunc(maps.Values(sum), func(l, r Message[K, V]) int {
+		return cmp.Compare(l.Offset, r.Offset)
+	}), maxOffset, nil
 }
 
 func NewMemoryLog[K any, V any]() Log[K, V] {
@@ -76,6 +132,13 @@ func (m *memMessages[K, V]) Consume(ctx context.Context, offset int64) ([]Messag
 	})
 	msgs := m.msgs[pos:min(pos+32, len(m.msgs))]
 	return msgs, msgs[len(msgs)-1].Offset + 1, nil
+}
+
+func (m *memMessages[K, V]) NextOffset() (int64, error) {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+
+	return m.nextOffset, nil
 }
 
 func (m *memMessages[K, V]) Put(k K, v V) (int64, error) {
