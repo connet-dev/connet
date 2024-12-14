@@ -8,8 +8,8 @@ import (
 	"net"
 
 	"github.com/keihaya-com/connet/certc"
+	"github.com/keihaya-com/connet/logc"
 	"github.com/keihaya-com/connet/model"
-	"github.com/keihaya-com/connet/notify"
 	"github.com/klev-dev/kleverr"
 	"github.com/quic-go/quic-go"
 	"golang.org/x/sync/errgroup"
@@ -47,10 +47,10 @@ func NewServer(cfg Config) (*Server, error) {
 				NextProtos: []string{"connet-relays"},
 			},
 
-			serversOffset:    notify.MessageOldest,
+			serversOffset:    logc.OffsetOldest,
 			serversByForward: map[model.Forward]*relayServer{},
 			serversByName:    map[string]*relayServer{},
-			serversLog:       notify.NewMemoryLog[model.Forward, *x509.Certificate](),
+			serversLog:       logc.NewMemoryKVLog[model.Forward, *x509.Certificate](),
 
 			logger: cfg.Logger.With("relay-control", cfg.Hostport),
 		},

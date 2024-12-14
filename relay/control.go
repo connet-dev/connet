@@ -12,9 +12,9 @@ import (
 	"time"
 
 	"github.com/keihaya-com/connet/certc"
+	"github.com/keihaya-com/connet/logc"
 	"github.com/keihaya-com/connet/model"
 	"github.com/keihaya-com/connet/netc"
-	"github.com/keihaya-com/connet/notify"
 	"github.com/keihaya-com/connet/pb"
 	"github.com/keihaya-com/connet/pbs"
 	"github.com/quic-go/quic-go"
@@ -33,7 +33,7 @@ type controlClient struct {
 	serversByForward map[model.Forward]*relayServer
 	serversByName    map[string]*relayServer
 	serversMu        sync.RWMutex
-	serversLog       notify.Log[model.Forward, *x509.Certificate]
+	serversLog       logc.KV[model.Forward, *x509.Certificate]
 
 	logger *slog.Logger
 }
@@ -213,10 +213,10 @@ func (s *controlClient) runCerts(ctx context.Context, conn quic.Connection) erro
 			return err
 		}
 
-		var msgs []notify.Message[model.Forward, *x509.Certificate]
+		var msgs []logc.Message[model.Forward, *x509.Certificate]
 		var nextOffset int64
-		if req.Offset == notify.MessageOldest {
-			msgs, nextOffset, err = notify.Latest(ctx, s.serversLog)
+		if req.Offset == logc.OffsetOldest {
+			msgs, nextOffset, err = s.serversLog.Snapshot(ctx)
 			s.logger.Debug("sending initial control changes", "offset", nextOffset, "changes", len(msgs))
 		} else {
 			msgs, nextOffset, err = s.serversLog.Consume(ctx, req.Offset)

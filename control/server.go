@@ -8,8 +8,8 @@ import (
 	"net"
 	"time"
 
+	"github.com/keihaya-com/connet/logc"
 	"github.com/keihaya-com/connet/model"
-	"github.com/keihaya-com/connet/notify"
 	"github.com/klev-dev/kleverr"
 	"github.com/quic-go/quic-go"
 )
@@ -33,7 +33,7 @@ func NewServer(cfg Config) (*Server, error) {
 	}
 	s.relays = &relayServer{
 		auth:     cfg.RelayAuth,
-		relays:   notify.NewMemoryLog[relayKey, relayValue](),
+		relays:   logc.NewMemoryKVLog[relayKey, relayValue](),
 		forwards: map[model.Forward]*relayForward{},
 		logger:   cfg.Logger.With("server", "relays"),
 	}

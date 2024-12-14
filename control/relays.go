@@ -4,12 +4,11 @@ import (
 	"context"
 	"crypto/x509"
 	"log/slog"
-	"maps"
 	"sync"
 
 	"github.com/keihaya-com/connet/certc"
+	"github.com/keihaya-com/connet/logc"
 	"github.com/keihaya-com/connet/model"
-	"github.com/keihaya-com/connet/notify"
 	"github.com/keihaya-com/connet/pb"
 	"github.com/keihaya-com/connet/pbs"
 	"github.com/klev-dev/kleverr"
@@ -29,7 +28,7 @@ type relayServer struct {
 	auth   RelayAuthenticator
 	logger *slog.Logger
 
-	relays notify.Log[relayKey, relayValue]
+	relays logc.KV[relayKey, relayValue]
 
 	forwards   map[model.Forward]*relayForward
 	forwardsMu sync.RWMutex
@@ -47,7 +46,7 @@ type relayValue struct {
 }
 
 type relayForward struct {
-	servers *notify.V[map[model.HostPort]*x509.Certificate]
+	serverLog logc.KV[model.HostPort, *x509.Certificate]
 }
 
 func (s *relayServer) createForward(fwd model.Forward) *relayForward {
@@ -63,7 +62,7 @@ func (s *relayServer) createForward(fwd model.Forward) *relayForward {
 	}
 
 	srv := &relayForward{
-		servers: notify.NewEmpty[map[model.HostPort]*x509.Certificate](),
+		serverLog: logc.NewMemoryKVLog[model.HostPort, *x509.Certificate](),
 	}
 	s.forwards[fwd] = srv
 	return srv
@@ -77,7 +76,7 @@ func (s *relayServer) getForward(fwd model.Forward) *relayForward {
 }
 
 func (s *relayServer) Destination(ctx context.Context, fwd model.Forward, cert *x509.Certificate,
-	notify func(map[model.HostPort]*x509.Certificate) error) error {
+	notifyFn func(map[model.HostPort]*x509.Certificate) error) error {
 	srv := s.createForward(fwd)
 
 	key := relayKey{fwd: fwd, destination: certc.NewKey(cert)}
@@ -85,11 +84,11 @@ func (s *relayServer) Destination(ctx context.Context, fwd model.Forward, cert *
 	s.relays.Put(key, val)
 	defer s.relays.Del(key, val)
 
-	return srv.servers.Listen(ctx, notify)
+	return srv.serverLog.Listen(ctx, notifyFn)
 }
 
 func (s *relayServer) Source(ctx context.Context, fwd model.Forward, cert *x509.Certificate,
-	notify func(map[model.HostPort]*x509.Certificate) error) error {
+	notifyFn func(map[model.HostPort]*x509.Certificate) error) error {
 	srv := s.createForward(fwd)
 
 	key := relayKey{fwd: fwd, source: certc.NewKey(cert)}
@@ -97,7 +96,7 @@ func (s *relayServer) Source(ctx context.Context, fwd model.Forward, cert *x509.
 	s.relays.Put(key, val)
 	defer s.relays.Del(key, val)
 
-	return srv.servers.Listen(ctx, notify)
+	return srv.serverLog.Listen(ctx, notifyFn)
 }
 
 func (s *relayServer) handle(ctx context.Context, conn quic.Connection) error {
@@ -190,10 +189,10 @@ func (c *relayConn) runForwards(ctx context.Context) error {
 			return err
 		}
 
-		var msgs []notify.Message[relayKey, relayValue]
+		var msgs []logc.Message[relayKey, relayValue]
 		var nextOffset int64
-		if req.Offset == notify.MessageOldest {
-			msgs, nextOffset, err = notify.Latest(ctx, c.server.relays)
+		if req.Offset == logc.OffsetOldest {
+			msgs, nextOffset, err = c.server.relays.Snapshot(ctx)
 			c.logger.Debug("sending initial relay changes", "offset", nextOffset, "changes", len(msgs))
 		} else {
 			msgs, nextOffset, err = c.server.relays.Consume(ctx, req.Offset)
@@ -253,7 +252,7 @@ func (c *relayConn) runClients(ctx context.Context) error {
 	}
 	defer stream.Close()
 
-	offset := notify.MessageOldest
+	offset := logc.OffsetOldest
 	for {
 		req := &pbs.RelayServersReq{
 			Offset: offset,
@@ -276,21 +275,11 @@ func (c *relayConn) runClients(ctx context.Context) error {
 			}
 
 			srvForward := c.server.getForward(srv)
-			srvForward.servers.Update(func(t map[model.HostPort]*x509.Certificate) map[model.HostPort]*x509.Certificate {
-				if t == nil {
-					t = map[model.HostPort]*x509.Certificate{}
-				} else {
-					t = maps.Clone(t)
-				}
-
-				if change.Change == pbs.RelayChange_ChangeDel {
-					delete(t, c.hostport)
-				} else {
-					t[c.hostport] = cert
-				}
-
-				return t
-			})
+			if change.Change == pbs.RelayChange_ChangeDel {
+				srvForward.serverLog.Del(c.hostport, cert)
+			} else {
+				srvForward.serverLog.Put(c.hostport, cert)
+			}
 		}
 
 		offset = resp.Offset
