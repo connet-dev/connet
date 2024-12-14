@@ -3,24 +3,34 @@ package main
 import (
 	"bufio"
 	"context"
+	"crypto/tls"
+	"crypto/x509"
 	"fmt"
 	"log/slog"
+	"net"
 	"os"
 	"os/signal"
 	"syscall"
 
 	"github.com/keihaya-com/connet"
+	"github.com/keihaya-com/connet/control"
 	"github.com/keihaya-com/connet/model"
+	"github.com/keihaya-com/connet/relay"
+	"github.com/keihaya-com/connet/selfhosted"
 	"github.com/klev-dev/kleverr"
 	"github.com/pelletier/go-toml/v2"
 	"github.com/spf13/cobra"
 )
 
 type Config struct {
-	LogLevel  string       `toml:"log-level"`
-	LogFormat string       `toml:"log-format"`
-	Server    ServerConfig `toml:"server"`
-	Client    ClientConfig `toml:"client"`
+	LogLevel  string `toml:"log-level"`
+	LogFormat string `toml:"log-format"`
+
+	Server ServerConfig `toml:"server"`
+	Client ClientConfig `toml:"client"`
+
+	Control ControlConfig `toml:"control"`
+	Relay   RelayConfig   `toml:"relay"`
 }
 
 type ServerConfig struct {
@@ -33,6 +43,29 @@ type ServerConfig struct {
 
 	RelayAddr     string `toml:"relay-addr"`
 	RelayHostname string `toml:"relay-hostname"`
+}
+
+type ControlConfig struct {
+	ClientTokens     []string `toml:"client-tokens"`
+	ClientTokensFile string   `toml:"client-tokens-file"`
+
+	RelayTokens     []string `toml:"relay-tokens"`
+	RelayTokensFile string   `toml:"relay-tokens-file"`
+
+	Addr string `toml:"addr"`
+	Cert string `toml:"cert-file"`
+	Key  string `toml:"key-file"`
+}
+
+type RelayConfig struct {
+	Token     string `toml:"token"`
+	TokenFile string `toml:"token-file"`
+
+	Addr     string `toml:"addr"`
+	Hostname string `toml:"hostname"`
+
+	ControlAddr string `toml:"control-addr"`
+	ControlCAs  string `toml:"control-cas"`
 }
 
 type ClientConfig struct {
@@ -70,6 +103,8 @@ func rootCmd() *cobra.Command {
 	}
 
 	cmd.AddCommand(serverCmd())
+	cmd.AddCommand(controlCmd())
+	cmd.AddCommand(relayCmd())
 	cmd.AddCommand(checkCmd())
 
 	filename := cmd.Flags().String("config", "", "config file to load")
@@ -117,7 +152,7 @@ func rootCmd() *cobra.Command {
 			return kleverr.Ret(err)
 		}
 
-		return client(cmd.Context(), cfg.Client, logger)
+		return clientRun(cmd.Context(), cfg.Client, logger)
 	}
 
 	return cmd
@@ -158,7 +193,88 @@ func serverCmd() *cobra.Command {
 			return kleverr.Ret(err)
 		}
 
-		return server(cmd.Context(), cfg.Server, logger)
+		return serverRun(cmd.Context(), cfg.Server, logger)
+	}
+
+	return cmd
+}
+
+func controlCmd() *cobra.Command {
+	cmd := &cobra.Command{
+		Use:   "control",
+		Short: "run connet control server",
+	}
+
+	filename := cmd.Flags().String("config", "", "config file to load")
+
+	var flagsConfig Config
+	cmd.Flags().StringVar(&flagsConfig.LogLevel, "log-level", "", "log level to use")
+	cmd.Flags().StringVar(&flagsConfig.LogFormat, "log-format", "", "log formatter to use")
+
+	cmd.Flags().StringArrayVar(&flagsConfig.Control.ClientTokens, "client-tokens", nil, "client tokens for clients to connect")
+	cmd.Flags().StringVar(&flagsConfig.Control.ClientTokensFile, "client-tokens-file", "", "client tokens file to load")
+
+	cmd.Flags().StringArrayVar(&flagsConfig.Control.RelayTokens, "relay-tokens", nil, "relay tokens for clients to connect")
+	cmd.Flags().StringVar(&flagsConfig.Control.RelayTokensFile, "relay-tokens-file", "", "relay tokens file to load")
+
+	cmd.Flags().StringVar(&flagsConfig.Control.Addr, "addr", "", "control server addr to use")
+	cmd.Flags().StringVar(&flagsConfig.Control.Cert, "cert-file", "", "control server cert to use")
+	cmd.Flags().StringVar(&flagsConfig.Control.Key, "key-file", "", "control server key to use")
+
+	cmd.RunE = func(cmd *cobra.Command, args []string) error {
+		cfg, err := loadConfig(*filename)
+		if err != nil {
+			return err
+		}
+
+		cfg.merge(flagsConfig)
+
+		logger, err := logger(cfg)
+		if err != nil {
+			return kleverr.Ret(err)
+		}
+
+		return controlRun(cmd.Context(), cfg.Control, logger)
+	}
+
+	return cmd
+}
+
+func relayCmd() *cobra.Command {
+	cmd := &cobra.Command{
+		Use:   "relay",
+		Short: "run connet relay server",
+	}
+
+	filename := cmd.Flags().String("config", "", "config file to load")
+
+	var flagsConfig Config
+	cmd.Flags().StringVar(&flagsConfig.LogLevel, "log-level", "", "log level to use")
+	cmd.Flags().StringVar(&flagsConfig.LogFormat, "log-format", "", "log formatter to use")
+
+	cmd.Flags().StringVar(&flagsConfig.Relay.Token, "token", "", "token to use")
+	cmd.Flags().StringVar(&flagsConfig.Relay.TokenFile, "token-file", "", "token file to use")
+
+	cmd.Flags().StringVar(&flagsConfig.Relay.Addr, "addr", "", "server addr to use")
+	cmd.Flags().StringVar(&flagsConfig.Relay.Hostname, "hostname", "", "server public hostname to use")
+
+	cmd.Flags().StringVar(&flagsConfig.Relay.ControlAddr, "control-addr", "", "control server address to connect")
+	cmd.Flags().StringVar(&flagsConfig.Relay.ControlCAs, "control-cas", "", "control server CAs to use")
+
+	cmd.RunE = func(cmd *cobra.Command, args []string) error {
+		cfg, err := loadConfig(*filename)
+		if err != nil {
+			return err
+		}
+
+		cfg.merge(flagsConfig)
+
+		logger, err := logger(cfg)
+		if err != nil {
+			return kleverr.Ret(err)
+		}
+
+		return relayRun(cmd.Context(), cfg.Relay, logger)
 	}
 
 	return cmd
@@ -231,43 +347,7 @@ func logger(cfg Config) (*slog.Logger, error) {
 	}
 }
 
-func server(ctx context.Context, cfg ServerConfig, logger *slog.Logger) error {
-	var opts []connet.ServerOption
-
-	if cfg.TokensFile != "" {
-		tokens, err := loadTokens(cfg.TokensFile)
-		if err != nil {
-			return err
-		}
-		opts = append(opts, connet.ServerClientTokens(tokens...))
-	} else {
-		opts = append(opts, connet.ServerClientTokens(cfg.Tokens...))
-	}
-
-	if cfg.Addr != "" {
-		opts = append(opts, connet.ServerControlAddress(cfg.Addr))
-	}
-	if cfg.Cert != "" {
-		opts = append(opts, connet.ServerControlCertificate(cfg.Cert, cfg.Key))
-	}
-
-	if cfg.RelayAddr != "" {
-		opts = append(opts, connet.ServerRelayAddress(cfg.RelayAddr))
-	}
-	if cfg.RelayHostname != "" {
-		opts = append(opts, connet.ServerRelayHostname(cfg.RelayHostname))
-	}
-
-	opts = append(opts, connet.ServerLogger(logger))
-
-	srv, err := connet.NewServer(opts...)
-	if err != nil {
-		return err
-	}
-	return srv.Run(ctx)
-}
-
-func client(ctx context.Context, cfg ClientConfig, logger *slog.Logger) error {
+func clientRun(ctx context.Context, cfg ClientConfig, logger *slog.Logger) error {
 	var opts []connet.ClientOption
 
 	if cfg.TokenFile != "" {
@@ -315,6 +395,149 @@ func client(ctx context.Context, cfg ClientConfig, logger *slog.Logger) error {
 	return cl.Run(ctx)
 }
 
+func serverRun(ctx context.Context, cfg ServerConfig, logger *slog.Logger) error {
+	var opts []connet.ServerOption
+
+	if cfg.TokensFile != "" {
+		tokens, err := loadTokens(cfg.TokensFile)
+		if err != nil {
+			return err
+		}
+		opts = append(opts, connet.ServerClientTokens(tokens...))
+	} else {
+		opts = append(opts, connet.ServerClientTokens(cfg.Tokens...))
+	}
+
+	if cfg.Addr != "" {
+		opts = append(opts, connet.ServerControlAddress(cfg.Addr))
+	}
+	if cfg.Cert != "" {
+		opts = append(opts, connet.ServerControlCertificate(cfg.Cert, cfg.Key))
+	}
+
+	if cfg.RelayAddr != "" {
+		opts = append(opts, connet.ServerRelayAddress(cfg.RelayAddr))
+	}
+	if cfg.RelayHostname != "" {
+		opts = append(opts, connet.ServerRelayHostname(cfg.RelayHostname))
+	}
+
+	opts = append(opts, connet.ServerLogger(logger))
+
+	srv, err := connet.NewServer(opts...)
+	if err != nil {
+		return err
+	}
+	return srv.Run(ctx)
+}
+
+func controlRun(ctx context.Context, cfg ControlConfig, logger *slog.Logger) error {
+	controlCfg := control.Config{
+		Logger: logger,
+	}
+
+	if cfg.ClientTokensFile != "" {
+		tokens, err := loadTokens(cfg.ClientTokensFile)
+		if err != nil {
+			return err
+		}
+		controlCfg.ClientAuth = selfhosted.NewClientAuthenticator(tokens...)
+	} else {
+		controlCfg.ClientAuth = selfhosted.NewClientAuthenticator(cfg.ClientTokens...)
+	}
+
+	if cfg.RelayTokensFile != "" {
+		tokens, err := loadTokens(cfg.RelayTokensFile)
+		if err != nil {
+			return err
+		}
+		controlCfg.RelayAuth = selfhosted.NewRelayAuthenticator(tokens...)
+	} else {
+		controlCfg.RelayAuth = selfhosted.NewRelayAuthenticator(cfg.RelayTokens...)
+	}
+
+	if cfg.Addr == "" {
+		cfg.Addr = ":19190"
+	}
+	addr, err := net.ResolveUDPAddr("udp", cfg.Addr)
+	if err != nil {
+		return kleverr.Newf("control address cannot be resolved: %w", err)
+	}
+	controlCfg.Addr = addr
+
+	if cfg.Cert != "" {
+		cert, err := tls.LoadX509KeyPair(cfg.Cert, cfg.Key)
+		if err != nil {
+			return kleverr.Newf("control cert cannot be loaded: %w", err)
+		}
+		controlCfg.Cert = cert
+	}
+
+	srv, err := control.NewServer(controlCfg)
+	if err != nil {
+		return err
+	}
+	return srv.Run(ctx)
+}
+
+func relayRun(ctx context.Context, cfg RelayConfig, logger *slog.Logger) error {
+	relayCfg := relay.Config{
+		Logger: logger,
+	}
+
+	if cfg.TokenFile != "" {
+		tokens, err := loadTokens(cfg.TokenFile)
+		if err != nil {
+			return err
+		}
+		relayCfg.ControlToken = tokens[0]
+	} else {
+		relayCfg.ControlToken = cfg.Token
+	}
+
+	if cfg.Addr == "" {
+		cfg.Addr = ":19191"
+		if cfg.Hostname == "" {
+			cfg.Hostname = "localhost"
+		}
+	}
+	serverAddr, err := net.ResolveUDPAddr("udp", cfg.Addr)
+	if err != nil {
+		return kleverr.Newf("server address cannot be resolved: %w", err)
+	}
+	relayCfg.Addr = serverAddr
+
+	relayCfg.Hostport = model.HostPort{Host: cfg.Hostname, Port: uint16(serverAddr.Port)}
+
+	if cfg.ControlAddr == "" {
+		cfg.ControlAddr = "localhost:19190"
+	}
+	controlAddr, err := net.ResolveUDPAddr("udp", cfg.ControlAddr)
+	if err != nil {
+		return kleverr.Newf("control address cannot be resolved: %w", err)
+	}
+	relayCfg.ControlAddr = controlAddr
+
+	if cfg.ControlCAs != "" {
+		casData, err := os.ReadFile(cfg.ControlCAs)
+		if err != nil {
+			return kleverr.Newf("cannot read certs file: %w", err)
+		}
+
+		cas := x509.NewCertPool()
+		if !cas.AppendCertsFromPEM(casData) {
+			return kleverr.Newf("no certificates found in %s", cfg.ControlCAs)
+		}
+		relayCfg.ControlCAs = cas
+	}
+
+	srv, err := relay.NewServer(relayCfg)
+	if err != nil {
+		return err
+	}
+	return srv.Run(ctx)
+}
+
 func loadTokens(tokensFile string) ([]string, error) {
 	f, err := os.Open(tokensFile)
 	if err != nil {
@@ -345,18 +568,9 @@ func (c *Config) merge(o Config) {
 
 	c.Server.merge(o.Server)
 	c.Client.merge(o.Client)
-}
 
-func (c *ServerConfig) merge(o ServerConfig) {
-	c.Tokens = append(c.Tokens, o.Tokens...)
-	c.TokensFile = override(c.TokensFile, o.TokensFile)
-
-	c.Addr = override(c.Addr, o.Addr)
-	c.Cert = override(c.Cert, o.Cert)
-	c.Key = override(c.Key, o.Key)
-
-	c.RelayAddr = override(c.RelayAddr, o.RelayAddr)
-	c.RelayHostname = override(c.RelayHostname, o.RelayHostname)
+	c.Control.merge(o.Control)
+	c.Relay.merge(o.Relay)
 }
 
 func (c *ClientConfig) merge(o ClientConfig) {
@@ -380,6 +594,41 @@ func (c *ClientConfig) merge(o ClientConfig) {
 		}
 		c.Sources[k] = mergeForwardConfig(c.Sources[k], v)
 	}
+}
+
+func (c *ServerConfig) merge(o ServerConfig) {
+	c.Tokens = append(c.Tokens, o.Tokens...)
+	c.TokensFile = override(c.TokensFile, o.TokensFile)
+
+	c.Addr = override(c.Addr, o.Addr)
+	c.Cert = override(c.Cert, o.Cert)
+	c.Key = override(c.Key, o.Key)
+
+	c.RelayAddr = override(c.RelayAddr, o.RelayAddr)
+	c.RelayHostname = override(c.RelayHostname, o.RelayHostname)
+}
+
+func (c *ControlConfig) merge(o ControlConfig) {
+	c.ClientTokens = append(c.ClientTokens, o.ClientTokens...)
+	c.ClientTokensFile = override(c.ClientTokensFile, o.ClientTokensFile)
+
+	c.RelayTokens = append(c.RelayTokens, o.RelayTokens...)
+	c.RelayTokensFile = override(c.RelayTokensFile, o.RelayTokensFile)
+
+	c.Addr = override(c.Addr, o.Addr)
+	c.Cert = override(c.Cert, o.Cert)
+	c.Key = override(c.Key, o.Key)
+}
+
+func (c *RelayConfig) merge(o RelayConfig) {
+	c.Token = override(c.Token, o.Token)
+	c.TokenFile = override(c.TokenFile, o.TokenFile)
+
+	c.Addr = override(c.Addr, o.Addr)
+	c.Hostname = override(c.Hostname, o.Hostname)
+
+	c.ControlAddr = override(c.ControlAddr, o.ControlAddr)
+	c.ControlCAs = override(c.ControlCAs, o.ControlCAs)
 }
 
 func mergeForwardConfig(c, o ForwardConfig) ForwardConfig {

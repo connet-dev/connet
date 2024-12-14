@@ -1,12 +1,7 @@
 log-level = "debug"
 
-[server]
-tokens-file = "examples/token.secret"
-cert-file = ".direnv/localhost/cert.pem"
-key-file = ".direnv/localhost/key.pem"
-
 [client]
-token-file = "examples/token.secret"
+token-file = "examples/client-token.secret"
 server-cas = ".direnv/localhost/cert.pem"
 
 [client.destinations.sws]
@@ -14,3 +9,18 @@ addr = ":8081"
 
 [client.sources.sws]
 addr = ":9999"
+
+[server]
+tokens-file = "examples/client-token.secret"
+cert-file = ".direnv/localhost/cert.pem"
+key-file = ".direnv/localhost/key.pem"
+
+[control]
+client-tokens-file = "examples/client-token.secret"
+relay-tokens-file = "examples/relay-token.secret"
+cert-file = ".direnv/localhost/cert.pem"
+key-file = ".direnv/localhost/key.pem"
+
+[relay]
+token-file = "examples/relay-token.secret"
+control-cas = ".direnv/localhost/cert.pem"

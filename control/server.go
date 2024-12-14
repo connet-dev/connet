@@ -89,7 +89,7 @@ func (s *Server) Run(ctx context.Context) error {
 			s.logger.Warn("accept error", "err", err)
 			return kleverr.Ret(err)
 		}
-		s.logger.Info("client connected", "local", conn.LocalAddr(), "remote", conn.RemoteAddr())
+		s.logger.Info("connection accepted", "remote", conn.RemoteAddr(), "proto", conn.ConnectionState().TLS.NegotiatedProtocol)
 
 		switch conn.ConnectionState().TLS.NegotiatedProtocol {
 		case "connet":

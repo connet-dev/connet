@@ -1,12 +1,12 @@
 log-level = "debug"
 
 [server]
-tokens-file = "examples/token.secret"
+tokens-file = "examples/client-token.secret"
 cert-file = ".direnv/localhost/cert.pem"
 key-file = ".direnv/localhost/key.pem"
 
 [client]
-token = "xxyxx"
+token-file = "examples/client-token.secret"
 server-cas = ".direnv/localhost/cert.pem"
 
 [client.destinations.sws-direct]
