@@ -27,7 +27,8 @@ type Log[K any, V any] interface {
 	NextOffset() (int64, error)
 
 	Put(k K, v V) (int64, error)
-	Del(k K, v V) (int64, error)
+	PutDel(k K, v V) (int64, error)
+	Del(k K) (int64, error)
 }
 
 func NewMemoryLog[K any, V any]() Log[K, V] {
@@ -91,10 +92,17 @@ func (m *memLog[K, V]) Put(k K, v V) (int64, error) {
 	})
 }
 
-func (m *memLog[K, V]) Del(k K, v V) (int64, error) {
+func (m *memLog[K, V]) PutDel(k K, v V) (int64, error) {
 	return m.publishNotify(Message[K, V]{
 		Key:    k,
 		Value:  v,
+		Delete: true,
+	})
+}
+
+func (m *memLog[K, V]) Del(k K) (int64, error) {
+	return m.publishNotify(Message[K, V]{
+		Key:    k,
 		Delete: true,
 	})
 }

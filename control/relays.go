@@ -82,7 +82,7 @@ func (s *relayServer) Destination(ctx context.Context, fwd model.Forward, cert *
 	key := relayKey{fwd: fwd, destination: certc.NewKey(cert)}
 	val := relayValue{destination: cert}
 	s.relays.Put(key, val)
-	defer s.relays.Del(key, val)
+	defer s.relays.PutDel(key, val)
 
 	return srv.serverLog.Listen(ctx, notifyFn)
 }
@@ -94,7 +94,7 @@ func (s *relayServer) Source(ctx context.Context, fwd model.Forward, cert *x509.
 	key := relayKey{fwd: fwd, source: certc.NewKey(cert)}
 	val := relayValue{source: cert}
 	s.relays.Put(key, val)
-	defer s.relays.Del(key, val)
+	defer s.relays.PutDel(key, val)
 
 	return srv.serverLog.Listen(ctx, notifyFn)
 }
@@ -276,7 +276,7 @@ func (c *relayConn) runClients(ctx context.Context) error {
 
 			srvForward := c.server.getForward(srv)
 			if change.Change == pbs.RelayChange_ChangeDel {
-				srvForward.serverLog.Del(c.hostport, cert)
+				srvForward.serverLog.Del(c.hostport)
 			} else {
 				srvForward.serverLog.Put(c.hostport, cert)
 			}

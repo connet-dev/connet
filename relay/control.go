@@ -335,7 +335,7 @@ func (s *controlClient) removeServer(srv *relayServer) {
 	srv.cas.Store(nil)
 
 	delete(s.serversByForward, srv.fwd)
-	s.serversLog.Del(srv.fwd, srv.cert)
+	s.serversLog.PutDel(srv.fwd, srv.cert)
 }
 
 func (s *controlClient) removeDestination(fwd model.Forward, cert *x509.Certificate) {
