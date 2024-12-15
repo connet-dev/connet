@@ -184,45 +184,57 @@ func (s *controlClient) runForwards(ctx context.Context, conn quic.Connection) e
 	}
 	defer stream.Close()
 
-	for {
-		req := &pbs.RelayClientsReq{
-			Offset: s.serverOffset,
-		}
-		if err := pb.Write(stream, req); err != nil {
-			return err
-		}
+	g, ctx := errgroup.WithContext(ctx)
 
-		resp := &pbs.RelayClients{}
-		if err := pb.Read(stream, resp); err != nil {
-			return err
-		}
+	g.Go(func() error {
+		<-ctx.Done()
+		stream.CancelRead(0)
+		return nil
+	})
 
-		for _, change := range resp.Changes {
-			cert, err := x509.ParseCertificate(change.ClientCertificate)
-			if err != nil {
+	g.Go(func() error {
+		for {
+			req := &pbs.RelayClientsReq{
+				Offset: s.serverOffset,
+			}
+			if err := pb.Write(stream, req); err != nil {
 				return err
 			}
 
-			switch {
-			case change.Destination != nil:
-				fwd := model.NewForwardFromPB(change.Destination)
-				if change.Change == pbs.RelayChange_ChangeDel {
-					s.removeDestination(fwd, cert)
-				} else if err := s.addDestination(fwd, cert); err != nil {
+			resp := &pbs.RelayClients{}
+			if err := pb.Read(stream, resp); err != nil {
+				return err
+			}
+
+			for _, change := range resp.Changes {
+				cert, err := x509.ParseCertificate(change.ClientCertificate)
+				if err != nil {
 					return err
 				}
-			case change.Source != nil:
-				fwd := model.NewForwardFromPB(change.Source)
-				if change.Change == pbs.RelayChange_ChangeDel {
-					s.removeSource(fwd, cert)
-				} else if err := s.addSource(fwd, cert); err != nil {
-					return err
+
+				switch {
+				case change.Destination != nil:
+					fwd := model.NewForwardFromPB(change.Destination)
+					if change.Change == pbs.RelayChange_ChangeDel {
+						s.removeDestination(fwd, cert)
+					} else if err := s.addDestination(fwd, cert); err != nil {
+						return err
+					}
+				case change.Source != nil:
+					fwd := model.NewForwardFromPB(change.Source)
+					if change.Change == pbs.RelayChange_ChangeDel {
+						s.removeSource(fwd, cert)
+					} else if err := s.addSource(fwd, cert); err != nil {
+						return err
+					}
 				}
 			}
-		}
 
-		s.serverOffset = resp.Offset
-	}
+			s.serverOffset = resp.Offset
+		}
+	})
+
+	return g.Wait()
 }
 
 func (s *controlClient) runCerts(ctx context.Context, conn quic.Connection) error {
@@ -232,44 +244,56 @@ func (s *controlClient) runCerts(ctx context.Context, conn quic.Connection) erro
 	}
 	defer stream.Close()
 
-	for {
-		req := &pbs.RelayServersReq{}
-		if err := pb.Read(stream, req); err != nil {
-			return err
-		}
+	g, ctx := errgroup.WithContext(ctx)
 
-		var msgs []logc.Message[model.Forward, *x509.Certificate]
-		var nextOffset int64
-		if req.Offset == logc.OffsetOldest {
-			msgs, nextOffset, err = s.serversLog.Snapshot(ctx)
-			s.logger.Debug("sending initial control changes", "offset", nextOffset, "changes", len(msgs))
-		} else {
-			msgs, nextOffset, err = s.serversLog.Consume(ctx, req.Offset)
-			s.logger.Debug("sending delta control changes", "offset", nextOffset, "changes", len(msgs))
-		}
-		if err != nil {
-			return err
-		}
+	g.Go(func() error {
+		<-ctx.Done()
+		stream.CancelRead(0)
+		return nil
+	})
 
-		resp := &pbs.RelayServers{Offset: nextOffset}
-
-		for _, msg := range msgs {
-			var change = &pbs.RelayServers_Change{
-				Server: msg.Key.PB(),
+	g.Go(func() error {
+		for {
+			req := &pbs.RelayServersReq{}
+			if err := pb.Read(stream, req); err != nil {
+				return err
 			}
-			if msg.Delete {
-				change.Change = pbs.RelayChange_ChangeDel
+
+			var msgs []logc.Message[model.Forward, *x509.Certificate]
+			var nextOffset int64
+			if req.Offset == logc.OffsetOldest {
+				msgs, nextOffset, err = s.serversLog.Snapshot(ctx)
+				s.logger.Debug("sending initial control changes", "offset", nextOffset, "changes", len(msgs))
 			} else {
-				change.ServerCertificate = msg.Value.Raw
-				change.Change = pbs.RelayChange_ChangePut
+				msgs, nextOffset, err = s.serversLog.Consume(ctx, req.Offset)
+				s.logger.Debug("sending delta control changes", "offset", nextOffset, "changes", len(msgs))
 			}
-			resp.Changes = append(resp.Changes, change)
-		}
+			if err != nil {
+				return err
+			}
 
-		if err := pb.Write(stream, resp); err != nil {
-			return err
+			resp := &pbs.RelayServers{Offset: nextOffset}
+
+			for _, msg := range msgs {
+				var change = &pbs.RelayServers_Change{
+					Server: msg.Key.PB(),
+				}
+				if msg.Delete {
+					change.Change = pbs.RelayChange_ChangeDel
+				} else {
+					change.ServerCertificate = msg.Value.Raw
+					change.Change = pbs.RelayChange_ChangePut
+				}
+				resp.Changes = append(resp.Changes, change)
+			}
+
+			if err := pb.Write(stream, resp); err != nil {
+				return err
+			}
 		}
-	}
+	})
+
+	return g.Wait()
 }
 
 func (s *controlClient) createServer(fwd model.Forward) (*relayServer, error) {

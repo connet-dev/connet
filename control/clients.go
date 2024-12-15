@@ -308,9 +308,8 @@ func (s *clientStream) destination(ctx context.Context, req *pbs.Request_Destina
 		return err
 	}
 
-	w := s.conn.server.whisperer.For(from)
-	w.AddDestination(s.conn.id, req.Peer)
-	defer w.RemoveDestination(s.conn.id)
+	s.conn.server.whisperer.AddDestination(from, s.conn.id, req.Peer)
+	defer s.conn.server.whisperer.RemoveDestination(from, s.conn.id)
 
 	g, ctx := errgroup.WithContext(ctx)
 
@@ -335,13 +334,13 @@ func (s *clientStream) destination(ctx context.Context, req *pbs.Request_Destina
 				return err
 			}
 
-			w.AddDestination(s.conn.id, req.Destination.Peer)
+			s.conn.server.whisperer.AddDestination(from, s.conn.id, req.Destination.Peer)
 		}
 	})
 
 	g.Go(func() error {
 		defer s.conn.logger.Debug("completed sources notify")
-		return w.Sources(ctx, func(peers []*pbs.ServerPeer) error {
+		return s.conn.server.whisperer.Sources(ctx, from, func(peers []*pbs.ServerPeer) error {
 			s.conn.logger.Debug("updated sources list", "peers", len(peers))
 
 			if err := pb.Write(s.stream, &pbs.Response{
@@ -447,9 +446,8 @@ func (s *clientStream) source(ctx context.Context, req *pbs.Request_Source) erro
 		return err
 	}
 
-	w := s.conn.server.whisperer.For(to)
-	w.AddSource(s.conn.id, req.Peer)
-	defer w.RemoveSource(s.conn.id)
+	s.conn.server.whisperer.AddSource(to, s.conn.id, req.Peer)
+	defer s.conn.server.whisperer.RemoveSource(to, s.conn.id)
 
 	g, ctx := errgroup.WithContext(ctx)
 
@@ -474,13 +472,13 @@ func (s *clientStream) source(ctx context.Context, req *pbs.Request_Source) erro
 				return err
 			}
 
-			w.AddSource(s.conn.id, req.Source.Peer)
+			s.conn.server.whisperer.AddSource(to, s.conn.id, req.Source.Peer)
 		}
 	})
 
 	g.Go(func() error {
 		defer s.conn.logger.Debug("completed destinations notify")
-		return w.Destinations(ctx, func(peers []*pbs.ServerPeer) error {
+		return s.conn.server.whisperer.Destinations(ctx, to, func(peers []*pbs.ServerPeer) error {
 			s.conn.logger.Debug("updated destinations list", "peers", len(peers))
 
 			if err := pb.Write(s.stream, &pbs.Response{

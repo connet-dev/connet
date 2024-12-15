@@ -17,29 +17,38 @@ type whisperer struct {
 	mu       sync.RWMutex
 }
 
+type whisper struct {
+	forward model.Forward
+	dsts    logc.KV[ksuid.KSUID, *pbs.ServerPeer]
+	srcs    logc.KV[ksuid.KSUID, *pbs.ServerPeer]
+}
+
 func newWhisperer() *whisperer {
 	return &whisperer{
 		whispers: map[model.Forward]*whisper{},
 	}
 }
 
-func (w *whisperer) For(fwd model.Forward) *whisper {
+func (w *whisperer) get(fwd model.Forward) *whisper {
 	w.mu.RLock()
-	wh := w.whispers[fwd]
-	w.mu.RUnlock()
-	if wh != nil {
+	defer w.mu.RUnlock()
+
+	return w.whispers[fwd]
+}
+
+func (w *whisperer) create(fwd model.Forward) *whisper {
+	if wh := w.get(fwd); wh != nil {
 		return wh
 	}
 
 	w.mu.Lock()
 	defer w.mu.Unlock()
 
-	wh = w.whispers[fwd]
-	if wh != nil {
+	if wh := w.whispers[fwd]; wh != nil {
 		return wh
 	}
 
-	wh = &whisper{
+	wh := &whisper{
 		forward: fwd,
 		dsts:    logc.NewMemoryKVLog[ksuid.KSUID, *pbs.ServerPeer](),
 		srcs:    logc.NewMemoryKVLog[ksuid.KSUID, *pbs.ServerPeer](),
@@ -48,45 +57,45 @@ func (w *whisperer) For(fwd model.Forward) *whisper {
 	return wh
 }
 
-type whisper struct {
-	forward model.Forward
-	dsts    logc.KV[ksuid.KSUID, *pbs.ServerPeer]
-	srcs    logc.KV[ksuid.KSUID, *pbs.ServerPeer]
-}
-
-func (w *whisper) AddDestination(id ksuid.KSUID, peer *pbs.ClientPeer) {
-	w.dsts.Put(id, &pbs.ServerPeer{
+func (w *whisperer) AddDestination(fwd model.Forward, id ksuid.KSUID, peer *pbs.ClientPeer) {
+	wh := w.create(fwd)
+	wh.dsts.Put(id, &pbs.ServerPeer{
 		Id:     id.String(),
 		Direct: peer.Direct,
 		Relays: peer.Relays,
 	})
 }
 
-func (w *whisper) RemoveDestination(id ksuid.KSUID) {
-	w.dsts.Del(id)
+func (w *whisperer) RemoveDestination(fwd model.Forward, id ksuid.KSUID) {
+	wh := w.get(fwd)
+	wh.dsts.Del(id)
 }
 
-func (w *whisper) Destinations(ctx context.Context, f func([]*pbs.ServerPeer) error) error {
-	return w.dsts.Listen(ctx, func(m map[ksuid.KSUID]*pbs.ServerPeer) error {
+func (w *whisperer) Destinations(ctx context.Context, fwd model.Forward, f func([]*pbs.ServerPeer) error) error {
+	wh := w.get(fwd)
+	return wh.dsts.Listen(ctx, func(m map[ksuid.KSUID]*pbs.ServerPeer) error {
 		vals := slices.Collect(maps.Values(m))
 		return f(vals)
 	})
 }
 
-func (w *whisper) AddSource(id ksuid.KSUID, peer *pbs.ClientPeer) {
-	w.srcs.Put(id, &pbs.ServerPeer{
+func (w *whisperer) AddSource(fwd model.Forward, id ksuid.KSUID, peer *pbs.ClientPeer) {
+	wh := w.create(fwd)
+	wh.srcs.Put(id, &pbs.ServerPeer{
 		Id:     id.String(),
 		Direct: peer.Direct,
 		Relays: peer.Relays,
 	})
 }
 
-func (w *whisper) RemoveSource(id ksuid.KSUID) {
-	w.srcs.Del(id)
+func (w *whisperer) RemoveSource(fwd model.Forward, id ksuid.KSUID) {
+	wh := w.get(fwd)
+	wh.srcs.Del(id)
 }
 
-func (w *whisper) Sources(ctx context.Context, f func([]*pbs.ServerPeer) error) error {
-	return w.srcs.Listen(ctx, func(m map[ksuid.KSUID]*pbs.ServerPeer) error {
+func (w *whisperer) Sources(ctx context.Context, fwd model.Forward, f func([]*pbs.ServerPeer) error) error {
+	wh := w.get(fwd)
+	return wh.srcs.Listen(ctx, func(m map[ksuid.KSUID]*pbs.ServerPeer) error {
 		vals := slices.Collect(maps.Values(m))
 		return f(vals)
 	})
