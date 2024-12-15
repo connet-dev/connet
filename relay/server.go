@@ -47,7 +47,7 @@ func NewServer(cfg Config) (*Server, error) {
 				NextProtos: []string{"connet-relays"},
 			},
 
-			serversOffset:    logc.OffsetOldest,
+			serverOffset:     logc.OffsetOldest,
 			serversByForward: map[model.Forward]*relayServer{},
 			serversByName:    map[string]*relayServer{},
 			serversLog:       logc.NewMemoryKVLog[model.Forward, *x509.Certificate](),

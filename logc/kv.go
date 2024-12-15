@@ -5,15 +5,22 @@ import (
 	"context"
 	"maps"
 	"slices"
+	"time"
 )
 
 type KV[K comparable, V any] interface {
 	Log[K, V]
 
+	Put(k K, v V) (int64, error)
+	PutDel(k K, v V) (int64, error)
+	Del(k K) (int64, error)
+
 	Map(ctx context.Context) (map[K]V, int64, error)
 	Snapshot(ctx context.Context) ([]Message[K, V], int64, error)
 
 	Listen(ctx context.Context, f func(map[K]V) error) error
+
+	Compact(ctx context.Context, age time.Duration) error
 }
 
 func NewMemoryKVLog[K comparable, V any]() KV[K, V] {
@@ -26,6 +33,28 @@ type kv[K comparable, V any] struct {
 	Log[K, V]
 }
 
+func (m *kv[K, V]) Put(k K, v V) (int64, error) {
+	return m.Publish(Message[K, V]{
+		Key:   k,
+		Value: v,
+	})
+}
+
+func (m *kv[K, V]) PutDel(k K, v V) (int64, error) {
+	return m.Publish(Message[K, V]{
+		Key:    k,
+		Value:  v,
+		Delete: true,
+	})
+}
+
+func (m *kv[K, V]) Del(k K) (int64, error) {
+	return m.Publish(Message[K, V]{
+		Key:    k,
+		Delete: true,
+	})
+}
+
 func (m *kv[K, V]) Map(ctx context.Context) (map[K]V, int64, error) {
 	return Map(ctx, m.Log)
 }
@@ -36,6 +65,46 @@ func (m *kv[K, V]) Snapshot(ctx context.Context) ([]Message[K, V], int64, error)
 
 func (m *kv[K, V]) Listen(ctx context.Context, f func(map[K]V) error) error {
 	return ListenMap(ctx, m.Log, f)
+}
+
+func (m *kv[K, V]) Compact(ctx context.Context, age time.Duration) error {
+	cutoff := time.Now().Add(-age)
+
+	maxOffset, err := m.NextOffset()
+	if err != nil {
+		return err
+	}
+
+	lastSet := map[K]Message[K, V]{}
+	deleteSet := map[int64]struct{}{}
+
+CUTOFF:
+	for offset := OffsetOldest; offset < maxOffset; {
+		msgs, nextOffset, err := m.Consume(ctx, offset)
+		if err != nil {
+			return err
+		}
+		offset = nextOffset
+
+		for _, msg := range msgs {
+			if msg.Time.After(cutoff) {
+				break CUTOFF
+			}
+
+			if oldMsg, ok := lastSet[msg.Key]; ok {
+				// if we've seen this key before, mark it for deletion
+				deleteSet[oldMsg.Offset] = struct{}{}
+			}
+
+			if msg.Delete {
+				deleteSet[msg.Offset] = struct{}{}
+			} else {
+				lastSet[msg.Key] = msg
+			}
+		}
+	}
+
+	return m.Delete(deleteSet)
 }
 
 func Map[K comparable, V any](ctx context.Context, log Log[K, V]) (map[K]V, int64, error) {

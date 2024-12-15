@@ -12,6 +12,7 @@ import (
 	"github.com/keihaya-com/connet/model"
 	"github.com/klev-dev/kleverr"
 	"github.com/quic-go/quic-go"
+	"github.com/segmentio/ksuid"
 )
 
 type Config struct {
@@ -32,6 +33,7 @@ func NewServer(cfg Config) (*Server, error) {
 		logger: cfg.Logger.With("control", cfg.Addr),
 	}
 	s.relays = &relayServer{
+		id:       ksuid.New(),
 		auth:     cfg.RelayAuth,
 		relays:   logc.NewMemoryKVLog[relayKey, relayValue](),
 		forwards: map[model.Forward]*relayForward{},

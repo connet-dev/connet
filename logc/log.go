@@ -5,6 +5,7 @@ import (
 	"context"
 	"slices"
 	"sync"
+	"time"
 
 	"github.com/klev-dev/kleverr"
 )
@@ -17,6 +18,7 @@ const (
 
 type Message[K any, V any] struct {
 	Offset int64
+	Time   time.Time
 	Key    K
 	Value  V
 	Delete bool
@@ -25,10 +27,8 @@ type Message[K any, V any] struct {
 type Log[K any, V any] interface {
 	Consume(ctx context.Context, offset int64) ([]Message[K, V], int64, error)
 	NextOffset() (int64, error)
-
-	Put(k K, v V) (int64, error)
-	PutDel(k K, v V) (int64, error)
-	Del(k K) (int64, error)
+	Publish(msg Message[K, V]) (int64, error)
+	Delete(offsets map[int64]struct{}) error
 }
 
 func NewMemoryLog[K any, V any]() Log[K, V] {
@@ -39,7 +39,7 @@ func NewMemoryLog[K any, V any]() Log[K, V] {
 
 type memLog[K any, V any] struct {
 	nextOffset int64
-	msgs       []Message[K, V]
+	messages   []Message[K, V]
 	mu         sync.RWMutex
 	notify     *offsetNotify
 }
@@ -60,21 +60,21 @@ func (m *memLog[K, V]) Consume(ctx context.Context, offset int64) ([]Message[K, 
 	case offset == OffsetNewest || offset == m.nextOffset:
 		return nil, m.nextOffset, nil
 	case offset == OffsetOldest:
-		if len(m.msgs) == 0 {
+		if len(m.messages) == 0 {
 			return nil, m.nextOffset, nil
 		}
-		msgs := m.msgs[0:min(32, len(m.msgs))]
+		msgs := m.messages[0:min(32, len(m.messages))]
 		return msgs, msgs[len(msgs)-1].Offset + 1, nil
-	case len(m.msgs) == 0:
+	case len(m.messages) == 0:
 		return nil, m.nextOffset, nil
-	case offset < m.msgs[0].Offset:
-		return nil, m.msgs[0].Offset, nil
+	case offset < m.messages[0].Offset:
+		return nil, m.messages[0].Offset, nil
 	}
 
-	pos, _ := slices.BinarySearchFunc(m.msgs, offset, func(msg Message[K, V], offset int64) int {
+	pos, _ := slices.BinarySearchFunc(m.messages, offset, func(msg Message[K, V], offset int64) int {
 		return cmp.Compare(msg.Offset, offset)
 	})
-	msgs := m.msgs[pos:min(pos+32, len(m.msgs))]
+	msgs := m.messages[pos:min(pos+32, len(m.messages))]
 	return msgs, msgs[len(msgs)-1].Offset + 1, nil
 }
 
@@ -85,29 +85,7 @@ func (m *memLog[K, V]) NextOffset() (int64, error) {
 	return m.nextOffset, nil
 }
 
-func (m *memLog[K, V]) Put(k K, v V) (int64, error) {
-	return m.publishNotify(Message[K, V]{
-		Key:   k,
-		Value: v,
-	})
-}
-
-func (m *memLog[K, V]) PutDel(k K, v V) (int64, error) {
-	return m.publishNotify(Message[K, V]{
-		Key:    k,
-		Value:  v,
-		Delete: true,
-	})
-}
-
-func (m *memLog[K, V]) Del(k K) (int64, error) {
-	return m.publishNotify(Message[K, V]{
-		Key:    k,
-		Delete: true,
-	})
-}
-
-func (m *memLog[K, V]) publishNotify(msg Message[K, V]) (int64, error) {
+func (m *memLog[K, V]) Publish(msg Message[K, V]) (int64, error) {
 	offset, err := m.publish(msg)
 	if err != nil {
 		return 0, err
@@ -121,8 +99,26 @@ func (m *memLog[K, V]) publish(msg Message[K, V]) (int64, error) {
 	defer m.mu.Unlock()
 
 	msg.Offset = m.nextOffset
-	m.msgs = append(m.msgs, msg)
+	if msg.Time.IsZero() {
+		msg.Time = time.Now()
+	}
+	m.messages = append(m.messages, msg)
 
 	m.nextOffset++
 	return m.nextOffset, nil
+}
+
+func (m *memLog[K, V]) Delete(offsets map[int64]struct{}) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	messages := make([]Message[K, V], 0, len(m.messages))
+	for _, msg := range m.messages {
+		if _, ok := offsets[msg.Offset]; !ok {
+			messages = append(messages, msg)
+		}
+	}
+	m.messages = messages
+
+	return nil
 }

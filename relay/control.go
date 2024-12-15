@@ -17,6 +17,7 @@ import (
 	"github.com/keihaya-com/connet/netc"
 	"github.com/keihaya-com/connet/pb"
 	"github.com/keihaya-com/connet/pbs"
+	"github.com/klev-dev/kleverr"
 	"github.com/quic-go/quic-go"
 	"golang.org/x/sync/errgroup"
 )
@@ -29,13 +30,34 @@ type controlClient struct {
 	controlToken   string
 	controlTlsConf *tls.Config
 
-	serversOffset    int64
+	serverID         string
+	serverOffset     int64
 	serversByForward map[model.Forward]*relayServer
 	serversByName    map[string]*relayServer
 	serversMu        sync.RWMutex
 	serversLog       logc.KV[model.Forward, *x509.Certificate]
 
 	logger *slog.Logger
+}
+
+func (s *controlClient) setServerID(serverID string) {
+	if s.serverID == serverID {
+		return
+	} else if s.serverID == "" {
+		s.logger.Info("new control server, no state", "serverID", serverID)
+		s.serverID = serverID
+		return
+	}
+
+	s.logger.Info("new control server, resetting", "serverID", serverID)
+	s.serversMu.Lock()
+	defer s.serversMu.Unlock()
+
+	s.serverID = serverID
+	s.serverOffset = logc.OffsetOldest
+	s.serversByForward = map[model.Forward]*relayServer{}
+	s.serversByName = map[string]*relayServer{}
+	s.serversLog = logc.NewMemoryKVLog[model.Forward, *x509.Certificate]()
 }
 
 func (s *controlClient) getByName(serverName string) *relayServer {
@@ -65,13 +87,13 @@ func (s *controlClient) authenticate(serverName string, certs []*x509.Certificat
 }
 
 func (s *controlClient) run(ctx context.Context, transport *quic.Transport) error {
-	conn, err := s.connect(ctx, transport)
+	conn, serverID, err := s.connect(ctx, transport)
 	if err != nil {
 		return err
 	}
 
 	for {
-		if err := s.runConnection(ctx, conn); err != nil {
+		if err := s.runConnection(ctx, conn, serverID); err != nil {
 			s.logger.Error("session ended", "err", err)
 			switch {
 			case errors.Is(err, context.Canceled):
@@ -80,23 +102,25 @@ func (s *controlClient) run(ctx context.Context, transport *quic.Transport) erro
 			}
 		}
 
-		if conn, err = s.reconnect(ctx, transport); err != nil {
+		if conn, serverID, err = s.reconnect(ctx, transport); err != nil {
 			return err
 		}
 	}
 }
 
-func (s *controlClient) connect(ctx context.Context, transport *quic.Transport) (quic.Connection, error) {
+var retConnect = kleverr.Ret2[quic.Connection, string]
+
+func (s *controlClient) connect(ctx context.Context, transport *quic.Transport) (quic.Connection, string, error) {
 	conn, err := transport.Dial(ctx, s.controlAddr, s.controlTlsConf, &quic.Config{
 		KeepAlivePeriod: 25 * time.Second,
 	})
 	if err != nil {
-		return nil, err
+		return retConnect(err)
 	}
 
 	authStream, err := conn.OpenStreamSync(ctx)
 	if err != nil {
-		return nil, err
+		return retConnect(err)
 	}
 	defer authStream.Close()
 
@@ -104,21 +128,21 @@ func (s *controlClient) connect(ctx context.Context, transport *quic.Transport) 
 		Token: s.controlToken,
 		Addr:  s.hostport.PB(),
 	}); err != nil {
-		return nil, err
+		return retConnect(err)
 	}
 
 	resp := &pbs.RelayAuthResp{}
 	if err := pb.Read(authStream, resp); err != nil {
-		return nil, err
+		return retConnect(err)
 	}
 	if resp.Error != nil {
-		return nil, err
+		return retConnect(err)
 	}
 
-	return conn, nil
+	return conn, resp.ControlId, nil
 }
 
-func (c *controlClient) reconnect(ctx context.Context, transport *quic.Transport) (quic.Connection, error) {
+func (c *controlClient) reconnect(ctx context.Context, transport *quic.Transport) (quic.Connection, string, error) {
 	d := netc.MinBackoff
 	t := time.NewTimer(d)
 	defer t.Stop()
@@ -126,14 +150,14 @@ func (c *controlClient) reconnect(ctx context.Context, transport *quic.Transport
 		c.logger.Debug("backoff wait", "d", d)
 		select {
 		case <-ctx.Done():
-			return nil, ctx.Err()
+			return nil, "", ctx.Err()
 		case <-t.C:
 		}
 
-		if sess, err := c.connect(ctx, transport); err != nil {
+		if sess, serverID, err := c.connect(ctx, transport); err != nil {
 			c.logger.Debug("reconnect failed, retrying", "err", err)
 		} else {
-			return sess, nil
+			return sess, serverID, nil
 		}
 
 		d = netc.NextBackoff(d)
@@ -141,8 +165,9 @@ func (c *controlClient) reconnect(ctx context.Context, transport *quic.Transport
 	}
 }
 
-func (s *controlClient) runConnection(ctx context.Context, conn quic.Connection) error {
+func (s *controlClient) runConnection(ctx context.Context, conn quic.Connection, serverID string) error {
 	defer conn.CloseWithError(0, "done")
+	s.setServerID(serverID)
 
 	g, ctx := errgroup.WithContext(ctx)
 
@@ -161,7 +186,7 @@ func (s *controlClient) runForwards(ctx context.Context, conn quic.Connection) e
 
 	for {
 		req := &pbs.RelayClientsReq{
-			Offset: s.serversOffset,
+			Offset: s.serverOffset,
 		}
 		if err := pb.Write(stream, req); err != nil {
 			return err
@@ -196,7 +221,7 @@ func (s *controlClient) runForwards(ctx context.Context, conn quic.Connection) e
 			}
 		}
 
-		s.serversOffset = resp.Offset
+		s.serverOffset = resp.Offset
 	}
 }
 

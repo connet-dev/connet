@@ -13,6 +13,7 @@ import (
 	"github.com/keihaya-com/connet/pbs"
 	"github.com/klev-dev/kleverr"
 	"github.com/quic-go/quic-go"
+	"github.com/segmentio/ksuid"
 	"golang.org/x/sync/errgroup"
 )
 
@@ -25,6 +26,7 @@ type RelayAuthentication interface {
 }
 
 type relayServer struct {
+	id     ksuid.KSUID
 	auth   RelayAuthenticator
 	logger *slog.Logger
 
@@ -168,7 +170,9 @@ func (c *relayConn) authenticate(ctx context.Context) (RelayAuthentication, mode
 		return retRelayAuth(err)
 	}
 
-	if err := pb.Write(authStream, &pbs.RelayAuthResp{}); err != nil {
+	if err := pb.Write(authStream, &pbs.RelayAuthResp{
+		ControlId: c.server.id.String(),
+	}); err != nil {
 		return retRelayAuth(err)
 	}
 
@@ -269,7 +273,7 @@ func (c *relayConn) runClients(ctx context.Context) error {
 		for _, change := range resp.Changes {
 			srv := model.NewForwardFromPB(change.Server)
 
-			srvForward := c.server.getForward(srv)
+			srvForward := c.server.createForward(srv)
 			if change.Change == pbs.RelayChange_ChangeDel {
 				srvForward.serverLog.Del(c.hostport)
 			} else {

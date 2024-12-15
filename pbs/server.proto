@@ -90,6 +90,7 @@ message RelayAuth {
 
 message RelayAuthResp {
   shared.Error error = 1;
+  string control_id = 2;
 }
 
 enum RelayChange {
