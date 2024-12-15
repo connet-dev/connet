@@ -531,6 +531,12 @@ func relayRun(ctx context.Context, cfg RelayConfig, logger *slog.Logger) error {
 		relayCfg.ControlCAs = cas
 	}
 
+	controlHost, _, err := net.SplitHostPort(cfg.ControlAddr)
+	if err != nil {
+		return err
+	}
+	relayCfg.ControlHost = controlHost
+
 	srv, err := relay.NewServer(relayCfg)
 	if err != nil {
 		return err
