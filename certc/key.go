@@ -1,7 +1,6 @@
 package certc
 
 import (
-	"crypto/sha256"
 	"crypto/tls"
 	"crypto/x509"
 
@@ -19,7 +18,7 @@ func NewKeyTLS(cert tls.Certificate) Key {
 	return newKey(blake2s.Sum256(cert.Leaf.Raw))
 }
 
-func newKey(sk [sha256.Size]byte) Key {
+func newKey(sk [blake2s.Size]byte) Key {
 	return Key{base58.Encode(sk[:])}
 }
 
