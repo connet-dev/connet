@@ -1,0 +1,55 @@
+syntax = "proto3";
+package relay;
+
+import "shared.proto";
+
+option go_package = "github.com/keihaya-com/connet/pbr";
+
+message RelayAuth {
+  string token = 1;
+  shared.HostPort addr = 2;
+}
+
+message RelayAuthResp {
+  shared.Error error = 1;
+  string control_id = 2;
+}
+
+enum RelayChange {
+  ChangeUnknown = 0;
+  ChangePut = 1;
+  ChangeDel = 2;
+}
+
+message RelayClientsReq {
+  int64 offset = 1;
+}
+
+message RelayClients {
+  repeated Change changes = 1;
+  int64 offset = 2;
+  bool restart = 3;
+
+  message Change {
+    shared.Forward destination = 1;
+    shared.Forward source = 2;
+    bytes client_certificate = 3;
+    RelayChange change = 4;
+  }
+}
+
+message RelayServersReq {
+  int64 offset = 1;
+}
+
+message RelayServers {
+  repeated Change changes = 1;
+  int64 offset = 2;
+  bool restart = 3;
+
+  message Change {
+    shared.Forward server = 1;
+    bytes server_certificate = 2;
+    RelayChange change = 3;
+  }
+}

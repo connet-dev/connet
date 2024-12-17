@@ -21,55 +21,6 @@ const (
 	_ = protoimpl.EnforceVersion(protoimpl.MaxVersion - 20)
 )
 
-type RelayChange int32
-
-const (
-	RelayChange_ChangeUnknown RelayChange = 0
-	RelayChange_ChangePut     RelayChange = 1
-	RelayChange_ChangeDel     RelayChange = 2
-)
-
-// Enum value maps for RelayChange.
-var (
-	RelayChange_name = map[int32]string{
-		0: "ChangeUnknown",
-		1: "ChangePut",
-		2: "ChangeDel",
-	}
-	RelayChange_value = map[string]int32{
-		"ChangeUnknown": 0,
-		"ChangePut":     1,
-		"ChangeDel":     2,
-	}
-)
-
-func (x RelayChange) Enum() *RelayChange {
-	p := new(RelayChange)
-	*p = x
-	return p
-}
-
-func (x RelayChange) String() string {
-	return protoimpl.X.EnumStringOf(x.Descriptor(), protoreflect.EnumNumber(x))
-}
-
-func (RelayChange) Descriptor() protoreflect.EnumDescriptor {
-	return file_server_proto_enumTypes[0].Descriptor()
-}
-
-func (RelayChange) Type() protoreflect.EnumType {
-	return &file_server_proto_enumTypes[0]
-}
-
-func (x RelayChange) Number() protoreflect.EnumNumber {
-	return protoreflect.EnumNumber(x)
-}
-
-// Deprecated: Use RelayChange.Descriptor instead.
-func (RelayChange) EnumDescriptor() ([]byte, []int) {
-	return file_server_proto_rawDescGZIP(), []int{0}
-}
-
 type Authenticate struct {
 	state         protoimpl.MessageState
 	sizeCache     protoimpl.SizeCache
@@ -552,324 +503,6 @@ func (x *DirectRoute) GetClientCertificate() []byte {
 	return nil
 }
 
-type RelayAuth struct {
-	state         protoimpl.MessageState
-	sizeCache     protoimpl.SizeCache
-	unknownFields protoimpl.UnknownFields
-
-	Token string       `protobuf:"bytes,1,opt,name=token,proto3" json:"token,omitempty"`
-	Addr  *pb.HostPort `protobuf:"bytes,2,opt,name=addr,proto3" json:"addr,omitempty"`
-}
-
-func (x *RelayAuth) Reset() {
-	*x = RelayAuth{}
-	mi := &file_server_proto_msgTypes[8]
-	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-	ms.StoreMessageInfo(mi)
-}
-
-func (x *RelayAuth) String() string {
-	return protoimpl.X.MessageStringOf(x)
-}
-
-func (*RelayAuth) ProtoMessage() {}
-
-func (x *RelayAuth) ProtoReflect() protoreflect.Message {
-	mi := &file_server_proto_msgTypes[8]
-	if x != nil {
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		if ms.LoadMessageInfo() == nil {
-			ms.StoreMessageInfo(mi)
-		}
-		return ms
-	}
-	return mi.MessageOf(x)
-}
-
-// Deprecated: Use RelayAuth.ProtoReflect.Descriptor instead.
-func (*RelayAuth) Descriptor() ([]byte, []int) {
-	return file_server_proto_rawDescGZIP(), []int{8}
-}
-
-func (x *RelayAuth) GetToken() string {
-	if x != nil {
-		return x.Token
-	}
-	return ""
-}
-
-func (x *RelayAuth) GetAddr() *pb.HostPort {
-	if x != nil {
-		return x.Addr
-	}
-	return nil
-}
-
-type RelayAuthResp struct {
-	state         protoimpl.MessageState
-	sizeCache     protoimpl.SizeCache
-	unknownFields protoimpl.UnknownFields
-
-	Error     *pb.Error `protobuf:"bytes,1,opt,name=error,proto3" json:"error,omitempty"`
-	ControlId string    `protobuf:"bytes,2,opt,name=control_id,json=controlId,proto3" json:"control_id,omitempty"`
-}
-
-func (x *RelayAuthResp) Reset() {
-	*x = RelayAuthResp{}
-	mi := &file_server_proto_msgTypes[9]
-	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-	ms.StoreMessageInfo(mi)
-}
-
-func (x *RelayAuthResp) String() string {
-	return protoimpl.X.MessageStringOf(x)
-}
-
-func (*RelayAuthResp) ProtoMessage() {}
-
-func (x *RelayAuthResp) ProtoReflect() protoreflect.Message {
-	mi := &file_server_proto_msgTypes[9]
-	if x != nil {
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		if ms.LoadMessageInfo() == nil {
-			ms.StoreMessageInfo(mi)
-		}
-		return ms
-	}
-	return mi.MessageOf(x)
-}
-
-// Deprecated: Use RelayAuthResp.ProtoReflect.Descriptor instead.
-func (*RelayAuthResp) Descriptor() ([]byte, []int) {
-	return file_server_proto_rawDescGZIP(), []int{9}
-}
-
-func (x *RelayAuthResp) GetError() *pb.Error {
-	if x != nil {
-		return x.Error
-	}
-	return nil
-}
-
-func (x *RelayAuthResp) GetControlId() string {
-	if x != nil {
-		return x.ControlId
-	}
-	return ""
-}
-
-type RelayClientsReq struct {
-	state         protoimpl.MessageState
-	sizeCache     protoimpl.SizeCache
-	unknownFields protoimpl.UnknownFields
-
-	Offset int64 `protobuf:"varint,1,opt,name=offset,proto3" json:"offset,omitempty"`
-}
-
-func (x *RelayClientsReq) Reset() {
-	*x = RelayClientsReq{}
-	mi := &file_server_proto_msgTypes[10]
-	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-	ms.StoreMessageInfo(mi)
-}
-
-func (x *RelayClientsReq) String() string {
-	return protoimpl.X.MessageStringOf(x)
-}
-
-func (*RelayClientsReq) ProtoMessage() {}
-
-func (x *RelayClientsReq) ProtoReflect() protoreflect.Message {
-	mi := &file_server_proto_msgTypes[10]
-	if x != nil {
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		if ms.LoadMessageInfo() == nil {
-			ms.StoreMessageInfo(mi)
-		}
-		return ms
-	}
-	return mi.MessageOf(x)
-}
-
-// Deprecated: Use RelayClientsReq.ProtoReflect.Descriptor instead.
-func (*RelayClientsReq) Descriptor() ([]byte, []int) {
-	return file_server_proto_rawDescGZIP(), []int{10}
-}
-
-func (x *RelayClientsReq) GetOffset() int64 {
-	if x != nil {
-		return x.Offset
-	}
-	return 0
-}
-
-type RelayClients struct {
-	state         protoimpl.MessageState
-	sizeCache     protoimpl.SizeCache
-	unknownFields protoimpl.UnknownFields
-
-	Changes []*RelayClients_Change `protobuf:"bytes,1,rep,name=changes,proto3" json:"changes,omitempty"`
-	Offset  int64                  `protobuf:"varint,2,opt,name=offset,proto3" json:"offset,omitempty"`
-	Restart bool                   `protobuf:"varint,3,opt,name=restart,proto3" json:"restart,omitempty"`
-}
-
-func (x *RelayClients) Reset() {
-	*x = RelayClients{}
-	mi := &file_server_proto_msgTypes[11]
-	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-	ms.StoreMessageInfo(mi)
-}
-
-func (x *RelayClients) String() string {
-	return protoimpl.X.MessageStringOf(x)
-}
-
-func (*RelayClients) ProtoMessage() {}
-
-func (x *RelayClients) ProtoReflect() protoreflect.Message {
-	mi := &file_server_proto_msgTypes[11]
-	if x != nil {
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		if ms.LoadMessageInfo() == nil {
-			ms.StoreMessageInfo(mi)
-		}
-		return ms
-	}
-	return mi.MessageOf(x)
-}
-
-// Deprecated: Use RelayClients.ProtoReflect.Descriptor instead.
-func (*RelayClients) Descriptor() ([]byte, []int) {
-	return file_server_proto_rawDescGZIP(), []int{11}
-}
-
-func (x *RelayClients) GetChanges() []*RelayClients_Change {
-	if x != nil {
-		return x.Changes
-	}
-	return nil
-}
-
-func (x *RelayClients) GetOffset() int64 {
-	if x != nil {
-		return x.Offset
-	}
-	return 0
-}
-
-func (x *RelayClients) GetRestart() bool {
-	if x != nil {
-		return x.Restart
-	}
-	return false
-}
-
-type RelayServersReq struct {
-	state         protoimpl.MessageState
-	sizeCache     protoimpl.SizeCache
-	unknownFields protoimpl.UnknownFields
-
-	Offset int64 `protobuf:"varint,1,opt,name=offset,proto3" json:"offset,omitempty"`
-}
-
-func (x *RelayServersReq) Reset() {
-	*x = RelayServersReq{}
-	mi := &file_server_proto_msgTypes[12]
-	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-	ms.StoreMessageInfo(mi)
-}
-
-func (x *RelayServersReq) String() string {
-	return protoimpl.X.MessageStringOf(x)
-}
-
-func (*RelayServersReq) ProtoMessage() {}
-
-func (x *RelayServersReq) ProtoReflect() protoreflect.Message {
-	mi := &file_server_proto_msgTypes[12]
-	if x != nil {
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		if ms.LoadMessageInfo() == nil {
-			ms.StoreMessageInfo(mi)
-		}
-		return ms
-	}
-	return mi.MessageOf(x)
-}
-
-// Deprecated: Use RelayServersReq.ProtoReflect.Descriptor instead.
-func (*RelayServersReq) Descriptor() ([]byte, []int) {
-	return file_server_proto_rawDescGZIP(), []int{12}
-}
-
-func (x *RelayServersReq) GetOffset() int64 {
-	if x != nil {
-		return x.Offset
-	}
-	return 0
-}
-
-type RelayServers struct {
-	state         protoimpl.MessageState
-	sizeCache     protoimpl.SizeCache
-	unknownFields protoimpl.UnknownFields
-
-	Changes []*RelayServers_Change `protobuf:"bytes,1,rep,name=changes,proto3" json:"changes,omitempty"`
-	Offset  int64                  `protobuf:"varint,2,opt,name=offset,proto3" json:"offset,omitempty"`
-	Restart bool                   `protobuf:"varint,3,opt,name=restart,proto3" json:"restart,omitempty"`
-}
-
-func (x *RelayServers) Reset() {
-	*x = RelayServers{}
-	mi := &file_server_proto_msgTypes[13]
-	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-	ms.StoreMessageInfo(mi)
-}
-
-func (x *RelayServers) String() string {
-	return protoimpl.X.MessageStringOf(x)
-}
-
-func (*RelayServers) ProtoMessage() {}
-
-func (x *RelayServers) ProtoReflect() protoreflect.Message {
-	mi := &file_server_proto_msgTypes[13]
-	if x != nil {
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		if ms.LoadMessageInfo() == nil {
-			ms.StoreMessageInfo(mi)
-		}
-		return ms
-	}
-	return mi.MessageOf(x)
-}
-
-// Deprecated: Use RelayServers.ProtoReflect.Descriptor instead.
-func (*RelayServers) Descriptor() ([]byte, []int) {
-	return file_server_proto_rawDescGZIP(), []int{13}
-}
-
-func (x *RelayServers) GetChanges() []*RelayServers_Change {
-	if x != nil {
-		return x.Changes
-	}
-	return nil
-}
-
-func (x *RelayServers) GetOffset() int64 {
-	if x != nil {
-		return x.Offset
-	}
-	return 0
-}
-
-func (x *RelayServers) GetRestart() bool {
-	if x != nil {
-		return x.Restart
-	}
-	return false
-}
-
 type Request_DestinationRelay struct {
 	state         protoimpl.MessageState
 	sizeCache     protoimpl.SizeCache
@@ -881,7 +514,7 @@ type Request_DestinationRelay struct {
 
 func (x *Request_DestinationRelay) Reset() {
 	*x = Request_DestinationRelay{}
-	mi := &file_server_proto_msgTypes[14]
+	mi := &file_server_proto_msgTypes[8]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -893,7 +526,7 @@ func (x *Request_DestinationRelay) String() string {
 func (*Request_DestinationRelay) ProtoMessage() {}
 
 func (x *Request_DestinationRelay) ProtoReflect() protoreflect.Message {
-	mi := &file_server_proto_msgTypes[14]
+	mi := &file_server_proto_msgTypes[8]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -934,7 +567,7 @@ type Request_Destination struct {
 
 func (x *Request_Destination) Reset() {
 	*x = Request_Destination{}
-	mi := &file_server_proto_msgTypes[15]
+	mi := &file_server_proto_msgTypes[9]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -946,7 +579,7 @@ func (x *Request_Destination) String() string {
 func (*Request_Destination) ProtoMessage() {}
 
 func (x *Request_Destination) ProtoReflect() protoreflect.Message {
-	mi := &file_server_proto_msgTypes[15]
+	mi := &file_server_proto_msgTypes[9]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -987,7 +620,7 @@ type Request_SourceRelay struct {
 
 func (x *Request_SourceRelay) Reset() {
 	*x = Request_SourceRelay{}
-	mi := &file_server_proto_msgTypes[16]
+	mi := &file_server_proto_msgTypes[10]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -999,7 +632,7 @@ func (x *Request_SourceRelay) String() string {
 func (*Request_SourceRelay) ProtoMessage() {}
 
 func (x *Request_SourceRelay) ProtoReflect() protoreflect.Message {
-	mi := &file_server_proto_msgTypes[16]
+	mi := &file_server_proto_msgTypes[10]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1040,7 +673,7 @@ type Request_Source struct {
 
 func (x *Request_Source) Reset() {
 	*x = Request_Source{}
-	mi := &file_server_proto_msgTypes[17]
+	mi := &file_server_proto_msgTypes[11]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1052,7 +685,7 @@ func (x *Request_Source) String() string {
 func (*Request_Source) ProtoMessage() {}
 
 func (x *Request_Source) ProtoReflect() protoreflect.Message {
-	mi := &file_server_proto_msgTypes[17]
+	mi := &file_server_proto_msgTypes[11]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1092,7 +725,7 @@ type Response_Relays struct {
 
 func (x *Response_Relays) Reset() {
 	*x = Response_Relays{}
-	mi := &file_server_proto_msgTypes[18]
+	mi := &file_server_proto_msgTypes[12]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1104,7 +737,7 @@ func (x *Response_Relays) String() string {
 func (*Response_Relays) ProtoMessage() {}
 
 func (x *Response_Relays) ProtoReflect() protoreflect.Message {
-	mi := &file_server_proto_msgTypes[18]
+	mi := &file_server_proto_msgTypes[12]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1137,7 +770,7 @@ type Response_Destination struct {
 
 func (x *Response_Destination) Reset() {
 	*x = Response_Destination{}
-	mi := &file_server_proto_msgTypes[19]
+	mi := &file_server_proto_msgTypes[13]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1149,7 +782,7 @@ func (x *Response_Destination) String() string {
 func (*Response_Destination) ProtoMessage() {}
 
 func (x *Response_Destination) ProtoReflect() protoreflect.Message {
-	mi := &file_server_proto_msgTypes[19]
+	mi := &file_server_proto_msgTypes[13]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1182,7 +815,7 @@ type Response_Source struct {
 
 func (x *Response_Source) Reset() {
 	*x = Response_Source{}
-	mi := &file_server_proto_msgTypes[20]
+	mi := &file_server_proto_msgTypes[14]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1194,7 +827,7 @@ func (x *Response_Source) String() string {
 func (*Response_Source) ProtoMessage() {}
 
 func (x *Response_Source) ProtoReflect() protoreflect.Message {
-	mi := &file_server_proto_msgTypes[20]
+	mi := &file_server_proto_msgTypes[14]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1215,136 +848,6 @@ func (x *Response_Source) GetPeers() []*ServerPeer {
 		return x.Peers
 	}
 	return nil
-}
-
-type RelayClients_Change struct {
-	state         protoimpl.MessageState
-	sizeCache     protoimpl.SizeCache
-	unknownFields protoimpl.UnknownFields
-
-	Destination       *pb.Forward `protobuf:"bytes,1,opt,name=destination,proto3" json:"destination,omitempty"`
-	Source            *pb.Forward `protobuf:"bytes,2,opt,name=source,proto3" json:"source,omitempty"`
-	ClientCertificate []byte      `protobuf:"bytes,3,opt,name=client_certificate,json=clientCertificate,proto3" json:"client_certificate,omitempty"`
-	Change            RelayChange `protobuf:"varint,4,opt,name=change,proto3,enum=server.RelayChange" json:"change,omitempty"`
-}
-
-func (x *RelayClients_Change) Reset() {
-	*x = RelayClients_Change{}
-	mi := &file_server_proto_msgTypes[21]
-	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-	ms.StoreMessageInfo(mi)
-}
-
-func (x *RelayClients_Change) String() string {
-	return protoimpl.X.MessageStringOf(x)
-}
-
-func (*RelayClients_Change) ProtoMessage() {}
-
-func (x *RelayClients_Change) ProtoReflect() protoreflect.Message {
-	mi := &file_server_proto_msgTypes[21]
-	if x != nil {
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		if ms.LoadMessageInfo() == nil {
-			ms.StoreMessageInfo(mi)
-		}
-		return ms
-	}
-	return mi.MessageOf(x)
-}
-
-// Deprecated: Use RelayClients_Change.ProtoReflect.Descriptor instead.
-func (*RelayClients_Change) Descriptor() ([]byte, []int) {
-	return file_server_proto_rawDescGZIP(), []int{11, 0}
-}
-
-func (x *RelayClients_Change) GetDestination() *pb.Forward {
-	if x != nil {
-		return x.Destination
-	}
-	return nil
-}
-
-func (x *RelayClients_Change) GetSource() *pb.Forward {
-	if x != nil {
-		return x.Source
-	}
-	return nil
-}
-
-func (x *RelayClients_Change) GetClientCertificate() []byte {
-	if x != nil {
-		return x.ClientCertificate
-	}
-	return nil
-}
-
-func (x *RelayClients_Change) GetChange() RelayChange {
-	if x != nil {
-		return x.Change
-	}
-	return RelayChange_ChangeUnknown
-}
-
-type RelayServers_Change struct {
-	state         protoimpl.MessageState
-	sizeCache     protoimpl.SizeCache
-	unknownFields protoimpl.UnknownFields
-
-	Server            *pb.Forward `protobuf:"bytes,1,opt,name=server,proto3" json:"server,omitempty"`
-	ServerCertificate []byte      `protobuf:"bytes,2,opt,name=server_certificate,json=serverCertificate,proto3" json:"server_certificate,omitempty"`
-	Change            RelayChange `protobuf:"varint,3,opt,name=change,proto3,enum=server.RelayChange" json:"change,omitempty"`
-}
-
-func (x *RelayServers_Change) Reset() {
-	*x = RelayServers_Change{}
-	mi := &file_server_proto_msgTypes[22]
-	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-	ms.StoreMessageInfo(mi)
-}
-
-func (x *RelayServers_Change) String() string {
-	return protoimpl.X.MessageStringOf(x)
-}
-
-func (*RelayServers_Change) ProtoMessage() {}
-
-func (x *RelayServers_Change) ProtoReflect() protoreflect.Message {
-	mi := &file_server_proto_msgTypes[22]
-	if x != nil {
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		if ms.LoadMessageInfo() == nil {
-			ms.StoreMessageInfo(mi)
-		}
-		return ms
-	}
-	return mi.MessageOf(x)
-}
-
-// Deprecated: Use RelayServers_Change.ProtoReflect.Descriptor instead.
-func (*RelayServers_Change) Descriptor() ([]byte, []int) {
-	return file_server_proto_rawDescGZIP(), []int{13, 0}
-}
-
-func (x *RelayServers_Change) GetServer() *pb.Forward {
-	if x != nil {
-		return x.Server
-	}
-	return nil
-}
-
-func (x *RelayServers_Change) GetServerCertificate() []byte {
-	if x != nil {
-		return x.ServerCertificate
-	}
-	return nil
-}
-
-func (x *RelayServers_Change) GetChange() RelayChange {
-	if x != nil {
-		return x.Change
-	}
-	return RelayChange_ChangeUnknown
 }
 
 var File_server_proto protoreflect.FileDescriptor
@@ -1458,66 +961,10 @@ var file_server_proto_rawDesc = []byte{
 	0x65, 0x72, 0x43, 0x65, 0x72, 0x74, 0x69, 0x66, 0x69, 0x63, 0x61, 0x74, 0x65, 0x12, 0x2d, 0x0a,
 	0x12, 0x63, 0x6c, 0x69, 0x65, 0x6e, 0x74, 0x5f, 0x63, 0x65, 0x72, 0x74, 0x69, 0x66, 0x69, 0x63,
 	0x61, 0x74, 0x65, 0x18, 0x03, 0x20, 0x01, 0x28, 0x0c, 0x52, 0x11, 0x63, 0x6c, 0x69, 0x65, 0x6e,
-	0x74, 0x43, 0x65, 0x72, 0x74, 0x69, 0x66, 0x69, 0x63, 0x61, 0x74, 0x65, 0x22, 0x47, 0x0a, 0x09,
-	0x52, 0x65, 0x6c, 0x61, 0x79, 0x41, 0x75, 0x74, 0x68, 0x12, 0x14, 0x0a, 0x05, 0x74, 0x6f, 0x6b,
-	0x65, 0x6e, 0x18, 0x01, 0x20, 0x01, 0x28, 0x09, 0x52, 0x05, 0x74, 0x6f, 0x6b, 0x65, 0x6e, 0x12,
-	0x24, 0x0a, 0x04, 0x61, 0x64, 0x64, 0x72, 0x18, 0x02, 0x20, 0x01, 0x28, 0x0b, 0x32, 0x10, 0x2e,
-	0x73, 0x68, 0x61, 0x72, 0x65, 0x64, 0x2e, 0x48, 0x6f, 0x73, 0x74, 0x50, 0x6f, 0x72, 0x74, 0x52,
-	0x04, 0x61, 0x64, 0x64, 0x72, 0x22, 0x53, 0x0a, 0x0d, 0x52, 0x65, 0x6c, 0x61, 0x79, 0x41, 0x75,
-	0x74, 0x68, 0x52, 0x65, 0x73, 0x70, 0x12, 0x23, 0x0a, 0x05, 0x65, 0x72, 0x72, 0x6f, 0x72, 0x18,
-	0x01, 0x20, 0x01, 0x28, 0x0b, 0x32, 0x0d, 0x2e, 0x73, 0x68, 0x61, 0x72, 0x65, 0x64, 0x2e, 0x45,
-	0x72, 0x72, 0x6f, 0x72, 0x52, 0x05, 0x65, 0x72, 0x72, 0x6f, 0x72, 0x12, 0x1d, 0x0a, 0x0a, 0x63,
-	0x6f, 0x6e, 0x74, 0x72, 0x6f, 0x6c, 0x5f, 0x69, 0x64, 0x18, 0x02, 0x20, 0x01, 0x28, 0x09, 0x52,
-	0x09, 0x63, 0x6f, 0x6e, 0x74, 0x72, 0x6f, 0x6c, 0x49, 0x64, 0x22, 0x29, 0x0a, 0x0f, 0x52, 0x65,
-	0x6c, 0x61, 0x79, 0x43, 0x6c, 0x69, 0x65, 0x6e, 0x74, 0x73, 0x52, 0x65, 0x71, 0x12, 0x16, 0x0a,
-	0x06, 0x6f, 0x66, 0x66, 0x73, 0x65, 0x74, 0x18, 0x01, 0x20, 0x01, 0x28, 0x03, 0x52, 0x06, 0x6f,
-	0x66, 0x66, 0x73, 0x65, 0x74, 0x22, 0xba, 0x02, 0x0a, 0x0c, 0x52, 0x65, 0x6c, 0x61, 0x79, 0x43,
-	0x6c, 0x69, 0x65, 0x6e, 0x74, 0x73, 0x12, 0x35, 0x0a, 0x07, 0x63, 0x68, 0x61, 0x6e, 0x67, 0x65,
-	0x73, 0x18, 0x01, 0x20, 0x03, 0x28, 0x0b, 0x32, 0x1b, 0x2e, 0x73, 0x65, 0x72, 0x76, 0x65, 0x72,
-	0x2e, 0x52, 0x65, 0x6c, 0x61, 0x79, 0x43, 0x6c, 0x69, 0x65, 0x6e, 0x74, 0x73, 0x2e, 0x43, 0x68,
-	0x61, 0x6e, 0x67, 0x65, 0x52, 0x07, 0x63, 0x68, 0x61, 0x6e, 0x67, 0x65, 0x73, 0x12, 0x16, 0x0a,
-	0x06, 0x6f, 0x66, 0x66, 0x73, 0x65, 0x74, 0x18, 0x02, 0x20, 0x01, 0x28, 0x03, 0x52, 0x06, 0x6f,
-	0x66, 0x66, 0x73, 0x65, 0x74, 0x12, 0x18, 0x0a, 0x07, 0x72, 0x65, 0x73, 0x74, 0x61, 0x72, 0x74,
-	0x18, 0x03, 0x20, 0x01, 0x28, 0x08, 0x52, 0x07, 0x72, 0x65, 0x73, 0x74, 0x61, 0x72, 0x74, 0x1a,
-	0xc0, 0x01, 0x0a, 0x06, 0x43, 0x68, 0x61, 0x6e, 0x67, 0x65, 0x12, 0x31, 0x0a, 0x0b, 0x64, 0x65,
-	0x73, 0x74, 0x69, 0x6e, 0x61, 0x74, 0x69, 0x6f, 0x6e, 0x18, 0x01, 0x20, 0x01, 0x28, 0x0b, 0x32,
-	0x0f, 0x2e, 0x73, 0x68, 0x61, 0x72, 0x65, 0x64, 0x2e, 0x46, 0x6f, 0x72, 0x77, 0x61, 0x72, 0x64,
-	0x52, 0x0b, 0x64, 0x65, 0x73, 0x74, 0x69, 0x6e, 0x61, 0x74, 0x69, 0x6f, 0x6e, 0x12, 0x27, 0x0a,
-	0x06, 0x73, 0x6f, 0x75, 0x72, 0x63, 0x65, 0x18, 0x02, 0x20, 0x01, 0x28, 0x0b, 0x32, 0x0f, 0x2e,
-	0x73, 0x68, 0x61, 0x72, 0x65, 0x64, 0x2e, 0x46, 0x6f, 0x72, 0x77, 0x61, 0x72, 0x64, 0x52, 0x06,
-	0x73, 0x6f, 0x75, 0x72, 0x63, 0x65, 0x12, 0x2d, 0x0a, 0x12, 0x63, 0x6c, 0x69, 0x65, 0x6e, 0x74,
-	0x5f, 0x63, 0x65, 0x72, 0x74, 0x69, 0x66, 0x69, 0x63, 0x61, 0x74, 0x65, 0x18, 0x03, 0x20, 0x01,
-	0x28, 0x0c, 0x52, 0x11, 0x63, 0x6c, 0x69, 0x65, 0x6e, 0x74, 0x43, 0x65, 0x72, 0x74, 0x69, 0x66,
-	0x69, 0x63, 0x61, 0x74, 0x65, 0x12, 0x2b, 0x0a, 0x06, 0x63, 0x68, 0x61, 0x6e, 0x67, 0x65, 0x18,
-	0x04, 0x20, 0x01, 0x28, 0x0e, 0x32, 0x13, 0x2e, 0x73, 0x65, 0x72, 0x76, 0x65, 0x72, 0x2e, 0x52,
-	0x65, 0x6c, 0x61, 0x79, 0x43, 0x68, 0x61, 0x6e, 0x67, 0x65, 0x52, 0x06, 0x63, 0x68, 0x61, 0x6e,
-	0x67, 0x65, 0x22, 0x29, 0x0a, 0x0f, 0x52, 0x65, 0x6c, 0x61, 0x79, 0x53, 0x65, 0x72, 0x76, 0x65,
-	0x72, 0x73, 0x52, 0x65, 0x71, 0x12, 0x16, 0x0a, 0x06, 0x6f, 0x66, 0x66, 0x73, 0x65, 0x74, 0x18,
-	0x01, 0x20, 0x01, 0x28, 0x03, 0x52, 0x06, 0x6f, 0x66, 0x66, 0x73, 0x65, 0x74, 0x22, 0x87, 0x02,
-	0x0a, 0x0c, 0x52, 0x65, 0x6c, 0x61, 0x79, 0x53, 0x65, 0x72, 0x76, 0x65, 0x72, 0x73, 0x12, 0x35,
-	0x0a, 0x07, 0x63, 0x68, 0x61, 0x6e, 0x67, 0x65, 0x73, 0x18, 0x01, 0x20, 0x03, 0x28, 0x0b, 0x32,
-	0x1b, 0x2e, 0x73, 0x65, 0x72, 0x76, 0x65, 0x72, 0x2e, 0x52, 0x65, 0x6c, 0x61, 0x79, 0x53, 0x65,
-	0x72, 0x76, 0x65, 0x72, 0x73, 0x2e, 0x43, 0x68, 0x61, 0x6e, 0x67, 0x65, 0x52, 0x07, 0x63, 0x68,
-	0x61, 0x6e, 0x67, 0x65, 0x73, 0x12, 0x16, 0x0a, 0x06, 0x6f, 0x66, 0x66, 0x73, 0x65, 0x74, 0x18,
-	0x02, 0x20, 0x01, 0x28, 0x03, 0x52, 0x06, 0x6f, 0x66, 0x66, 0x73, 0x65, 0x74, 0x12, 0x18, 0x0a,
-	0x07, 0x72, 0x65, 0x73, 0x74, 0x61, 0x72, 0x74, 0x18, 0x03, 0x20, 0x01, 0x28, 0x08, 0x52, 0x07,
-	0x72, 0x65, 0x73, 0x74, 0x61, 0x72, 0x74, 0x1a, 0x8d, 0x01, 0x0a, 0x06, 0x43, 0x68, 0x61, 0x6e,
-	0x67, 0x65, 0x12, 0x27, 0x0a, 0x06, 0x73, 0x65, 0x72, 0x76, 0x65, 0x72, 0x18, 0x01, 0x20, 0x01,
-	0x28, 0x0b, 0x32, 0x0f, 0x2e, 0x73, 0x68, 0x61, 0x72, 0x65, 0x64, 0x2e, 0x46, 0x6f, 0x72, 0x77,
-	0x61, 0x72, 0x64, 0x52, 0x06, 0x73, 0x65, 0x72, 0x76, 0x65, 0x72, 0x12, 0x2d, 0x0a, 0x12, 0x73,
-	0x65, 0x72, 0x76, 0x65, 0x72, 0x5f, 0x63, 0x65, 0x72, 0x74, 0x69, 0x66, 0x69, 0x63, 0x61, 0x74,
-	0x65, 0x18, 0x02, 0x20, 0x01, 0x28, 0x0c, 0x52, 0x11, 0x73, 0x65, 0x72, 0x76, 0x65, 0x72, 0x43,
-	0x65, 0x72, 0x74, 0x69, 0x66, 0x69, 0x63, 0x61, 0x74, 0x65, 0x12, 0x2b, 0x0a, 0x06, 0x63, 0x68,
-	0x61, 0x6e, 0x67, 0x65, 0x18, 0x03, 0x20, 0x01, 0x28, 0x0e, 0x32, 0x13, 0x2e, 0x73, 0x65, 0x72,
-	0x76, 0x65, 0x72, 0x2e, 0x52, 0x65, 0x6c, 0x61, 0x79, 0x43, 0x68, 0x61, 0x6e, 0x67, 0x65, 0x52,
-	0x06, 0x63, 0x68, 0x61, 0x6e, 0x67, 0x65, 0x2a, 0x3e, 0x0a, 0x0b, 0x52, 0x65, 0x6c, 0x61, 0x79,
-	0x43, 0x68, 0x61, 0x6e, 0x67, 0x65, 0x12, 0x11, 0x0a, 0x0d, 0x43, 0x68, 0x61, 0x6e, 0x67, 0x65,
-	0x55, 0x6e, 0x6b, 0x6e, 0x6f, 0x77, 0x6e, 0x10, 0x00, 0x12, 0x0d, 0x0a, 0x09, 0x43, 0x68, 0x61,
-	0x6e, 0x67, 0x65, 0x50, 0x75, 0x74, 0x10, 0x01, 0x12, 0x0d, 0x0a, 0x09, 0x43, 0x68, 0x61, 0x6e,
-	0x67, 0x65, 0x44, 0x65, 0x6c, 0x10, 0x02, 0x42, 0x23, 0x5a, 0x21, 0x67, 0x69, 0x74, 0x68, 0x75,
-	0x62, 0x2e, 0x63, 0x6f, 0x6d, 0x2f, 0x6b, 0x65, 0x69, 0x68, 0x61, 0x79, 0x61, 0x2d, 0x63, 0x6f,
-	0x6d, 0x2f, 0x63, 0x6f, 0x6e, 0x6e, 0x65, 0x74, 0x2f, 0x70, 0x62, 0x73, 0x62, 0x06, 0x70, 0x72,
-	0x6f, 0x74, 0x6f, 0x33,
+	0x74, 0x43, 0x65, 0x72, 0x74, 0x69, 0x66, 0x69, 0x63, 0x61, 0x74, 0x65, 0x42, 0x23, 0x5a, 0x21,
+	0x67, 0x69, 0x74, 0x68, 0x75, 0x62, 0x2e, 0x63, 0x6f, 0x6d, 0x2f, 0x6b, 0x65, 0x69, 0x68, 0x61,
+	0x79, 0x61, 0x2d, 0x63, 0x6f, 0x6d, 0x2f, 0x63, 0x6f, 0x6e, 0x6e, 0x65, 0x74, 0x2f, 0x70, 0x62,
+	0x73, 0x62, 0x06, 0x70, 0x72, 0x6f, 0x74, 0x6f, 0x33,
 }
 
 var (
@@ -1532,78 +979,59 @@ func file_server_proto_rawDescGZIP() []byte {
 	return file_server_proto_rawDescData
 }
 
-var file_server_proto_enumTypes = make([]protoimpl.EnumInfo, 1)
-var file_server_proto_msgTypes = make([]protoimpl.MessageInfo, 23)
+var file_server_proto_msgTypes = make([]protoimpl.MessageInfo, 15)
 var file_server_proto_goTypes = []any{
-	(RelayChange)(0),                 // 0: server.RelayChange
-	(*Authenticate)(nil),             // 1: server.Authenticate
-	(*AuthenticateResp)(nil),         // 2: server.AuthenticateResp
-	(*Request)(nil),                  // 3: server.Request
-	(*Response)(nil),                 // 4: server.Response
-	(*Relay)(nil),                    // 5: server.Relay
-	(*ClientPeer)(nil),               // 6: server.ClientPeer
-	(*ServerPeer)(nil),               // 7: server.ServerPeer
-	(*DirectRoute)(nil),              // 8: server.DirectRoute
-	(*RelayAuth)(nil),                // 9: server.RelayAuth
-	(*RelayAuthResp)(nil),            // 10: server.RelayAuthResp
-	(*RelayClientsReq)(nil),          // 11: server.RelayClientsReq
-	(*RelayClients)(nil),             // 12: server.RelayClients
-	(*RelayServersReq)(nil),          // 13: server.RelayServersReq
-	(*RelayServers)(nil),             // 14: server.RelayServers
-	(*Request_DestinationRelay)(nil), // 15: server.Request.DestinationRelay
-	(*Request_Destination)(nil),      // 16: server.Request.Destination
-	(*Request_SourceRelay)(nil),      // 17: server.Request.SourceRelay
-	(*Request_Source)(nil),           // 18: server.Request.Source
-	(*Response_Relays)(nil),          // 19: server.Response.Relays
-	(*Response_Destination)(nil),     // 20: server.Response.Destination
-	(*Response_Source)(nil),          // 21: server.Response.Source
-	(*RelayClients_Change)(nil),      // 22: server.RelayClients.Change
-	(*RelayServers_Change)(nil),      // 23: server.RelayServers.Change
-	(*pb.Error)(nil),                 // 24: shared.Error
-	(*pb.AddrPort)(nil),              // 25: shared.AddrPort
-	(*pb.HostPort)(nil),              // 26: shared.HostPort
-	(*pb.Forward)(nil),               // 27: shared.Forward
+	(*Authenticate)(nil),             // 0: server.Authenticate
+	(*AuthenticateResp)(nil),         // 1: server.AuthenticateResp
+	(*Request)(nil),                  // 2: server.Request
+	(*Response)(nil),                 // 3: server.Response
+	(*Relay)(nil),                    // 4: server.Relay
+	(*ClientPeer)(nil),               // 5: server.ClientPeer
+	(*ServerPeer)(nil),               // 6: server.ServerPeer
+	(*DirectRoute)(nil),              // 7: server.DirectRoute
+	(*Request_DestinationRelay)(nil), // 8: server.Request.DestinationRelay
+	(*Request_Destination)(nil),      // 9: server.Request.Destination
+	(*Request_SourceRelay)(nil),      // 10: server.Request.SourceRelay
+	(*Request_Source)(nil),           // 11: server.Request.Source
+	(*Response_Relays)(nil),          // 12: server.Response.Relays
+	(*Response_Destination)(nil),     // 13: server.Response.Destination
+	(*Response_Source)(nil),          // 14: server.Response.Source
+	(*pb.Error)(nil),                 // 15: shared.Error
+	(*pb.AddrPort)(nil),              // 16: shared.AddrPort
+	(*pb.HostPort)(nil),              // 17: shared.HostPort
+	(*pb.Forward)(nil),               // 18: shared.Forward
 }
 var file_server_proto_depIdxs = []int32{
-	24, // 0: server.AuthenticateResp.error:type_name -> shared.Error
-	25, // 1: server.AuthenticateResp.public:type_name -> shared.AddrPort
-	15, // 2: server.Request.destination_relay:type_name -> server.Request.DestinationRelay
-	16, // 3: server.Request.destination:type_name -> server.Request.Destination
-	17, // 4: server.Request.source_relay:type_name -> server.Request.SourceRelay
-	18, // 5: server.Request.source:type_name -> server.Request.Source
-	24, // 6: server.Response.error:type_name -> shared.Error
-	19, // 7: server.Response.relay:type_name -> server.Response.Relays
-	20, // 8: server.Response.destination:type_name -> server.Response.Destination
-	21, // 9: server.Response.source:type_name -> server.Response.Source
-	26, // 10: server.Relay.address:type_name -> shared.HostPort
-	8,  // 11: server.ClientPeer.direct:type_name -> server.DirectRoute
-	26, // 12: server.ClientPeer.relays:type_name -> shared.HostPort
-	8,  // 13: server.ServerPeer.direct:type_name -> server.DirectRoute
-	26, // 14: server.ServerPeer.relays:type_name -> shared.HostPort
-	25, // 15: server.DirectRoute.addresses:type_name -> shared.AddrPort
-	26, // 16: server.RelayAuth.addr:type_name -> shared.HostPort
-	24, // 17: server.RelayAuthResp.error:type_name -> shared.Error
-	22, // 18: server.RelayClients.changes:type_name -> server.RelayClients.Change
-	23, // 19: server.RelayServers.changes:type_name -> server.RelayServers.Change
-	27, // 20: server.Request.DestinationRelay.from:type_name -> shared.Forward
-	27, // 21: server.Request.Destination.from:type_name -> shared.Forward
-	6,  // 22: server.Request.Destination.peer:type_name -> server.ClientPeer
-	27, // 23: server.Request.SourceRelay.to:type_name -> shared.Forward
-	27, // 24: server.Request.Source.to:type_name -> shared.Forward
-	6,  // 25: server.Request.Source.peer:type_name -> server.ClientPeer
-	5,  // 26: server.Response.Relays.relays:type_name -> server.Relay
-	7,  // 27: server.Response.Destination.peers:type_name -> server.ServerPeer
-	7,  // 28: server.Response.Source.peers:type_name -> server.ServerPeer
-	27, // 29: server.RelayClients.Change.destination:type_name -> shared.Forward
-	27, // 30: server.RelayClients.Change.source:type_name -> shared.Forward
-	0,  // 31: server.RelayClients.Change.change:type_name -> server.RelayChange
-	27, // 32: server.RelayServers.Change.server:type_name -> shared.Forward
-	0,  // 33: server.RelayServers.Change.change:type_name -> server.RelayChange
-	34, // [34:34] is the sub-list for method output_type
-	34, // [34:34] is the sub-list for method input_type
-	34, // [34:34] is the sub-list for extension type_name
-	34, // [34:34] is the sub-list for extension extendee
-	0,  // [0:34] is the sub-list for field type_name
+	15, // 0: server.AuthenticateResp.error:type_name -> shared.Error
+	16, // 1: server.AuthenticateResp.public:type_name -> shared.AddrPort
+	8,  // 2: server.Request.destination_relay:type_name -> server.Request.DestinationRelay
+	9,  // 3: server.Request.destination:type_name -> server.Request.Destination
+	10, // 4: server.Request.source_relay:type_name -> server.Request.SourceRelay
+	11, // 5: server.Request.source:type_name -> server.Request.Source
+	15, // 6: server.Response.error:type_name -> shared.Error
+	12, // 7: server.Response.relay:type_name -> server.Response.Relays
+	13, // 8: server.Response.destination:type_name -> server.Response.Destination
+	14, // 9: server.Response.source:type_name -> server.Response.Source
+	17, // 10: server.Relay.address:type_name -> shared.HostPort
+	7,  // 11: server.ClientPeer.direct:type_name -> server.DirectRoute
+	17, // 12: server.ClientPeer.relays:type_name -> shared.HostPort
+	7,  // 13: server.ServerPeer.direct:type_name -> server.DirectRoute
+	17, // 14: server.ServerPeer.relays:type_name -> shared.HostPort
+	16, // 15: server.DirectRoute.addresses:type_name -> shared.AddrPort
+	18, // 16: server.Request.DestinationRelay.from:type_name -> shared.Forward
+	18, // 17: server.Request.Destination.from:type_name -> shared.Forward
+	5,  // 18: server.Request.Destination.peer:type_name -> server.ClientPeer
+	18, // 19: server.Request.SourceRelay.to:type_name -> shared.Forward
+	18, // 20: server.Request.Source.to:type_name -> shared.Forward
+	5,  // 21: server.Request.Source.peer:type_name -> server.ClientPeer
+	4,  // 22: server.Response.Relays.relays:type_name -> server.Relay
+	6,  // 23: server.Response.Destination.peers:type_name -> server.ServerPeer
+	6,  // 24: server.Response.Source.peers:type_name -> server.ServerPeer
+	25, // [25:25] is the sub-list for method output_type
+	25, // [25:25] is the sub-list for method input_type
+	25, // [25:25] is the sub-list for extension type_name
+	25, // [25:25] is the sub-list for extension extendee
+	0,  // [0:25] is the sub-list for field type_name
 }
 
 func init() { file_server_proto_init() }
@@ -1616,14 +1044,13 @@ func file_server_proto_init() {
 		File: protoimpl.DescBuilder{
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: file_server_proto_rawDesc,
-			NumEnums:      1,
-			NumMessages:   23,
+			NumEnums:      0,
+			NumMessages:   15,
 			NumExtensions: 0,
 			NumServices:   0,
 		},
 		GoTypes:           file_server_proto_goTypes,
 		DependencyIndexes: file_server_proto_depIdxs,
-		EnumInfos:         file_server_proto_enumTypes,
 		MessageInfos:      file_server_proto_msgTypes,
 	}.Build()
 	File_server_proto = out.File

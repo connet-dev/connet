@@ -16,7 +16,7 @@ import (
 	"github.com/keihaya-com/connet/model"
 	"github.com/keihaya-com/connet/netc"
 	"github.com/keihaya-com/connet/pb"
-	"github.com/keihaya-com/connet/pbs"
+	"github.com/keihaya-com/connet/pbr"
 	"github.com/klev-dev/kleverr"
 	"github.com/quic-go/quic-go"
 	"golang.org/x/sync/errgroup"
@@ -124,14 +124,14 @@ func (s *controlClient) connect(ctx context.Context, transport *quic.Transport) 
 	}
 	defer authStream.Close()
 
-	if err := pb.Write(authStream, &pbs.RelayAuth{
+	if err := pb.Write(authStream, &pbr.RelayAuth{
 		Token: s.controlToken,
 		Addr:  s.hostport.PB(),
 	}); err != nil {
 		return retConnect(err)
 	}
 
-	resp := &pbs.RelayAuthResp{}
+	resp := &pbr.RelayAuthResp{}
 	if err := pb.Read(authStream, resp); err != nil {
 		return retConnect(err)
 	}
@@ -194,14 +194,14 @@ func (s *controlClient) runForwards(ctx context.Context, conn quic.Connection) e
 
 	g.Go(func() error {
 		for {
-			req := &pbs.RelayClientsReq{
+			req := &pbr.RelayClientsReq{
 				Offset: s.serverOffset,
 			}
 			if err := pb.Write(stream, req); err != nil {
 				return err
 			}
 
-			resp := &pbs.RelayClients{}
+			resp := &pbr.RelayClients{}
 			if err := pb.Read(stream, resp); err != nil {
 				return err
 			}
@@ -215,14 +215,14 @@ func (s *controlClient) runForwards(ctx context.Context, conn quic.Connection) e
 				switch {
 				case change.Destination != nil:
 					fwd := model.NewForwardFromPB(change.Destination)
-					if change.Change == pbs.RelayChange_ChangeDel {
+					if change.Change == pbr.RelayChange_ChangeDel {
 						s.removeDestination(fwd, cert)
 					} else if err := s.addDestination(fwd, cert); err != nil {
 						return err
 					}
 				case change.Source != nil:
 					fwd := model.NewForwardFromPB(change.Source)
-					if change.Change == pbs.RelayChange_ChangeDel {
+					if change.Change == pbr.RelayChange_ChangeDel {
 						s.removeSource(fwd, cert)
 					} else if err := s.addSource(fwd, cert); err != nil {
 						return err
@@ -254,7 +254,7 @@ func (s *controlClient) runCerts(ctx context.Context, conn quic.Connection) erro
 
 	g.Go(func() error {
 		for {
-			req := &pbs.RelayServersReq{}
+			req := &pbr.RelayServersReq{}
 			if err := pb.Read(stream, req); err != nil {
 				return err
 			}
@@ -272,17 +272,17 @@ func (s *controlClient) runCerts(ctx context.Context, conn quic.Connection) erro
 				return err
 			}
 
-			resp := &pbs.RelayServers{Offset: nextOffset}
+			resp := &pbr.RelayServers{Offset: nextOffset}
 
 			for _, msg := range msgs {
-				var change = &pbs.RelayServers_Change{
+				var change = &pbr.RelayServers_Change{
 					Server: msg.Key.PB(),
 				}
 				if msg.Delete {
-					change.Change = pbs.RelayChange_ChangeDel
+					change.Change = pbr.RelayChange_ChangeDel
 				} else {
 					change.ServerCertificate = msg.Value.Raw
-					change.Change = pbs.RelayChange_ChangePut
+					change.Change = pbr.RelayChange_ChangePut
 				}
 				resp.Changes = append(resp.Changes, change)
 			}

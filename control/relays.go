@@ -10,7 +10,7 @@ import (
 	"github.com/keihaya-com/connet/logc"
 	"github.com/keihaya-com/connet/model"
 	"github.com/keihaya-com/connet/pb"
-	"github.com/keihaya-com/connet/pbs"
+	"github.com/keihaya-com/connet/pbr"
 	"github.com/klev-dev/kleverr"
 	"github.com/quic-go/quic-go"
 	"github.com/segmentio/ksuid"
@@ -156,7 +156,7 @@ func (c *relayConn) authenticate(ctx context.Context) (RelayAuthentication, mode
 	}
 	defer authStream.Close()
 
-	req := &pbs.RelayAuth{}
+	req := &pbr.RelayAuth{}
 	if err := pb.Read(authStream, req); err != nil {
 		return retRelayAuth(err)
 	}
@@ -164,13 +164,13 @@ func (c *relayConn) authenticate(ctx context.Context) (RelayAuthentication, mode
 	auth, err := c.server.auth.Authenticate(req.Token)
 	if err != nil {
 		err := pb.NewError(pb.Error_AuthenticationFailed, "Invalid or unknown token")
-		if err := pb.Write(authStream, &pbs.RelayAuthResp{Error: err}); err != nil {
+		if err := pb.Write(authStream, &pbr.RelayAuthResp{Error: err}); err != nil {
 			return retRelayAuth(err)
 		}
 		return retRelayAuth(err)
 	}
 
-	if err := pb.Write(authStream, &pbs.RelayAuthResp{
+	if err := pb.Write(authStream, &pbr.RelayAuthResp{
 		ControlId: c.server.id.String(),
 	}); err != nil {
 		return retRelayAuth(err)
@@ -188,7 +188,7 @@ func (c *relayConn) runForwards(ctx context.Context) error {
 	defer stream.Close()
 
 	for {
-		req := &pbs.RelayClientsReq{}
+		req := &pbr.RelayClientsReq{}
 		if err := pb.Read(stream, req); err != nil {
 			return err
 		}
@@ -210,7 +210,7 @@ func (c *relayConn) runForwards(ctx context.Context) error {
 		// TODO we are too far off and potentially have missed messages
 		// }
 
-		resp := &pbs.RelayClients{Offset: nextOffset}
+		resp := &pbr.RelayClients{Offset: nextOffset}
 
 		for _, msg := range msgs {
 			if !c.auth.Allow(msg.Key.fwd) {
@@ -231,11 +231,11 @@ func (c *relayConn) runForwards(ctx context.Context) error {
 				continue
 			}
 
-			change := pbs.RelayChange_ChangePut
+			change := pbr.RelayChange_ChangePut
 			if msg.Delete {
-				change = pbs.RelayChange_ChangeDel
+				change = pbr.RelayChange_ChangeDel
 			}
-			resp.Changes = append(resp.Changes, &pbs.RelayClients_Change{
+			resp.Changes = append(resp.Changes, &pbr.RelayClients_Change{
 				Destination:       dst,
 				Source:            src,
 				ClientCertificate: cert.Raw,
@@ -258,14 +258,14 @@ func (c *relayConn) runClients(ctx context.Context) error {
 
 	offset := logc.OffsetOldest
 	for {
-		req := &pbs.RelayServersReq{
+		req := &pbr.RelayServersReq{
 			Offset: offset,
 		}
 		if err := pb.Write(stream, req); err != nil {
 			return err
 		}
 
-		resp := &pbs.RelayServers{}
+		resp := &pbr.RelayServers{}
 		if err := pb.Read(stream, resp); err != nil {
 			return err
 		}
@@ -274,7 +274,7 @@ func (c *relayConn) runClients(ctx context.Context) error {
 			srv := model.NewForwardFromPB(change.Server)
 
 			srvForward := c.server.createForward(srv)
-			if change.Change == pbs.RelayChange_ChangeDel {
+			if change.Change == pbr.RelayChange_ChangeDel {
 				srvForward.serverLog.Del(c.hostport)
 			} else {
 				cert, err := x509.ParseCertificate(change.ServerCertificate)
