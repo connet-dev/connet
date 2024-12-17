@@ -124,14 +124,14 @@ func (s *controlClient) connect(ctx context.Context, transport *quic.Transport) 
 	}
 	defer authStream.Close()
 
-	if err := pb.Write(authStream, &pbr.RelayAuth{
+	if err := pb.Write(authStream, &pbr.AuthenticateReq{
 		Token: s.controlToken,
 		Addr:  s.hostport.PB(),
 	}); err != nil {
 		return retConnect(err)
 	}
 
-	resp := &pbr.RelayAuthResp{}
+	resp := &pbr.AuthenticateResp{}
 	if err := pb.Read(authStream, resp); err != nil {
 		return retConnect(err)
 	}
@@ -194,14 +194,14 @@ func (s *controlClient) runForwards(ctx context.Context, conn quic.Connection) e
 
 	g.Go(func() error {
 		for {
-			req := &pbr.RelayClientsReq{
+			req := &pbr.ClientsReq{
 				Offset: s.serverOffset,
 			}
 			if err := pb.Write(stream, req); err != nil {
 				return err
 			}
 
-			resp := &pbr.RelayClients{}
+			resp := &pbr.ClientsResp{}
 			if err := pb.Read(stream, resp); err != nil {
 				return err
 			}
@@ -215,14 +215,14 @@ func (s *controlClient) runForwards(ctx context.Context, conn quic.Connection) e
 				switch {
 				case change.Destination != nil:
 					fwd := model.NewForwardFromPB(change.Destination)
-					if change.Change == pbr.RelayChange_ChangeDel {
+					if change.Change == pbr.ChangeType_ChangeDel {
 						s.removeDestination(fwd, cert)
 					} else if err := s.addDestination(fwd, cert); err != nil {
 						return err
 					}
 				case change.Source != nil:
 					fwd := model.NewForwardFromPB(change.Source)
-					if change.Change == pbr.RelayChange_ChangeDel {
+					if change.Change == pbr.ChangeType_ChangeDel {
 						s.removeSource(fwd, cert)
 					} else if err := s.addSource(fwd, cert); err != nil {
 						return err
@@ -254,7 +254,7 @@ func (s *controlClient) runCerts(ctx context.Context, conn quic.Connection) erro
 
 	g.Go(func() error {
 		for {
-			req := &pbr.RelayServersReq{}
+			req := &pbr.ServersReq{}
 			if err := pb.Read(stream, req); err != nil {
 				return err
 			}
@@ -272,17 +272,17 @@ func (s *controlClient) runCerts(ctx context.Context, conn quic.Connection) erro
 				return err
 			}
 
-			resp := &pbr.RelayServers{Offset: nextOffset}
+			resp := &pbr.ServersResp{Offset: nextOffset}
 
 			for _, msg := range msgs {
-				var change = &pbr.RelayServers_Change{
+				var change = &pbr.ServersResp_Change{
 					Server: msg.Key.PB(),
 				}
 				if msg.Delete {
-					change.Change = pbr.RelayChange_ChangeDel
+					change.Change = pbr.ChangeType_ChangeDel
 				} else {
 					change.ServerCertificate = msg.Value.Raw
-					change.Change = pbr.RelayChange_ChangePut
+					change.Change = pbr.ChangeType_ChangePut
 				}
 				resp.Changes = append(resp.Changes, change)
 			}

@@ -156,7 +156,7 @@ func (c *relayConn) authenticate(ctx context.Context) (RelayAuthentication, mode
 	}
 	defer authStream.Close()
 
-	req := &pbr.RelayAuth{}
+	req := &pbr.AuthenticateReq{}
 	if err := pb.Read(authStream, req); err != nil {
 		return retRelayAuth(err)
 	}
@@ -164,13 +164,13 @@ func (c *relayConn) authenticate(ctx context.Context) (RelayAuthentication, mode
 	auth, err := c.server.auth.Authenticate(req.Token)
 	if err != nil {
 		err := pb.NewError(pb.Error_AuthenticationFailed, "Invalid or unknown token")
-		if err := pb.Write(authStream, &pbr.RelayAuthResp{Error: err}); err != nil {
+		if err := pb.Write(authStream, &pbr.AuthenticateResp{Error: err}); err != nil {
 			return retRelayAuth(err)
 		}
 		return retRelayAuth(err)
 	}
 
-	if err := pb.Write(authStream, &pbr.RelayAuthResp{
+	if err := pb.Write(authStream, &pbr.AuthenticateResp{
 		ControlId: c.server.id.String(),
 	}); err != nil {
 		return retRelayAuth(err)
@@ -188,7 +188,7 @@ func (c *relayConn) runForwards(ctx context.Context) error {
 	defer stream.Close()
 
 	for {
-		req := &pbr.RelayClientsReq{}
+		req := &pbr.ClientsReq{}
 		if err := pb.Read(stream, req); err != nil {
 			return err
 		}
@@ -210,7 +210,7 @@ func (c *relayConn) runForwards(ctx context.Context) error {
 		// TODO we are too far off and potentially have missed messages
 		// }
 
-		resp := &pbr.RelayClients{Offset: nextOffset}
+		resp := &pbr.ClientsResp{Offset: nextOffset}
 
 		for _, msg := range msgs {
 			if !c.auth.Allow(msg.Key.fwd) {
@@ -231,11 +231,11 @@ func (c *relayConn) runForwards(ctx context.Context) error {
 				continue
 			}
 
-			change := pbr.RelayChange_ChangePut
+			change := pbr.ChangeType_ChangePut
 			if msg.Delete {
-				change = pbr.RelayChange_ChangeDel
+				change = pbr.ChangeType_ChangeDel
 			}
-			resp.Changes = append(resp.Changes, &pbr.RelayClients_Change{
+			resp.Changes = append(resp.Changes, &pbr.ClientsResp_Change{
 				Destination:       dst,
 				Source:            src,
 				ClientCertificate: cert.Raw,
@@ -258,14 +258,14 @@ func (c *relayConn) runClients(ctx context.Context) error {
 
 	offset := logc.OffsetOldest
 	for {
-		req := &pbr.RelayServersReq{
+		req := &pbr.ServersReq{
 			Offset: offset,
 		}
 		if err := pb.Write(stream, req); err != nil {
 			return err
 		}
 
-		resp := &pbr.RelayServers{}
+		resp := &pbr.ServersResp{}
 		if err := pb.Read(stream, resp); err != nil {
 			return err
 		}
@@ -274,7 +274,7 @@ func (c *relayConn) runClients(ctx context.Context) error {
 			srv := model.NewForwardFromPB(change.Server)
 
 			srvForward := c.server.createForward(srv)
-			if change.Change == pbr.RelayChange_ChangeDel {
+			if change.Change == pbr.ChangeType_ChangeDel {
 				srvForward.serverLog.Del(c.hostport)
 			} else {
 				cert, err := x509.ParseCertificate(change.ServerCertificate)
