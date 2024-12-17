@@ -424,11 +424,12 @@ func (s *relayServer) authenticate(certs []*x509.Certificate) *clientAuth {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 
-	key := certc.NewKey(certs[0])
-	if dst := s.desinations[key]; dst != nil {
+	cert := certs[0]
+	key := certc.NewKey(cert)
+	if dst := s.desinations[key]; dst != nil && dst.Equal(cert) {
 		return &clientAuth{s.fwd, true, false}
 	}
-	if src := s.sources[key]; src != nil {
+	if src := s.sources[key]; src != nil && src.Equal(cert) {
 		return &clientAuth{s.fwd, false, true}
 	}
 

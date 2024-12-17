@@ -46,12 +46,11 @@ type vClient struct {
 	ch   chan quic.Connection
 }
 
-func (s *vServer) dequeue(key certc.Key) *vClient {
+func (s *vServer) dequeue(key certc.Key, cert *x509.Certificate) *vClient {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
-	// TODO compare the whole key?
-	if exp, ok := s.clients[key]; ok {
+	if exp, ok := s.clients[key]; ok && exp.cert.Equal(cert) {
 		delete(s.clients, key)
 		return exp
 	}
@@ -167,10 +166,11 @@ func (s *DirectServer) runConn(conn quic.Connection) {
 		return
 	}
 
-	key := certc.NewKey(conn.ConnectionState().TLS.PeerCertificates[0])
+	cert := conn.ConnectionState().TLS.PeerCertificates[0]
+	key := certc.NewKey(cert)
 	s.logger.Debug("accepted conn", "server", srv.serverName, "cert", key, "remote", conn.RemoteAddr())
 
-	exp := srv.dequeue(key)
+	exp := srv.dequeue(key, cert)
 	if exp == nil {
 		conn.CloseWithError(2, "client not found")
 		return
