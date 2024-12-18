@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/x509"
 	"log/slog"
+	"maps"
 	"sync"
 
 	"github.com/keihaya-com/connet/certc"
@@ -30,75 +31,102 @@ type relayServer struct {
 	auth   RelayAuthenticator
 	logger *slog.Logger
 
-	relays logc.KV[relayKey, relayValue]
+	relayClients logc.KV[relayClientKey, relayClientValue]
+	relayServers logc.KV[relayServerKey, relayServerValue]
 
-	forwards   map[model.Forward]*relayForward
-	forwardsMu sync.RWMutex
+	forwards       map[model.Forward]map[model.HostPort]*x509.Certificate
+	forwardsOffset int64
+	forwardsMu     sync.RWMutex
 }
 
-type relayKey struct {
-	fwd         model.Forward
-	destination certc.Key
-	source      certc.Key
+type relayClientKey struct {
+	Forward model.Forward `json:"forward"`
+	Role    model.Role    `json:"role"`
+	Key     certc.Key     `json:"key"`
 }
 
-type relayValue struct {
-	destination *x509.Certificate
-	source      *x509.Certificate
+type relayClientValue struct {
+	Cert []byte `json:"cert"`
 }
 
-type relayForward struct {
-	serverLog logc.KV[model.HostPort, *x509.Certificate]
+type relayServerKey struct {
+	Forward  model.Forward  `json:"forward"`
+	Hostport model.HostPort `json:"host_port"`
 }
 
-func (s *relayServer) createForward(fwd model.Forward) *relayForward {
-	if srv := s.getForward(fwd); srv != nil {
-		return srv
-	}
-
-	s.forwardsMu.Lock()
-	defer s.forwardsMu.Unlock()
-
-	if srv := s.forwards[fwd]; srv != nil {
-		return srv
-	}
-
-	srv := &relayForward{
-		serverLog: logc.NewMemoryKVLog[model.HostPort, *x509.Certificate](),
-	}
-	s.forwards[fwd] = srv
-	return srv
+type relayServerValue struct {
+	Cert []byte `json:"cert"`
 }
 
-func (s *relayServer) getForward(fwd model.Forward) *relayForward {
+func (s *relayServer) getForward(fwd model.Forward) (map[model.HostPort]*x509.Certificate, int64) {
 	s.forwardsMu.RLock()
 	defer s.forwardsMu.RUnlock()
 
-	return s.forwards[fwd]
+	return maps.Clone(s.forwards[fwd]), s.forwardsOffset
 }
 
 func (s *relayServer) Destination(ctx context.Context, fwd model.Forward, cert *x509.Certificate,
 	notifyFn func(map[model.HostPort]*x509.Certificate) error) error {
-	srv := s.createForward(fwd)
 
-	key := relayKey{fwd: fwd, destination: certc.NewKey(cert)}
-	val := relayValue{destination: cert}
-	s.relays.Put(key, val)
-	defer s.relays.PutDel(key, val)
+	key := relayClientKey{Forward: fwd, Role: model.Destination, Key: certc.NewKey(cert)}
+	val := relayClientValue{Cert: cert.Raw}
+	s.relayClients.Put(key, val)
+	defer s.relayClients.Del(key)
 
-	return srv.serverLog.Listen(ctx, notifyFn)
+	return s.listen(ctx, fwd, notifyFn)
 }
 
 func (s *relayServer) Source(ctx context.Context, fwd model.Forward, cert *x509.Certificate,
 	notifyFn func(map[model.HostPort]*x509.Certificate) error) error {
-	srv := s.createForward(fwd)
 
-	key := relayKey{fwd: fwd, source: certc.NewKey(cert)}
-	val := relayValue{source: cert}
-	s.relays.Put(key, val)
-	defer s.relays.PutDel(key, val)
+	key := relayClientKey{Forward: fwd, Role: model.Source, Key: certc.NewKey(cert)}
+	val := relayClientValue{Cert: cert.Raw}
+	s.relayClients.Put(key, val)
+	defer s.relayClients.Del(key)
 
-	return srv.serverLog.Listen(ctx, notifyFn)
+	return s.listen(ctx, fwd, notifyFn)
+}
+
+func (s *relayServer) listen(ctx context.Context, fwd model.Forward, notifyFn func(map[model.HostPort]*x509.Certificate) error) error {
+	servers, offset := s.getForward(fwd)
+	if len(servers) > 0 {
+		if err := notifyFn(servers); err != nil {
+			return err
+		}
+	}
+
+	for {
+		msgs, nextOffset, err := s.relayServers.Consume(ctx, offset)
+		if err != nil {
+			return err
+		}
+
+		var changed bool
+		for _, msg := range msgs {
+			if msg.Key.Forward != fwd {
+				continue
+			}
+
+			if msg.Delete {
+				delete(servers, msg.Key.Hostport)
+			} else {
+				cert, err := x509.ParseCertificate(msg.Value.Cert) // TODO do this once on deser
+				if err != nil {
+					return err
+				}
+				servers[msg.Key.Hostport] = cert
+			}
+			changed = true
+		}
+
+		offset = nextOffset
+
+		if changed {
+			if err := notifyFn(servers); err != nil {
+				return err
+			}
+		}
+	}
 }
 
 func (s *relayServer) handle(ctx context.Context, conn quic.Connection) error {
@@ -140,8 +168,8 @@ func (c *relayConn) runErr(ctx context.Context) error {
 
 	g, ctx := errgroup.WithContext(ctx)
 
-	g.Go(func() error { return c.runForwards(ctx) })
-	g.Go(func() error { return c.runClients(ctx) })
+	g.Go(func() error { return c.runRelayClients(ctx) })
+	g.Go(func() error { return c.runRelayServers(ctx) })
 
 	return g.Wait()
 }
@@ -180,7 +208,7 @@ func (c *relayConn) authenticate(ctx context.Context) (RelayAuthentication, mode
 	return auth, model.NewHostPortFromPB(req.Addr), nil
 }
 
-func (c *relayConn) runForwards(ctx context.Context) error {
+func (c *relayConn) runRelayClients(ctx context.Context) error {
 	stream, err := c.conn.AcceptStream(ctx)
 	if err != nil {
 		return err
@@ -193,13 +221,13 @@ func (c *relayConn) runForwards(ctx context.Context) error {
 			return err
 		}
 
-		var msgs []logc.Message[relayKey, relayValue]
+		var msgs []logc.Message[relayClientKey, relayClientValue]
 		var nextOffset int64
 		if req.Offset == logc.OffsetOldest {
-			msgs, nextOffset, err = c.server.relays.Snapshot(ctx)
+			msgs, nextOffset, err = c.server.relayClients.Snapshot()
 			c.logger.Debug("sending initial relay changes", "offset", nextOffset, "changes", len(msgs))
 		} else {
-			msgs, nextOffset, err = c.server.relays.Consume(ctx, req.Offset)
+			msgs, nextOffset, err = c.server.relayClients.Consume(ctx, req.Offset)
 			c.logger.Debug("sending delta relay changes", "offset", nextOffset, "changes", len(msgs))
 		}
 		if err != nil {
@@ -213,34 +241,24 @@ func (c *relayConn) runForwards(ctx context.Context) error {
 		resp := &pbr.ClientsResp{Offset: nextOffset}
 
 		for _, msg := range msgs {
-			if !c.auth.Allow(msg.Key.fwd) {
+			if !c.auth.Allow(msg.Key.Forward) {
 				continue
 			}
 
-			var dst, src *pb.Forward
-			var cert *x509.Certificate
-
-			switch {
-			case msg.Key.destination.IsValid():
-				dst = msg.Key.fwd.PB()
-				cert = msg.Value.destination
-			case msg.Key.source.IsValid():
-				src = msg.Key.fwd.PB()
-				cert = msg.Value.source
-			default:
-				continue
+			change := &pbr.ClientsResp_Change{
+				Forward:        msg.Key.Forward.PB(),
+				Role:           msg.Key.Role.PB(),
+				CertificateKey: msg.Key.Key.String(),
 			}
 
-			change := pbr.ChangeType_ChangePut
 			if msg.Delete {
-				change = pbr.ChangeType_ChangeDel
+				change.Change = pbr.ChangeType_ChangeDel
+			} else {
+				change.Change = pbr.ChangeType_ChangePut
+				change.Certificate = msg.Value.Cert
 			}
-			resp.Changes = append(resp.Changes, &pbr.ClientsResp_Change{
-				Destination:       dst,
-				Source:            src,
-				ClientCertificate: cert.Raw,
-				Change:            change,
-			})
+
+			resp.Changes = append(resp.Changes, change)
 		}
 
 		if err := pb.Write(stream, resp); err != nil {
@@ -249,14 +267,14 @@ func (c *relayConn) runForwards(ctx context.Context) error {
 	}
 }
 
-func (c *relayConn) runClients(ctx context.Context) error {
+func (c *relayConn) runRelayServers(ctx context.Context) error {
 	stream, err := c.conn.OpenStreamSync(ctx)
 	if err != nil {
 		return err
 	}
 	defer stream.Close()
 
-	offset := logc.OffsetOldest
+	offset := logc.OffsetOldest // TODO store this offset
 	for {
 		req := &pbr.ServersReq{
 			Offset: offset,
@@ -271,18 +289,26 @@ func (c *relayConn) runClients(ctx context.Context) error {
 		}
 
 		for _, change := range resp.Changes {
-			srv := model.NewForwardFromPB(change.Server)
+			key := relayServerKey{
+				Forward:  model.NewForwardFromPB(change.Server),
+				Hostport: c.hostport,
+			}
 
-			srvForward := c.server.createForward(srv)
-			if change.Change == pbr.ChangeType_ChangeDel {
-				srvForward.serverLog.Del(c.hostport)
-			} else {
+			switch change.Change {
+			case pbr.ChangeType_ChangePut:
 				cert, err := x509.ParseCertificate(change.ServerCertificate)
 				if err != nil {
 					return err
 				}
-
-				srvForward.serverLog.Put(c.hostport, cert)
+				if err := c.server.relayServers.Put(key, relayServerValue{cert.Raw}); err != nil {
+					return err
+				}
+			case pbr.ChangeType_ChangeDel:
+				if err := c.server.relayServers.Del(key); err != nil {
+					return err
+				}
+			default:
+				return kleverr.New("unknown change")
 			}
 		}
 

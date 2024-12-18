@@ -31,10 +31,11 @@ message ClientsResp {
   bool restart = 3;
 
   message Change {
-    shared.Forward destination = 1;
-    shared.Forward source = 2;
-    bytes client_certificate = 3;
-    ChangeType change = 4;
+    ChangeType change = 1;
+    shared.Forward forward = 2;
+    shared.Role role = 3;
+    string certificate_key = 4;
+    bytes certificate = 5;
   }
 }
 
@@ -48,8 +49,8 @@ message ServersResp {
   bool restart = 3;
 
   message Change {
-    shared.Forward server = 1;
-    bytes server_certificate = 2;
-    ChangeType change = 3;
+    ChangeType change = 1;
+    shared.Forward server = 2;
+    bytes server_certificate = 3;
   }
 }

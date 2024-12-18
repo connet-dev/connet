@@ -8,7 +8,7 @@ import (
 	"golang.org/x/crypto/blake2s"
 )
 
-type Key struct{ string }
+type Key struct{ string } // TODO move to model
 
 func NewKey(cert *x509.Certificate) Key {
 	return NewKeyRaw(cert.Raw)
@@ -21,6 +21,10 @@ func NewKeyTLS(cert tls.Certificate) Key {
 func NewKeyRaw(raw []byte) Key {
 	hash := blake2s.Sum256(raw)
 	return Key{base58.Encode(hash[:])}
+}
+
+func NewKeyString(s string) Key {
+	return Key{s}
 }
 
 func (k Key) String() string {

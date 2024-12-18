@@ -32,7 +32,7 @@ type KV[K comparable, V any] interface {
 	Consume(ctx context.Context, offset int64) ([]Message[K, V], int64, error)
 	Get(k K) (V, error)
 
-	Snapshot() ([]Message[K, V], int64, error)
+	Snapshot() ([]Message[K, V], int64, error) // TODO this could possible return too much data
 
 	Close() error
 }

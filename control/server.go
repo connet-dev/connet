@@ -3,9 +3,11 @@ package control
 import (
 	"context"
 	"crypto/tls"
+	"crypto/x509"
 	"errors"
 	"log/slog"
 	"net"
+	"path/filepath"
 	"time"
 
 	"github.com/keihaya-com/connet/logc"
@@ -24,6 +26,18 @@ type Config struct {
 }
 
 func NewServer(cfg Config) (*Server, error) {
+	baseDir := "/var/lib/connet/control" // TODO
+
+	relayClients, err := logc.NewKV[relayClientKey, relayClientValue](filepath.Join(baseDir, "relay", "clients"))
+	if err != nil {
+		return nil, err
+	}
+
+	relayServers, err := logc.NewKV[relayServerKey, relayServerValue](filepath.Join(baseDir, "relay", "servers"))
+	if err != nil {
+		return nil, err
+	}
+
 	s := &Server{
 		addr: cfg.Addr,
 		tlsConf: &tls.Config{
@@ -33,11 +47,15 @@ func NewServer(cfg Config) (*Server, error) {
 		logger: cfg.Logger.With("control", cfg.Addr),
 	}
 	s.relays = &relayServer{
-		id:       ksuid.New(),
-		auth:     cfg.RelayAuth,
-		relays:   logc.NewMemoryKVLog[relayKey, relayValue](),
-		forwards: map[model.Forward]*relayForward{},
-		logger:   cfg.Logger.With("server", "relays"),
+		id:     ksuid.New(),
+		auth:   cfg.RelayAuth,
+		logger: cfg.Logger.With("server", "relays"),
+
+		relayClients: relayClients,
+		relayServers: relayServers,
+
+		forwards:       map[model.Forward]map[model.HostPort]*x509.Certificate{}, // TODO actually run the cache
+		forwardsOffset: logc.OffsetOldest,
 	}
 	s.clients = &clientServer{
 		auth:      cfg.ClientAuth,

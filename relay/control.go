@@ -8,7 +8,7 @@ import (
 	"errors"
 	"log/slog"
 	"net"
-	"path"
+	"path/filepath"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -129,7 +129,8 @@ type serverClientValue struct {
 type configKey string
 
 var (
-	configClientOffset configKey = "client-offset"
+	configClientsStreamOffset configKey = "clients-stream-offset"
+	configClientsLogOffset    configKey = "clients-log-offset"
 )
 
 type configValue struct {
@@ -150,16 +151,16 @@ type controlServerState struct {
 }
 
 func newControlServerState(parent *controlClient, id string) (*controlServerState, error) {
-	serverDir := path.Join(parent.baseDir, id)
-	config, err := logc.NewKV[configKey, configValue](path.Join(serverDir, "config"))
+	serverDir := filepath.Join(parent.baseDir, id)
+	config, err := logc.NewKV[configKey, configValue](filepath.Join(serverDir, "config"))
 	if err != nil {
 		return nil, err
 	}
-	clients, err := logc.NewKV[clientKey, clientValue](path.Join(serverDir, "clients"))
+	clients, err := logc.NewKV[clientKey, clientValue](filepath.Join(serverDir, "clients"))
 	if err != nil {
 		return nil, err
 	}
-	servers, err := logc.NewKV[serverKey, serverValue](path.Join(serverDir, "servers"))
+	servers, err := logc.NewKV[serverKey, serverValue](filepath.Join(serverDir, "servers"))
 	if err != nil {
 		return nil, err
 	}
@@ -191,8 +192,9 @@ func newControlServerState(parent *controlClient, id string) (*controlServerStat
 	}, nil
 }
 
-func (s *controlServerState) getClientOffset() (int64, error) {
-	v, err := s.config.Get(configClientOffset)
+func (s *controlServerState) getClientsStreamOffset() (int64, error) {
+	// TODO cache/optimize
+	v, err := s.config.Get(configClientsStreamOffset)
 	switch {
 	case errors.Is(err, logc.ErrNotFound):
 		return logc.OffsetOldest, nil
@@ -203,8 +205,25 @@ func (s *controlServerState) getClientOffset() (int64, error) {
 	}
 }
 
-func (s *controlServerState) setClientOffset(v int64) error {
-	return s.config.Put(configClientOffset, configValue{Int64: v})
+func (s *controlServerState) setClientsStreamOffset(v int64) error {
+	return s.config.Put(configClientsStreamOffset, configValue{Int64: v})
+}
+
+func (s *controlServerState) getClientsLogOffset() (int64, error) {
+	// TODO cache/optimize
+	v, err := s.config.Get(configClientsLogOffset)
+	switch {
+	case errors.Is(err, logc.ErrNotFound):
+		return logc.OffsetOldest, nil
+	case err != nil:
+		return logc.OffsetInvalid, err
+	default:
+		return v.Int64, nil
+	}
+}
+
+func (s *controlServerState) setClientsLogOffset(v int64) error {
+	return s.config.Put(configClientsLogOffset, configValue{Int64: v})
 }
 
 func (s *controlServerState) getServer(name string) *relayServer {
@@ -383,7 +402,7 @@ func (s *controlServerState) runClientsStream(ctx context.Context, conn quic.Con
 
 	g.Go(func() error {
 		for {
-			serverOffset, err := s.getClientOffset()
+			serverOffset, err := s.getClientsStreamOffset()
 			if err != nil {
 				return err
 			}
@@ -401,52 +420,31 @@ func (s *controlServerState) runClientsStream(ctx context.Context, conn quic.Con
 			}
 
 			for _, change := range resp.Changes {
-				cert, err := x509.ParseCertificate(change.ClientCertificate)
-				if err != nil {
-					return err
+				key := clientKey{
+					Forward: model.NewForwardFromPB(change.Forward),
+					Role:    model.RoleFromPB(change.Role),
+					Key:     certc.NewKeyString(change.CertificateKey),
 				}
 
-				switch {
-				case change.Destination != nil:
-					key := clientKey{
-						Forward: model.NewForwardFromPB(change.Destination),
-						Role:    model.Destination,
-						Key:     certc.NewKey(cert),
+				switch change.Change {
+				case pbr.ChangeType_ChangePut:
+					cert, err := x509.ParseCertificate(change.Certificate)
+					if err != nil {
+						return err
 					}
-					switch change.Change {
-					case pbr.ChangeType_ChangePut:
-						if err := s.clients.Put(key, clientValue{change.ClientCertificate}); err != nil {
-							return err
-						}
-					case pbr.ChangeType_ChangeDel:
-						if err := s.clients.Del(key); err != nil {
-							return err
-						}
-					default:
-						return kleverr.Newf("unknown change")
+					if err := s.clients.Put(key, clientValue{cert.Raw}); err != nil {
+						return err
 					}
-				case change.Source != nil:
-					key := clientKey{
-						Forward: model.NewForwardFromPB(change.Source),
-						Role:    model.Source,
-						Key:     certc.NewKey(cert),
+				case pbr.ChangeType_ChangeDel:
+					if err := s.clients.Del(key); err != nil {
+						return err
 					}
-					switch change.Change {
-					case pbr.ChangeType_ChangePut:
-						if err := s.clients.Put(key, clientValue{change.ClientCertificate}); err != nil {
-							return err
-						}
-					case pbr.ChangeType_ChangeDel:
-						if err := s.clients.Del(key); err != nil {
-							return err
-						}
-					default:
-						return kleverr.Newf("unknown change")
-					}
+				default:
+					return kleverr.New("unknown change")
 				}
 			}
 
-			if err := s.setClientOffset(resp.Offset); err != nil {
+			if err := s.setClientsStreamOffset(resp.Offset); err != nil {
 				return err
 			}
 		}
@@ -456,8 +454,12 @@ func (s *controlServerState) runClientsStream(ctx context.Context, conn quic.Con
 }
 
 func (s *controlServerState) runClientsLog(ctx context.Context) error {
-	offset := klevdb.OffsetOldest
 	for {
+		offset, err := s.getClientsLogOffset()
+		if err != nil {
+			return err
+		}
+
 		msgs, nextOffset, err := s.clients.Consume(ctx, offset)
 		if err != nil {
 			return err
@@ -502,7 +504,9 @@ func (s *controlServerState) runClientsLog(ctx context.Context) error {
 			}
 		}
 
-		offset = nextOffset
+		if err := s.setClientsLogOffset(nextOffset); err != nil {
+			return err
+		}
 	}
 }
 
@@ -593,9 +597,8 @@ func (s *controlServerState) runServersLog(ctx context.Context) error {
 		return nil
 	}
 
-	offset := klevdb.OffsetOldest
 	for {
-		msgs, nextOffset, err := s.servers.Consume(ctx, offset)
+		msgs, nextOffset, err := s.servers.Consume(ctx, s.serverByNameOffset)
 		if err != nil {
 			return err
 		}
@@ -606,7 +609,7 @@ func (s *controlServerState) runServersLog(ctx context.Context) error {
 			}
 		}
 
-		offset = nextOffset
+		s.serverByNameOffset = nextOffset
 	}
 }
 

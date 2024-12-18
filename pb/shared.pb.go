@@ -20,6 +20,55 @@ const (
 	_ = protoimpl.EnforceVersion(protoimpl.MaxVersion - 20)
 )
 
+type Role int32
+
+const (
+	Role_RoleUnknown     Role = 0
+	Role_RoleDestination Role = 1
+	Role_RoleSource      Role = 2
+)
+
+// Enum value maps for Role.
+var (
+	Role_name = map[int32]string{
+		0: "RoleUnknown",
+		1: "RoleDestination",
+		2: "RoleSource",
+	}
+	Role_value = map[string]int32{
+		"RoleUnknown":     0,
+		"RoleDestination": 1,
+		"RoleSource":      2,
+	}
+)
+
+func (x Role) Enum() *Role {
+	p := new(Role)
+	*p = x
+	return p
+}
+
+func (x Role) String() string {
+	return protoimpl.X.EnumStringOf(x.Descriptor(), protoreflect.EnumNumber(x))
+}
+
+func (Role) Descriptor() protoreflect.EnumDescriptor {
+	return file_shared_proto_enumTypes[0].Descriptor()
+}
+
+func (Role) Type() protoreflect.EnumType {
+	return &file_shared_proto_enumTypes[0]
+}
+
+func (x Role) Number() protoreflect.EnumNumber {
+	return protoreflect.EnumNumber(x)
+}
+
+// Deprecated: Use Role.Descriptor instead.
+func (Role) EnumDescriptor() ([]byte, []int) {
+	return file_shared_proto_rawDescGZIP(), []int{0}
+}
+
 type Error_Code int32
 
 const (
@@ -86,11 +135,11 @@ func (x Error_Code) String() string {
 }
 
 func (Error_Code) Descriptor() protoreflect.EnumDescriptor {
-	return file_shared_proto_enumTypes[0].Descriptor()
+	return file_shared_proto_enumTypes[1].Descriptor()
 }
 
 func (Error_Code) Type() protoreflect.EnumType {
-	return &file_shared_proto_enumTypes[0]
+	return &file_shared_proto_enumTypes[1]
 }
 
 func (x Error_Code) Number() protoreflect.EnumNumber {
@@ -402,9 +451,13 @@ var file_shared_proto_rawDesc = []byte{
 	0x44, 0x65, 0x73, 0x74, 0x69, 0x6e, 0x61, 0x74, 0x69, 0x6f, 0x6e, 0x4e, 0x6f, 0x74, 0x46, 0x6f,
 	0x75, 0x6e, 0x64, 0x10, 0xf4, 0x03, 0x12, 0x1a, 0x0a, 0x15, 0x44, 0x65, 0x73, 0x74, 0x69, 0x6e,
 	0x61, 0x74, 0x69, 0x6f, 0x6e, 0x44, 0x69, 0x61, 0x6c, 0x46, 0x61, 0x69, 0x6c, 0x65, 0x64, 0x10,
-	0xf5, 0x03, 0x42, 0x22, 0x5a, 0x20, 0x67, 0x69, 0x74, 0x68, 0x75, 0x62, 0x2e, 0x63, 0x6f, 0x6d,
-	0x2f, 0x6b, 0x65, 0x69, 0x68, 0x61, 0x79, 0x61, 0x2d, 0x63, 0x6f, 0x6d, 0x2f, 0x63, 0x6f, 0x6e,
-	0x6e, 0x65, 0x74, 0x2f, 0x70, 0x62, 0x62, 0x06, 0x70, 0x72, 0x6f, 0x74, 0x6f, 0x33,
+	0xf5, 0x03, 0x2a, 0x3c, 0x0a, 0x04, 0x52, 0x6f, 0x6c, 0x65, 0x12, 0x0f, 0x0a, 0x0b, 0x52, 0x6f,
+	0x6c, 0x65, 0x55, 0x6e, 0x6b, 0x6e, 0x6f, 0x77, 0x6e, 0x10, 0x00, 0x12, 0x13, 0x0a, 0x0f, 0x52,
+	0x6f, 0x6c, 0x65, 0x44, 0x65, 0x73, 0x74, 0x69, 0x6e, 0x61, 0x74, 0x69, 0x6f, 0x6e, 0x10, 0x01,
+	0x12, 0x0e, 0x0a, 0x0a, 0x52, 0x6f, 0x6c, 0x65, 0x53, 0x6f, 0x75, 0x72, 0x63, 0x65, 0x10, 0x02,
+	0x42, 0x22, 0x5a, 0x20, 0x67, 0x69, 0x74, 0x68, 0x75, 0x62, 0x2e, 0x63, 0x6f, 0x6d, 0x2f, 0x6b,
+	0x65, 0x69, 0x68, 0x61, 0x79, 0x61, 0x2d, 0x63, 0x6f, 0x6d, 0x2f, 0x63, 0x6f, 0x6e, 0x6e, 0x65,
+	0x74, 0x2f, 0x70, 0x62, 0x62, 0x06, 0x70, 0x72, 0x6f, 0x74, 0x6f, 0x33,
 }
 
 var (
@@ -419,19 +472,20 @@ func file_shared_proto_rawDescGZIP() []byte {
 	return file_shared_proto_rawDescData
 }
 
-var file_shared_proto_enumTypes = make([]protoimpl.EnumInfo, 1)
+var file_shared_proto_enumTypes = make([]protoimpl.EnumInfo, 2)
 var file_shared_proto_msgTypes = make([]protoimpl.MessageInfo, 5)
 var file_shared_proto_goTypes = []any{
-	(Error_Code)(0),  // 0: shared.Error.Code
-	(*Addr)(nil),     // 1: shared.Addr
-	(*AddrPort)(nil), // 2: shared.AddrPort
-	(*HostPort)(nil), // 3: shared.HostPort
-	(*Forward)(nil),  // 4: shared.Forward
-	(*Error)(nil),    // 5: shared.Error
+	(Role)(0),        // 0: shared.Role
+	(Error_Code)(0),  // 1: shared.Error.Code
+	(*Addr)(nil),     // 2: shared.Addr
+	(*AddrPort)(nil), // 3: shared.AddrPort
+	(*HostPort)(nil), // 4: shared.HostPort
+	(*Forward)(nil),  // 5: shared.Forward
+	(*Error)(nil),    // 6: shared.Error
 }
 var file_shared_proto_depIdxs = []int32{
-	1, // 0: shared.AddrPort.addr:type_name -> shared.Addr
-	0, // 1: shared.Error.code:type_name -> shared.Error.Code
+	2, // 0: shared.AddrPort.addr:type_name -> shared.Addr
+	1, // 1: shared.Error.code:type_name -> shared.Error.Code
 	2, // [2:2] is the sub-list for method output_type
 	2, // [2:2] is the sub-list for method input_type
 	2, // [2:2] is the sub-list for extension type_name
@@ -449,7 +503,7 @@ func file_shared_proto_init() {
 		File: protoimpl.DescBuilder{
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: file_shared_proto_rawDesc,
-			NumEnums:      1,
+			NumEnums:      2,
 			NumMessages:   5,
 			NumExtensions: 0,
 			NumServices:   0,

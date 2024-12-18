@@ -1,6 +1,9 @@
 package model
 
-import "github.com/klev-dev/kleverr"
+import (
+	"github.com/keihaya-com/connet/pb"
+	"github.com/klev-dev/kleverr"
+)
 
 type Role struct{ string }
 
@@ -9,6 +12,28 @@ var (
 	Destination = Role{"destination"}
 	Source      = Role{"source"}
 )
+
+func RoleFromPB(r pb.Role) Role {
+	switch r {
+	case pb.Role_RoleDestination:
+		return Destination
+	case pb.Role_RoleSource:
+		return Source
+	default:
+		return UnknownRole
+	}
+}
+
+func (r Role) PB() pb.Role {
+	switch r {
+	case Destination:
+		return pb.Role_RoleDestination
+	case Source:
+		return pb.Role_RoleSource
+	default:
+		return pb.Role_RoleUnknown
+	}
+}
 
 func (r Role) String() string {
 	return r.string

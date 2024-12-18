@@ -22,6 +22,12 @@ message Forward {
   string name = 1;
 }
 
+enum Role {
+  RoleUnknown = 0;
+  RoleDestination = 1;
+  RoleSource = 2;
+}
+
 message Error {
   Code code = 1;
   string message = 2;
