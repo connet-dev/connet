@@ -4,9 +4,11 @@ import (
 	"context"
 	"crypto/tls"
 	"crypto/x509"
+	"encoding/json"
 	"errors"
 	"log/slog"
 	"net"
+	"path"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -17,6 +19,7 @@ import (
 	"github.com/keihaya-com/connet/netc"
 	"github.com/keihaya-com/connet/pb"
 	"github.com/keihaya-com/connet/pbr"
+	"github.com/klev-dev/klevdb"
 	"github.com/klev-dev/kleverr"
 	"github.com/quic-go/quic-go"
 	"golang.org/x/sync/errgroup"
@@ -25,51 +28,232 @@ import (
 type controlClient struct {
 	hostport model.HostPort
 	root     *certc.Cert
+	baseDir  string
 
 	controlAddr    *net.UDPAddr
 	controlToken   string
 	controlTlsConf *tls.Config
 
-	serverID         string
-	serverOffset     int64
-	serversByForward map[model.Forward]*relayServer
-	serversByName    map[string]*relayServer
-	serversMu        sync.RWMutex
-	serversLog       logc.KV[model.Forward, *x509.Certificate]
+	state atomic.Pointer[controlServerState]
 
 	logger *slog.Logger
 }
 
-func (s *controlClient) setServerID(serverID string) {
-	if s.serverID == serverID {
-		return
-	} else if s.serverID == "" {
-		s.logger.Info("new control server, no state", "serverID", serverID)
-		s.serverID = serverID
-		return
+type clientKey struct {
+	Forward model.Forward `json:"forward"`
+	Role    model.Role    `json:"role"`
+	Key     certc.Key     `json:"key"`
+}
+
+type clientValue struct {
+	Cert []byte `json:"cert"`
+}
+
+type serverKey struct {
+	Forward model.Forward `json:"forward"`
+}
+
+type serverValue struct {
+	Name    string                          `json:"name"`
+	Cert    *certc.Cert                     `json:"cert"`
+	Clients map[serverClientKey]clientValue `json:"clients"`
+}
+
+func (v serverValue) MarshalJSON() ([]byte, error) {
+	cert, key, err := v.Cert.EncodeToMemory()
+	if err != nil {
+		return nil, err
 	}
 
-	s.logger.Info("new control server, resetting", "serverID", serverID)
-	s.serversMu.Lock()
-	defer s.serversMu.Unlock()
+	s := struct {
+		Name    string              `json:"name"`
+		Cert    []byte              `json:"cert"`
+		CertKey []byte              `json:"cert_key"`
+		Clients []serverClientValue `json:"clients"`
+	}{
+		Name:    v.Name,
+		Cert:    cert,
+		CertKey: key,
+	}
 
-	s.serverID = serverID
-	s.serverOffset = logc.OffsetOldest
-	s.serversByForward = map[model.Forward]*relayServer{}
-	s.serversByName = map[string]*relayServer{}
-	s.serversLog = logc.NewMemoryKVLog[model.Forward, *x509.Certificate]()
+	for k, v := range v.Clients {
+		s.Clients = append(s.Clients, serverClientValue{
+			Role: k.Role,
+			Cert: v.Cert,
+		})
+	}
+
+	return json.Marshal(s)
+}
+
+func (v *serverValue) UnmarshalJSON(b []byte) error {
+	s := struct {
+		Name    string              `json:"name"`
+		Cert    []byte              `json:"cert"`
+		CertKey []byte              `json:"cert_key"`
+		Clients []serverClientValue `json:"clients"`
+	}{}
+	if err := json.Unmarshal(b, &s); err != nil {
+		return err
+	}
+
+	cert, err := certc.DecodeFromMemory(s.Cert, s.CertKey)
+	if err != nil {
+		return err
+	}
+
+	sv := serverValue{
+		Name:    s.Name,
+		Cert:    cert,
+		Clients: map[serverClientKey]clientValue{},
+	}
+
+	for _, cl := range s.Clients {
+		sv.Clients[serverClientKey{cl.Role, certc.NewKeyRaw(cl.Cert)}] = clientValue{cl.Cert}
+	}
+
+	*v = sv
+	return nil
+}
+
+type serverClientKey struct {
+	Role model.Role `json:"role"`
+	Key  certc.Key  `json:"key"`
+}
+
+type serverClientValue struct {
+	Role model.Role `json:"role"`
+	Cert []byte     `json:"cert"`
+}
+
+type configKey string
+
+var (
+	configClientOffset configKey = "client-offset"
+)
+
+type configValue struct {
+	Int64 int64 `json:"int64,omitempty"`
+}
+
+type controlServerState struct {
+	id     string
+	parent *controlClient
+
+	config  logc.KV[configKey, configValue]
+	clients logc.KV[clientKey, clientValue]
+	servers logc.KV[serverKey, serverValue]
+
+	serverByNameOffset int64
+	serverByName       map[string]*relayServer
+	serverByNameMu     sync.RWMutex
+}
+
+func newControlServerState(parent *controlClient, id string) (*controlServerState, error) {
+	serverDir := path.Join(parent.baseDir, id)
+	config, err := logc.NewKV[configKey, configValue](path.Join(serverDir, "config"))
+	if err != nil {
+		return nil, err
+	}
+	clients, err := logc.NewKV[clientKey, clientValue](path.Join(serverDir, "clients"))
+	if err != nil {
+		return nil, err
+	}
+	servers, err := logc.NewKV[serverKey, serverValue](path.Join(serverDir, "servers"))
+	if err != nil {
+		return nil, err
+	}
+
+	msgs, serversOffset, err := servers.Snapshot()
+	if err != nil {
+		return nil, err
+	}
+
+	serverByName := map[string]*relayServer{}
+	for _, msg := range msgs {
+		srv, err := newRelayServer(msg)
+		if err != nil {
+			return nil, err
+		}
+		serverByName[srv.tls[0].Leaf.DNSNames[0]] = srv
+	}
+
+	return &controlServerState{
+		id:     id,
+		parent: parent,
+
+		config:  config,
+		clients: clients,
+		servers: servers,
+
+		serverByNameOffset: serversOffset,
+		serverByName:       serverByName,
+	}, nil
+}
+
+func (s *controlServerState) getClientOffset() (int64, error) {
+	v, err := s.config.Get(configClientOffset)
+	switch {
+	case errors.Is(err, logc.ErrNotFound):
+		return logc.OffsetOldest, nil
+	case err != nil:
+		return logc.OffsetInvalid, err
+	default:
+		return v.Int64, nil
+	}
+}
+
+func (s *controlServerState) setClientOffset(v int64) error {
+	return s.config.Put(configClientOffset, configValue{Int64: v})
+}
+
+func (s *controlServerState) getServer(name string) *relayServer {
+	s.serverByNameMu.RLock()
+	defer s.serverByNameMu.RUnlock()
+
+	return s.serverByName[name]
+}
+
+func (s *controlServerState) close() error {
+	var errs []error
+	errs = append(errs, s.servers.Close())
+	errs = append(errs, s.clients.Close())
+	errs = append(errs, s.config.Close())
+	return errors.Join(errs...)
+}
+
+func (s *controlClient) setServerID(serverID string) (*controlServerState, error) {
+	switch state := s.state.Load(); {
+	case state != nil && state.id == serverID:
+		// we've got the correct state, do nothing
+		s.logger.Info("same control server, resuming", "serverID", state.id)
+		return state, nil
+	case state != nil && state.id != serverID:
+		s.logger.Info("new control server, destroying state", "serverID", state.id)
+		if err := state.close(); err != nil {
+			return nil, err
+		}
+		fallthrough
+	default:
+		s.logger.Info("new control server, loading state", "serverID", serverID)
+		state, err := newControlServerState(s, serverID)
+		if err != nil {
+			return nil, err
+		}
+		s.state.Store(state)
+		return state, nil
+	}
 }
 
 func (s *controlClient) getByName(serverName string) *relayServer {
-	s.serversMu.RLock()
-	defer s.serversMu.RUnlock()
-
-	return s.serversByName[serverName]
+	if state := s.state.Load(); state != nil {
+		return state.getServer(serverName)
+	}
+	return nil
 }
 
 func (s *controlClient) clientTLSConfig(chi *tls.ClientHelloInfo, base *tls.Config) (*tls.Config, error) {
-	srv := s.getByName(chi.ServerName)
-	if srv != nil {
+	if srv := s.getByName(chi.ServerName); srv != nil {
 		cfg := base.Clone()
 		cfg.Certificates = srv.tls
 		cfg.ClientCAs = srv.cas.Load()
@@ -79,11 +263,10 @@ func (s *controlClient) clientTLSConfig(chi *tls.ClientHelloInfo, base *tls.Conf
 }
 
 func (s *controlClient) authenticate(serverName string, certs []*x509.Certificate) *clientAuth {
-	srv := s.getByName(serverName)
-	if srv == nil {
-		return nil
+	if srv := s.getByName(serverName); srv != nil {
+		return srv.authenticate(certs)
 	}
-	return srv.authenticate(certs)
+	return nil
 }
 
 func (s *controlClient) run(ctx context.Context, transport *quic.Transport) error {
@@ -167,17 +350,23 @@ func (c *controlClient) reconnect(ctx context.Context, transport *quic.Transport
 
 func (s *controlClient) runConnection(ctx context.Context, conn quic.Connection, serverID string) error {
 	defer conn.CloseWithError(0, "done")
-	s.setServerID(serverID)
+
+	state, err := s.setServerID(serverID)
+	if err != nil {
+		return err
+	}
 
 	g, ctx := errgroup.WithContext(ctx)
 
-	g.Go(func() error { return s.runForwards(ctx, conn) })
-	g.Go(func() error { return s.runCerts(ctx, conn) })
+	g.Go(func() error { return state.runClientsStream(ctx, conn) })
+	g.Go(func() error { return state.runClientsLog(ctx) })
+	g.Go(func() error { return state.runServersLog(ctx) })
+	g.Go(func() error { return state.runServersStream(ctx, conn) })
 
 	return g.Wait()
 }
 
-func (s *controlClient) runForwards(ctx context.Context, conn quic.Connection) error {
+func (s *controlServerState) runClientsStream(ctx context.Context, conn quic.Connection) error {
 	stream, err := conn.OpenStreamSync(ctx)
 	if err != nil {
 		return err
@@ -194,8 +383,13 @@ func (s *controlClient) runForwards(ctx context.Context, conn quic.Connection) e
 
 	g.Go(func() error {
 		for {
+			serverOffset, err := s.getClientOffset()
+			if err != nil {
+				return err
+			}
+
 			req := &pbr.ClientsReq{
-				Offset: s.serverOffset,
+				Offset: serverOffset,
 			}
 			if err := pb.Write(stream, req); err != nil {
 				return err
@@ -214,30 +408,105 @@ func (s *controlClient) runForwards(ctx context.Context, conn quic.Connection) e
 
 				switch {
 				case change.Destination != nil:
-					fwd := model.NewForwardFromPB(change.Destination)
-					if change.Change == pbr.ChangeType_ChangeDel {
-						s.removeDestination(fwd, cert)
-					} else if err := s.addDestination(fwd, cert); err != nil {
-						return err
+					key := clientKey{
+						Forward: model.NewForwardFromPB(change.Destination),
+						Role:    model.Destination,
+						Key:     certc.NewKey(cert),
+					}
+					switch change.Change {
+					case pbr.ChangeType_ChangePut:
+						if err := s.clients.Put(key, clientValue{change.ClientCertificate}); err != nil {
+							return err
+						}
+					case pbr.ChangeType_ChangeDel:
+						if err := s.clients.Del(key); err != nil {
+							return err
+						}
+					default:
+						return kleverr.Newf("unknown change")
 					}
 				case change.Source != nil:
-					fwd := model.NewForwardFromPB(change.Source)
-					if change.Change == pbr.ChangeType_ChangeDel {
-						s.removeSource(fwd, cert)
-					} else if err := s.addSource(fwd, cert); err != nil {
-						return err
+					key := clientKey{
+						Forward: model.NewForwardFromPB(change.Source),
+						Role:    model.Source,
+						Key:     certc.NewKey(cert),
+					}
+					switch change.Change {
+					case pbr.ChangeType_ChangePut:
+						if err := s.clients.Put(key, clientValue{change.ClientCertificate}); err != nil {
+							return err
+						}
+					case pbr.ChangeType_ChangeDel:
+						if err := s.clients.Del(key); err != nil {
+							return err
+						}
+					default:
+						return kleverr.Newf("unknown change")
 					}
 				}
 			}
 
-			s.serverOffset = resp.Offset
+			if err := s.setClientOffset(resp.Offset); err != nil {
+				return err
+			}
 		}
 	})
 
 	return g.Wait()
 }
 
-func (s *controlClient) runCerts(ctx context.Context, conn quic.Connection) error {
+func (s *controlServerState) runClientsLog(ctx context.Context) error {
+	offset := klevdb.OffsetOldest
+	for {
+		msgs, nextOffset, err := s.clients.Consume(ctx, offset)
+		if err != nil {
+			return err
+		}
+
+		for _, msg := range msgs {
+			srvKey := serverKey{msg.Key.Forward}
+			clKey := serverClientKey{msg.Key.Role, msg.Key.Key}
+			sv, err := s.servers.Get(srvKey)
+
+			switch {
+			case errors.Is(err, klevdb.ErrNotFound):
+				serverName := model.GenServerName("connet-relay")
+				serverRoot, err := s.parent.root.NewServer(certc.CertOpts{
+					Domains: []string{serverName},
+				})
+				if err != nil {
+					return err
+				}
+				sv = serverValue{Name: serverName, Cert: serverRoot}
+			case err != nil:
+				return err
+			}
+
+			if msg.Delete {
+				delete(sv.Clients, clKey)
+			} else {
+				if sv.Clients == nil {
+					sv.Clients = map[serverClientKey]clientValue{}
+				}
+				sv.Clients[clKey] = msg.Value
+			}
+
+			if len(sv.Clients) == 0 {
+				if err := s.servers.Del(srvKey); err != nil {
+					return err
+				}
+			} else {
+				if err := s.servers.Put(srvKey, sv); err != nil {
+					return err
+				}
+			}
+		}
+
+		offset = nextOffset
+	}
+}
+
+func (s *controlServerState) runServersStream(ctx context.Context, conn quic.Connection) error {
 	stream, err := conn.AcceptStream(ctx)
 	if err != nil {
 		return err
@@ -259,14 +528,14 @@ func (s *controlClient) runCerts(ctx context.Context, conn quic.Connection) erro
 				return err
 			}
 
-			var msgs []logc.Message[model.Forward, *x509.Certificate]
+			var msgs []logc.Message[serverKey, serverValue]
 			var nextOffset int64
 			if req.Offset == logc.OffsetOldest {
-				msgs, nextOffset, err = s.serversLog.Snapshot(ctx)
-				s.logger.Debug("sending initial control changes", "offset", nextOffset, "changes", len(msgs))
+				msgs, nextOffset, err = s.servers.Snapshot()
+				s.parent.logger.Debug("sending initial control changes", "offset", nextOffset, "changes", len(msgs))
 			} else {
-				msgs, nextOffset, err = s.serversLog.Consume(ctx, req.Offset)
-				s.logger.Debug("sending delta control changes", "offset", nextOffset, "changes", len(msgs))
+				msgs, nextOffset, err = s.servers.Consume(ctx, req.Offset)
+				s.parent.logger.Debug("sending delta control changes", "offset", nextOffset, "changes", len(msgs))
 			}
 			if err != nil {
 				return err
@@ -276,12 +545,12 @@ func (s *controlClient) runCerts(ctx context.Context, conn quic.Connection) erro
 
 			for _, msg := range msgs {
 				var change = &pbr.ServersResp_Change{
-					Server: msg.Key.PB(),
+					Server: msg.Key.Forward.PB(),
 				}
 				if msg.Delete {
 					change.Change = pbr.ChangeType_ChangeDel
 				} else {
-					change.ServerCertificate = msg.Value.Raw
+					change.ServerCertificate = msg.Value.Cert.Raw()
 					change.Change = pbr.ChangeType_ChangePut
 				}
 				resp.Changes = append(resp.Changes, change)
@@ -296,128 +565,119 @@ func (s *controlClient) runCerts(ctx context.Context, conn quic.Connection) erro
 	return g.Wait()
 }
 
-func (s *controlClient) createServer(fwd model.Forward) (*relayServer, error) {
-	if srv := s.getServer(fwd); srv != nil {
-		return srv, nil
+func (s *controlServerState) runServersLog(ctx context.Context) error {
+	upsert := func(msg logc.Message[serverKey, serverValue]) error {
+		serverName := msg.Value.Name
+
+		s.serverByNameMu.RLock()
+		srv := s.serverByName[serverName]
+		s.serverByNameMu.RUnlock()
+
+		if srv != nil {
+			return srv.update(msg)
+		}
+
+		s.serverByNameMu.Lock()
+		defer s.serverByNameMu.Unlock()
+
+		srv = s.serverByName[serverName]
+		if srv != nil {
+			return srv.update(msg)
+		}
+
+		srv, err := newRelayServer(msg)
+		if err != nil {
+			return err
+		}
+		s.serverByName[serverName] = srv
+		return nil
 	}
 
-	serverRoot, err := s.root.NewServer(certc.CertOpts{
-		Domains: []string{model.GenServerName("connet-relay")},
-	})
-	if err != nil {
-		return nil, err
-	}
+	offset := klevdb.OffsetOldest
+	for {
+		msgs, nextOffset, err := s.servers.Consume(ctx, offset)
+		if err != nil {
+			return err
+		}
 
-	serverCert, err := serverRoot.TLSCert()
+		for _, msg := range msgs {
+			if err := upsert(msg); err != nil {
+				return err
+			}
+		}
+
+		offset = nextOffset
+	}
+}
+
+type relayServer struct {
+	fwd  model.Forward
+	name string
+
+	tls []tls.Certificate
+	cas atomic.Pointer[x509.CertPool]
+
+	clients map[serverClientKey]*x509.Certificate
+	mu      sync.RWMutex
+}
+
+func newRelayServer(msg logc.Message[serverKey, serverValue]) (*relayServer, error) {
+	srvCert, err := msg.Value.Cert.TLSCert()
 	if err != nil {
 		return nil, err
 	}
 
 	srv := &relayServer{
-		fwd: fwd,
+		fwd: msg.Key.Forward,
 
-		cert: serverCert.Leaf,
-		tls:  []tls.Certificate{serverCert},
-
-		desinations: map[certc.Key]*x509.Certificate{},
-		sources:     map[certc.Key]*x509.Certificate{},
+		tls: []tls.Certificate{srvCert},
 	}
 
-	s.serversMu.Lock()
-	defer s.serversMu.Unlock()
+	cas := x509.NewCertPool()
+	for k, v := range msg.Value.Clients {
+		clientCert, err := x509.ParseCertificate(v.Cert) // TODO parse as part of loading
+		if err != nil {
+			return nil, err
+		}
+		cas.AddCert(clientCert)
 
-	if added := s.serversByForward[fwd]; added != nil {
-		return added, nil
+		srv.clients[k] = clientCert
 	}
-
-	s.serversByForward[fwd] = srv
-	s.serversByName[serverCert.Leaf.DNSNames[0]] = srv
-	s.serversLog.Put(fwd, srv.cert)
+	srv.cas.Store(cas)
 
 	return srv, nil
 }
 
-func (s *controlClient) addDestination(fwd model.Forward, cert *x509.Certificate) error {
-	for {
-		srv, err := s.createServer(fwd)
-		if err != nil {
-			return err
+func (s *relayServer) update(msg logc.Message[serverKey, serverValue]) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	seenSet := map[serverClientKey]struct{}{}
+	cas := x509.NewCertPool()
+	for k, v := range msg.Value.Clients {
+		if clientCert, ok := s.clients[k]; ok {
+			cas.AddCert(clientCert)
+		} else {
+			clientCert, err := x509.ParseCertificate(v.Cert) // TODO parse as part of loading
+			if err != nil {
+				return err
+			}
+			cas.AddCert(clientCert)
+
+			s.clients[k] = clientCert
 		}
-		if srv.addDestination(cert) {
-			return nil
+
+		seenSet[k] = struct{}{}
+	}
+	s.cas.Store(cas)
+
+	for k := range s.clients {
+		if _, seen := seenSet[k]; !seen {
+			delete(s.clients, k)
 		}
 	}
-}
 
-func (s *controlClient) addSource(fwd model.Forward, cert *x509.Certificate) error {
-	for {
-		srv, err := s.createServer(fwd)
-		if err != nil {
-			return err
-		}
-		if srv.addSource(cert) {
-			return nil
-		}
-	}
-}
-
-func (s *controlClient) getServer(fwd model.Forward) *relayServer {
-	s.serversMu.RLock()
-	defer s.serversMu.RUnlock()
-
-	return s.serversByForward[fwd]
-}
-
-func (s *controlClient) removeServer(srv *relayServer) {
-	s.serversMu.Lock()
-	defer s.serversMu.Unlock()
-
-	srv.mu.Lock()
-	defer srv.mu.Unlock()
-
-	if !srv.empty() {
-		return
-	}
-
-	srv.desinations = nil
-	srv.sources = nil
-	srv.cas.Store(nil)
-
-	delete(s.serversByForward, srv.fwd)
-	s.serversLog.Del(srv.fwd)
-}
-
-func (s *controlClient) removeDestination(fwd model.Forward, cert *x509.Certificate) {
-	srv := s.getServer(fwd)
-	if srv == nil {
-		return
-	}
-	if srv.removeDestination(cert) {
-		s.removeServer(srv)
-	}
-}
-
-func (s *controlClient) removeSource(fwd model.Forward, cert *x509.Certificate) {
-	srv := s.getServer(fwd)
-	if srv == nil {
-		return
-	}
-	if srv.removeSource(cert) {
-		s.removeServer(srv)
-	}
-}
-
-type relayServer struct {
-	fwd model.Forward
-
-	cert *x509.Certificate
-	tls  []tls.Certificate
-
-	desinations map[certc.Key]*x509.Certificate
-	sources     map[certc.Key]*x509.Certificate
-	mu          sync.RWMutex
-
-	cas atomic.Pointer[x509.CertPool]
+	return nil
 }
 
 func (s *relayServer) authenticate(certs []*x509.Certificate) *clientAuth {
@@ -426,80 +686,13 @@ func (s *relayServer) authenticate(certs []*x509.Certificate) *clientAuth {
 
 	cert := certs[0]
 	key := certc.NewKey(cert)
-	if dst := s.desinations[key]; dst != nil && dst.Equal(cert) {
+
+	if dst, ok := s.clients[serverClientKey{model.Destination, key}]; ok && dst.Equal(cert) {
 		return &clientAuth{s.fwd, true, false}
 	}
-	if src := s.sources[key]; src != nil && src.Equal(cert) {
+	if src, ok := s.clients[serverClientKey{model.Source, key}]; ok && src.Equal(cert) {
 		return &clientAuth{s.fwd, false, true}
 	}
 
 	return nil
-}
-
-func (s *relayServer) refreshCA() {
-	s.mu.RLock()
-	defer s.mu.RUnlock()
-
-	cas := x509.NewCertPool()
-	for _, cert := range s.desinations {
-		cas.AddCert(cert)
-	}
-	for _, cert := range s.sources {
-		cas.AddCert(cert)
-	}
-	s.cas.Store(cas)
-}
-
-func (s *relayServer) addDestination(cert *x509.Certificate) bool {
-	defer s.refreshCA()
-
-	s.mu.Lock()
-	defer s.mu.Unlock()
-
-	if s.desinations == nil {
-		return false
-	}
-
-	s.desinations[certc.NewKey(cert)] = cert
-	return true
-}
-
-func (s *relayServer) addSource(cert *x509.Certificate) bool {
-	defer s.refreshCA()
-
-	s.mu.Lock()
-	defer s.mu.Unlock()
-
-	if s.sources == nil {
-		return false
-	}
-
-	s.sources[certc.NewKey(cert)] = cert
-	return true
-}
-
-func (s *relayServer) removeDestination(cert *x509.Certificate) bool {
-	defer s.refreshCA()
-
-	s.mu.Lock()
-	defer s.mu.Unlock()
-
-	delete(s.desinations, certc.NewKey(cert))
-
-	return s.empty()
-}
-
-func (s *relayServer) removeSource(cert *x509.Certificate) bool {
-	defer s.refreshCA()
-
-	s.mu.Lock()
-	defer s.mu.Unlock()
-
-	delete(s.sources, certc.NewKey(cert))
-
-	return s.empty()
-}
-
-func (s *relayServer) empty() bool {
-	return (len(s.desinations) + len(s.sources)) == 0
 }

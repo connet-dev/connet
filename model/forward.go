@@ -42,3 +42,12 @@ func GenServerName(prefix string) string {
 	}
 	return fmt.Sprintf("%s-%s", prefix, base58.Encode(data))
 }
+
+func (f Forward) MarshalText() ([]byte, error) {
+	return []byte(f.string), nil
+}
+
+func (f *Forward) UnmarshalText(b []byte) error {
+	*f = Forward{string(b)}
+	return nil
+}

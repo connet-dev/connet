@@ -11,15 +11,16 @@ import (
 type Key struct{ string }
 
 func NewKey(cert *x509.Certificate) Key {
-	return newKey(blake2s.Sum256(cert.Raw))
+	return NewKeyRaw(cert.Raw)
 }
 
 func NewKeyTLS(cert tls.Certificate) Key {
-	return newKey(blake2s.Sum256(cert.Leaf.Raw))
+	return NewKeyRaw(cert.Leaf.Raw)
 }
 
-func newKey(sk [blake2s.Size]byte) Key {
-	return Key{base58.Encode(sk[:])}
+func NewKeyRaw(raw []byte) Key {
+	hash := blake2s.Sum256(raw)
+	return Key{base58.Encode(hash[:])}
 }
 
 func (k Key) String() string {
@@ -28,4 +29,13 @@ func (k Key) String() string {
 
 func (k Key) IsValid() bool {
 	return k.string != ""
+}
+
+func (k Key) MarshalText() ([]byte, error) {
+	return []byte(k.string), nil
+}
+
+func (k *Key) UnmarshalText(b []byte) error {
+	k.string = string(b)
+	return nil
 }

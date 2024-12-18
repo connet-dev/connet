@@ -3,122 +3,135 @@ package logc
 import (
 	"cmp"
 	"context"
+	"maps"
 	"slices"
-	"sync"
-	"time"
 
+	"github.com/klev-dev/klevdb"
 	"github.com/klev-dev/kleverr"
 )
 
 const (
-	OffsetInvalid int64 = -3
-	OffsetOldest  int64 = -2
-	OffsetNewest  int64 = -1
+	OffsetInvalid = klevdb.OffsetInvalid
+	OffsetOldest  = klevdb.OffsetOldest
+	OffsetNewest  = klevdb.OffsetNewest
 )
 
-type Message[K any, V any] struct {
+var ErrNotFound = klevdb.ErrNotFound
+
+type Message[K comparable, V any] struct {
 	Offset int64
-	Time   time.Time
 	Key    K
 	Value  V
 	Delete bool
 }
 
-type Log[K any, V any] interface {
+type KV[K comparable, V any] interface {
+	Put(k K, v V) error
+	Del(k K) error
+
 	Consume(ctx context.Context, offset int64) ([]Message[K, V], int64, error)
-	NextOffset() (int64, error)
-	Publish(msg Message[K, V]) (int64, error)
-	Delete(offsets map[int64]struct{}) error
+	Get(k K) (V, error)
+
+	Snapshot() ([]Message[K, V], int64, error)
+
+	Close() error
 }
 
-func NewMemoryLog[K any, V any]() Log[K, V] {
-	return &memLog[K, V]{
-		notify: newOffsetNotify(0),
+func NewKV[K comparable, V any](dir string) (KV[K, V], error) {
+	log, err := klevdb.OpenTBlocking(dir, klevdb.Options{
+		CreateDirs: true,
+		KeyIndex:   true,
+		AutoSync:   true,
+		Check:      true,
+	}, klevdb.JsonCodec[K]{}, klevdb.JsonCodec[V]{})
+	if err != nil {
+		return nil, err
 	}
+	return &kv[K, V]{log}, nil
 }
 
-type memLog[K any, V any] struct {
-	nextOffset int64
-	messages   []Message[K, V]
-	mu         sync.RWMutex
-	notify     *offsetNotify
+type kv[K comparable, V any] struct {
+	log klevdb.TBlockingLog[K, V]
 }
 
-func (m *memLog[K, V]) Consume(ctx context.Context, offset int64) ([]Message[K, V], int64, error) {
-	if err := m.notify.Wait(ctx, offset); err != nil {
+func (l *kv[K, V]) Put(k K, v V) error {
+	_, err := l.log.Publish([]klevdb.TMessage[K, V]{{
+		Key:   k,
+		Value: v,
+	}})
+	return err
+}
+
+func (l *kv[K, V]) Del(k K) error {
+	_, err := l.log.Publish([]klevdb.TMessage[K, V]{{
+		Key:        k,
+		ValueEmpty: true,
+	}})
+	return err
+}
+
+func (l *kv[K, V]) Consume(ctx context.Context, offset int64) ([]Message[K, V], int64, error) {
+	nextOffset, msgs, err := l.log.ConsumeBlocking(ctx, offset, 32)
+	if err != nil {
+		return nil, OffsetInvalid, err
+	}
+	var nmsgs []Message[K, V]
+	for _, msg := range msgs {
+		nmsgs = append(nmsgs, Message[K, V]{
+			Offset: msg.Offset,
+			Key:    msg.Key,
+			Value:  msg.Value,
+			Delete: msg.ValueEmpty,
+		})
+	}
+	return nmsgs, nextOffset, nil
+}
+
+func (l *kv[K, V]) Get(k K) (V, error) {
+	msg, err := l.log.GetByKey(k, false)
+	if err != nil {
+		var v V
+		return v, err
+	}
+	if msg.ValueEmpty {
+		var v V
+		return v, kleverr.Newf("key not found: %w", ErrNotFound)
+	}
+	return msg.Value, nil
+}
+
+func (l *kv[K, V]) Snapshot() ([]Message[K, V], int64, error) {
+	maxOffset, err := l.log.NextOffset()
+	if err != nil {
 		return nil, OffsetInvalid, err
 	}
 
-	m.mu.RLock()
-	defer m.mu.RUnlock()
-
-	switch {
-	case offset <= OffsetInvalid:
-		return nil, OffsetInvalid, kleverr.Newf("invalid offset: %d it negative", offset)
-	case offset > m.nextOffset:
-		return nil, OffsetInvalid, kleverr.Newf("invalid offset: %d does not exist", offset)
-	case offset == OffsetNewest || offset == m.nextOffset:
-		return nil, m.nextOffset, nil
-	case offset == OffsetOldest:
-		if len(m.messages) == 0 {
-			return nil, m.nextOffset, nil
+	sum := map[K]Message[K, V]{}
+	for offset := OffsetOldest; offset < maxOffset; {
+		nextOffset, msgs, err := l.log.Consume(offset, 32)
+		if err != nil {
+			return nil, OffsetInvalid, err
 		}
-		msgs := m.messages[0:min(32, len(m.messages))]
-		return msgs, msgs[len(msgs)-1].Offset + 1, nil
-	case len(m.messages) == 0:
-		return nil, m.nextOffset, nil
-	case offset < m.messages[0].Offset:
-		return nil, m.messages[0].Offset, nil
-	}
+		offset = nextOffset
 
-	pos, _ := slices.BinarySearchFunc(m.messages, offset, func(msg Message[K, V], offset int64) int {
-		return cmp.Compare(msg.Offset, offset)
-	})
-	msgs := m.messages[pos:min(pos+32, len(m.messages))]
-	return msgs, msgs[len(msgs)-1].Offset + 1, nil
-}
-
-func (m *memLog[K, V]) NextOffset() (int64, error) {
-	m.mu.RLock()
-	defer m.mu.RUnlock()
-
-	return m.nextOffset, nil
-}
-
-func (m *memLog[K, V]) Publish(msg Message[K, V]) (int64, error) {
-	offset, err := m.publish(msg)
-	if err != nil {
-		return 0, err
-	}
-	m.notify.Set(offset)
-	return offset, nil
-}
-
-func (m *memLog[K, V]) publish(msg Message[K, V]) (int64, error) {
-	m.mu.Lock()
-	defer m.mu.Unlock()
-
-	msg.Offset = m.nextOffset
-	if msg.Time.IsZero() {
-		msg.Time = time.Now()
-	}
-	m.messages = append(m.messages, msg)
-
-	m.nextOffset++
-	return m.nextOffset, nil
-}
-
-func (m *memLog[K, V]) Delete(offsets map[int64]struct{}) error {
-	m.mu.Lock()
-	defer m.mu.Unlock()
-
-	messages := make([]Message[K, V], 0, len(m.messages))
-	for _, msg := range m.messages {
-		if _, ok := offsets[msg.Offset]; !ok {
-			messages = append(messages, msg)
+		for _, msg := range msgs {
+			if msg.ValueEmpty {
+				delete(sum, msg.Key)
+			} else {
+				sum[msg.Key] = Message[K, V]{
+					Offset: msg.Offset,
+					Key:    msg.Key,
+					Value:  msg.Value,
+				}
+			}
 		}
 	}
-	m.messages = messages
 
-	return nil
+	return slices.SortedFunc(maps.Values(sum), func(l, r Message[K, V]) int {
+		return cmp.Compare(l.Offset, r.Offset)
+	}), maxOffset, nil
+}
+
+func (l *kv[K, V]) Close() error {
+	return l.log.Close()
 }

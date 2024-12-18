@@ -8,7 +8,6 @@ import (
 	"net"
 
 	"github.com/keihaya-com/connet/certc"
-	"github.com/keihaya-com/connet/logc"
 	"github.com/keihaya-com/connet/model"
 	"github.com/klev-dev/kleverr"
 	"github.com/quic-go/quic-go"
@@ -38,6 +37,7 @@ func NewServer(cfg Config) (*Server, error) {
 		control: &controlClient{
 			hostport: cfg.Hostport,
 			root:     root,
+			baseDir:  "/var/lib/connet/relay", // TODO
 
 			controlAddr:  cfg.ControlAddr,
 			controlToken: cfg.ControlToken,
@@ -46,11 +46,6 @@ func NewServer(cfg Config) (*Server, error) {
 				RootCAs:    cfg.ControlCAs,
 				NextProtos: []string{"connet-relays"},
 			},
-
-			serverOffset:     logc.OffsetOldest,
-			serversByForward: map[model.Forward]*relayServer{},
-			serversByName:    map[string]*relayServer{},
-			serversLog:       logc.NewMemoryKVLog[model.Forward, *x509.Certificate](),
 
 			logger: cfg.Logger.With("relay-control", cfg.Hostport),
 		},

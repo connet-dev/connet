@@ -236,6 +236,26 @@ func (c *Cert) EncodeToMemory() ([]byte, []byte, error) {
 	return certPEM, keyPEM, nil
 }
 
+func DecodeFromMemory(cert, key []byte) (*Cert, error) {
+	certDER, _ := pem.Decode(cert)
+	if certDER == nil {
+		return nil, kleverr.New("could not find cert pem block")
+	}
+	if certDER.Type != "CERTIFICATE" {
+		return nil, kleverr.Newf("pem is not certificate: %s", certDER.Type)
+	}
+
+	keyDER, _ := pem.Decode(key)
+	if keyDER == nil {
+		return nil, kleverr.New("could not find key pem block")
+	}
+	if keyDER.Type != "PRIVATE KEY" {
+		return nil, kleverr.Newf("pem is not private key: %s", keyDER.Type)
+	}
+
+	return &Cert{der: certDER.Bytes, pk: keyDER.Bytes}, nil
+}
+
 func SelfSigned(domain string) (tls.Certificate, *x509.CertPool, error) {
 	root, err := NewRoot()
 	if err != nil {
