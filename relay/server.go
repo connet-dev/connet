@@ -18,6 +18,7 @@ type Config struct {
 	Addr     *net.UDPAddr
 	Hostport model.HostPort
 	Logger   *slog.Logger
+	Dir      string
 
 	ControlAddr  *net.UDPAddr
 	ControlHost  string
@@ -37,7 +38,7 @@ func NewServer(cfg Config) (*Server, error) {
 		control: &controlClient{
 			hostport: cfg.Hostport,
 			root:     root,
-			baseDir:  "/var/lib/connet/relay", // TODO
+			dir:      cfg.Dir,
 
 			controlAddr:  cfg.ControlAddr,
 			controlToken: cfg.ControlToken,

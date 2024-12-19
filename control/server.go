@@ -24,22 +24,21 @@ type Config struct {
 	ClientAuth ClientAuthenticator
 	RelayAuth  RelayAuthenticator
 	Logger     *slog.Logger
+	Dir        string
 }
 
 func NewServer(cfg Config) (*Server, error) {
-	baseDir := "/var/lib/connet/control" // TODO
-
-	relayClients, err := logc.NewKV[relayClientKey, relayClientValue](filepath.Join(baseDir, "relay", "clients"))
+	relayClients, err := logc.NewKV[relayClientKey, relayClientValue](filepath.Join(cfg.Dir, "relay-clients"))
 	if err != nil {
 		return nil, err
 	}
 
-	relayServers, err := logc.NewKV[relayServerKey, relayServerValue](filepath.Join(baseDir, "relay", "servers"))
+	relayServers, err := logc.NewKV[relayServerKey, relayServerValue](filepath.Join(cfg.Dir, "relay-servers"))
 	if err != nil {
 		return nil, err
 	}
 
-	clients, err := logc.NewKV[clientKey, clientValue](filepath.Join(baseDir, "control", "clients"))
+	clients, err := logc.NewKV[clientKey, clientValue](filepath.Join(cfg.Dir, "control-clients"))
 	if err != nil {
 		return nil, err
 	}

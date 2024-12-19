@@ -6,6 +6,8 @@ import (
 	"crypto/x509"
 	"log/slog"
 	"net"
+	"os"
+	"path/filepath"
 
 	"github.com/keihaya-com/connet/control"
 	"github.com/keihaya-com/connet/model"
@@ -50,6 +52,12 @@ func NewServer(opts ...ServerOption) (*Server, error) {
 		}
 	}
 
+	if cfg.dir == "" {
+		if err := serverStoreDirTemp()(cfg); err != nil {
+			return nil, err
+		}
+	}
+
 	relayControlToken := model.GenServerName("relay")
 
 	control, err := control.NewServer(control.Config{
@@ -58,6 +66,7 @@ func NewServer(opts ...ServerOption) (*Server, error) {
 		ClientAuth: cfg.clientAuth,
 		RelayAuth:  selfhosted.NewRelayAuthenticator(relayControlToken),
 		Logger:     cfg.logger,
+		Dir:        filepath.Join(cfg.dir, "control"),
 	})
 
 	controlCAs := x509.NewCertPool()
@@ -66,6 +75,7 @@ func NewServer(opts ...ServerOption) (*Server, error) {
 		Addr:     cfg.relayAddr,
 		Hostport: model.HostPort{Host: cfg.relayHostname, Port: cfg.relayAddr.AddrPort().Port()},
 		Logger:   cfg.logger,
+		Dir:      filepath.Join(cfg.dir, "relay"),
 
 		ControlAddr:  cfg.controlAddr,
 		ControlHost:  "localhost",
@@ -104,6 +114,7 @@ type serverConfig struct {
 	relayAddr     *net.UDPAddr
 	relayHostname string
 
+	dir    string
 	logger *slog.Logger
 }
 
@@ -166,6 +177,24 @@ func ServerRelayAddress(address string) ServerOption {
 func ServerRelayHostname(hostname string) ServerOption {
 	return func(cfg *serverConfig) error {
 		cfg.relayHostname = hostname
+		return nil
+	}
+}
+
+func ServerStoreDir(dir string) ServerOption {
+	return func(cfg *serverConfig) error {
+		cfg.dir = dir
+		return nil
+	}
+}
+
+func serverStoreDirTemp() ServerOption {
+	return func(cfg *serverConfig) error {
+		tmpDir, err := os.MkdirTemp("", "connet-server-")
+		if err != nil {
+			return err
+		}
+		cfg.dir = tmpDir
 		return nil
 	}
 }

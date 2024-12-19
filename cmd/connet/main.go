@@ -43,6 +43,8 @@ type ServerConfig struct {
 
 	RelayAddr     string `toml:"relay-addr"`
 	RelayHostname string `toml:"relay-hostname"`
+
+	StoreDir string `toml:"store-dir"`
 }
 
 type ControlConfig struct {
@@ -55,6 +57,8 @@ type ControlConfig struct {
 	Addr string `toml:"addr"`
 	Cert string `toml:"cert-file"`
 	Key  string `toml:"key-file"`
+
+	StoreDir string `toml:"store-dir"`
 }
 
 type RelayConfig struct {
@@ -66,6 +70,8 @@ type RelayConfig struct {
 
 	ControlAddr string `toml:"control-addr"`
 	ControlCAs  string `toml:"control-cas"`
+
+	StoreDir string `toml:"store-dir"`
 }
 
 type ClientConfig struct {
@@ -180,6 +186,8 @@ func serverCmd() *cobra.Command {
 	cmd.Flags().StringVar(&flagsConfig.Server.RelayAddr, "relay-addr", "", "relay server addr to use")
 	cmd.Flags().StringVar(&flagsConfig.Server.RelayHostname, "relay-hostname", "", "relay server public hostname to use")
 
+	cmd.Flags().StringVar(&flagsConfig.Server.StoreDir, "store-dir", "", "storage dir, /tmp subdirectory if empty")
+
 	cmd.RunE = func(cmd *cobra.Command, args []string) error {
 		cfg, err := loadConfig(*filename)
 		if err != nil {
@@ -221,6 +229,8 @@ func controlCmd() *cobra.Command {
 	cmd.Flags().StringVar(&flagsConfig.Control.Cert, "cert-file", "", "control server cert to use")
 	cmd.Flags().StringVar(&flagsConfig.Control.Key, "key-file", "", "control server key to use")
 
+	cmd.Flags().StringVar(&flagsConfig.Control.StoreDir, "store-dir", "", "storage dir, /tmp subdirectory if empty")
+
 	cmd.RunE = func(cmd *cobra.Command, args []string) error {
 		cfg, err := loadConfig(*filename)
 		if err != nil {
@@ -260,6 +270,8 @@ func relayCmd() *cobra.Command {
 
 	cmd.Flags().StringVar(&flagsConfig.Relay.ControlAddr, "control-addr", "", "control server address to connect")
 	cmd.Flags().StringVar(&flagsConfig.Relay.ControlCAs, "control-cas", "", "control server CAs to use")
+
+	cmd.Flags().StringVar(&flagsConfig.Relay.StoreDir, "store-dir", "", "storage dir, /tmp subdirectory if empty")
 
 	cmd.RunE = func(cmd *cobra.Command, args []string) error {
 		cfg, err := loadConfig(*filename)
@@ -422,6 +434,10 @@ func serverRun(ctx context.Context, cfg ServerConfig, logger *slog.Logger) error
 		opts = append(opts, connet.ServerRelayHostname(cfg.RelayHostname))
 	}
 
+	if cfg.StoreDir != "" {
+		opts = append(opts, connet.ServerStoreDir(cfg.StoreDir))
+	}
+
 	opts = append(opts, connet.ServerLogger(logger))
 
 	srv, err := connet.NewServer(opts...)
@@ -471,6 +487,15 @@ func controlRun(ctx context.Context, cfg ControlConfig, logger *slog.Logger) err
 			return kleverr.Newf("control cert cannot be loaded: %w", err)
 		}
 		controlCfg.Cert = cert
+	}
+
+	if cfg.StoreDir == "" {
+		controlCfg.Dir, err = os.MkdirTemp("", "connet-control-")
+		if err != nil {
+			return err
+		}
+	} else {
+		controlCfg.Dir = cfg.StoreDir
 	}
 
 	srv, err := control.NewServer(controlCfg)
@@ -536,6 +561,15 @@ func relayRun(ctx context.Context, cfg RelayConfig, logger *slog.Logger) error {
 		return err
 	}
 	relayCfg.ControlHost = controlHost
+
+	if cfg.StoreDir == "" {
+		relayCfg.Dir, err = os.MkdirTemp("", "connet-relay-")
+		if err != nil {
+			return err
+		}
+	} else {
+		relayCfg.Dir = cfg.StoreDir
+	}
 
 	srv, err := relay.NewServer(relayCfg)
 	if err != nil {
@@ -612,6 +646,8 @@ func (c *ServerConfig) merge(o ServerConfig) {
 
 	c.RelayAddr = override(c.RelayAddr, o.RelayAddr)
 	c.RelayHostname = override(c.RelayHostname, o.RelayHostname)
+
+	c.StoreDir = override(c.StoreDir, o.StoreDir)
 }
 
 func (c *ControlConfig) merge(o ControlConfig) {
@@ -624,6 +660,8 @@ func (c *ControlConfig) merge(o ControlConfig) {
 	c.Addr = override(c.Addr, o.Addr)
 	c.Cert = override(c.Cert, o.Cert)
 	c.Key = override(c.Key, o.Key)
+
+	c.StoreDir = override(c.StoreDir, o.StoreDir)
 }
 
 func (c *RelayConfig) merge(o RelayConfig) {
@@ -635,6 +673,8 @@ func (c *RelayConfig) merge(o RelayConfig) {
 
 	c.ControlAddr = override(c.ControlAddr, o.ControlAddr)
 	c.ControlCAs = override(c.ControlCAs, o.ControlCAs)
+
+	c.StoreDir = override(c.StoreDir, o.StoreDir)
 }
 
 func mergeForwardConfig(c, o ForwardConfig) ForwardConfig {

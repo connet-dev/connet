@@ -28,7 +28,7 @@ import (
 type controlClient struct {
 	hostport model.HostPort
 	root     *certc.Cert
-	baseDir  string
+	dir      string
 
 	controlAddr    *net.UDPAddr
 	controlToken   string
@@ -151,7 +151,7 @@ type controlServerState struct {
 }
 
 func newControlServerState(parent *controlClient, id string) (*controlServerState, error) {
-	serverDir := filepath.Join(parent.baseDir, id)
+	serverDir := filepath.Join(parent.dir, id)
 	config, err := logc.NewKV[configKey, configValue](filepath.Join(serverDir, "config"))
 	if err != nil {
 		return nil, err
