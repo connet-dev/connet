@@ -3,6 +3,7 @@ package control
 import (
 	"context"
 	"crypto/x509"
+	"errors"
 	"log/slog"
 	"maps"
 	"sync"
@@ -33,6 +34,7 @@ type relayServer struct {
 
 	relayClients logc.KV[relayClientKey, relayClientValue]
 	relayServers logc.KV[relayServerKey, relayServerValue]
+	relayOffsets logc.KV[model.HostPort, int64]
 
 	forwardsCache  map[model.Forward]map[model.HostPort]*x509.Certificate
 	forwardsOffset int64
@@ -51,7 +53,7 @@ type relayClientValue struct {
 
 type relayServerKey struct {
 	Forward  model.Forward  `json:"forward"`
-	Hostport model.HostPort `json:"host_port"`
+	Hostport model.HostPort `json:"hostport"`
 }
 
 type relayServerValue struct {
@@ -180,6 +182,22 @@ func (s *relayServer) handle(ctx context.Context, conn quic.Connection) error {
 	}
 	go rc.run(ctx)
 	return nil
+}
+
+func (s *relayServer) getRelayOffset(hp model.HostPort) (int64, error) {
+	offset, err := s.relayOffsets.Get(hp)
+	switch {
+	case errors.Is(err, logc.ErrNotFound):
+		return logc.OffsetOldest, nil
+	case err != nil:
+		return logc.OffsetInvalid, err
+	default:
+		return offset, nil
+	}
+}
+
+func (s *relayServer) setRelayOffset(hp model.HostPort, offset int64) error {
+	return s.relayOffsets.Put(hp, offset)
 }
 
 type relayConn struct {
@@ -317,8 +335,12 @@ func (c *relayConn) runRelayServers(ctx context.Context) error {
 	}
 	defer stream.Close()
 
-	offset := logc.OffsetOldest // TODO store this offset
 	for {
+		offset, err := c.server.getRelayOffset(c.hostport)
+		if err != nil {
+			return err
+		}
+
 		req := &pbr.ServersReq{
 			Offset: offset,
 		}
@@ -355,6 +377,8 @@ func (c *relayConn) runRelayServers(ctx context.Context) error {
 			}
 		}
 
-		offset = resp.Offset
+		if err := c.server.setRelayOffset(c.hostport, resp.Offset); err != nil {
+			return err
+		}
 	}
 }

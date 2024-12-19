@@ -39,6 +39,11 @@ func NewServer(cfg Config) (*Server, error) {
 		return nil, err
 	}
 
+	relayOffsets, err := logc.NewKV[model.HostPort, int64](filepath.Join(cfg.Dir, "relay-offsets"))
+	if err != nil {
+		return nil, err
+	}
+
 	clients, err := logc.NewKV[clientKey, clientValue](filepath.Join(cfg.Dir, "control-clients"))
 	if err != nil {
 		return nil, err
@@ -59,6 +64,7 @@ func NewServer(cfg Config) (*Server, error) {
 
 		relayClients: relayClients,
 		relayServers: relayServers,
+		relayOffsets: relayOffsets,
 
 		forwardsCache:  map[model.Forward]map[model.HostPort]*x509.Certificate{},
 		forwardsOffset: logc.OffsetOldest,

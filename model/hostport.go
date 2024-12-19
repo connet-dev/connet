@@ -7,8 +7,8 @@ import (
 )
 
 type HostPort struct {
-	Host string
-	Port uint16
+	Host string `json:"host"`
+	Port uint16 `json:"port"`
 }
 
 func NewHostPortFromPB(h *pb.HostPort) HostPort {
