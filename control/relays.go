@@ -48,7 +48,21 @@ type relayClientKey struct {
 }
 
 type relayClientValue struct {
-	Cert []byte `json:"cert"`
+	Cert *x509.Certificate `json:"cert"`
+}
+
+func (v relayClientValue) MarshalJSON() ([]byte, error) {
+	return certc.MarshalJSONCert(v.Cert)
+}
+
+func (v *relayClientValue) UnmarshalJSON(b []byte) error {
+	cert, err := certc.UnmarshalJSONCert(b)
+	if err != nil {
+		return err
+	}
+
+	*v = relayClientValue{cert}
+	return nil
 }
 
 type relayServerKey struct {
@@ -57,7 +71,21 @@ type relayServerKey struct {
 }
 
 type relayServerValue struct {
-	Cert []byte `json:"cert"`
+	Cert *x509.Certificate `json:"cert"`
+}
+
+func (v relayServerValue) MarshalJSON() ([]byte, error) {
+	return certc.MarshalJSONCert(v.Cert)
+}
+
+func (v *relayServerValue) UnmarshalJSON(b []byte) error {
+	cert, err := certc.UnmarshalJSONCert(b)
+	if err != nil {
+		return err
+	}
+
+	*v = relayServerValue{cert}
+	return nil
 }
 
 func (s *relayServer) getForward(fwd model.Forward) (map[model.HostPort]*x509.Certificate, int64) {
@@ -71,7 +99,7 @@ func (s *relayServer) Client(ctx context.Context, fwd model.Forward, role model.
 	notifyFn func(map[model.HostPort]*x509.Certificate) error) error {
 
 	key := relayClientKey{Forward: fwd, Role: role, Key: certc.NewKey(cert)}
-	val := relayClientValue{Cert: cert.Raw}
+	val := relayClientValue{Cert: cert}
 	s.relayClients.Put(key, val)
 	defer s.relayClients.Del(key)
 
@@ -106,11 +134,7 @@ func (s *relayServer) listen(ctx context.Context, fwd model.Forward,
 				if servers == nil {
 					servers = map[model.HostPort]*x509.Certificate{}
 				}
-				cert, err := x509.ParseCertificate(msg.Value.Cert) // TODO do this once on deser
-				if err != nil {
-					return err
-				}
-				servers[msg.Key.Hostport] = cert
+				servers[msg.Key.Hostport] = msg.Value.Cert
 			}
 			changed = true
 		}
@@ -141,11 +165,7 @@ func (s *relayServer) run(ctx context.Context) error {
 				srv = map[model.HostPort]*x509.Certificate{}
 				s.forwardsCache[msg.Key.Forward] = srv
 			}
-			cert, err := x509.ParseCertificate(msg.Value.Cert) // TODO do this once on deser
-			if err != nil {
-				return err
-			}
-			srv[msg.Key.Hostport] = cert
+			srv[msg.Key.Hostport] = msg.Value.Cert
 		}
 
 		s.forwardsOffset = msg.Offset + 1
@@ -316,7 +336,7 @@ func (c *relayConn) runRelayClients(ctx context.Context) error {
 				change.Change = pbr.ChangeType_ChangeDel
 			} else {
 				change.Change = pbr.ChangeType_ChangePut
-				change.Certificate = msg.Value.Cert
+				change.Certificate = msg.Value.Cert.Raw
 			}
 
 			resp.Changes = append(resp.Changes, change)
@@ -365,7 +385,7 @@ func (c *relayConn) runRelayServers(ctx context.Context) error {
 				if err != nil {
 					return err
 				}
-				if err := c.server.relayServers.Put(key, relayServerValue{cert.Raw}); err != nil {
+				if err := c.server.relayServers.Put(key, relayServerValue{cert}); err != nil {
 					return err
 				}
 			case pbr.ChangeType_ChangeDel:

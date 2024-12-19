@@ -50,24 +50,11 @@ type clientValue struct {
 }
 
 func (v clientValue) MarshalJSON() ([]byte, error) {
-	s := struct {
-		Cert []byte `json:"cert"`
-	}{
-		Cert: v.Cert.Raw,
-	}
-	return json.Marshal(s)
+	return certc.MarshalJSONCert(v.Cert)
 }
 
 func (v *clientValue) UnmarshalJSON(b []byte) error {
-	s := struct {
-		Cert []byte `json:"cert"`
-	}{}
-
-	if err := json.Unmarshal(b, &s); err != nil {
-		return err
-	}
-
-	cert, err := x509.ParseCertificate(s.Cert)
+	cert, err := certc.UnmarshalJSONCert(b)
 	if err != nil {
 		return err
 	}
