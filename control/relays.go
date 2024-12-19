@@ -110,6 +110,9 @@ func (s *relayServer) listen(ctx context.Context, fwd model.Forward, notifyFn fu
 			if msg.Delete {
 				delete(servers, msg.Key.Hostport)
 			} else {
+				if servers == nil {
+					servers = map[model.HostPort]*x509.Certificate{}
+				}
 				cert, err := x509.ParseCertificate(msg.Value.Cert) // TODO do this once on deser
 				if err != nil {
 					return err

@@ -4,9 +4,13 @@ import (
 	"context"
 	"crypto/rand"
 	"crypto/x509"
+	"encoding/json"
 	"io"
 	"log/slog"
+	"slices"
+	"sync"
 
+	"github.com/keihaya-com/connet/logc"
 	"github.com/keihaya-com/connet/model"
 	"github.com/keihaya-com/connet/pb"
 	"github.com/keihaya-com/connet/pbc"
@@ -17,6 +21,7 @@ import (
 	"golang.org/x/crypto/blake2s"
 	"golang.org/x/crypto/nacl/secretbox"
 	"golang.org/x/sync/errgroup"
+	"google.golang.org/protobuf/proto"
 )
 
 type ClientAuthenticator interface {
@@ -36,11 +41,128 @@ type ClientRelays interface {
 }
 
 type clientServer struct {
-	auth      ClientAuthenticator
-	relays    ClientRelays
-	encode    []byte
-	whisperer *whisperer
-	logger    *slog.Logger
+	auth   ClientAuthenticator
+	relays ClientRelays
+	encode []byte
+	logger *slog.Logger
+
+	clients logc.KV[clientKey, clientValue]
+
+	clientsCache  map[cacheKey][]*pbs.ServerPeer // TODO fill this cache
+	clientsOffset int64
+	clientsMu     sync.RWMutex
+}
+
+type clientKey struct {
+	Forward model.Forward `json:"forward"`
+	Role    model.Role    `json:"role"`
+	ID      ksuid.KSUID   `json:"id"` // TODO consider using the server cert key
+}
+
+type clientValue struct {
+	peer *pbs.ClientPeer
+}
+
+func (v clientValue) MarshalJSON() ([]byte, error) { // TODO proper json
+	peerBytes, err := proto.Marshal(v.peer)
+	if err != nil {
+		return nil, err
+	}
+
+	s := struct {
+		Data []byte `json:"data"`
+	}{
+		Data: peerBytes,
+	}
+
+	return json.Marshal(s)
+}
+
+func (v *clientValue) UnmarshalJSON(b []byte) error {
+	s := struct {
+		Data []byte `json:"data"`
+	}{}
+	if err := json.Unmarshal(b, &s); err != nil {
+		return err
+	}
+
+	peer := &pbs.ClientPeer{}
+	if err := proto.Unmarshal(s.Data, peer); err != nil {
+		return err
+	}
+
+	*v = clientValue{peer}
+	return nil
+}
+
+type cacheKey struct {
+	forward model.Forward
+	role    model.Role
+}
+
+func (s *clientServer) put(fwd model.Forward, role model.Role, id ksuid.KSUID, peer *pbs.ClientPeer) error {
+	return s.clients.Put(clientKey{fwd, role, id}, clientValue{peer})
+}
+
+func (s *clientServer) del(fwd model.Forward, role model.Role, id ksuid.KSUID) error {
+	return s.clients.Del(clientKey{fwd, role, id})
+}
+
+func (s *clientServer) get(fwd model.Forward, role model.Role) ([]*pbs.ServerPeer, int64) {
+	s.clientsMu.RLock()
+	defer s.clientsMu.RUnlock()
+
+	return s.clientsCache[cacheKey{fwd, role}], s.clientsOffset
+}
+
+func (s *clientServer) listen(ctx context.Context, fwd model.Forward, role model.Role, notify func(peers []*pbs.ServerPeer) error) error {
+	peers, offset := s.get(fwd, role)
+	if len(peers) > 0 {
+		if err := notify(peers); err != nil {
+			return err
+		}
+	}
+
+	for {
+		msgs, nextOffset, err := s.clients.Consume(ctx, offset)
+		if err != nil {
+			return err
+		}
+
+		var changed bool
+		for _, msg := range msgs {
+			if msg.Key.Forward != fwd || msg.Key.Role != role {
+				continue
+			}
+
+			if msg.Delete {
+				peers = slices.DeleteFunc(peers, func(peer *pbs.ServerPeer) bool {
+					return peer.Id == msg.Key.ID.String()
+				})
+			} else if idx := slices.IndexFunc(peers, func(peer *pbs.ServerPeer) bool { return peer.Id == msg.Key.ID.String() }); idx >= 0 {
+				peers[idx] = &pbs.ServerPeer{
+					Id:     msg.Key.ID.String(),
+					Direct: msg.Value.peer.Direct,
+					Relays: msg.Value.peer.Relays,
+				}
+			} else {
+				peers = append(peers, &pbs.ServerPeer{
+					Id:     msg.Key.ID.String(),
+					Direct: msg.Value.peer.Direct,
+					Relays: msg.Value.peer.Relays,
+				})
+			}
+			changed = true
+		}
+
+		offset = nextOffset
+
+		if changed {
+			if err := notify(peers); err != nil {
+				return err
+			}
+		}
+	}
 }
 
 func (s *clientServer) handle(ctx context.Context, conn quic.Connection) error {
@@ -308,8 +430,10 @@ func (s *clientStream) destination(ctx context.Context, req *pbs.Request_Destina
 		return err
 	}
 
-	s.conn.server.whisperer.AddDestination(from, s.conn.id, req.Peer)
-	defer s.conn.server.whisperer.RemoveDestination(from, s.conn.id)
+	if err := s.conn.server.put(from, model.Destination, s.conn.id, req.Peer); err != nil {
+		return err
+	}
+	defer s.conn.server.del(from, model.Destination, s.conn.id)
 
 	g, ctx := errgroup.WithContext(ctx)
 
@@ -334,13 +458,15 @@ func (s *clientStream) destination(ctx context.Context, req *pbs.Request_Destina
 				return err
 			}
 
-			s.conn.server.whisperer.AddDestination(from, s.conn.id, req.Destination.Peer)
+			if err := s.conn.server.put(from, model.Destination, s.conn.id, req.Destination.Peer); err != nil {
+				return err
+			}
 		}
 	})
 
 	g.Go(func() error {
 		defer s.conn.logger.Debug("completed sources notify")
-		return s.conn.server.whisperer.Sources(ctx, from, func(peers []*pbs.ServerPeer) error {
+		return s.conn.server.listen(ctx, from, model.Source, func(peers []*pbs.ServerPeer) error {
 			s.conn.logger.Debug("updated sources list", "peers", len(peers))
 
 			if err := pb.Write(s.stream, &pbs.Response{
@@ -446,8 +572,10 @@ func (s *clientStream) source(ctx context.Context, req *pbs.Request_Source) erro
 		return err
 	}
 
-	s.conn.server.whisperer.AddSource(to, s.conn.id, req.Peer)
-	defer s.conn.server.whisperer.RemoveSource(to, s.conn.id)
+	if err := s.conn.server.put(to, model.Source, s.conn.id, req.Peer); err != nil {
+		return err
+	}
+	defer s.conn.server.del(to, model.Source, s.conn.id)
 
 	g, ctx := errgroup.WithContext(ctx)
 
@@ -472,13 +600,15 @@ func (s *clientStream) source(ctx context.Context, req *pbs.Request_Source) erro
 				return err
 			}
 
-			s.conn.server.whisperer.AddSource(to, s.conn.id, req.Source.Peer)
+			if err := s.conn.server.put(to, model.Source, s.conn.id, req.Source.Peer); err != nil {
+				return err
+			}
 		}
 	})
 
 	g.Go(func() error {
 		defer s.conn.logger.Debug("completed destinations notify")
-		return s.conn.server.whisperer.Destinations(ctx, to, func(peers []*pbs.ServerPeer) error {
+		return s.conn.server.listen(ctx, to, model.Destination, func(peers []*pbs.ServerPeer) error {
 			s.conn.logger.Debug("updated destinations list", "peers", len(peers))
 
 			if err := pb.Write(s.stream, &pbs.Response{

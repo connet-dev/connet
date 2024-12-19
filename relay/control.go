@@ -634,6 +634,8 @@ func newRelayServer(msg logc.Message[serverKey, serverValue]) (*relayServer, err
 		fwd: msg.Key.Forward,
 
 		tls: []tls.Certificate{srvCert},
+
+		clients: map[serverClientKey]*x509.Certificate{},
 	}
 
 	cas := x509.NewCertPool()

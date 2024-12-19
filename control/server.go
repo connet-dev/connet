@@ -12,6 +12,7 @@ import (
 
 	"github.com/keihaya-com/connet/logc"
 	"github.com/keihaya-com/connet/model"
+	"github.com/keihaya-com/connet/pbs"
 	"github.com/klev-dev/kleverr"
 	"github.com/quic-go/quic-go"
 	"github.com/segmentio/ksuid"
@@ -38,6 +39,11 @@ func NewServer(cfg Config) (*Server, error) {
 		return nil, err
 	}
 
+	clients, err := logc.NewKV[clientKey, clientValue](filepath.Join(baseDir, "control", "clients"))
+	if err != nil {
+		return nil, err
+	}
+
 	s := &Server{
 		addr: cfg.Addr,
 		tlsConf: &tls.Config{
@@ -58,11 +64,15 @@ func NewServer(cfg Config) (*Server, error) {
 		forwardsOffset: logc.OffsetOldest,
 	}
 	s.clients = &clientServer{
-		auth:      cfg.ClientAuth,
-		relays:    s.relays,
-		encode:    cfg.Cert.Leaf.Raw,
-		whisperer: newWhisperer(),
-		logger:    cfg.Logger.With("server", "clients"),
+		auth:   cfg.ClientAuth,
+		relays: s.relays,
+		encode: cfg.Cert.Leaf.Raw,
+		logger: cfg.Logger.With("server", "clients"),
+
+		clients: clients,
+
+		clientsCache:  map[cacheKey][]*pbs.ServerPeer{},
+		clientsOffset: logc.OffsetOldest,
 	}
 	return s, nil
 }
