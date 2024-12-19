@@ -46,7 +46,34 @@ type clientKey struct {
 }
 
 type clientValue struct {
-	Cert []byte `json:"cert"`
+	Cert *x509.Certificate `json:"cert"`
+}
+
+func (v clientValue) MarshalJSON() ([]byte, error) {
+	s := struct {
+		Cert []byte `json:"cert"`
+	}{
+		Cert: v.Cert.Raw,
+	}
+	return json.Marshal(s)
+}
+
+func (v *clientValue) UnmarshalJSON(b []byte) error {
+	s := struct {
+		Cert []byte `json:"cert"`
+	}{}
+
+	if err := json.Unmarshal(b, &s); err != nil {
+		return err
+	}
+
+	cert, err := x509.ParseCertificate(s.Cert)
+	if err != nil {
+		return err
+	}
+
+	*v = clientValue{cert}
+	return nil
 }
 
 type serverKey struct {
@@ -78,8 +105,8 @@ func (v serverValue) MarshalJSON() ([]byte, error) {
 
 	for k, v := range v.Clients {
 		s.Clients = append(s.Clients, serverClientValue{
-			Role: k.Role,
-			Cert: v.Cert,
+			Role:  k.Role,
+			Value: v,
 		})
 	}
 
@@ -109,7 +136,7 @@ func (v *serverValue) UnmarshalJSON(b []byte) error {
 	}
 
 	for _, cl := range s.Clients {
-		sv.Clients[serverClientKey{cl.Role, certc.NewKeyRaw(cl.Cert)}] = clientValue{cl.Cert}
+		sv.Clients[serverClientKey{cl.Role, certc.NewKey(cl.Value.Cert)}] = cl.Value
 	}
 
 	*v = sv
@@ -122,8 +149,8 @@ type serverClientKey struct {
 }
 
 type serverClientValue struct {
-	Role model.Role `json:"role"`
-	Cert []byte     `json:"cert"`
+	Role  model.Role  `json:"role"`
+	Value clientValue `json:"value"`
 }
 
 type configKey string
@@ -432,7 +459,7 @@ func (s *controlServerState) runClientsStream(ctx context.Context, conn quic.Con
 					if err != nil {
 						return err
 					}
-					if err := s.clients.Put(key, clientValue{cert.Raw}); err != nil {
+					if err := s.clients.Put(key, clientValue{cert}); err != nil {
 						return err
 					}
 				case pbr.ChangeType_ChangeDel:
@@ -656,13 +683,8 @@ func newRelayServer(msg logc.Message[serverKey, serverValue]) (*relayServer, err
 
 	cas := x509.NewCertPool()
 	for k, v := range msg.Value.Clients {
-		clientCert, err := x509.ParseCertificate(v.Cert) // TODO parse as part of loading
-		if err != nil {
-			return nil, err
-		}
-		cas.AddCert(clientCert)
-
-		srv.clients[k] = clientCert
+		srv.clients[k] = v.Cert
+		cas.AddCert(v.Cert)
 	}
 	srv.cas.Store(cas)
 
@@ -679,13 +701,8 @@ func (s *relayServer) update(msg logc.Message[serverKey, serverValue]) error {
 		if clientCert, ok := s.clients[k]; ok {
 			cas.AddCert(clientCert)
 		} else {
-			clientCert, err := x509.ParseCertificate(v.Cert) // TODO parse as part of loading
-			if err != nil {
-				return err
-			}
-			cas.AddCert(clientCert)
-
-			s.clients[k] = clientCert
+			s.clients[k] = v.Cert
+			cas.AddCert(v.Cert)
 		}
 
 		seenSet[k] = struct{}{}

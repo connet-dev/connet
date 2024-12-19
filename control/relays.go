@@ -32,9 +32,9 @@ type relayServer struct {
 	auth   RelayAuthenticator
 	logger *slog.Logger
 
-	relayClients logc.KV[relayClientKey, relayClientValue]
-	relayServers logc.KV[relayServerKey, relayServerValue]
-	relayOffsets logc.KV[model.HostPort, int64]
+	relayClients       logc.KV[relayClientKey, relayClientValue]
+	relayServers       logc.KV[relayServerKey, relayServerValue]
+	relayServerOffsets logc.KV[model.HostPort, int64]
 
 	forwardsCache  map[model.Forward]map[model.HostPort]*x509.Certificate
 	forwardsOffset int64
@@ -184,8 +184,8 @@ func (s *relayServer) handle(ctx context.Context, conn quic.Connection) error {
 	return nil
 }
 
-func (s *relayServer) getRelayOffset(hp model.HostPort) (int64, error) {
-	offset, err := s.relayOffsets.Get(hp)
+func (s *relayServer) getRelayServerOffset(hp model.HostPort) (int64, error) {
+	offset, err := s.relayServerOffsets.Get(hp)
 	switch {
 	case errors.Is(err, logc.ErrNotFound):
 		return logc.OffsetOldest, nil
@@ -196,8 +196,8 @@ func (s *relayServer) getRelayOffset(hp model.HostPort) (int64, error) {
 	}
 }
 
-func (s *relayServer) setRelayOffset(hp model.HostPort, offset int64) error {
-	return s.relayOffsets.Put(hp, offset)
+func (s *relayServer) setRelayServerOffset(hp model.HostPort, offset int64) error {
+	return s.relayServerOffsets.Put(hp, offset)
 }
 
 type relayConn struct {
@@ -336,7 +336,7 @@ func (c *relayConn) runRelayServers(ctx context.Context) error {
 	defer stream.Close()
 
 	for {
-		offset, err := c.server.getRelayOffset(c.hostport)
+		offset, err := c.server.getRelayServerOffset(c.hostport)
 		if err != nil {
 			return err
 		}
@@ -377,7 +377,7 @@ func (c *relayConn) runRelayServers(ctx context.Context) error {
 			}
 		}
 
-		if err := c.server.setRelayOffset(c.hostport, resp.Offset); err != nil {
+		if err := c.server.setRelayServerOffset(c.hostport, resp.Offset); err != nil {
 			return err
 		}
 	}
