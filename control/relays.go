@@ -65,10 +65,10 @@ func (s *relayServer) getForward(fwd model.Forward) (map[model.HostPort]*x509.Ce
 	return maps.Clone(s.forwards[fwd]), s.forwardsOffset
 }
 
-func (s *relayServer) Destination(ctx context.Context, fwd model.Forward, cert *x509.Certificate,
+func (s *relayServer) Client(ctx context.Context, fwd model.Forward, role model.Role, cert *x509.Certificate,
 	notifyFn func(map[model.HostPort]*x509.Certificate) error) error {
 
-	key := relayClientKey{Forward: fwd, Role: model.Destination, Key: certc.NewKey(cert)}
+	key := relayClientKey{Forward: fwd, Role: role, Key: certc.NewKey(cert)}
 	val := relayClientValue{Cert: cert.Raw}
 	s.relayClients.Put(key, val)
 	defer s.relayClients.Del(key)
@@ -76,18 +76,9 @@ func (s *relayServer) Destination(ctx context.Context, fwd model.Forward, cert *
 	return s.listen(ctx, fwd, notifyFn)
 }
 
-func (s *relayServer) Source(ctx context.Context, fwd model.Forward, cert *x509.Certificate,
+func (s *relayServer) listen(ctx context.Context, fwd model.Forward,
 	notifyFn func(map[model.HostPort]*x509.Certificate) error) error {
 
-	key := relayClientKey{Forward: fwd, Role: model.Source, Key: certc.NewKey(cert)}
-	val := relayClientValue{Cert: cert.Raw}
-	s.relayClients.Put(key, val)
-	defer s.relayClients.Del(key)
-
-	return s.listen(ctx, fwd, notifyFn)
-}
-
-func (s *relayServer) listen(ctx context.Context, fwd model.Forward, notifyFn func(map[model.HostPort]*x509.Certificate) error) error {
 	servers, offset := s.getForward(fwd)
 	if len(servers) > 0 {
 		if err := notifyFn(servers); err != nil {

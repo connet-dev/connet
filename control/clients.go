@@ -34,9 +34,7 @@ type ClientAuthentication interface {
 }
 
 type ClientRelays interface {
-	Destination(ctx context.Context, fwd model.Forward, cert *x509.Certificate,
-		notify func(map[model.HostPort]*x509.Certificate) error) error
-	Source(ctx context.Context, fwd model.Forward, cert *x509.Certificate,
+	Client(ctx context.Context, fwd model.Forward, role model.Role, cert *x509.Certificate,
 		notify func(map[model.HostPort]*x509.Certificate) error) error
 }
 
@@ -373,7 +371,7 @@ func (s *clientStream) destinationRelay(ctx context.Context, req *pbs.Request_De
 
 	g.Go(func() error {
 		defer s.conn.logger.Debug("completed destination relay notify")
-		return s.conn.server.relays.Destination(ctx, fwd, clientCert, func(relays map[model.HostPort]*x509.Certificate) error {
+		return s.conn.server.relays.Client(ctx, fwd, model.Destination, clientCert, func(relays map[model.HostPort]*x509.Certificate) error {
 			s.conn.logger.Debug("updated destination relay list", "relays", len(relays))
 
 			var addrs []*pbs.Relay
@@ -515,7 +513,7 @@ func (s *clientStream) sourceRelay(ctx context.Context, req *pbs.Request_SourceR
 
 	g.Go(func() error {
 		defer s.conn.logger.Debug("completed source relay notify")
-		return s.conn.server.relays.Source(ctx, fwd, clientCert, func(relays map[model.HostPort]*x509.Certificate) error {
+		return s.conn.server.relays.Client(ctx, fwd, model.Source, clientCert, func(relays map[model.HostPort]*x509.Certificate) error {
 			s.conn.logger.Debug("updated source relay list", "relays", len(relays))
 
 			var addrs []*pbs.Relay
