@@ -176,7 +176,7 @@ func newControlServerState(parent *controlClient, id string) (*controlServerStat
 		if err != nil {
 			return nil, err
 		}
-		serverByName[srv.tls[0].Leaf.DNSNames[0]] = srv
+		serverByName[srv.name] = srv
 	}
 
 	return &controlServerState{
@@ -597,6 +597,15 @@ func (s *controlServerState) runServersLog(ctx context.Context) error {
 		return nil
 	}
 
+	drop := func(msg logc.Message[serverKey, serverValue]) error {
+		s.serverByNameMu.Lock()
+		defer s.serverByNameMu.Unlock()
+
+		delete(s.serverByName, msg.Value.Name)
+
+		return nil
+	}
+
 	for {
 		msgs, nextOffset, err := s.servers.Consume(ctx, s.serverByNameOffset)
 		if err != nil {
@@ -604,8 +613,14 @@ func (s *controlServerState) runServersLog(ctx context.Context) error {
 		}
 
 		for _, msg := range msgs {
-			if err := upsert(msg); err != nil {
-				return err
+			if msg.Delete {
+				if err := drop(msg); err != nil {
+					return err
+				}
+			} else {
+				if err := upsert(msg); err != nil {
+					return err
+				}
 			}
 		}
 
@@ -631,7 +646,8 @@ func newRelayServer(msg logc.Message[serverKey, serverValue]) (*relayServer, err
 	}
 
 	srv := &relayServer{
-		fwd: msg.Key.Forward,
+		fwd:  msg.Key.Forward,
+		name: srvCert.Leaf.DNSNames[0],
 
 		tls: []tls.Certificate{srvCert},
 

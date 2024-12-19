@@ -253,7 +253,12 @@ func DecodeFromMemory(cert, key []byte) (*Cert, error) {
 		return nil, kleverr.Newf("pem is not private key: %s", keyDER.Type)
 	}
 
-	return &Cert{der: certDER.Bytes, pk: keyDER.Bytes}, nil
+	keyValue, err := x509.ParsePKCS8PrivateKey(keyDER.Bytes)
+	if err != nil {
+		return nil, kleverr.Newf("cannot parse pk: %w", err)
+	}
+
+	return &Cert{der: certDER.Bytes, pk: keyValue}, nil
 }
 
 func SelfSigned(domain string) (tls.Certificate, *x509.CertPool, error) {
