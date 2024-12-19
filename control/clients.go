@@ -46,7 +46,7 @@ type clientServer struct {
 
 	clients logc.KV[clientKey, clientValue]
 
-	clientsCache  map[cacheKey][]*pbs.ServerPeer // TODO fill this cache
+	clientsCache  map[cacheKey][]*pbs.ServerPeer
 	clientsOffset int64
 	clientsMu     sync.RWMutex
 }
@@ -137,18 +137,18 @@ func (s *clientServer) listen(ctx context.Context, fwd model.Forward, role model
 				peers = slices.DeleteFunc(peers, func(peer *pbs.ServerPeer) bool {
 					return peer.Id == msg.Key.ID.String()
 				})
-			} else if idx := slices.IndexFunc(peers, func(peer *pbs.ServerPeer) bool { return peer.Id == msg.Key.ID.String() }); idx >= 0 {
-				peers[idx] = &pbs.ServerPeer{
+			} else {
+				peer := &pbs.ServerPeer{
 					Id:     msg.Key.ID.String(),
 					Direct: msg.Value.peer.Direct,
 					Relays: msg.Value.peer.Relays,
 				}
-			} else {
-				peers = append(peers, &pbs.ServerPeer{
-					Id:     msg.Key.ID.String(),
-					Direct: msg.Value.peer.Direct,
-					Relays: msg.Value.peer.Relays,
-				})
+				idx := slices.IndexFunc(peers, func(peer *pbs.ServerPeer) bool { return peer.Id == msg.Key.ID.String() })
+				if idx >= 0 {
+					peers[idx] = peer
+				} else {
+					peers = append(peers, peer)
+				}
 			}
 			changed = true
 		}
@@ -160,6 +160,63 @@ func (s *clientServer) listen(ctx context.Context, fwd model.Forward, role model
 				return err
 			}
 		}
+	}
+}
+
+func (s *clientServer) run(ctx context.Context) error {
+	update := func(msg logc.Message[clientKey, clientValue]) error {
+		s.clientsMu.Lock()
+		defer s.clientsMu.Unlock()
+
+		key := cacheKey{msg.Key.Forward, msg.Key.Role}
+		peers := s.clientsCache[key]
+		if msg.Delete {
+			peers = slices.DeleteFunc(peers, func(peer *pbs.ServerPeer) bool {
+				return peer.Id == msg.Key.ID.String()
+			})
+			if len(peers) == 0 {
+				delete(s.clientsCache, key)
+			} else {
+				s.clientsCache[key] = peers
+			}
+		} else {
+			peer := &pbs.ServerPeer{
+				Id:     msg.Key.ID.String(),
+				Direct: msg.Value.peer.Direct,
+				Relays: msg.Value.peer.Relays,
+			}
+			idx := slices.IndexFunc(peers, func(peer *pbs.ServerPeer) bool { return peer.Id == msg.Key.ID.String() })
+			if idx >= 0 {
+				peers[idx] = peer
+			} else {
+				peers = append(peers, peer)
+			}
+			s.clientsCache[key] = peers
+		}
+
+		s.clientsOffset = msg.Offset + 1
+		return nil
+	}
+
+	for {
+		s.clientsMu.RLock()
+		offset := s.clientsOffset
+		s.clientsMu.RUnlock()
+
+		msgs, nextOffset, err := s.clients.Consume(ctx, offset)
+		if err != nil {
+			return err
+		}
+
+		for _, msg := range msgs {
+			if err := update(msg); err != nil {
+				return err
+			}
+		}
+
+		s.clientsMu.Lock()
+		s.clientsOffset = nextOffset
+		s.clientsMu.Unlock()
 	}
 }
 

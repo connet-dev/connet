@@ -34,7 +34,7 @@ type relayServer struct {
 	relayClients logc.KV[relayClientKey, relayClientValue]
 	relayServers logc.KV[relayServerKey, relayServerValue]
 
-	forwards       map[model.Forward]map[model.HostPort]*x509.Certificate
+	forwardsCache  map[model.Forward]map[model.HostPort]*x509.Certificate
 	forwardsOffset int64
 	forwardsMu     sync.RWMutex
 }
@@ -62,7 +62,7 @@ func (s *relayServer) getForward(fwd model.Forward) (map[model.HostPort]*x509.Ce
 	s.forwardsMu.RLock()
 	defer s.forwardsMu.RUnlock()
 
-	return maps.Clone(s.forwards[fwd]), s.forwardsOffset
+	return maps.Clone(s.forwardsCache[fwd]), s.forwardsOffset
 }
 
 func (s *relayServer) Client(ctx context.Context, fwd model.Forward, role model.Role, cert *x509.Certificate,
@@ -120,6 +120,55 @@ func (s *relayServer) listen(ctx context.Context, fwd model.Forward,
 				return err
 			}
 		}
+	}
+}
+
+func (s *relayServer) run(ctx context.Context) error {
+	update := func(msg logc.Message[relayServerKey, relayServerValue]) error {
+		s.forwardsMu.Lock()
+		defer s.forwardsMu.Unlock()
+
+		srv := s.forwardsCache[msg.Key.Forward]
+		if msg.Delete {
+			delete(srv, msg.Key.Hostport)
+			if len(srv) == 0 {
+				delete(s.forwardsCache, msg.Key.Forward)
+			}
+		} else {
+			if srv == nil {
+				srv = map[model.HostPort]*x509.Certificate{}
+				s.forwardsCache[msg.Key.Forward] = srv
+			}
+			cert, err := x509.ParseCertificate(msg.Value.Cert) // TODO do this once on deser
+			if err != nil {
+				return err
+			}
+			srv[msg.Key.Hostport] = cert
+		}
+
+		s.forwardsOffset = msg.Offset + 1
+		return nil
+	}
+
+	for {
+		s.forwardsMu.RLock()
+		offset := s.forwardsOffset
+		s.forwardsMu.RUnlock()
+
+		msgs, nextOffset, err := s.relayServers.Consume(ctx, offset)
+		if err != nil {
+			return err
+		}
+
+		for _, msg := range msgs {
+			if err := update(msg); err != nil {
+				return err
+			}
+		}
+
+		s.forwardsMu.Lock()
+		s.forwardsOffset = nextOffset
+		s.forwardsMu.Unlock()
 	}
 }
 

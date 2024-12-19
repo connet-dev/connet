@@ -16,6 +16,7 @@ import (
 	"github.com/klev-dev/kleverr"
 	"github.com/quic-go/quic-go"
 	"github.com/segmentio/ksuid"
+	"golang.org/x/sync/errgroup"
 )
 
 type Config struct {
@@ -59,7 +60,7 @@ func NewServer(cfg Config) (*Server, error) {
 		relayClients: relayClients,
 		relayServers: relayServers,
 
-		forwards:       map[model.Forward]map[model.HostPort]*x509.Certificate{}, // TODO actually run the cache
+		forwardsCache:  map[model.Forward]map[model.HostPort]*x509.Certificate{},
 		forwardsOffset: logc.OffsetOldest,
 	}
 	s.clients = &clientServer{
@@ -86,6 +87,16 @@ type Server struct {
 }
 
 func (s *Server) Run(ctx context.Context) error {
+	g, ctx := errgroup.WithContext(ctx)
+
+	g.Go(func() error { return s.relays.run(ctx) })
+	g.Go(func() error { return s.clients.run(ctx) })
+	g.Go(func() error { return s.runListener(ctx) })
+
+	return g.Wait()
+}
+
+func (s *Server) runListener(ctx context.Context) error {
 	s.logger.Debug("start udp listener")
 	conn, err := net.ListenUDP("udp", s.addr)
 	if err != nil {
