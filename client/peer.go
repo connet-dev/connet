@@ -95,6 +95,10 @@ func (p *peer) expectDirect() {
 	p.direct.addServerCert(p.serverCert)
 }
 
+func (p *peer) isDirect() bool {
+	return p.direct.getServer(p.serverCert.Leaf.DNSNames[0]) != nil
+}
+
 func (p *peer) setDirectAddrs(addrs []netip.AddrPort) {
 	p.self.Update(func(cp *pbs.ClientPeer) *pbs.ClientPeer {
 		return &pbs.ClientPeer{

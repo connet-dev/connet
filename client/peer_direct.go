@@ -78,7 +78,7 @@ func (p *directPeer) stop() {
 
 func (p *directPeer) runRemote(ctx context.Context) error {
 	return p.remote.Listen(ctx, func(remote *pbs.ServerPeer) error {
-		if remote.Direct != nil {
+		if p.local.isDirect() && remote.Direct != nil {
 			if p.incoming == nil {
 				remoteClientCert, err := x509.ParseCertificate(remote.Direct.ClientCertificate)
 				if err != nil {
