@@ -328,7 +328,7 @@ func (s *controlServerState) runClientsStream(ctx context.Context, conn quic.Con
 
 			for _, change := range resp.Changes {
 				key := clientKey{
-					Forward: model.NewForwardFromPB(change.Forward),
+					Forward: model.ForwardFromPB(change.Forward),
 					Role:    model.RoleFromPB(change.Role),
 					Key:     certc.NewKeyString(change.CertificateKey),
 				}

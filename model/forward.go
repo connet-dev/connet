@@ -15,16 +15,16 @@ func NewForward(s string) Forward {
 	return Forward{s}
 }
 
-func NewForwardFromPB(f *pb.Forward) Forward {
+func ForwardFromPB(f *pb.Forward) Forward {
 	return Forward{f.Name}
-}
-
-func (f Forward) String() string {
-	return f.string
 }
 
 func (f Forward) PB() *pb.Forward {
 	return &pb.Forward{Name: f.string}
+}
+
+func (f Forward) String() string {
+	return f.string
 }
 
 func PBFromForwards(fwds []Forward) []*pb.Forward {

@@ -111,7 +111,7 @@ func (p *directPeer) runRemote(ctx context.Context) error {
 
 		relays := map[model.HostPort]struct{}{}
 		for _, relay := range remote.Relays {
-			relays[model.NewHostPortFromPB(relay)] = struct{}{}
+			relays[model.HostPortFromPB(relay)] = struct{}{}
 		}
 		if p.relays == nil {
 			p.relays = newDirectPeerRelays(ctx, p, relays)

@@ -357,7 +357,7 @@ func validatePeerCert(fwd model.Forward, peer *pbs.ClientPeer) *pb.Error {
 }
 
 func (s *clientStream) announce(ctx context.Context, req *pbs.Request_Announce) error {
-	fwd := model.NewForwardFromPB(req.Forward)
+	fwd := model.ForwardFromPB(req.Forward)
 	role := model.RoleFromPB(req.Role)
 	if newFwd, err := s.conn.auth.Validate(fwd, role); err != nil {
 		err := pb.NewError(pb.Error_AnnounceValidationFailed, "failed to validte desination '%s': %v", fwd, err)
@@ -431,7 +431,7 @@ func (s *clientStream) announce(ctx context.Context, req *pbs.Request_Announce) 
 }
 
 func (s *clientStream) relay(ctx context.Context, req *pbs.Request_Relay) error {
-	fwd := model.NewForwardFromPB(req.Forward) // TODO rename NEW
+	fwd := model.ForwardFromPB(req.Forward)
 	role := model.RoleFromPB(req.Role)
 	if newFwd, err := s.conn.auth.Validate(fwd, role); err != nil {
 		err := pb.NewError(pb.Error_RelayValidationFailed, "failed to validate desination '%s': %v", fwd, err)

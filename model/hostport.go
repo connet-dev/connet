@@ -11,7 +11,7 @@ type HostPort struct {
 	Port uint16 `json:"port"`
 }
 
-func NewHostPortFromPB(h *pb.HostPort) HostPort {
+func HostPortFromPB(h *pb.HostPort) HostPort {
 	return HostPort{
 		Host: h.Host,
 		Port: uint16(h.Port),

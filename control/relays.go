@@ -239,7 +239,7 @@ func (c *relayConn) authenticate(ctx context.Context) (RelayAuthentication, mode
 	}
 
 	c.logger.Debug("authentication completed", "local", c.conn.LocalAddr(), "remote", c.conn.RemoteAddr())
-	return auth, model.NewHostPortFromPB(req.Addr), nil
+	return auth, model.HostPortFromPB(req.Addr), nil
 }
 
 func (c *relayConn) runRelayClients(ctx context.Context) error {
@@ -328,7 +328,7 @@ func (c *relayConn) runRelayServers(ctx context.Context) error {
 
 		for _, change := range resp.Changes {
 			key := relayServerKey{
-				Forward:  model.NewForwardFromPB(change.Server),
+				Forward:  model.ForwardFromPB(change.Server),
 				Hostport: c.hostport,
 			}
 

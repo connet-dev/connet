@@ -137,7 +137,7 @@ func (p *peer) runRelays(ctx context.Context) error {
 
 		activeRelays := map[model.HostPort]struct{}{}
 		for _, relay := range relays {
-			hp := model.NewHostPortFromPB(relay.Address)
+			hp := model.HostPortFromPB(relay.Address)
 			activeRelays[hp] = struct{}{}
 			rlg := relayPeers[hp]
 
