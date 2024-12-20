@@ -19,22 +19,18 @@ message AuthenticateResp {
 
 message Request {
   // Soft one-of
-  DestinationRelay destination_relay = 1;
+  Relay relay = 1;
   Destination destination = 2;
-  SourceRelay source_relay = 3;
   Source source = 4;
 
-  message DestinationRelay {
-    shared.Forward from = 1;
-    bytes client_certificate = 2; // certificate to use when connecting to a relay
+  message Relay {
+    shared.Forward forward = 1;
+    shared.Role role = 2;
+    bytes client_certificate = 3; // certificate to use when connecting to a relay
   }
   message Destination {
     shared.Forward from = 1;
     ClientPeer peer = 2;
-  }
-  message SourceRelay {
-    shared.Forward to = 1;
-    bytes client_certificate = 2; // certificate to use when connecting to a relay
   }
   message Source {
     shared.Forward to = 1;

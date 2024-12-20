@@ -268,8 +268,9 @@ func (d *Destination) runRelay(ctx context.Context, conn quic.Connection) error 
 	defer stream.Close()
 
 	if err := pb.Write(stream, &pbs.Request{
-		DestinationRelay: &pbs.Request_DestinationRelay{
-			From:              d.fwd.PB(),
+		Relay: &pbs.Request_Relay{
+			Forward:           d.fwd.PB(),
+			Role:              model.Destination.PB(),
 			ClientCertificate: d.peer.clientCert.Leaf.Raw,
 		},
 	}); err != nil {

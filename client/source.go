@@ -234,8 +234,9 @@ func (s *Source) runRelay(ctx context.Context, conn quic.Connection) error {
 	defer stream.Close()
 
 	if err := pb.Write(stream, &pbs.Request{
-		SourceRelay: &pbs.Request_SourceRelay{
-			To:                s.fwd.PB(),
+		Relay: &pbs.Request_Relay{
+			Forward:           s.fwd.PB(),
+			Role:              model.Source.PB(),
 			ClientCertificate: s.peer.clientCert.Leaf.Raw,
 		},
 	}); err != nil {

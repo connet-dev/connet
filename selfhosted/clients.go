@@ -29,10 +29,6 @@ type clientAuthentication struct {
 	token string
 }
 
-func (a *clientAuthentication) ValidateDestination(dst model.Forward) (model.Forward, error) {
-	return dst, nil
-}
-
-func (a *clientAuthentication) ValidateSource(src model.Forward) (model.Forward, error) {
-	return src, nil
+func (a *clientAuthentication) Validate(fwd model.Forward, role model.Role) (model.Forward, error) {
+	return fwd, nil
 }

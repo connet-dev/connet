@@ -27,8 +27,7 @@ type ClientAuthenticator interface {
 }
 
 type ClientAuthentication interface {
-	ValidateDestination(dst model.Forward) (model.Forward, error)
-	ValidateSource(src model.Forward) (model.Forward, error)
+	Validate(fwd model.Forward, role model.Role) (model.Forward, error)
 }
 
 type ClientRelays interface {
@@ -335,22 +334,21 @@ func (s *clientStream) runErr(ctx context.Context) error {
 	}
 
 	switch {
-	case req.DestinationRelay != nil:
-		return s.destinationRelay(ctx, req.DestinationRelay)
 	case req.Destination != nil:
 		return s.destination(ctx, req.Destination)
-	case req.SourceRelay != nil:
-		return s.sourceRelay(ctx, req.SourceRelay)
 	case req.Source != nil:
 		return s.source(ctx, req.Source)
+	case req.Relay != nil:
+		return s.relay(ctx, req.Relay)
 	default:
 		return s.unknown(ctx, req)
 	}
 }
 
-func (s *clientStream) destinationRelay(ctx context.Context, req *pbs.Request_DestinationRelay) error {
-	fwd := model.NewForwardFromPB(req.From)
-	if newFwd, err := s.conn.auth.ValidateDestination(fwd); err != nil {
+func (s *clientStream) relay(ctx context.Context, req *pbs.Request_Relay) error {
+	fwd := model.NewForwardFromPB(req.Forward) // TODO rename NEW
+	role := model.RoleFromPB(req.Role)
+	if newFwd, err := s.conn.auth.Validate(fwd, role); err != nil {
 		err := pb.NewError(pb.Error_RelayDestinationValidationFailed, "failed to validate desination '%s': %v", fwd, err)
 		if err := pb.Write(s.stream, &pbs.Response{Error: err}); err != nil {
 			return kleverr.Newf("could not write error response: %w", err)
@@ -379,7 +377,7 @@ func (s *clientStream) destinationRelay(ctx context.Context, req *pbs.Request_De
 
 	g.Go(func() error {
 		defer s.conn.logger.Debug("completed destination relay notify")
-		return s.conn.server.relays.Client(ctx, fwd, model.Destination, clientCert, func(relays map[model.HostPort]*x509.Certificate) error {
+		return s.conn.server.relays.Client(ctx, fwd, role, clientCert, func(relays map[model.HostPort]*x509.Certificate) error {
 			s.conn.logger.Debug("updated destination relay list", "relays", len(relays))
 
 			var addrs []*pbs.Relay
@@ -419,7 +417,7 @@ func validateDestinationCert(from model.Forward, peer *pbs.ClientPeer) *pb.Error
 
 func (s *clientStream) destination(ctx context.Context, req *pbs.Request_Destination) error {
 	from := model.NewForwardFromPB(req.From)
-	if newFrom, err := s.conn.auth.ValidateDestination(from); err != nil {
+	if newFrom, err := s.conn.auth.Validate(from, model.Destination); err != nil {
 		err := pb.NewError(pb.Error_DestinationValidationFailed, "failed to validte desination '%s': %v", from, err)
 		if err := pb.Write(s.stream, &pbs.Response{Error: err}); err != nil {
 			return kleverr.Newf("could not write error response: %w", err)
@@ -490,62 +488,6 @@ func (s *clientStream) destination(ctx context.Context, req *pbs.Request_Destina
 	return g.Wait()
 }
 
-func (s *clientStream) sourceRelay(ctx context.Context, req *pbs.Request_SourceRelay) error {
-	fwd := model.NewForwardFromPB(req.To)
-	if newFwd, err := s.conn.auth.ValidateSource(fwd); err != nil {
-		err := pb.NewError(pb.Error_RelaySourceValidationFailed, "failed to validate source '%s': %v", fwd, err)
-		if err := pb.Write(s.stream, &pbs.Response{Error: err}); err != nil {
-			return kleverr.Newf("could not write error response: %w", err)
-		}
-		return err
-	} else {
-		fwd = newFwd
-	}
-
-	clientCert, err := x509.ParseCertificate(req.ClientCertificate)
-	if err != nil {
-		err := pb.NewError(pb.Error_RelayInvalidCertificate, "invalid certificate: %v", err)
-		if err := pb.Write(s.stream, &pbs.Response{Error: err}); err != nil {
-			return kleverr.Newf("could not write error response: %w", err)
-		}
-		return err
-	}
-
-	g, ctx := errgroup.WithContext(ctx)
-
-	g.Go(func() error {
-		connCtx := s.conn.conn.Context()
-		<-connCtx.Done()
-		return context.Cause(connCtx)
-	})
-
-	g.Go(func() error {
-		defer s.conn.logger.Debug("completed source relay notify")
-		return s.conn.server.relays.Client(ctx, fwd, model.Source, clientCert, func(relays map[model.HostPort]*x509.Certificate) error {
-			s.conn.logger.Debug("updated source relay list", "relays", len(relays))
-
-			var addrs []*pbs.Relay
-			for hp, cert := range relays {
-				addrs = append(addrs, &pbs.Relay{
-					Address:           hp.PB(),
-					ServerCertificate: cert.Raw,
-				})
-			}
-
-			if err := pb.Write(s.stream, &pbs.Response{
-				Relay: &pbs.Response_Relays{
-					Relays: addrs,
-				},
-			}); err != nil {
-				return kleverr.Ret(err)
-			}
-			return nil
-		})
-	})
-
-	return g.Wait()
-}
-
 func validateSourceCert(to model.Forward, peer *pbs.ClientPeer) *pb.Error {
 	if peer.Direct == nil {
 		return nil
@@ -561,7 +503,7 @@ func validateSourceCert(to model.Forward, peer *pbs.ClientPeer) *pb.Error {
 
 func (s *clientStream) source(ctx context.Context, req *pbs.Request_Source) error {
 	to := model.NewForwardFromPB(req.To)
-	if newTo, err := s.conn.auth.ValidateSource(to); err != nil {
+	if newTo, err := s.conn.auth.Validate(to, model.Source); err != nil {
 		err := pb.NewError(pb.Error_SourceValidationFailed, "failed to validate source '%s': %v", to, err)
 		if err := pb.Write(s.stream, &pbs.Response{Error: err}); err != nil {
 			return kleverr.Newf("could not write error response: %w", err)
