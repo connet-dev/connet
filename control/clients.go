@@ -91,8 +91,8 @@ func (s *clientServer) listen(ctx context.Context, fwd model.Forward, role model
 			} else {
 				peer := &pbs.ServerPeer{
 					Id:     msg.Key.ID.String(),
-					Direct: msg.Value.peer.Direct,
-					Relays: msg.Value.peer.Relays,
+					Direct: msg.Value.Peer.Direct,
+					Relays: msg.Value.Peer.Relays,
 				}
 				idx := slices.IndexFunc(peers, func(peer *pbs.ServerPeer) bool { return peer.Id == msg.Key.ID.String() })
 				if idx >= 0 {
@@ -133,8 +133,8 @@ func (s *clientServer) run(ctx context.Context) error {
 		} else {
 			peer := &pbs.ServerPeer{
 				Id:     msg.Key.ID.String(),
-				Direct: msg.Value.peer.Direct,
-				Relays: msg.Value.peer.Relays,
+				Direct: msg.Value.Peer.Direct,
+				Relays: msg.Value.Peer.Relays,
 			}
 			idx := slices.IndexFunc(peers, func(peer *pbs.ServerPeer) bool { return peer.Id == msg.Key.ID.String() })
 			if idx >= 0 {
