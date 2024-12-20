@@ -201,7 +201,7 @@ func (d *Destination) heartbeat(ctx context.Context, stream quic.Stream, hbt *pb
 func (d *Destination) RunControl(ctx context.Context, conn quic.Connection) error {
 	g, ctx := errgroup.WithContext(ctx)
 
-	g.Go(func() error { return d.runControl(ctx, conn) })
+	g.Go(func() error { return d.runAnnounce(ctx, conn) })
 	if d.opt.AllowRelay() {
 		g.Go(func() error { return d.runRelay(ctx, conn) })
 	}
@@ -209,7 +209,7 @@ func (d *Destination) RunControl(ctx context.Context, conn quic.Connection) erro
 	return g.Wait()
 }
 
-func (d *Destination) runControl(ctx context.Context, conn quic.Connection) error {
+func (d *Destination) runAnnounce(ctx context.Context, conn quic.Connection) error {
 	stream, err := conn.OpenStreamSync(ctx)
 	if err != nil {
 		return kleverr.Ret(err)
@@ -233,9 +233,10 @@ func (d *Destination) runControl(ctx context.Context, conn quic.Connection) erro
 			}
 			d.logger.Debug("updated destination", "direct", directLen, "relay", len(peer.Relays))
 			return pb.Write(stream, &pbs.Request{
-				Destination: &pbs.Request_Destination{
-					From: d.fwd.PB(),
-					Peer: peer,
+				Announce: &pbs.Request_Announce{
+					Forward: d.fwd.PB(),
+					Role:    pb.Role_RoleDestination,
+					Peer:    peer,
 				},
 			})
 		})
@@ -247,13 +248,13 @@ func (d *Destination) runControl(ctx context.Context, conn quic.Connection) erro
 			if err != nil {
 				return err
 			}
-			if resp.Destination == nil {
+			if resp.Announce == nil {
 				return kleverr.Newf("unexpected response")
 			}
 
 			// TODO on server restart peers is reset and client loses active peers
 			// only for them to come back at the next tick, with different ID
-			d.peer.setPeers(resp.Destination.Peers)
+			d.peer.setPeers(resp.Announce.Peers)
 		}
 	})
 
@@ -270,7 +271,7 @@ func (d *Destination) runRelay(ctx context.Context, conn quic.Connection) error 
 	if err := pb.Write(stream, &pbs.Request{
 		Relay: &pbs.Request_Relay{
 			Forward:           d.fwd.PB(),
-			Role:              model.Destination.PB(),
+			Role:              pb.Role_RoleDestination,
 			ClientCertificate: d.peer.clientCert.Leaf.Raw,
 		},
 	}); err != nil {

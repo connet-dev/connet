@@ -334,15 +334,100 @@ func (s *clientStream) runErr(ctx context.Context) error {
 	}
 
 	switch {
-	case req.Destination != nil:
-		return s.destination(ctx, req.Destination)
-	case req.Source != nil:
-		return s.source(ctx, req.Source)
+	case req.Announce != nil:
+		return s.announce(ctx, req.Announce)
 	case req.Relay != nil:
 		return s.relay(ctx, req.Relay)
 	default:
 		return s.unknown(ctx, req)
 	}
+}
+
+func validatePeerCert(fwd model.Forward, peer *pbs.ClientPeer) *pb.Error {
+	if peer.Direct == nil {
+		return nil
+	}
+	if _, err := x509.ParseCertificate(peer.Direct.ClientCertificate); err != nil {
+		return pb.NewError(pb.Error_DestinationInvalidCertificate, "desination '%s' client cert is invalid", fwd)
+	}
+	if _, err := x509.ParseCertificate(peer.Direct.ServerCertificate); err != nil {
+		return pb.NewError(pb.Error_DestinationInvalidCertificate, "desination '%s' client cert is invalid", fwd)
+	}
+	return nil
+}
+
+func (s *clientStream) announce(ctx context.Context, req *pbs.Request_Announce) error {
+	fwd := model.NewForwardFromPB(req.Forward)
+	role := model.RoleFromPB(req.Role)
+	if newFwd, err := s.conn.auth.Validate(fwd, role); err != nil {
+		err := pb.NewError(pb.Error_DestinationValidationFailed, "failed to validte desination '%s': %v", fwd, err)
+		if err := pb.Write(s.stream, &pbs.Response{Error: err}); err != nil {
+			return kleverr.Newf("could not write error response: %w", err)
+		}
+		return err
+	} else {
+		fwd = newFwd
+	}
+
+	if err := validatePeerCert(fwd, req.Peer); err != nil {
+		if err := pb.Write(s.stream, &pbs.Response{Error: err}); err != nil {
+			return kleverr.Newf("could not write error response: %w", err)
+		}
+		return err
+	}
+
+	if err := s.conn.server.put(fwd, role, s.conn.id, req.Peer); err != nil {
+		return err
+	}
+	defer s.conn.server.del(fwd, role, s.conn.id)
+
+	g, ctx := errgroup.WithContext(ctx)
+
+	g.Go(func() error {
+		for {
+			req, err := pbs.ReadRequest(s.stream)
+			if err != nil {
+				return err
+			}
+			if req.Announce == nil {
+				respErr := pb.NewError(pb.Error_RequestUnknown, "unexpected request")
+				if err := pb.Write(s.stream, &pbs.Response{Error: respErr}); err != nil {
+					return kleverr.Ret(err)
+				}
+				return respErr
+			}
+
+			if err := validatePeerCert(fwd, req.Announce.Peer); err != nil {
+				if err := pb.Write(s.stream, &pbs.Response{Error: err}); err != nil {
+					return kleverr.Newf("could not write error response: %w", err)
+				}
+				return err
+			}
+
+			if err := s.conn.server.put(fwd, role, s.conn.id, req.Announce.Peer); err != nil {
+				return err
+			}
+		}
+	})
+
+	g.Go(func() error {
+		defer s.conn.logger.Debug("completed sources notify")
+		return s.conn.server.listen(ctx, fwd, role.Invert(), func(peers []*pbs.ServerPeer) error {
+			s.conn.logger.Debug("updated sources list", "peers", len(peers))
+
+			if err := pb.Write(s.stream, &pbs.Response{
+				Announce: &pbs.Response_Announce{
+					Peers: peers,
+				},
+			}); err != nil {
+				return kleverr.Ret(err)
+			}
+
+			return nil
+		})
+	})
+
+	return g.Wait()
 }
 
 func (s *clientStream) relay(ctx context.Context, req *pbs.Request_Relay) error {
@@ -395,178 +480,6 @@ func (s *clientStream) relay(ctx context.Context, req *pbs.Request_Relay) error 
 			}); err != nil {
 				return kleverr.Ret(err)
 			}
-			return nil
-		})
-	})
-
-	return g.Wait()
-}
-
-func validateDestinationCert(from model.Forward, peer *pbs.ClientPeer) *pb.Error {
-	if peer.Direct == nil {
-		return nil
-	}
-	if _, err := x509.ParseCertificate(peer.Direct.ClientCertificate); err != nil {
-		return pb.NewError(pb.Error_DestinationInvalidCertificate, "desination '%s' client cert is invalid", from)
-	}
-	if _, err := x509.ParseCertificate(peer.Direct.ServerCertificate); err != nil {
-		return pb.NewError(pb.Error_DestinationInvalidCertificate, "desination '%s' client cert is invalid", from)
-	}
-	return nil
-}
-
-func (s *clientStream) destination(ctx context.Context, req *pbs.Request_Destination) error {
-	from := model.NewForwardFromPB(req.From)
-	if newFrom, err := s.conn.auth.Validate(from, model.Destination); err != nil {
-		err := pb.NewError(pb.Error_DestinationValidationFailed, "failed to validte desination '%s': %v", from, err)
-		if err := pb.Write(s.stream, &pbs.Response{Error: err}); err != nil {
-			return kleverr.Newf("could not write error response: %w", err)
-		}
-		return err
-	} else {
-		from = newFrom
-	}
-
-	if err := validateDestinationCert(from, req.Peer); err != nil {
-		if err := pb.Write(s.stream, &pbs.Response{Error: err}); err != nil {
-			return kleverr.Newf("could not write error response: %w", err)
-		}
-		return err
-	}
-
-	if err := s.conn.server.put(from, model.Destination, s.conn.id, req.Peer); err != nil {
-		return err
-	}
-	defer s.conn.server.del(from, model.Destination, s.conn.id)
-
-	g, ctx := errgroup.WithContext(ctx)
-
-	g.Go(func() error {
-		for {
-			req, err := pbs.ReadRequest(s.stream)
-			if err != nil {
-				return err
-			}
-			if req.Destination == nil {
-				respErr := pb.NewError(pb.Error_RequestUnknown, "unexpected request")
-				if err := pb.Write(s.stream, &pbs.Response{Error: respErr}); err != nil {
-					return kleverr.Ret(err)
-				}
-				return respErr
-			}
-
-			if err := validateDestinationCert(from, req.Destination.Peer); err != nil {
-				if err := pb.Write(s.stream, &pbs.Response{Error: err}); err != nil {
-					return kleverr.Newf("could not write error response: %w", err)
-				}
-				return err
-			}
-
-			if err := s.conn.server.put(from, model.Destination, s.conn.id, req.Destination.Peer); err != nil {
-				return err
-			}
-		}
-	})
-
-	g.Go(func() error {
-		defer s.conn.logger.Debug("completed sources notify")
-		return s.conn.server.listen(ctx, from, model.Source, func(peers []*pbs.ServerPeer) error {
-			s.conn.logger.Debug("updated sources list", "peers", len(peers))
-
-			if err := pb.Write(s.stream, &pbs.Response{
-				Destination: &pbs.Response_Destination{
-					Peers: peers,
-				},
-			}); err != nil {
-				return kleverr.Ret(err)
-			}
-
-			return nil
-		})
-	})
-
-	return g.Wait()
-}
-
-func validateSourceCert(to model.Forward, peer *pbs.ClientPeer) *pb.Error {
-	if peer.Direct == nil {
-		return nil
-	}
-	if _, err := x509.ParseCertificate(peer.Direct.ServerCertificate); err != nil {
-		return pb.NewError(pb.Error_SourceInvalidCertificate, "source '%s' server cert is invalid", to)
-	}
-	if _, err := x509.ParseCertificate(peer.Direct.ClientCertificate); err != nil {
-		return pb.NewError(pb.Error_SourceInvalidCertificate, "source '%s' client cert is invalid", to)
-	}
-	return nil
-}
-
-func (s *clientStream) source(ctx context.Context, req *pbs.Request_Source) error {
-	to := model.NewForwardFromPB(req.To)
-	if newTo, err := s.conn.auth.Validate(to, model.Source); err != nil {
-		err := pb.NewError(pb.Error_SourceValidationFailed, "failed to validate source '%s': %v", to, err)
-		if err := pb.Write(s.stream, &pbs.Response{Error: err}); err != nil {
-			return kleverr.Newf("could not write error response: %w", err)
-		}
-		return err
-	} else {
-		to = newTo
-	}
-
-	if err := validateSourceCert(to, req.Peer); err != nil {
-		if err := pb.Write(s.stream, &pbs.Response{Error: err}); err != nil {
-			return kleverr.Newf("could not write error response: %w", err)
-		}
-		return err
-	}
-
-	if err := s.conn.server.put(to, model.Source, s.conn.id, req.Peer); err != nil {
-		return err
-	}
-	defer s.conn.server.del(to, model.Source, s.conn.id)
-
-	g, ctx := errgroup.WithContext(ctx)
-
-	g.Go(func() error {
-		for {
-			req, err := pbs.ReadRequest(s.stream)
-			if err != nil {
-				return err
-			}
-			if req.Source == nil {
-				respErr := pb.NewError(pb.Error_RequestUnknown, "unexpected request")
-				if err := pb.Write(s.stream, &pbs.Response{Error: respErr}); err != nil {
-					return kleverr.Ret(err)
-				}
-				return respErr
-			}
-
-			if err := validateSourceCert(to, req.Source.Peer); err != nil {
-				if err := pb.Write(s.stream, &pbs.Response{Error: err}); err != nil {
-					return kleverr.Newf("could not write error response: %w", err)
-				}
-				return err
-			}
-
-			if err := s.conn.server.put(to, model.Source, s.conn.id, req.Source.Peer); err != nil {
-				return err
-			}
-		}
-	})
-
-	g.Go(func() error {
-		defer s.conn.logger.Debug("completed destinations notify")
-		return s.conn.server.listen(ctx, to, model.Destination, func(peers []*pbs.ServerPeer) error {
-			s.conn.logger.Debug("updated destinations list", "peers", len(peers))
-
-			if err := pb.Write(s.stream, &pbs.Response{
-				Source: &pbs.Response_Source{
-					Peers: peers,
-				},
-			}); err != nil {
-				return kleverr.Ret(err)
-			}
-
 			return nil
 		})
 	})

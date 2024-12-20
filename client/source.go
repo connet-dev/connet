@@ -167,7 +167,7 @@ func (s *Source) runConnErr(ctx context.Context, conn net.Conn) error {
 func (s *Source) RunControl(ctx context.Context, conn quic.Connection) error {
 	g, ctx := errgroup.WithContext(ctx)
 
-	g.Go(func() error { return s.runControl(ctx, conn) })
+	g.Go(func() error { return s.runAnnounce(ctx, conn) })
 	if s.opt.AllowRelay() {
 		g.Go(func() error { return s.runRelay(ctx, conn) })
 	}
@@ -175,7 +175,7 @@ func (s *Source) RunControl(ctx context.Context, conn quic.Connection) error {
 	return g.Wait()
 }
 
-func (s *Source) runControl(ctx context.Context, conn quic.Connection) error {
+func (s *Source) runAnnounce(ctx context.Context, conn quic.Connection) error {
 	stream, err := conn.OpenStreamSync(ctx)
 	if err != nil {
 		return kleverr.Ret(err)
@@ -199,9 +199,10 @@ func (s *Source) runControl(ctx context.Context, conn quic.Connection) error {
 			}
 			s.logger.Debug("updated source", "direct", directLen, "relay", len(peer.Relays))
 			return pb.Write(stream, &pbs.Request{
-				Source: &pbs.Request_Source{
-					To:   s.fwd.PB(),
-					Peer: peer,
+				Announce: &pbs.Request_Announce{
+					Forward: s.fwd.PB(),
+					Role:    pb.Role_RoleSource,
+					Peer:    peer,
 				},
 			})
 		})
@@ -213,13 +214,13 @@ func (s *Source) runControl(ctx context.Context, conn quic.Connection) error {
 			if err != nil {
 				return err
 			}
-			if resp.Source == nil {
+			if resp.Announce == nil {
 				return kleverr.Newf("unexpected response")
 			}
 
 			// TODO on server restart peers is reset and client loses active peers
 			// only for them to come back at the next tick, with different ID
-			s.peer.setPeers(resp.Source.Peers)
+			s.peer.setPeers(resp.Announce.Peers)
 		}
 	})
 
@@ -236,7 +237,7 @@ func (s *Source) runRelay(ctx context.Context, conn quic.Connection) error {
 	if err := pb.Write(stream, &pbs.Request{
 		Relay: &pbs.Request_Relay{
 			Forward:           s.fwd.PB(),
-			Role:              model.Source.PB(),
+			Role:              pb.Role_RoleSource,
 			ClientCertificate: s.peer.clientCert.Leaf.Raw,
 		},
 	}); err != nil {

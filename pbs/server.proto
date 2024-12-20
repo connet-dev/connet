@@ -19,22 +19,18 @@ message AuthenticateResp {
 
 message Request {
   // Soft one-of
-  Relay relay = 1;
-  Destination destination = 2;
-  Source source = 4;
+  Announce announce = 1;
+  Relay relay = 2;
 
+  message Announce {
+    shared.Forward forward = 1;
+    shared.Role role = 2;
+    ClientPeer peer = 3;
+  }
   message Relay {
     shared.Forward forward = 1;
     shared.Role role = 2;
     bytes client_certificate = 3; // certificate to use when connecting to a relay
-  }
-  message Destination {
-    shared.Forward from = 1;
-    ClientPeer peer = 2;
-  }
-  message Source {
-    shared.Forward to = 1;
-    ClientPeer peer = 2;
   }
 }
 
@@ -42,18 +38,14 @@ message Response {
   shared.Error error = 1;
 
   // Soft one-of if error is nil
-  Relays relay = 2;
-  Destination destination = 3;
-  Source source = 4;
+  Announce announce = 2;
+  Relays relay = 3;
 
+  message Announce {
+    repeated ServerPeer peers = 1;
+  }
   message Relays {
     repeated Relay relays = 1;
-  }
-  message Destination {
-    repeated ServerPeer peers = 1;
-  }
-  message Source {
-    repeated ServerPeer peers = 1;
   }
 }
 

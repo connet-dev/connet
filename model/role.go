@@ -35,6 +35,17 @@ func (r Role) PB() pb.Role {
 	}
 }
 
+func (r Role) Invert() Role {
+	switch r {
+	case Destination:
+		return Source
+	case Source:
+		return Destination
+	default:
+		return UnknownRole
+	}
+}
+
 func (r Role) String() string {
 	return r.string
 }
