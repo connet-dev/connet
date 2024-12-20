@@ -49,11 +49,6 @@ message Response {
   }
 }
 
-message Relay {
-  shared.HostPort address = 1;
-  bytes server_certificate = 2;
-}
-
 message ClientPeer {
   DirectRoute direct = 1;
   repeated shared.HostPort relays = 2;
@@ -69,4 +64,9 @@ message DirectRoute {
   repeated shared.AddrPort addresses = 1;
   bytes server_certificate = 2;
   bytes client_certificate = 3;
+}
+
+message Relay {
+  shared.HostPort address = 1;
+  bytes server_certificate = 2;
 }

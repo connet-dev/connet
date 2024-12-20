@@ -40,18 +40,14 @@ message Error {
     // Authentication
     AuthenticationFailed = 100;
 
+    // Announce
+    AnnounceValidationFailed = 200;
+    AnnounceInvalidClientCertificate = 201;
+    AnnounceInvalidServerCertificate = 202;
+
     // Relay
-    RelayInvalidCertificate = 200;
-    RelayDestinationValidationFailed = 201;
-    RelaySourceValidationFailed = 202;
-
-    // Destination
-    DestinationValidationFailed = 300;
-    DestinationInvalidCertificate = 301;
-
-    // Source
-    SourceValidationFailed = 400;
-    SourceInvalidCertificate = 401;
+    RelayValidationFailed = 300;
+    RelayInvalidCertificate = 301;
 
     // Client connect codes
     DestinationNotFound = 500;

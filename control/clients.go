@@ -348,10 +348,10 @@ func validatePeerCert(fwd model.Forward, peer *pbs.ClientPeer) *pb.Error {
 		return nil
 	}
 	if _, err := x509.ParseCertificate(peer.Direct.ClientCertificate); err != nil {
-		return pb.NewError(pb.Error_DestinationInvalidCertificate, "desination '%s' client cert is invalid", fwd)
+		return pb.NewError(pb.Error_AnnounceInvalidClientCertificate, "'%s' client cert is invalid", fwd)
 	}
 	if _, err := x509.ParseCertificate(peer.Direct.ServerCertificate); err != nil {
-		return pb.NewError(pb.Error_DestinationInvalidCertificate, "desination '%s' client cert is invalid", fwd)
+		return pb.NewError(pb.Error_AnnounceInvalidServerCertificate, "'%s' server cert is invalid", fwd)
 	}
 	return nil
 }
@@ -360,7 +360,7 @@ func (s *clientStream) announce(ctx context.Context, req *pbs.Request_Announce) 
 	fwd := model.NewForwardFromPB(req.Forward)
 	role := model.RoleFromPB(req.Role)
 	if newFwd, err := s.conn.auth.Validate(fwd, role); err != nil {
-		err := pb.NewError(pb.Error_DestinationValidationFailed, "failed to validte desination '%s': %v", fwd, err)
+		err := pb.NewError(pb.Error_AnnounceValidationFailed, "failed to validte desination '%s': %v", fwd, err)
 		if err := pb.Write(s.stream, &pbs.Response{Error: err}); err != nil {
 			return kleverr.Newf("could not write error response: %w", err)
 		}
@@ -434,7 +434,7 @@ func (s *clientStream) relay(ctx context.Context, req *pbs.Request_Relay) error 
 	fwd := model.NewForwardFromPB(req.Forward) // TODO rename NEW
 	role := model.RoleFromPB(req.Role)
 	if newFwd, err := s.conn.auth.Validate(fwd, role); err != nil {
-		err := pb.NewError(pb.Error_RelayDestinationValidationFailed, "failed to validate desination '%s': %v", fwd, err)
+		err := pb.NewError(pb.Error_RelayValidationFailed, "failed to validate desination '%s': %v", fwd, err)
 		if err := pb.Write(s.stream, &pbs.Response{Error: err}); err != nil {
 			return kleverr.Newf("could not write error response: %w", err)
 		}
