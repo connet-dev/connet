@@ -30,10 +30,11 @@ type KV[K comparable, V any] interface {
 	Put(k K, v V) error
 	Del(k K) error
 
-	Consume(ctx context.Context, offset int64) ([]Message[K, V], int64, error)
 	Get(k K) (V, error)
 	GetOrDefault(k K, v V) (V, error)
+	GetOrInit(k K, fn func(K) (V, error)) (V, error)
 
+	Consume(ctx context.Context, offset int64) ([]Message[K, V], int64, error)
 	Snapshot() ([]Message[K, V], int64, error) // TODO this could possible return too much data
 
 	Close() error
@@ -72,6 +73,48 @@ func (l *kv[K, V]) Del(k K) error {
 	return err
 }
 
+func (l *kv[K, V]) Get(k K) (V, error) {
+	msg, err := l.log.GetByKey(k, false)
+	if err != nil {
+		var v V
+		return v, err
+	}
+	if msg.ValueEmpty {
+		var v V
+		return v, kleverr.Newf("key not found: %w", ErrNotFound)
+	}
+	return msg.Value, nil
+}
+
+func (l *kv[K, V]) GetOrDefault(k K, dv V) (V, error) {
+	switch v, err := l.Get(k); {
+	case err == nil:
+		return v, nil
+	case errors.Is(err, ErrNotFound):
+		return dv, nil
+	default:
+		return v, err
+	}
+}
+
+func (l *kv[K, V]) GetOrInit(k K, fn func(K) (V, error)) (V, error) {
+	switch v, err := l.Get(k); {
+	case err == nil:
+		return v, nil
+	case errors.Is(err, ErrNotFound):
+		nv, err := fn(k)
+		if err != nil {
+			return v, err
+		}
+		if err := l.Put(k, nv); err != nil {
+			return v, err
+		}
+		return nv, nil
+	default:
+		return v, err
+	}
+}
+
 func (l *kv[K, V]) Consume(ctx context.Context, offset int64) ([]Message[K, V], int64, error) {
 	nextOffset, msgs, err := l.log.ConsumeBlocking(ctx, offset, 32)
 	if err != nil {
@@ -87,34 +130,6 @@ func (l *kv[K, V]) Consume(ctx context.Context, offset int64) ([]Message[K, V], 
 		})
 	}
 	return nmsgs, nextOffset, nil
-}
-
-func (l *kv[K, V]) Get(k K) (V, error) {
-	msg, err := l.log.GetByKey(k, false)
-	if err != nil {
-		var v V
-		return v, err
-	}
-	if msg.ValueEmpty {
-		var v V
-		return v, kleverr.Newf("key not found: %w", ErrNotFound)
-	}
-	return msg.Value, nil
-}
-
-func (l *kv[K, V]) GetOrDefault(k K, v V) (V, error) {
-	msg, err := l.log.GetByKey(k, false)
-	if err != nil {
-		if errors.Is(err, klevdb.ErrNotFound) {
-			return v, nil
-		}
-		var v V
-		return v, err
-	}
-	if msg.ValueEmpty {
-		return v, nil
-	}
-	return msg.Value, nil
 }
 
 func (l *kv[K, V]) Snapshot() ([]Message[K, V], int64, error) {

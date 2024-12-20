@@ -6,6 +6,7 @@ import (
 	"crypto/x509"
 	"io"
 	"log/slog"
+	"path/filepath"
 	"slices"
 	"sync"
 
@@ -17,7 +18,6 @@ import (
 	"github.com/klev-dev/kleverr"
 	"github.com/quic-go/quic-go"
 	"github.com/segmentio/ksuid"
-	"golang.org/x/crypto/blake2s"
 	"golang.org/x/crypto/nacl/secretbox"
 	"golang.org/x/sync/errgroup"
 )
@@ -35,13 +35,64 @@ type ClientRelays interface {
 		notify func(map[model.HostPort]*x509.Certificate) error) error
 }
 
+func newClientServer(
+	auth ClientAuthenticator,
+	relays ClientRelays,
+	config logc.KV[configKey, configValue],
+	dir string,
+	logger *slog.Logger,
+) (*clientServer, error) {
+	clients, err := logc.NewKV[clientKey, clientValue](filepath.Join(dir, "clients"))
+	if err != nil {
+		return nil, err
+	}
+
+	clientsMsgs, clientsOffset, err := clients.Snapshot()
+	if err != nil {
+		return nil, err
+	}
+
+	clientsCache := map[cacheKey][]*pbs.ServerPeer{}
+	for _, msg := range clientsMsgs {
+		key := cacheKey{msg.Key.Forward, msg.Key.Role}
+		clientsCache[key] = append(clientsCache[key], &pbs.ServerPeer{
+			Id:     msg.Key.ID.String(),
+			Direct: msg.Value.Peer.Direct,
+			Relays: msg.Value.Peer.Relays,
+		})
+	}
+
+	serverClientSecret, err := config.GetOrInit(configServerClientSecret, func(ck configKey) (configValue, error) {
+		privateKey := [32]byte{}
+		if _, err := io.ReadFull(rand.Reader, privateKey[:]); err != nil {
+			return configValue{}, err
+		}
+		return configValue{Bytes: privateKey[:]}, nil
+	})
+
+	s := &clientServer{
+		auth:   auth,
+		relays: relays,
+		logger: logger.With("server", "clients"),
+
+		clientSecretKey: [32]byte(serverClientSecret.Bytes),
+		clients:         clients,
+
+		clientsCache:  clientsCache,
+		clientsOffset: clientsOffset,
+	}
+
+	return s, nil
+}
+
 type clientServer struct {
 	auth   ClientAuthenticator
 	relays ClientRelays
 	encode []byte
 	logger *slog.Logger
 
-	clients logc.KV[clientKey, clientValue]
+	clientSecretKey [32]byte
+	clients         logc.KV[clientKey, clientValue]
 
 	clientsCache  map[cacheKey][]*pbs.ServerPeer
 	clientsOffset int64
@@ -246,7 +297,7 @@ func (c *clientConn) authenticate(ctx context.Context) (ClientAuthentication, ks
 	}
 
 	var id ksuid.KSUID
-	if plain, err := c.decodeReconnect(req.Token, req.ReconnectToken); err != nil {
+	if plain, err := c.decodeReconnect(req.ReconnectToken); err != nil {
 		c.logger.Debug("decode failed", "err", err)
 		id = ksuid.New()
 	} else if sid, err := ksuid.FromBytes(plain); err != nil {
@@ -265,7 +316,7 @@ func (c *clientConn) authenticate(ctx context.Context) (ClientAuthentication, ks
 		return retClientAuth(err)
 	}
 
-	retoken, err := c.encodeReconnect(req.Token, id.Bytes())
+	retoken, err := c.encodeReconnect(id.Bytes())
 	if err != nil {
 		c.logger.Debug("encrypting failed", "err", err)
 		retoken = nil
@@ -281,33 +332,24 @@ func (c *clientConn) authenticate(ctx context.Context) (ClientAuthentication, ks
 	return auth, id, nil
 }
 
-func (c *clientConn) secretKey(token string) [32]byte {
-	// TODO reevaluate this
-	data := append([]byte(token), c.server.encode...)
-	return blake2s.Sum256(data)
-}
-
-func (c *clientConn) encodeReconnect(token string, id []byte) ([]byte, error) {
-	secretKey := c.secretKey(token)
-
+func (c *clientConn) encodeReconnect(id []byte) ([]byte, error) {
 	var nonce [24]byte
 	if _, err := io.ReadFull(rand.Reader, nonce[:]); err != nil {
 		return nil, kleverr.Newf("could not read rand: %w", err)
 	}
 
-	data := secretbox.Seal(nonce[:], id, &nonce, &secretKey)
+	data := secretbox.Seal(nonce[:], id, &nonce, &c.server.clientSecretKey)
 	return data, nil
 }
 
-func (c *clientConn) decodeReconnect(token string, encrypted []byte) ([]byte, error) {
+func (c *clientConn) decodeReconnect(encrypted []byte) ([]byte, error) {
 	if len(encrypted) < 24 {
 		return nil, kleverr.New("missing encrypted data")
 	}
-	secretKey := c.secretKey(token)
 
 	var decryptNonce [24]byte
 	copy(decryptNonce[:], encrypted[:24])
-	decrypted, ok := secretbox.Open(nil, encrypted[24:], &decryptNonce, &secretKey)
+	decrypted, ok := secretbox.Open(nil, encrypted[24:], &decryptNonce, &c.server.clientSecretKey)
 	if !ok {
 		return nil, kleverr.New("cannot open secretbox")
 	}

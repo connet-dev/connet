@@ -6,6 +6,7 @@ import (
 	"errors"
 	"log/slog"
 	"maps"
+	"path/filepath"
 	"sync"
 
 	"github.com/keihaya-com/connet/certc"
@@ -38,6 +39,58 @@ type relayServer struct {
 	forwardsCache  map[model.Forward]map[model.HostPort]*x509.Certificate
 	forwardsOffset int64
 	forwardsMu     sync.RWMutex
+}
+
+func newRelayServer(auth RelayAuthenticator, config logc.KV[configKey, configValue], dir string, logger *slog.Logger) (*relayServer, error) {
+	relayClients, err := logc.NewKV[relayClientKey, relayClientValue](filepath.Join(dir, "relay-clients"))
+	if err != nil {
+		return nil, err
+	}
+
+	relayServers, err := logc.NewKV[relayServerKey, relayServerValue](filepath.Join(dir, "relay-servers"))
+	if err != nil {
+		return nil, err
+	}
+
+	relayServerOffsets, err := logc.NewKV[model.HostPort, int64](filepath.Join(dir, "relay-server-offsets"))
+	if err != nil {
+		return nil, err
+	}
+
+	forwardsMsgs, forwardsOffset, err := relayServers.Snapshot()
+	if err != nil {
+		return nil, err
+	}
+
+	forwardsCache := map[model.Forward]map[model.HostPort]*x509.Certificate{}
+	for _, msg := range forwardsMsgs {
+		srv := forwardsCache[msg.Key.Forward]
+		if srv == nil {
+			srv = map[model.HostPort]*x509.Certificate{}
+			forwardsCache[msg.Key.Forward] = srv
+		}
+		srv[msg.Key.Hostport] = msg.Value.Cert
+	}
+
+	serverIDConfig, err := config.GetOrInit(configServerID, func(ck configKey) (configValue, error) {
+		return configValue{String: model.GenServerName("connet")}, nil
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	return &relayServer{
+		id:     serverIDConfig.String,
+		auth:   auth,
+		logger: logger.With("server", "relays"),
+
+		relayClients:       relayClients,
+		relayServers:       relayServers,
+		relayServerOffsets: relayServerOffsets,
+
+		forwardsCache:  forwardsCache,
+		forwardsOffset: forwardsOffset,
+	}, nil
 }
 
 func (s *relayServer) getForward(fwd model.Forward) (map[model.HostPort]*x509.Certificate, int64) {
