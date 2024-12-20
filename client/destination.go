@@ -11,7 +11,6 @@ import (
 	"github.com/keihaya-com/connet/netc"
 	"github.com/keihaya-com/connet/pb"
 	"github.com/keihaya-com/connet/pbc"
-	"github.com/keihaya-com/connet/pbs"
 	"github.com/klev-dev/kleverr"
 	"github.com/quic-go/quic-go"
 	"golang.org/x/sync/errgroup"
@@ -199,106 +198,11 @@ func (d *Destination) heartbeat(ctx context.Context, stream quic.Stream, hbt *pb
 }
 
 func (d *Destination) RunControl(ctx context.Context, conn quic.Connection) error {
-	g, ctx := errgroup.WithContext(ctx)
-
-	g.Go(func() error { return d.runAnnounce(ctx, conn) })
-	if d.opt.AllowRelay() {
-		g.Go(func() error { return d.runRelay(ctx, conn) })
-	}
-
-	return g.Wait()
-}
-
-func (d *Destination) runAnnounce(ctx context.Context, conn quic.Connection) error {
-	stream, err := conn.OpenStreamSync(ctx)
-	if err != nil {
-		return kleverr.Ret(err)
-	}
-	defer stream.Close()
-
-	g, ctx := errgroup.WithContext(ctx)
-
-	g.Go(func() error {
-		<-ctx.Done()
-		stream.CancelRead(0)
-		return nil
-	})
-
-	g.Go(func() error {
-		defer d.logger.Debug("completed destination notify")
-		return d.peer.selfListen(ctx, func(peer *pbs.ClientPeer) error {
-			directLen := 0
-			if peer.Direct != nil {
-				directLen = len(peer.Direct.Addresses)
-			}
-			d.logger.Debug("updated destination", "direct", directLen, "relay", len(peer.Relays))
-			return pb.Write(stream, &pbs.Request{
-				Announce: &pbs.Request_Announce{
-					Forward: d.fwd.PB(),
-					Role:    pb.Role_RoleDestination,
-					Peer:    peer,
-				},
-			})
-		})
-	})
-
-	g.Go(func() error {
-		for {
-			resp, err := pbs.ReadResponse(stream)
-			if err != nil {
-				return err
-			}
-			if resp.Announce == nil {
-				return kleverr.Newf("unexpected response")
-			}
-
-			// TODO on server restart peers is reset and client loses active peers
-			// only for them to come back at the next tick, with different ID
-			d.peer.setPeers(resp.Announce.Peers)
-		}
-	})
-
-	return g.Wait()
-}
-
-func (d *Destination) runRelay(ctx context.Context, conn quic.Connection) error {
-	stream, err := conn.OpenStreamSync(ctx)
-	if err != nil {
-		return kleverr.Ret(err)
-	}
-	defer stream.Close()
-
-	if err := pb.Write(stream, &pbs.Request{
-		Relay: &pbs.Request_Relay{
-			Forward:           d.fwd.PB(),
-			Role:              pb.Role_RoleDestination,
-			ClientCertificate: d.peer.clientCert.Leaf.Raw,
-		},
-	}); err != nil {
-		return err
-	}
-
-	g, ctx := errgroup.WithContext(ctx)
-
-	g.Go(func() error {
-		<-ctx.Done()
-		stream.CancelRead(0)
-		return nil
-	})
-
-	g.Go(func() error {
-		for {
-			resp, err := pbs.ReadResponse(stream)
-			if err != nil {
-				return err
-			}
-			if resp.Relay == nil {
-				return kleverr.Newf("unexpected response")
-			}
-
-			d.peer.setRelays(resp.Relay.Relays)
-		}
-	})
-
-	return g.Wait()
+	return (&peerControl{
+		local: d.peer,
+		fwd:   d.fwd,
+		role:  model.Destination,
+		opt:   d.opt,
+		conn:  conn,
+	}).run(ctx)
 }
