@@ -3,6 +3,7 @@ package logc
 import (
 	"cmp"
 	"context"
+	"errors"
 	"maps"
 	"slices"
 
@@ -31,6 +32,7 @@ type KV[K comparable, V any] interface {
 
 	Consume(ctx context.Context, offset int64) ([]Message[K, V], int64, error)
 	Get(k K) (V, error)
+	GetOrDefault(k K, v V) (V, error)
 
 	Snapshot() ([]Message[K, V], int64, error) // TODO this could possible return too much data
 
@@ -96,6 +98,21 @@ func (l *kv[K, V]) Get(k K) (V, error) {
 	if msg.ValueEmpty {
 		var v V
 		return v, kleverr.Newf("key not found: %w", ErrNotFound)
+	}
+	return msg.Value, nil
+}
+
+func (l *kv[K, V]) GetOrDefault(k K, v V) (V, error) {
+	msg, err := l.log.GetByKey(k, false)
+	if err != nil {
+		if errors.Is(err, klevdb.ErrNotFound) {
+			return v, nil
+		}
+		var v V
+		return v, err
+	}
+	if msg.ValueEmpty {
+		return v, nil
 	}
 	return msg.Value, nil
 }

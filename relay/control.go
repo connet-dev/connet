@@ -4,7 +4,6 @@ import (
 	"context"
 	"crypto/tls"
 	"crypto/x509"
-	"encoding/json"
 	"errors"
 	"log/slog"
 	"net"
@@ -39,118 +38,6 @@ type controlClient struct {
 	logger *slog.Logger
 }
 
-type clientKey struct {
-	Forward model.Forward `json:"forward"`
-	Role    model.Role    `json:"role"`
-	Key     certc.Key     `json:"key"`
-}
-
-type clientValue struct {
-	Cert *x509.Certificate `json:"cert"`
-}
-
-func (v clientValue) MarshalJSON() ([]byte, error) {
-	return certc.MarshalJSONCert(v.Cert)
-}
-
-func (v *clientValue) UnmarshalJSON(b []byte) error {
-	cert, err := certc.UnmarshalJSONCert(b)
-	if err != nil {
-		return err
-	}
-
-	*v = clientValue{cert}
-	return nil
-}
-
-type serverKey struct {
-	Forward model.Forward `json:"forward"`
-}
-
-type serverValue struct {
-	Name    string                          `json:"name"`
-	Cert    *certc.Cert                     `json:"cert"`
-	Clients map[serverClientKey]clientValue `json:"clients"`
-}
-
-func (v serverValue) MarshalJSON() ([]byte, error) {
-	cert, key, err := v.Cert.EncodeToMemory()
-	if err != nil {
-		return nil, err
-	}
-
-	s := struct {
-		Name    string              `json:"name"`
-		Cert    []byte              `json:"cert"`
-		CertKey []byte              `json:"cert_key"`
-		Clients []serverClientValue `json:"clients"`
-	}{
-		Name:    v.Name,
-		Cert:    cert,
-		CertKey: key,
-	}
-
-	for k, v := range v.Clients {
-		s.Clients = append(s.Clients, serverClientValue{
-			Role:  k.Role,
-			Value: v,
-		})
-	}
-
-	return json.Marshal(s)
-}
-
-func (v *serverValue) UnmarshalJSON(b []byte) error {
-	s := struct {
-		Name    string              `json:"name"`
-		Cert    []byte              `json:"cert"`
-		CertKey []byte              `json:"cert_key"`
-		Clients []serverClientValue `json:"clients"`
-	}{}
-	if err := json.Unmarshal(b, &s); err != nil {
-		return err
-	}
-
-	cert, err := certc.DecodeFromMemory(s.Cert, s.CertKey)
-	if err != nil {
-		return err
-	}
-
-	sv := serverValue{
-		Name:    s.Name,
-		Cert:    cert,
-		Clients: map[serverClientKey]clientValue{},
-	}
-
-	for _, cl := range s.Clients {
-		sv.Clients[serverClientKey{cl.Role, certc.NewKey(cl.Value.Cert)}] = cl.Value
-	}
-
-	*v = sv
-	return nil
-}
-
-type serverClientKey struct {
-	Role model.Role `json:"role"`
-	Key  certc.Key  `json:"key"`
-}
-
-type serverClientValue struct {
-	Role  model.Role  `json:"role"`
-	Value clientValue `json:"value"`
-}
-
-type configKey string
-
-var (
-	configClientsStreamOffset configKey = "clients-stream-offset"
-	configClientsLogOffset    configKey = "clients-log-offset"
-)
-
-type configValue struct {
-	Int64 int64 `json:"int64,omitempty"`
-}
-
 type controlServerState struct {
 	id     string
 	parent *controlClient
@@ -162,6 +49,9 @@ type controlServerState struct {
 	serverByNameOffset int64
 	serverByName       map[string]*relayServer
 	serverByNameMu     sync.RWMutex
+
+	clientsStreamOffset int64
+	clientsLogOffset    int64
 }
 
 func newControlServerState(parent *controlClient, id string) (*controlServerState, error) {
@@ -193,6 +83,16 @@ func newControlServerState(parent *controlClient, id string) (*controlServerStat
 		serverByName[srv.name] = srv
 	}
 
+	clientsStreamOffset, err := config.GetOrDefault(configClientsStreamOffset, configValue{Int64: logc.OffsetOldest})
+	if err != nil {
+		return nil, err
+	}
+
+	clientsLogOffset, err := config.GetOrDefault(configClientsLogOffset, configValue{Int64: logc.OffsetOldest})
+	if err != nil {
+		return nil, err
+	}
+
 	return &controlServerState{
 		id:     id,
 		parent: parent,
@@ -203,41 +103,34 @@ func newControlServerState(parent *controlClient, id string) (*controlServerStat
 
 		serverByNameOffset: serversOffset,
 		serverByName:       serverByName,
+
+		clientsStreamOffset: clientsStreamOffset.Int64,
+		clientsLogOffset:    clientsLogOffset.Int64,
 	}, nil
 }
 
 func (s *controlServerState) getClientsStreamOffset() (int64, error) {
-	// TODO cache/optimize
-	v, err := s.config.Get(configClientsStreamOffset)
-	switch {
-	case errors.Is(err, logc.ErrNotFound):
-		return logc.OffsetOldest, nil
-	case err != nil:
-		return logc.OffsetInvalid, err
-	default:
-		return v.Int64, nil
-	}
+	return s.clientsStreamOffset, nil
 }
 
 func (s *controlServerState) setClientsStreamOffset(v int64) error {
-	return s.config.Put(configClientsStreamOffset, configValue{Int64: v})
+	if err := s.config.Put(configClientsStreamOffset, configValue{Int64: v}); err != nil {
+		return err
+	}
+	s.clientsStreamOffset = v
+	return nil
 }
 
 func (s *controlServerState) getClientsLogOffset() (int64, error) {
-	// TODO cache/optimize
-	v, err := s.config.Get(configClientsLogOffset)
-	switch {
-	case errors.Is(err, logc.ErrNotFound):
-		return logc.OffsetOldest, nil
-	case err != nil:
-		return logc.OffsetInvalid, err
-	default:
-		return v.Int64, nil
-	}
+	return s.clientsLogOffset, nil
 }
 
 func (s *controlServerState) setClientsLogOffset(v int64) error {
-	return s.config.Put(configClientsLogOffset, configValue{Int64: v})
+	if err := s.config.Put(configClientsLogOffset, configValue{Int64: v}); err != nil {
+		return err
+	}
+	s.clientsLogOffset = v
+	return nil
 }
 
 func (s *controlServerState) getServer(name string) *relayServer {
