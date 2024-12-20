@@ -15,7 +15,6 @@ import (
 	"github.com/keihaya-com/connet/pbr"
 	"github.com/klev-dev/kleverr"
 	"github.com/quic-go/quic-go"
-	"github.com/segmentio/ksuid"
 	"golang.org/x/sync/errgroup"
 )
 
@@ -28,7 +27,7 @@ type RelayAuthentication interface {
 }
 
 type relayServer struct {
-	id     ksuid.KSUID
+	id     string
 	auth   RelayAuthenticator
 	logger *slog.Logger
 
@@ -233,7 +232,7 @@ func (c *relayConn) authenticate(ctx context.Context) (RelayAuthentication, mode
 	}
 
 	if err := pb.Write(authStream, &pbr.AuthenticateResp{
-		ControlId: c.server.id.String(),
+		ControlId: c.server.id,
 	}); err != nil {
 		return retRelayAuth(err)
 	}

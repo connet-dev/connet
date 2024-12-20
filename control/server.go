@@ -15,7 +15,6 @@ import (
 	"github.com/keihaya-com/connet/pbs"
 	"github.com/klev-dev/kleverr"
 	"github.com/quic-go/quic-go"
-	"github.com/segmentio/ksuid"
 	"golang.org/x/sync/errgroup"
 )
 
@@ -29,6 +28,11 @@ type Config struct {
 }
 
 func NewServer(cfg Config) (*Server, error) {
+	config, err := logc.NewKV[configKey, configValue](filepath.Join(cfg.Dir, "config"))
+	if err != nil {
+		return nil, err
+	}
+
 	relayClients, err := logc.NewKV[relayClientKey, relayClientValue](filepath.Join(cfg.Dir, "relay-clients"))
 	if err != nil {
 		return nil, err
@@ -49,6 +53,17 @@ func NewServer(cfg Config) (*Server, error) {
 		return nil, err
 	}
 
+	serverIDConfig, err := config.Get(configServerID)
+	switch {
+	case errors.Is(err, logc.ErrNotFound):
+		serverIDConfig = configValue{String: model.GenServerName("connet")}
+		if err := config.Put(configServerID, serverIDConfig); err != nil {
+			return nil, err
+		}
+	case err != nil:
+		return nil, err
+	}
+
 	s := &Server{
 		addr: cfg.Addr,
 		tlsConf: &tls.Config{
@@ -58,7 +73,7 @@ func NewServer(cfg Config) (*Server, error) {
 		logger: cfg.Logger.With("control", cfg.Addr),
 	}
 	s.relays = &relayServer{
-		id:     ksuid.New(),
+		id:     serverIDConfig.String,
 		auth:   cfg.RelayAuth,
 		logger: cfg.Logger.With("server", "relays"),
 
@@ -150,4 +165,15 @@ func (s *Server) runListener(ctx context.Context) error {
 			conn.CloseWithError(1, "unknown protocol")
 		}
 	}
+}
+
+type configKey string
+
+var (
+	configServerID configKey = "server-id"
+)
+
+type configValue struct {
+	Int64  int64  `json:"int64,omitempty"`
+	String string `json:"string,omitempty"`
 }
