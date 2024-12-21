@@ -159,7 +159,7 @@ func (s *clientsServer) run(ctx context.Context, transport *quic.Transport) erro
 			s.logger.Debug("accept error", "err", err)
 			return kleverr.Ret(err)
 		}
-		s.logger.Info("client connected", "local", conn.LocalAddr(), "remote", conn.RemoteAddr())
+		s.logger.Info("new client connected", "remote", conn.RemoteAddr())
 
 		rc := &clientConn{
 			server: s,

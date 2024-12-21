@@ -102,18 +102,20 @@ func (s *Server) runListener(ctx context.Context) error {
 			s.logger.Debug("accept error", "err", err)
 			return kleverr.Ret(err)
 		}
-		s.logger.Info("connection accepted", "remote", conn.RemoteAddr(), "proto", conn.ConnectionState().TLS.NegotiatedProtocol)
 
 		switch conn.ConnectionState().TLS.NegotiatedProtocol {
 		case "connet":
+			s.logger.Info("new client connected", "remote", conn.RemoteAddr())
 			if err := s.clients.handle(ctx, conn); err != nil {
 				return err
 			}
 		case "connet-relays":
+			s.logger.Info("new relay connected", "remote", conn.RemoteAddr())
 			if err := s.relays.handle(ctx, conn); err != nil {
 				return err
 			}
 		default:
+			s.logger.Debug("unknown connected", "remote", conn.RemoteAddr())
 			conn.CloseWithError(1, "unknown protocol")
 		}
 	}

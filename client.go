@@ -198,7 +198,7 @@ func (c *Client) connect(ctx context.Context, transport *quic.Transport, retoken
 		s.SetDirectAddrs(directAddrs)
 	}
 
-	c.logger.Info("authenticated", "addrs", directAddrs)
+	c.logger.Info("authenticated to server", "addr", c.controlAddr, "direct", directAddrs)
 	return conn, resp.ReconnectToken, nil
 }
 
