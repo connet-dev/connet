@@ -4,7 +4,6 @@ import (
 	"context"
 	"crypto/tls"
 	"crypto/x509"
-	"errors"
 	"log/slog"
 	"sync"
 	"sync/atomic"
@@ -149,10 +148,7 @@ func (s *DirectServer) runServer(ctx context.Context) error {
 	for {
 		conn, err := l.Accept(ctx)
 		if err != nil {
-			if errors.Is(err, context.Canceled) {
-				err = context.Cause(ctx)
-			}
-			s.logger.Warn("accept error", "err", err)
+			s.logger.Debug("accept error", "err", err)
 			return kleverr.Ret(err)
 		}
 		go s.runConn(conn)

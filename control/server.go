@@ -3,7 +3,6 @@ package control
 import (
 	"context"
 	"crypto/tls"
-	"errors"
 	"log/slog"
 	"net"
 	"path/filepath"
@@ -75,20 +74,20 @@ func (s *Server) Run(ctx context.Context) error {
 
 func (s *Server) runListener(ctx context.Context) error {
 	s.logger.Debug("start udp listener")
-	conn, err := net.ListenUDP("udp", s.addr)
+	udpConn, err := net.ListenUDP("udp", s.addr)
 	if err != nil {
 		return kleverr.Ret(err)
 	}
-	defer conn.Close()
+	defer udpConn.Close()
 
 	s.logger.Debug("start quic listener")
-	tr := &quic.Transport{
-		Conn: conn,
+	transport := &quic.Transport{
+		Conn: udpConn,
 		// TODO review other options
 	}
-	defer tr.Close()
+	defer transport.Close()
 
-	l, err := tr.Listen(s.tlsConf, &quic.Config{
+	l, err := transport.Listen(s.tlsConf, &quic.Config{
 		KeepAlivePeriod: 25 * time.Second,
 	})
 	if err != nil {
@@ -100,10 +99,7 @@ func (s *Server) runListener(ctx context.Context) error {
 	for {
 		conn, err := l.Accept(ctx)
 		if err != nil {
-			if errors.Is(err, context.Canceled) {
-				err = context.Cause(ctx)
-			}
-			s.logger.Warn("accept error", "err", err)
+			s.logger.Debug("accept error", "err", err)
 			return kleverr.Ret(err)
 		}
 		s.logger.Info("connection accepted", "remote", conn.RemoteAddr(), "proto", conn.ConnectionState().TLS.NegotiatedProtocol)

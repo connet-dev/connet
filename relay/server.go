@@ -84,15 +84,15 @@ type Server struct {
 
 func (s *Server) Run(ctx context.Context) error {
 	s.logger.Debug("start udp listener")
-	conn, err := net.ListenUDP("udp", s.addr)
+	udpConn, err := net.ListenUDP("udp", s.addr)
 	if err != nil {
 		return kleverr.Ret(err)
 	}
-	defer conn.Close()
+	defer udpConn.Close()
 
 	s.logger.Debug("start quic listener")
 	transport := &quic.Transport{
-		Conn: conn,
+		Conn: udpConn,
 		// TODO review other options
 	}
 	defer transport.Close()

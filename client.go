@@ -68,18 +68,21 @@ func NewClient(opts ...ClientOption) (*Client, error) {
 }
 
 func (c *Client) Run(ctx context.Context) error {
-	directUDP, err := net.ListenUDP("udp", c.directAddr)
+	c.logger.Debug("start udp listener")
+	udpConn, err := net.ListenUDP("udp", c.directAddr)
 	if err != nil {
 		return kleverr.Ret(err)
 	}
-	defer directUDP.Close()
+	defer udpConn.Close()
 
-	directTransport := &quic.Transport{
-		Conn: directUDP,
+	c.logger.Debug("start quic listener")
+	transport := &quic.Transport{
+		Conn: udpConn,
 		// TODO review other options
 	}
+	defer transport.Close()
 
-	ds, err := client.NewDirectServer(directTransport, c.logger)
+	ds, err := client.NewDirectServer(transport, c.logger)
 	if err != nil {
 		return kleverr.Ret(err)
 	}
@@ -112,7 +115,7 @@ func (c *Client) Run(ctx context.Context) error {
 		g.Go(func() error { return src.Run(ctx) })
 	}
 
-	g.Go(func() error { return c.run(ctx, directTransport) })
+	g.Go(func() error { return c.run(ctx, transport) })
 
 	return g.Wait()
 }
@@ -125,12 +128,12 @@ func (c *Client) run(ctx context.Context, transport *quic.Transport) error {
 
 	for {
 		if err := c.runConnection(ctx, conn); err != nil {
-			c.logger.Error("session ended", "err", err)
 			switch {
 			case errors.Is(err, context.Canceled):
 				return err
 				// TODO other terminal errors
 			}
+			c.logger.Error("session ended", "err", err)
 		}
 
 		if conn, retoken, err = c.reconnect(ctx, transport, retoken); err != nil {

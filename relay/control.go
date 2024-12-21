@@ -204,12 +204,12 @@ func (s *controlClient) run(ctx context.Context, transport *quic.Transport) erro
 
 	for {
 		if err := s.runConnection(ctx, conn, serverID); err != nil {
-			s.logger.Error("session ended", "err", err)
 			switch {
 			case errors.Is(err, context.Canceled):
 				return err
 				// TODO other terminal errors
 			}
+			s.logger.Error("session ended", "err", err)
 		}
 
 		s.logger.Info("reconnecting to control server", "addr", s.controlAddr)

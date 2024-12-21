@@ -68,7 +68,7 @@ func (p *directPeer) run(ctx context.Context) {
 	})
 
 	if err := g.Wait(); err != nil {
-		p.logger.Warn("error while running peering", "err", err)
+		p.logger.Debug("error while running peering", "err", err)
 	}
 }
 

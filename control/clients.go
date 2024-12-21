@@ -244,7 +244,7 @@ func (c *clientConn) run(ctx context.Context) {
 	defer c.conn.CloseWithError(0, "done")
 
 	if err := c.runErr(ctx); err != nil {
-		c.logger.Warn("error while running", "err", err)
+		c.logger.Debug("error while running", "err", err)
 	}
 }
 
@@ -369,7 +369,7 @@ func (s *clientStream) run(ctx context.Context) {
 	defer s.stream.Close()
 
 	if err := s.runErr(ctx); err != nil {
-		s.conn.logger.Warn("error while running", "err", err)
+		s.conn.logger.Debug("error while running", "err", err)
 	}
 }
 

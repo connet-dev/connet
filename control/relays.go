@@ -238,7 +238,7 @@ func (c *relayConn) run(ctx context.Context) {
 	defer c.conn.CloseWithError(0, "done")
 
 	if err := c.runErr(ctx); err != nil {
-		c.logger.Warn("error while running", "err", err)
+		c.logger.Debug("error while running", "err", err)
 	}
 }
 

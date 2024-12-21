@@ -4,7 +4,6 @@ import (
 	"context"
 	"crypto/tls"
 	"crypto/x509"
-	"errors"
 	"log/slog"
 	"maps"
 	"slices"
@@ -157,9 +156,6 @@ func (s *clientsServer) run(ctx context.Context, transport *quic.Transport) erro
 	for {
 		conn, err := l.Accept(ctx)
 		if err != nil {
-			if errors.Is(err, context.Canceled) {
-				err = context.Cause(ctx)
-			}
 			s.logger.Debug("accept error", "err", err)
 			return kleverr.Ret(err)
 		}
@@ -187,7 +183,7 @@ func (c *clientConn) run(ctx context.Context) {
 	defer c.conn.CloseWithError(0, "done")
 
 	if err := c.runErr(ctx); err != nil {
-		c.logger.Warn("error while running", "err", err)
+		c.logger.Debug("error while running", "err", err)
 	}
 }
 

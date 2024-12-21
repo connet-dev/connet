@@ -50,7 +50,7 @@ func (r *relayPeer) run(ctx context.Context) {
 	})
 
 	if err := g.Wait(); err != nil {
-		r.logger.Warn("error while running relaying", "err", err)
+		r.logger.Debug("error while running relaying", "err", err)
 	}
 }
 
