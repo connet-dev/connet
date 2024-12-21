@@ -244,7 +244,11 @@ func (c *relayConn) run(ctx context.Context) {
 
 func (c *relayConn) runErr(ctx context.Context) error {
 	if auth, hp, err := c.authenticate(ctx); err != nil {
-		c.conn.CloseWithError(1, "auth failed")
+		if perr := pb.GetError(err); perr != nil {
+			c.conn.CloseWithError(quic.ApplicationErrorCode(perr.Code), perr.Message)
+		} else {
+			c.conn.CloseWithError(quic.ApplicationErrorCode(pb.Error_AuthenticationFailed), "Error while authenticating")
+		}
 		return kleverr.Ret(err)
 	} else {
 		c.auth = auth

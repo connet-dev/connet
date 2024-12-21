@@ -196,6 +196,7 @@ func (s *controlClient) authenticate(serverName string, certs []*x509.Certificat
 }
 
 func (s *controlClient) run(ctx context.Context, transport *quic.Transport) error {
+	s.logger.Info("connecting to control server", "addr", s.controlAddr)
 	conn, serverID, err := s.connect(ctx, transport)
 	if err != nil {
 		return err
@@ -211,6 +212,7 @@ func (s *controlClient) run(ctx context.Context, transport *quic.Transport) erro
 			}
 		}
 
+		s.logger.Info("reconnecting to control server", "addr", s.controlAddr)
 		if conn, serverID, err = s.reconnect(ctx, transport); err != nil {
 			return err
 		}
@@ -245,7 +247,7 @@ func (s *controlClient) connect(ctx context.Context, transport *quic.Transport) 
 		return retConnect(err)
 	}
 	if resp.Error != nil {
-		return retConnect(err)
+		return retConnect(resp.Error)
 	}
 
 	return conn, resp.ControlId, nil

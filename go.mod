@@ -4,7 +4,7 @@ go 1.23.2
 
 require (
 	github.com/klev-dev/klevdb v0.7.3
-	github.com/klev-dev/kleverr v0.0.0-20241020235355-094c0f6ca824
+	github.com/klev-dev/kleverr v0.1.0
 	github.com/mr-tron/base58 v1.2.0
 	github.com/pelletier/go-toml/v2 v2.2.3
 	github.com/quic-go/quic-go v0.48.2

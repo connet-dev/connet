@@ -5,6 +5,7 @@ import (
 	"context"
 	"crypto/tls"
 	"crypto/x509"
+	"errors"
 	"fmt"
 	"log/slog"
 	"net"
@@ -97,15 +98,24 @@ func main() {
 	defer cancel()
 
 	if err := rootCmd().ExecuteContext(ctx); err != nil {
-		fmt.Fprintln(os.Stderr, err)
+		if cerr := context.Cause(ctx); errors.Is(cerr, context.Canceled) {
+			return
+		}
+		if kerr := kleverr.Get(err); kerr != nil {
+			fmt.Fprintln(os.Stderr, kerr.Print())
+		} else {
+			fmt.Fprintln(os.Stderr, err)
+		}
 		os.Exit(1)
 	}
 }
 
 func rootCmd() *cobra.Command {
 	cmd := &cobra.Command{
-		Use:   "connet",
-		Short: "connet is a reverse proxy/nat traversal tool",
+		Use:           "connet",
+		Short:         "connet is a reverse proxy/nat traversal tool",
+		SilenceUsage:  true,
+		SilenceErrors: true,
 	}
 
 	cmd.AddCommand(serverCmd())

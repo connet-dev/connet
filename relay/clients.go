@@ -153,14 +153,14 @@ func (s *clientsServer) run(ctx context.Context, transport *quic.Transport) erro
 	}
 	defer l.Close()
 
-	s.logger.Info("waiting for connections")
+	s.logger.Info("accepting client connections", "addr", transport.Conn.LocalAddr())
 	for {
 		conn, err := l.Accept(ctx)
 		if err != nil {
 			if errors.Is(err, context.Canceled) {
 				err = context.Cause(ctx)
 			}
-			s.logger.Warn("accept error", "err", err)
+			s.logger.Debug("accept error", "err", err)
 			return kleverr.Ret(err)
 		}
 		s.logger.Info("client connected", "local", conn.LocalAddr(), "remote", conn.RemoteAddr())
