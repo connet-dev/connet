@@ -15,7 +15,8 @@ import (
 type Stores interface {
 	Config() (logc.KV[configKey, configValue], error)
 
-	ClientPeers() (logc.KV[clientKey, clientValue], error)
+	ClientConns() (logc.KV[connKey, connValue], error)
+	ClientPeers() (logc.KV[peerKey, peerValue], error)
 
 	RelayClients() (logc.KV[relayClientKey, relayClientValue], error)
 	RelayServers() (logc.KV[relayServerKey, relayServerValue], error)
@@ -42,8 +43,12 @@ func (f *fileStores) Config() (logc.KV[configKey, configValue], error) {
 	return logc.NewKV[configKey, configValue](filepath.Join(f.dir, "config"))
 }
 
-func (f *fileStores) ClientPeers() (logc.KV[clientKey, clientValue], error) {
-	return logc.NewKV[clientKey, clientValue](filepath.Join(f.dir, "clients"))
+func (f *fileStores) ClientConns() (logc.KV[connKey, connValue], error) {
+	return logc.NewKV[connKey, connValue](filepath.Join(f.dir, "conns"))
+}
+
+func (f *fileStores) ClientPeers() (logc.KV[peerKey, peerValue], error) {
+	return logc.NewKV[peerKey, peerValue](filepath.Join(f.dir, "clients"))
 }
 
 func (f *fileStores) RelayClients() (logc.KV[relayClientKey, relayClientValue], error) {
@@ -71,13 +76,22 @@ type configValue struct {
 	Bytes  []byte `json:"bytes,omitempty"`
 }
 
-type clientKey struct {
+type connKey struct {
+	ID ksuid.KSUID `json:"id"` // TODO consider using the server cert key
+}
+
+type connValue struct {
+	Token string `json:"token"`
+	Addr  string `json:"addr"`
+}
+
+type peerKey struct {
 	Forward model.Forward `json:"forward"`
 	Role    model.Role    `json:"role"`
 	ID      ksuid.KSUID   `json:"id"` // TODO consider using the server cert key
 }
 
-type clientValue struct {
+type peerValue struct {
 	Peer *pbs.ClientPeer `json:"peer"`
 }
 

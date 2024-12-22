@@ -32,3 +32,7 @@ type clientAuthentication struct {
 func (a *clientAuthentication) Validate(fwd model.Forward, role model.Role) (model.Forward, error) {
 	return fwd, nil
 }
+
+func (a *clientAuthentication) String() string {
+	return a.token
+}

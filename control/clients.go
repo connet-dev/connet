@@ -6,6 +6,7 @@ import (
 	"crypto/x509"
 	"io"
 	"log/slog"
+	"net"
 	"slices"
 	"sync"
 
@@ -27,6 +28,8 @@ type ClientAuthenticator interface {
 
 type ClientAuthentication interface {
 	Validate(fwd model.Forward, role model.Role) (model.Forward, error)
+
+	String() string
 }
 
 type ClientRelays interface {
@@ -41,21 +44,25 @@ func newClientServer(
 	stores Stores,
 	logger *slog.Logger,
 ) (*clientServer, error) {
-	// TODO separate peering from connected clients
-	clients, err := stores.ClientPeers()
+	conns, err := stores.ClientConns()
 	if err != nil {
 		return nil, err
 	}
 
-	clientsMsgs, clientsOffset, err := clients.Snapshot()
+	peers, err := stores.ClientPeers()
 	if err != nil {
 		return nil, err
 	}
 
-	clientsCache := map[cacheKey][]*pbs.ServerPeer{}
+	clientsMsgs, clientsOffset, err := peers.Snapshot()
+	if err != nil {
+		return nil, err
+	}
+
+	peersCache := map[cacheKey][]*pbs.ServerPeer{}
 	for _, msg := range clientsMsgs {
 		key := cacheKey{msg.Key.Forward, msg.Key.Role}
-		clientsCache[key] = append(clientsCache[key], &pbs.ServerPeer{
+		peersCache[key] = append(peersCache[key], &pbs.ServerPeer{
 			Id:     msg.Key.ID.String(),
 			Direct: msg.Value.Peer.Direct,
 			Relays: msg.Value.Peer.Relays,
@@ -76,10 +83,12 @@ func newClientServer(
 		logger: logger.With("server", "clients"),
 
 		clientSecretKey: [32]byte(serverClientSecret.Bytes),
-		clients:         clients,
 
-		clientsCache:  clientsCache,
-		clientsOffset: clientsOffset,
+		conns: conns,
+		peers: peers,
+
+		peersCache:  peersCache,
+		peersOffset: clientsOffset,
 	}
 
 	return s, nil
@@ -92,30 +101,40 @@ type clientServer struct {
 	logger *slog.Logger
 
 	clientSecretKey [32]byte
-	clients         logc.KV[clientKey, clientValue]
 
-	clientsCache  map[cacheKey][]*pbs.ServerPeer
-	clientsOffset int64
-	clientsMu     sync.RWMutex
+	conns logc.KV[connKey, connValue]
+	peers logc.KV[peerKey, peerValue]
+
+	peersCache  map[cacheKey][]*pbs.ServerPeer
+	peersOffset int64
+	peersMu     sync.RWMutex
 }
 
-func (s *clientServer) put(fwd model.Forward, role model.Role, id ksuid.KSUID, peer *pbs.ClientPeer) error {
-	return s.clients.Put(clientKey{fwd, role, id}, clientValue{peer})
+func (s *clientServer) connected(id ksuid.KSUID, auth ClientAuthentication, remote net.Addr) error {
+	return s.conns.Put(connKey{id}, connValue{Token: auth.String(), Addr: remote.String()})
 }
 
-func (s *clientServer) del(fwd model.Forward, role model.Role, id ksuid.KSUID) error {
-	return s.clients.Del(clientKey{fwd, role, id})
+func (s *clientServer) disconnected(id ksuid.KSUID) error {
+	return s.conns.Del(connKey{id})
 }
 
-func (s *clientServer) get(fwd model.Forward, role model.Role) ([]*pbs.ServerPeer, int64) {
-	s.clientsMu.RLock()
-	defer s.clientsMu.RUnlock()
+func (s *clientServer) announce(fwd model.Forward, role model.Role, id ksuid.KSUID, peer *pbs.ClientPeer) error {
+	return s.peers.Put(peerKey{fwd, role, id}, peerValue{peer})
+}
 
-	return s.clientsCache[cacheKey{fwd, role}], s.clientsOffset
+func (s *clientServer) revoke(fwd model.Forward, role model.Role, id ksuid.KSUID) error {
+	return s.peers.Del(peerKey{fwd, role, id})
+}
+
+func (s *clientServer) announcements(fwd model.Forward, role model.Role) ([]*pbs.ServerPeer, int64) {
+	s.peersMu.RLock()
+	defer s.peersMu.RUnlock()
+
+	return s.peersCache[cacheKey{fwd, role}], s.peersOffset
 }
 
 func (s *clientServer) listen(ctx context.Context, fwd model.Forward, role model.Role, notify func(peers []*pbs.ServerPeer) error) error {
-	peers, offset := s.get(fwd, role)
+	peers, offset := s.announcements(fwd, role)
 	if len(peers) > 0 {
 		if err := notify(peers); err != nil {
 			return err
@@ -123,7 +142,7 @@ func (s *clientServer) listen(ctx context.Context, fwd model.Forward, role model
 	}
 
 	for {
-		msgs, nextOffset, err := s.clients.Consume(ctx, offset)
+		msgs, nextOffset, err := s.peers.Consume(ctx, offset)
 		if err != nil {
 			return err
 		}
@@ -165,20 +184,20 @@ func (s *clientServer) listen(ctx context.Context, fwd model.Forward, role model
 }
 
 func (s *clientServer) run(ctx context.Context) error {
-	update := func(msg logc.Message[clientKey, clientValue]) error {
-		s.clientsMu.Lock()
-		defer s.clientsMu.Unlock()
+	update := func(msg logc.Message[peerKey, peerValue]) error {
+		s.peersMu.Lock()
+		defer s.peersMu.Unlock()
 
 		key := cacheKey{msg.Key.Forward, msg.Key.Role}
-		peers := s.clientsCache[key]
+		peers := s.peersCache[key]
 		if msg.Delete {
 			peers = slices.DeleteFunc(peers, func(peer *pbs.ServerPeer) bool {
 				return peer.Id == msg.Key.ID.String()
 			})
 			if len(peers) == 0 {
-				delete(s.clientsCache, key)
+				delete(s.peersCache, key)
 			} else {
-				s.clientsCache[key] = peers
+				s.peersCache[key] = peers
 			}
 		} else {
 			peer := &pbs.ServerPeer{
@@ -192,19 +211,19 @@ func (s *clientServer) run(ctx context.Context) error {
 			} else {
 				peers = append(peers, peer)
 			}
-			s.clientsCache[key] = peers
+			s.peersCache[key] = peers
 		}
 
-		s.clientsOffset = msg.Offset + 1
+		s.peersOffset = msg.Offset + 1
 		return nil
 	}
 
 	for {
-		s.clientsMu.RLock()
-		offset := s.clientsOffset
-		s.clientsMu.RUnlock()
+		s.peersMu.RLock()
+		offset := s.peersOffset
+		s.peersMu.RUnlock()
 
-		msgs, nextOffset, err := s.clients.Consume(ctx, offset)
+		msgs, nextOffset, err := s.peers.Consume(ctx, offset)
 		if err != nil {
 			return err
 		}
@@ -215,9 +234,9 @@ func (s *clientServer) run(ctx context.Context) error {
 			}
 		}
 
-		s.clientsMu.Lock()
-		s.clientsOffset = nextOffset
-		s.clientsMu.Unlock()
+		s.peersMu.Lock()
+		s.peersOffset = nextOffset
+		s.peersMu.Unlock()
 	}
 }
 
@@ -261,6 +280,9 @@ func (c *clientConn) runErr(ctx context.Context) error {
 		c.id = id
 		c.logger = c.logger.With("client-id", id)
 	}
+
+	c.server.connected(c.id, c.auth, c.conn.RemoteAddr())
+	defer c.server.disconnected(c.id)
 
 	for {
 		stream, err := c.conn.AcceptStream(ctx)
@@ -422,10 +444,10 @@ func (s *clientStream) announce(ctx context.Context, req *pbs.Request_Announce) 
 		return err
 	}
 
-	if err := s.conn.server.put(fwd, role, s.conn.id, req.Peer); err != nil {
+	if err := s.conn.server.announce(fwd, role, s.conn.id, req.Peer); err != nil {
 		return err
 	}
-	defer s.conn.server.del(fwd, role, s.conn.id)
+	defer s.conn.server.revoke(fwd, role, s.conn.id)
 
 	g, ctx := errgroup.WithContext(ctx)
 
@@ -450,7 +472,7 @@ func (s *clientStream) announce(ctx context.Context, req *pbs.Request_Announce) 
 				return err
 			}
 
-			if err := s.conn.server.put(fwd, role, s.conn.id, req.Announce.Peer); err != nil {
+			if err := s.conn.server.announce(fwd, role, s.conn.id, req.Announce.Peer); err != nil {
 				return err
 			}
 		}
