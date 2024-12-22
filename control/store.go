@@ -15,7 +15,7 @@ import (
 type Stores interface {
 	Config() (logc.KV[configKey, configValue], error)
 
-	ClientConns() (logc.KV[connKey, connValue], error)
+	ClientConns() (logc.KV[ConnKey, ConnValue], error)
 	ClientPeers() (logc.KV[peerKey, peerValue], error)
 
 	RelayClients() (logc.KV[relayClientKey, relayClientValue], error)
@@ -43,8 +43,8 @@ func (f *fileStores) Config() (logc.KV[configKey, configValue], error) {
 	return logc.NewKV[configKey, configValue](filepath.Join(f.dir, "config"))
 }
 
-func (f *fileStores) ClientConns() (logc.KV[connKey, connValue], error) {
-	return logc.NewKV[connKey, connValue](filepath.Join(f.dir, "conns"))
+func (f *fileStores) ClientConns() (logc.KV[ConnKey, ConnValue], error) {
+	return logc.NewKV[ConnKey, ConnValue](filepath.Join(f.dir, "conns"))
 }
 
 func (f *fileStores) ClientPeers() (logc.KV[peerKey, peerValue], error) {
@@ -76,11 +76,11 @@ type configValue struct {
 	Bytes  []byte `json:"bytes,omitempty"`
 }
 
-type connKey struct {
+type ConnKey struct {
 	ID ksuid.KSUID `json:"id"` // TODO consider using the server cert key
 }
 
-type connValue struct {
+type ConnValue struct {
 	Token string `json:"token"`
 	Addr  string `json:"addr"`
 }

@@ -102,7 +102,7 @@ type clientServer struct {
 
 	clientSecretKey [32]byte
 
-	conns logc.KV[connKey, connValue]
+	conns logc.KV[ConnKey, ConnValue]
 	peers logc.KV[peerKey, peerValue]
 
 	peersCache  map[cacheKey][]*pbs.ServerPeer
@@ -111,11 +111,11 @@ type clientServer struct {
 }
 
 func (s *clientServer) connected(id ksuid.KSUID, auth ClientAuthentication, remote net.Addr) error {
-	return s.conns.Put(connKey{id}, connValue{Token: auth.String(), Addr: remote.String()})
+	return s.conns.Put(ConnKey{id}, ConnValue{Token: auth.String(), Addr: remote.String()})
 }
 
 func (s *clientServer) disconnected(id ksuid.KSUID) error {
-	return s.conns.Del(connKey{id})
+	return s.conns.Del(ConnKey{id})
 }
 
 func (s *clientServer) announce(fwd model.Forward, role model.Role, id ksuid.KSUID, peer *pbs.ClientPeer) error {
