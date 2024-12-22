@@ -66,7 +66,7 @@ func NewServer(opts ...ServerOption) (*Server, error) {
 		ClientAuth: cfg.clientAuth,
 		RelayAuth:  selfhosted.NewRelayAuthenticator(relayControlToken),
 		Logger:     cfg.logger,
-		Dir:        filepath.Join(cfg.dir, "control"),
+		Stores:     control.NewFileStores(filepath.Join(cfg.dir, "control")),
 	})
 
 	controlCAs := x509.NewCertPool()
@@ -75,7 +75,7 @@ func NewServer(opts ...ServerOption) (*Server, error) {
 		Addr:     cfg.relayAddr,
 		Hostport: model.HostPort{Host: cfg.relayHostname, Port: cfg.relayAddr.AddrPort().Port()},
 		Logger:   cfg.logger,
-		Dir:      filepath.Join(cfg.dir, "relay"),
+		Stores:   relay.NewFileStores(filepath.Join(cfg.dir, "relay")),
 
 		ControlAddr:  cfg.controlAddr,
 		ControlHost:  "localhost",

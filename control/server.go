@@ -5,10 +5,8 @@ import (
 	"crypto/tls"
 	"log/slog"
 	"net"
-	"path/filepath"
 	"time"
 
-	"github.com/keihaya-com/connet/logc"
 	"github.com/klev-dev/kleverr"
 	"github.com/quic-go/quic-go"
 	"golang.org/x/sync/errgroup"
@@ -19,12 +17,12 @@ type Config struct {
 	Cert       tls.Certificate
 	ClientAuth ClientAuthenticator
 	RelayAuth  RelayAuthenticator
+	Stores     Stores
 	Logger     *slog.Logger
-	Dir        string
 }
 
 func NewServer(cfg Config) (*Server, error) {
-	config, err := logc.NewKV[configKey, configValue](filepath.Join(cfg.Dir, "config"))
+	config, err := cfg.Stores.Config()
 	if err != nil {
 		return nil, err
 	}
@@ -38,13 +36,13 @@ func NewServer(cfg Config) (*Server, error) {
 		logger: cfg.Logger.With("control", cfg.Addr),
 	}
 
-	relays, err := newRelayServer(cfg.RelayAuth, config, cfg.Dir, cfg.Logger)
+	relays, err := newRelayServer(cfg.RelayAuth, config, cfg.Stores, cfg.Logger)
 	if err != nil {
 		return nil, err
 	}
 	s.relays = relays
 
-	clSrv, err := newClientServer(cfg.ClientAuth, s.relays, config, cfg.Dir, cfg.Logger)
+	clSrv, err := newClientServer(cfg.ClientAuth, s.relays, config, cfg.Stores, cfg.Logger)
 	if err != nil {
 		return nil, err
 	}
@@ -119,17 +117,4 @@ func (s *Server) runListener(ctx context.Context) error {
 			conn.CloseWithError(1, "unknown protocol")
 		}
 	}
-}
-
-type configKey string
-
-var (
-	configServerID           configKey = "server-id"
-	configServerClientSecret configKey = "server-client-secret"
-)
-
-type configValue struct {
-	Int64  int64  `json:"int64,omitempty"`
-	String string `json:"string,omitempty"`
-	Bytes  []byte `json:"bytes,omitempty"`
 }

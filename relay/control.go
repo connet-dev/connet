@@ -7,7 +7,6 @@ import (
 	"errors"
 	"log/slog"
 	"net"
-	"path/filepath"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -27,7 +26,7 @@ import (
 type controlClient struct {
 	hostport model.HostPort
 	root     *certc.Cert
-	dir      string
+	stores   Stores
 
 	controlAddr    *net.UDPAddr
 	controlToken   string
@@ -55,16 +54,15 @@ type controlServerState struct {
 }
 
 func newControlServerState(parent *controlClient, id string) (*controlServerState, error) {
-	serverDir := filepath.Join(parent.dir, id)
-	config, err := logc.NewKV[configKey, configValue](filepath.Join(serverDir, "config"))
+	config, err := parent.stores.Config(id)
 	if err != nil {
 		return nil, err
 	}
-	clients, err := logc.NewKV[clientKey, clientValue](filepath.Join(serverDir, "clients"))
+	clients, err := parent.stores.Clients(id)
 	if err != nil {
 		return nil, err
 	}
-	servers, err := logc.NewKV[serverKey, serverValue](filepath.Join(serverDir, "servers"))
+	servers, err := parent.stores.Servers(id)
 	if err != nil {
 		return nil, err
 	}

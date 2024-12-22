@@ -18,7 +18,7 @@ type Config struct {
 	Addr     *net.UDPAddr
 	Hostport model.HostPort
 	Logger   *slog.Logger
-	Dir      string
+	Stores   Stores
 
 	ControlAddr  *net.UDPAddr
 	ControlHost  string
@@ -38,7 +38,7 @@ func NewServer(cfg Config) (*Server, error) {
 		control: &controlClient{
 			hostport: cfg.Hostport,
 			root:     root,
-			dir:      cfg.Dir,
+			stores:   cfg.Stores,
 
 			controlAddr:  cfg.ControlAddr,
 			controlToken: cfg.ControlToken,

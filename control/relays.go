@@ -6,7 +6,6 @@ import (
 	"errors"
 	"log/slog"
 	"maps"
-	"path/filepath"
 	"sync"
 
 	"github.com/keihaya-com/connet/certc"
@@ -41,18 +40,23 @@ type relayServer struct {
 	forwardsMu     sync.RWMutex
 }
 
-func newRelayServer(auth RelayAuthenticator, config logc.KV[configKey, configValue], dir string, logger *slog.Logger) (*relayServer, error) {
-	relayClients, err := logc.NewKV[relayClientKey, relayClientValue](filepath.Join(dir, "relay-clients"))
+func newRelayServer(
+	auth RelayAuthenticator,
+	config logc.KV[configKey, configValue],
+	stores Stores,
+	logger *slog.Logger,
+) (*relayServer, error) {
+	relayClients, err := stores.RelayClients()
 	if err != nil {
 		return nil, err
 	}
 
-	relayServers, err := logc.NewKV[relayServerKey, relayServerValue](filepath.Join(dir, "relay-servers"))
+	relayServers, err := stores.RelayServers()
 	if err != nil {
 		return nil, err
 	}
 
-	relayServerOffsets, err := logc.NewKV[model.HostPort, int64](filepath.Join(dir, "relay-server-offsets"))
+	relayServerOffsets, err := stores.RelayServerOffsets()
 	if err != nil {
 		return nil, err
 	}

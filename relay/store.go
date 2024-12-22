@@ -3,10 +3,58 @@ package relay
 import (
 	"crypto/x509"
 	"encoding/json"
+	"os"
+	"path/filepath"
 
 	"github.com/keihaya-com/connet/certc"
+	"github.com/keihaya-com/connet/logc"
 	"github.com/keihaya-com/connet/model"
 )
+
+type Stores interface {
+	Config(sid string) (logc.KV[configKey, configValue], error)
+	Clients(sid string) (logc.KV[clientKey, clientValue], error)
+	Servers(sid string) (logc.KV[serverKey, serverValue], error)
+}
+
+func NewFileStores(dir string) Stores {
+	return &fileStores{dir}
+}
+
+func NewTmpFileStores() (Stores, error) {
+	dir, err := os.MkdirTemp("", "connet-relay-")
+	if err != nil {
+		return nil, err
+	}
+	return NewFileStores(dir), nil
+}
+
+type fileStores struct {
+	dir string
+}
+
+func (f *fileStores) Config(sid string) (logc.KV[configKey, configValue], error) {
+	return logc.NewKV[configKey, configValue](filepath.Join(f.dir, sid, "config"))
+}
+
+func (f *fileStores) Clients(sid string) (logc.KV[clientKey, clientValue], error) {
+	return logc.NewKV[clientKey, clientValue](filepath.Join(f.dir, sid, "clients"))
+}
+
+func (f *fileStores) Servers(sid string) (logc.KV[serverKey, serverValue], error) {
+	return logc.NewKV[serverKey, serverValue](filepath.Join(f.dir, sid, "servers"))
+}
+
+type configKey string
+
+var (
+	configClientsStreamOffset configKey = "clients-stream-offset"
+	configClientsLogOffset    configKey = "clients-log-offset"
+)
+
+type configValue struct {
+	Int64 int64 `json:"int64,omitempty"`
+}
 
 type clientKey struct {
 	Forward model.Forward `json:"forward"`
@@ -107,15 +155,4 @@ type serverClientKey struct {
 type serverClientValue struct {
 	Role  model.Role  `json:"role"`
 	Value clientValue `json:"value"`
-}
-
-type configKey string
-
-var (
-	configClientsStreamOffset configKey = "clients-stream-offset"
-	configClientsLogOffset    configKey = "clients-log-offset"
-)
-
-type configValue struct {
-	Int64 int64 `json:"int64,omitempty"`
 }

@@ -6,7 +6,6 @@ import (
 	"crypto/x509"
 	"io"
 	"log/slog"
-	"path/filepath"
 	"slices"
 	"sync"
 
@@ -39,10 +38,11 @@ func newClientServer(
 	auth ClientAuthenticator,
 	relays ClientRelays,
 	config logc.KV[configKey, configValue],
-	dir string,
+	stores Stores,
 	logger *slog.Logger,
 ) (*clientServer, error) {
-	clients, err := logc.NewKV[clientKey, clientValue](filepath.Join(dir, "clients"))
+	// TODO separate peering from connected clients
+	clients, err := stores.ClientPeers()
 	if err != nil {
 		return nil, err
 	}
