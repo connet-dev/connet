@@ -12,9 +12,9 @@ import (
 )
 
 type Stores interface {
-	Config(sid string) (logc.KV[configKey, configValue], error)
-	Clients(sid string) (logc.KV[clientKey, clientValue], error)
-	Servers(sid string) (logc.KV[serverKey, serverValue], error)
+	Config(sid string) (logc.KV[ConfigKey, ConfigValue], error)
+	Clients(sid string) (logc.KV[ClientKey, ClientValue], error)
+	Servers(sid string) (logc.KV[ServerKey, ServerValue], error)
 }
 
 func NewFileStores(dir string) Stores {
@@ -33,64 +33,64 @@ type fileStores struct {
 	dir string
 }
 
-func (f *fileStores) Config(sid string) (logc.KV[configKey, configValue], error) {
-	return logc.NewKV[configKey, configValue](filepath.Join(f.dir, sid, "config"))
+func (f *fileStores) Config(sid string) (logc.KV[ConfigKey, ConfigValue], error) {
+	return logc.NewKV[ConfigKey, ConfigValue](filepath.Join(f.dir, sid, "config"))
 }
 
-func (f *fileStores) Clients(sid string) (logc.KV[clientKey, clientValue], error) {
-	return logc.NewKV[clientKey, clientValue](filepath.Join(f.dir, sid, "clients"))
+func (f *fileStores) Clients(sid string) (logc.KV[ClientKey, ClientValue], error) {
+	return logc.NewKV[ClientKey, ClientValue](filepath.Join(f.dir, sid, "clients"))
 }
 
-func (f *fileStores) Servers(sid string) (logc.KV[serverKey, serverValue], error) {
-	return logc.NewKV[serverKey, serverValue](filepath.Join(f.dir, sid, "servers"))
+func (f *fileStores) Servers(sid string) (logc.KV[ServerKey, ServerValue], error) {
+	return logc.NewKV[ServerKey, ServerValue](filepath.Join(f.dir, sid, "servers"))
 }
 
-type configKey string
+type ConfigKey string
 
 var (
-	configClientsStreamOffset configKey = "clients-stream-offset"
-	configClientsLogOffset    configKey = "clients-log-offset"
+	configClientsStreamOffset ConfigKey = "clients-stream-offset"
+	configClientsLogOffset    ConfigKey = "clients-log-offset"
 )
 
-type configValue struct {
+type ConfigValue struct {
 	Int64 int64 `json:"int64,omitempty"`
 }
 
-type clientKey struct {
+type ClientKey struct {
 	Forward model.Forward `json:"forward"`
 	Role    model.Role    `json:"role"`
 	Key     certc.Key     `json:"key"`
 }
 
-type clientValue struct {
+type ClientValue struct {
 	Cert *x509.Certificate `json:"cert"`
 }
 
-func (v clientValue) MarshalJSON() ([]byte, error) {
+func (v ClientValue) MarshalJSON() ([]byte, error) {
 	return certc.MarshalJSONCert(v.Cert)
 }
 
-func (v *clientValue) UnmarshalJSON(b []byte) error {
+func (v *ClientValue) UnmarshalJSON(b []byte) error {
 	cert, err := certc.UnmarshalJSONCert(b)
 	if err != nil {
 		return err
 	}
 
-	*v = clientValue{cert}
+	*v = ClientValue{cert}
 	return nil
 }
 
-type serverKey struct {
+type ServerKey struct {
 	Forward model.Forward `json:"forward"`
 }
 
-type serverValue struct {
+type ServerValue struct {
 	Name    string                          `json:"name"`
 	Cert    *certc.Cert                     `json:"cert"`
-	Clients map[serverClientKey]clientValue `json:"clients"`
+	Clients map[serverClientKey]ClientValue `json:"clients"`
 }
 
-func (v serverValue) MarshalJSON() ([]byte, error) {
+func (v ServerValue) MarshalJSON() ([]byte, error) {
 	cert, key, err := v.Cert.EncodeToMemory()
 	if err != nil {
 		return nil, err
@@ -117,7 +117,7 @@ func (v serverValue) MarshalJSON() ([]byte, error) {
 	return json.Marshal(s)
 }
 
-func (v *serverValue) UnmarshalJSON(b []byte) error {
+func (v *ServerValue) UnmarshalJSON(b []byte) error {
 	s := struct {
 		Name    string              `json:"name"`
 		Cert    []byte              `json:"cert"`
@@ -133,10 +133,10 @@ func (v *serverValue) UnmarshalJSON(b []byte) error {
 		return err
 	}
 
-	sv := serverValue{
+	sv := ServerValue{
 		Name:    s.Name,
 		Cert:    cert,
-		Clients: map[serverClientKey]clientValue{},
+		Clients: map[serverClientKey]ClientValue{},
 	}
 
 	for _, cl := range s.Clients {
@@ -154,5 +154,5 @@ type serverClientKey struct {
 
 type serverClientValue struct {
 	Role  model.Role  `json:"role"`
-	Value clientValue `json:"value"`
+	Value ClientValue `json:"value"`
 }

@@ -40,7 +40,7 @@ type ClientRelays interface {
 func newClientServer(
 	auth ClientAuthenticator,
 	relays ClientRelays,
-	config logc.KV[configKey, configValue],
+	config logc.KV[ConfigKey, ConfigValue],
 	stores Stores,
 	logger *slog.Logger,
 ) (*clientServer, error) {
@@ -69,12 +69,12 @@ func newClientServer(
 		})
 	}
 
-	serverClientSecret, err := config.GetOrInit(configServerClientSecret, func(ck configKey) (configValue, error) {
+	serverClientSecret, err := config.GetOrInit(configServerClientSecret, func(ck ConfigKey) (ConfigValue, error) {
 		privateKey := [32]byte{}
 		if _, err := io.ReadFull(rand.Reader, privateKey[:]); err != nil {
-			return configValue{}, err
+			return ConfigValue{}, err
 		}
-		return configValue{Bytes: privateKey[:]}, nil
+		return ConfigValue{Bytes: privateKey[:]}, nil
 	})
 
 	s := &clientServer{
@@ -103,7 +103,7 @@ type clientServer struct {
 	clientSecretKey [32]byte
 
 	conns logc.KV[ConnKey, ConnValue]
-	peers logc.KV[peerKey, peerValue]
+	peers logc.KV[PeerKey, PeerValue]
 
 	peersCache  map[cacheKey][]*pbs.ServerPeer
 	peersOffset int64
@@ -119,11 +119,11 @@ func (s *clientServer) disconnected(id ksuid.KSUID) error {
 }
 
 func (s *clientServer) announce(fwd model.Forward, role model.Role, id ksuid.KSUID, peer *pbs.ClientPeer) error {
-	return s.peers.Put(peerKey{fwd, role, id}, peerValue{peer})
+	return s.peers.Put(PeerKey{fwd, role, id}, PeerValue{peer})
 }
 
 func (s *clientServer) revoke(fwd model.Forward, role model.Role, id ksuid.KSUID) error {
-	return s.peers.Del(peerKey{fwd, role, id})
+	return s.peers.Del(PeerKey{fwd, role, id})
 }
 
 func (s *clientServer) announcements(fwd model.Forward, role model.Role) ([]*pbs.ServerPeer, int64) {
@@ -184,7 +184,7 @@ func (s *clientServer) listen(ctx context.Context, fwd model.Forward, role model
 }
 
 func (s *clientServer) run(ctx context.Context) error {
-	update := func(msg logc.Message[peerKey, peerValue]) error {
+	update := func(msg logc.Message[PeerKey, PeerValue]) error {
 		s.peersMu.Lock()
 		defer s.peersMu.Unlock()
 

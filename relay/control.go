@@ -41,9 +41,9 @@ type controlServerState struct {
 	id     string
 	parent *controlClient
 
-	config  logc.KV[configKey, configValue]
-	clients logc.KV[clientKey, clientValue]
-	servers logc.KV[serverKey, serverValue]
+	config  logc.KV[ConfigKey, ConfigValue]
+	clients logc.KV[ClientKey, ClientValue]
+	servers logc.KV[ServerKey, ServerValue]
 
 	serverByNameOffset int64
 	serverByName       map[string]*relayServer
@@ -81,12 +81,12 @@ func newControlServerState(parent *controlClient, id string) (*controlServerStat
 		serverByName[srv.name] = srv
 	}
 
-	clientsStreamOffset, err := config.GetOrDefault(configClientsStreamOffset, configValue{Int64: logc.OffsetOldest})
+	clientsStreamOffset, err := config.GetOrDefault(configClientsStreamOffset, ConfigValue{Int64: logc.OffsetOldest})
 	if err != nil {
 		return nil, err
 	}
 
-	clientsLogOffset, err := config.GetOrDefault(configClientsLogOffset, configValue{Int64: logc.OffsetOldest})
+	clientsLogOffset, err := config.GetOrDefault(configClientsLogOffset, ConfigValue{Int64: logc.OffsetOldest})
 	if err != nil {
 		return nil, err
 	}
@@ -112,7 +112,7 @@ func (s *controlServerState) getClientsStreamOffset() (int64, error) {
 }
 
 func (s *controlServerState) setClientsStreamOffset(v int64) error {
-	if err := s.config.Put(configClientsStreamOffset, configValue{Int64: v}); err != nil {
+	if err := s.config.Put(configClientsStreamOffset, ConfigValue{Int64: v}); err != nil {
 		return err
 	}
 	s.clientsStreamOffset = v
@@ -124,7 +124,7 @@ func (s *controlServerState) getClientsLogOffset() (int64, error) {
 }
 
 func (s *controlServerState) setClientsLogOffset(v int64) error {
-	if err := s.config.Put(configClientsLogOffset, configValue{Int64: v}); err != nil {
+	if err := s.config.Put(configClientsLogOffset, ConfigValue{Int64: v}); err != nil {
 		return err
 	}
 	s.clientsLogOffset = v
@@ -327,7 +327,7 @@ func (s *controlServerState) runClientsStream(ctx context.Context, conn quic.Con
 			}
 
 			for _, change := range resp.Changes {
-				key := clientKey{
+				key := ClientKey{
 					Forward: model.ForwardFromPB(change.Forward),
 					Role:    model.RoleFromPB(change.Role),
 					Key:     certc.NewKeyString(change.CertificateKey),
@@ -339,7 +339,7 @@ func (s *controlServerState) runClientsStream(ctx context.Context, conn quic.Con
 					if err != nil {
 						return err
 					}
-					if err := s.clients.Put(key, clientValue{cert}); err != nil {
+					if err := s.clients.Put(key, ClientValue{cert}); err != nil {
 						return err
 					}
 				case pbr.ChangeType_ChangeDel:
@@ -373,7 +373,7 @@ func (s *controlServerState) runClientsLog(ctx context.Context) error {
 		}
 
 		for _, msg := range msgs {
-			srvKey := serverKey{msg.Key.Forward}
+			srvKey := ServerKey{msg.Key.Forward}
 			clKey := serverClientKey{msg.Key.Role, msg.Key.Key}
 			sv, err := s.servers.Get(srvKey)
 
@@ -386,7 +386,7 @@ func (s *controlServerState) runClientsLog(ctx context.Context) error {
 				if err != nil {
 					return err
 				}
-				sv = serverValue{Name: serverName, Cert: serverRoot}
+				sv = ServerValue{Name: serverName, Cert: serverRoot}
 			case err != nil:
 				return err
 			}
@@ -395,7 +395,7 @@ func (s *controlServerState) runClientsLog(ctx context.Context) error {
 				delete(sv.Clients, clKey)
 			} else {
 				if sv.Clients == nil {
-					sv.Clients = map[serverClientKey]clientValue{}
+					sv.Clients = map[serverClientKey]ClientValue{}
 				}
 				sv.Clients[clKey] = msg.Value
 			}
@@ -439,7 +439,7 @@ func (s *controlServerState) runServersStream(ctx context.Context, conn quic.Con
 				return err
 			}
 
-			var msgs []logc.Message[serverKey, serverValue]
+			var msgs []logc.Message[ServerKey, ServerValue]
 			var nextOffset int64
 			if req.Offset == logc.OffsetOldest {
 				msgs, nextOffset, err = s.servers.Snapshot()
@@ -477,7 +477,7 @@ func (s *controlServerState) runServersStream(ctx context.Context, conn quic.Con
 }
 
 func (s *controlServerState) runServersLog(ctx context.Context) error {
-	upsert := func(msg logc.Message[serverKey, serverValue]) error {
+	upsert := func(msg logc.Message[ServerKey, ServerValue]) error {
 		serverName := msg.Value.Name
 
 		s.serverByNameMu.RLock()
@@ -504,7 +504,7 @@ func (s *controlServerState) runServersLog(ctx context.Context) error {
 		return nil
 	}
 
-	drop := func(msg logc.Message[serverKey, serverValue]) error {
+	drop := func(msg logc.Message[ServerKey, ServerValue]) error {
 		s.serverByNameMu.Lock()
 		defer s.serverByNameMu.Unlock()
 
@@ -546,7 +546,7 @@ type relayServer struct {
 	mu      sync.RWMutex
 }
 
-func newRelayServer(msg logc.Message[serverKey, serverValue]) (*relayServer, error) {
+func newRelayServer(msg logc.Message[ServerKey, ServerValue]) (*relayServer, error) {
 	srvCert, err := msg.Value.Cert.TLSCert()
 	if err != nil {
 		return nil, err
@@ -571,7 +571,7 @@ func newRelayServer(msg logc.Message[serverKey, serverValue]) (*relayServer, err
 	return srv, nil
 }
 
-func (s *relayServer) update(msg logc.Message[serverKey, serverValue]) error {
+func (s *relayServer) update(msg logc.Message[ServerKey, ServerValue]) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 

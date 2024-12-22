@@ -13,13 +13,13 @@ import (
 )
 
 type Stores interface {
-	Config() (logc.KV[configKey, configValue], error)
+	Config() (logc.KV[ConfigKey, ConfigValue], error)
 
 	ClientConns() (logc.KV[ConnKey, ConnValue], error)
-	ClientPeers() (logc.KV[peerKey, peerValue], error)
+	ClientPeers() (logc.KV[PeerKey, PeerValue], error)
 
-	RelayClients() (logc.KV[relayClientKey, relayClientValue], error)
-	RelayServers() (logc.KV[relayServerKey, relayServerValue], error)
+	RelayClients() (logc.KV[RelayClientKey, RelayClientValue], error)
+	RelayServers() (logc.KV[RelayServerKey, RelayServerValue], error)
 	RelayServerOffsets() (logc.KV[model.HostPort, int64], error)
 }
 
@@ -39,38 +39,38 @@ type fileStores struct {
 	dir string
 }
 
-func (f *fileStores) Config() (logc.KV[configKey, configValue], error) {
-	return logc.NewKV[configKey, configValue](filepath.Join(f.dir, "config"))
+func (f *fileStores) Config() (logc.KV[ConfigKey, ConfigValue], error) {
+	return logc.NewKV[ConfigKey, ConfigValue](filepath.Join(f.dir, "config"))
 }
 
 func (f *fileStores) ClientConns() (logc.KV[ConnKey, ConnValue], error) {
 	return logc.NewKV[ConnKey, ConnValue](filepath.Join(f.dir, "conns"))
 }
 
-func (f *fileStores) ClientPeers() (logc.KV[peerKey, peerValue], error) {
-	return logc.NewKV[peerKey, peerValue](filepath.Join(f.dir, "clients"))
+func (f *fileStores) ClientPeers() (logc.KV[PeerKey, PeerValue], error) {
+	return logc.NewKV[PeerKey, PeerValue](filepath.Join(f.dir, "clients"))
 }
 
-func (f *fileStores) RelayClients() (logc.KV[relayClientKey, relayClientValue], error) {
-	return logc.NewKV[relayClientKey, relayClientValue](filepath.Join(f.dir, "relay-clients"))
+func (f *fileStores) RelayClients() (logc.KV[RelayClientKey, RelayClientValue], error) {
+	return logc.NewKV[RelayClientKey, RelayClientValue](filepath.Join(f.dir, "relay-clients"))
 }
 
-func (f *fileStores) RelayServers() (logc.KV[relayServerKey, relayServerValue], error) {
-	return logc.NewKV[relayServerKey, relayServerValue](filepath.Join(f.dir, "relay-servers"))
+func (f *fileStores) RelayServers() (logc.KV[RelayServerKey, RelayServerValue], error) {
+	return logc.NewKV[RelayServerKey, RelayServerValue](filepath.Join(f.dir, "relay-servers"))
 }
 
 func (f *fileStores) RelayServerOffsets() (logc.KV[model.HostPort, int64], error) {
 	return logc.NewKV[model.HostPort, int64](filepath.Join(f.dir, "relay-server-offsets"))
 }
 
-type configKey string
+type ConfigKey string
 
 var (
-	configServerID           configKey = "server-id"
-	configServerClientSecret configKey = "server-client-secret"
+	configServerID           ConfigKey = "server-id"
+	configServerClientSecret ConfigKey = "server-client-secret"
 )
 
-type configValue struct {
+type ConfigValue struct {
 	Int64  int64  `json:"int64,omitempty"`
 	String string `json:"string,omitempty"`
 	Bytes  []byte `json:"bytes,omitempty"`
@@ -85,13 +85,13 @@ type ConnValue struct {
 	Addr  string `json:"addr"`
 }
 
-type peerKey struct {
+type PeerKey struct {
 	Forward model.Forward `json:"forward"`
 	Role    model.Role    `json:"role"`
 	ID      ksuid.KSUID   `json:"id"` // TODO consider using the server cert key
 }
 
-type peerValue struct {
+type PeerValue struct {
 	Peer *pbs.ClientPeer `json:"peer"`
 }
 
@@ -100,49 +100,49 @@ type cacheKey struct {
 	role    model.Role
 }
 
-type relayClientKey struct {
+type RelayClientKey struct {
 	Forward model.Forward `json:"forward"`
 	Role    model.Role    `json:"role"`
 	Key     certc.Key     `json:"key"`
 }
 
-type relayClientValue struct {
+type RelayClientValue struct {
 	Cert *x509.Certificate `json:"cert"`
 }
 
-func (v relayClientValue) MarshalJSON() ([]byte, error) {
+func (v RelayClientValue) MarshalJSON() ([]byte, error) {
 	return certc.MarshalJSONCert(v.Cert)
 }
 
-func (v *relayClientValue) UnmarshalJSON(b []byte) error {
+func (v *RelayClientValue) UnmarshalJSON(b []byte) error {
 	cert, err := certc.UnmarshalJSONCert(b)
 	if err != nil {
 		return err
 	}
 
-	*v = relayClientValue{cert}
+	*v = RelayClientValue{cert}
 	return nil
 }
 
-type relayServerKey struct {
+type RelayServerKey struct {
 	Forward  model.Forward  `json:"forward"`
 	Hostport model.HostPort `json:"hostport"`
 }
 
-type relayServerValue struct {
+type RelayServerValue struct {
 	Cert *x509.Certificate `json:"cert"`
 }
 
-func (v relayServerValue) MarshalJSON() ([]byte, error) {
+func (v RelayServerValue) MarshalJSON() ([]byte, error) {
 	return certc.MarshalJSONCert(v.Cert)
 }
 
-func (v *relayServerValue) UnmarshalJSON(b []byte) error {
+func (v *RelayServerValue) UnmarshalJSON(b []byte) error {
 	cert, err := certc.UnmarshalJSONCert(b)
 	if err != nil {
 		return err
 	}
 
-	*v = relayServerValue{cert}
+	*v = RelayServerValue{cert}
 	return nil
 }
