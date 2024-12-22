@@ -226,6 +226,8 @@ func (c *Client) reconnect(ctx context.Context, transport *quic.Transport, retok
 }
 
 func (c *Client) runConnection(ctx context.Context, conn quic.Connection) error {
+	defer conn.CloseWithError(0, "done")
+
 	g, ctx := errgroup.WithContext(ctx)
 
 	for _, dstServer := range c.dsts {
