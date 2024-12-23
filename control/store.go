@@ -87,8 +87,8 @@ type ClientConnKey struct {
 }
 
 type ClientConnValue struct {
-	Authenication []byte `json:"authentication"`
-	Addr          string `json:"addr"`
+	Authentication []byte `json:"authentication"`
+	Addr           string `json:"addr"`
 }
 
 type ClientPeerKey struct {

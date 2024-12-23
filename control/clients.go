@@ -116,7 +116,7 @@ func (s *clientServer) connected(id ksuid.KSUID, auth ClientAuthentication, remo
 	if err != nil {
 		return err
 	}
-	return s.conns.Put(ClientConnKey{id}, ClientConnValue{Authenication: authData, Addr: remote.String()})
+	return s.conns.Put(ClientConnKey{id}, ClientConnValue{Authentication: authData, Addr: remote.String()})
 }
 
 func (s *clientServer) disconnected(id ksuid.KSUID) error {
