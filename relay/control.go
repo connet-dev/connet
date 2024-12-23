@@ -195,7 +195,7 @@ func (s *controlClient) authenticate(serverName string, certs []*x509.Certificat
 
 func (s *controlClient) run(ctx context.Context, transport *quic.Transport) error {
 	s.logger.Info("connecting to control server", "addr", s.controlAddr)
-	conn, serverID, err := s.connect(ctx, transport)
+	conn, serverID, retoken, err := s.connect(ctx, transport, nil)
 	if err != nil {
 		return err
 	}
@@ -211,15 +211,15 @@ func (s *controlClient) run(ctx context.Context, transport *quic.Transport) erro
 		}
 
 		s.logger.Info("reconnecting to control server", "addr", s.controlAddr)
-		if conn, serverID, err = s.reconnect(ctx, transport); err != nil {
+		if conn, serverID, retoken, err = s.reconnect(ctx, transport, retoken); err != nil {
 			return err
 		}
 	}
 }
 
-var retConnect = kleverr.Ret2[quic.Connection, string]
+var retConnect = kleverr.Ret3[quic.Connection, string, []byte]
 
-func (s *controlClient) connect(ctx context.Context, transport *quic.Transport) (quic.Connection, string, error) {
+func (s *controlClient) connect(ctx context.Context, transport *quic.Transport, retoken []byte) (quic.Connection, string, []byte, error) {
 	conn, err := transport.Dial(ctx, s.controlAddr, s.controlTlsConf, &quic.Config{
 		KeepAlivePeriod: 25 * time.Second,
 	})
@@ -234,8 +234,9 @@ func (s *controlClient) connect(ctx context.Context, transport *quic.Transport) 
 	defer authStream.Close()
 
 	if err := pb.Write(authStream, &pbr.AuthenticateReq{
-		Token: s.controlToken,
-		Addr:  s.hostport.PB(),
+		Token:          s.controlToken,
+		Addr:           s.hostport.PB(),
+		ReconnectToken: retoken,
 	}); err != nil {
 		return retConnect(err)
 	}
@@ -248,10 +249,10 @@ func (s *controlClient) connect(ctx context.Context, transport *quic.Transport) 
 		return retConnect(resp.Error)
 	}
 
-	return conn, resp.ControlId, nil
+	return conn, resp.ControlId, resp.ReconnectToken, nil
 }
 
-func (c *controlClient) reconnect(ctx context.Context, transport *quic.Transport) (quic.Connection, string, error) {
+func (c *controlClient) reconnect(ctx context.Context, transport *quic.Transport, retoken []byte) (quic.Connection, string, []byte, error) {
 	d := netc.MinBackoff
 	t := time.NewTimer(d)
 	defer t.Stop()
@@ -259,14 +260,14 @@ func (c *controlClient) reconnect(ctx context.Context, transport *quic.Transport
 		c.logger.Debug("backoff wait", "d", d)
 		select {
 		case <-ctx.Done():
-			return nil, "", ctx.Err()
+			return nil, "", nil, ctx.Err()
 		case <-t.C:
 		}
 
-		if sess, serverID, err := c.connect(ctx, transport); err != nil {
+		if sess, serverID, retoken, err := c.connect(ctx, transport, retoken); err != nil {
 			c.logger.Debug("reconnect failed, retrying", "err", err)
 		} else {
-			return sess, serverID, nil
+			return sess, serverID, retoken, nil
 		}
 
 		d = netc.NextBackoff(d)

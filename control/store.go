@@ -15,12 +15,13 @@ import (
 type Stores interface {
 	Config() (logc.KV[ConfigKey, ConfigValue], error)
 
-	ClientConns() (logc.KV[ConnKey, ConnValue], error)
-	ClientPeers() (logc.KV[PeerKey, PeerValue], error)
+	ClientConns() (logc.KV[ClientConnKey, ClientConnValue], error)
+	ClientPeers() (logc.KV[ClientPeerKey, ClientPeerValue], error)
 
+	RelayConns() (logc.KV[RelayConnKey, RelayConnValue], error)
 	RelayClients() (logc.KV[RelayClientKey, RelayClientValue], error)
 	RelayServers() (logc.KV[RelayServerKey, RelayServerValue], error)
-	RelayServerOffsets() (logc.KV[model.HostPort, int64], error)
+	RelayServerOffsets() (logc.KV[RelayConnKey, int64], error)
 }
 
 func NewFileStores(dir string) Stores {
@@ -43,12 +44,16 @@ func (f *fileStores) Config() (logc.KV[ConfigKey, ConfigValue], error) {
 	return logc.NewKV[ConfigKey, ConfigValue](filepath.Join(f.dir, "config"))
 }
 
-func (f *fileStores) ClientConns() (logc.KV[ConnKey, ConnValue], error) {
-	return logc.NewKV[ConnKey, ConnValue](filepath.Join(f.dir, "conns"))
+func (f *fileStores) ClientConns() (logc.KV[ClientConnKey, ClientConnValue], error) {
+	return logc.NewKV[ClientConnKey, ClientConnValue](filepath.Join(f.dir, "client-conns"))
 }
 
-func (f *fileStores) ClientPeers() (logc.KV[PeerKey, PeerValue], error) {
-	return logc.NewKV[PeerKey, PeerValue](filepath.Join(f.dir, "clients"))
+func (f *fileStores) ClientPeers() (logc.KV[ClientPeerKey, ClientPeerValue], error) {
+	return logc.NewKV[ClientPeerKey, ClientPeerValue](filepath.Join(f.dir, "client-peers"))
+}
+
+func (f *fileStores) RelayConns() (logc.KV[RelayConnKey, RelayConnValue], error) {
+	return logc.NewKV[RelayConnKey, RelayConnValue](filepath.Join(f.dir, "relay-conns"))
 }
 
 func (f *fileStores) RelayClients() (logc.KV[RelayClientKey, RelayClientValue], error) {
@@ -59,8 +64,8 @@ func (f *fileStores) RelayServers() (logc.KV[RelayServerKey, RelayServerValue], 
 	return logc.NewKV[RelayServerKey, RelayServerValue](filepath.Join(f.dir, "relay-servers"))
 }
 
-func (f *fileStores) RelayServerOffsets() (logc.KV[model.HostPort, int64], error) {
-	return logc.NewKV[model.HostPort, int64](filepath.Join(f.dir, "relay-server-offsets"))
+func (f *fileStores) RelayServerOffsets() (logc.KV[RelayConnKey, int64], error) {
+	return logc.NewKV[RelayConnKey, int64](filepath.Join(f.dir, "relay-server-offsets"))
 }
 
 type ConfigKey string
@@ -68,6 +73,7 @@ type ConfigKey string
 var (
 	configServerID           ConfigKey = "server-id"
 	configServerClientSecret ConfigKey = "server-client-secret"
+	configServerRelaySecret  ConfigKey = "server-relay-secret"
 )
 
 type ConfigValue struct {
@@ -76,28 +82,37 @@ type ConfigValue struct {
 	Bytes  []byte `json:"bytes,omitempty"`
 }
 
-type ConnKey struct {
-	ID ksuid.KSUID `json:"id"` // TODO consider using the server cert key
+type ClientConnKey struct {
+	ID ksuid.KSUID `json:"id"`
 }
 
-type ConnValue struct {
-	Token string `json:"token"`
-	Addr  string `json:"addr"`
+type ClientConnValue struct {
+	Authenication ClientAuthentication `json:"authentication"`
+	Addr          string               `json:"addr"`
 }
 
-type PeerKey struct {
+type ClientPeerKey struct {
 	Forward model.Forward `json:"forward"`
 	Role    model.Role    `json:"role"`
 	ID      ksuid.KSUID   `json:"id"` // TODO consider using the server cert key
 }
 
-type PeerValue struct {
+type ClientPeerValue struct {
 	Peer *pbs.ClientPeer `json:"peer"`
 }
 
 type cacheKey struct {
 	forward model.Forward
 	role    model.Role
+}
+
+type RelayConnKey struct {
+	ID ksuid.KSUID `json:"id"`
+}
+
+type RelayConnValue struct {
+	Authentication RelayAuthentication `json:"authentication"`
+	Hostport       model.HostPort      `json:"hostport"`
 }
 
 type RelayClientKey struct {

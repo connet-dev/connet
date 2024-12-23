@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/rand"
 	"crypto/x509"
+	"encoding/json"
 	"io"
 	"log/slog"
 	"net"
@@ -29,7 +30,8 @@ type ClientAuthenticator interface {
 type ClientAuthentication interface {
 	Validate(fwd model.Forward, role model.Role) (model.Forward, error)
 
-	String() string
+	json.Marshaler
+	json.Unmarshaler
 }
 
 type ClientRelays interface {
@@ -69,7 +71,7 @@ func newClientServer(
 		})
 	}
 
-	serverClientSecret, err := config.GetOrInit(configServerClientSecret, func(ck ConfigKey) (ConfigValue, error) {
+	serverSecret, err := config.GetOrInit(configServerClientSecret, func(ck ConfigKey) (ConfigValue, error) {
 		privateKey := [32]byte{}
 		if _, err := io.ReadFull(rand.Reader, privateKey[:]); err != nil {
 			return ConfigValue{}, err
@@ -82,7 +84,7 @@ func newClientServer(
 		relays: relays,
 		logger: logger.With("server", "clients"),
 
-		clientSecretKey: [32]byte(serverClientSecret.Bytes),
+		clientSecretKey: [32]byte(serverSecret.Bytes),
 
 		conns: conns,
 		peers: peers,
@@ -102,8 +104,8 @@ type clientServer struct {
 
 	clientSecretKey [32]byte
 
-	conns logc.KV[ConnKey, ConnValue]
-	peers logc.KV[PeerKey, PeerValue]
+	conns logc.KV[ClientConnKey, ClientConnValue]
+	peers logc.KV[ClientPeerKey, ClientPeerValue]
 
 	peersCache  map[cacheKey][]*pbs.ServerPeer
 	peersOffset int64
@@ -111,19 +113,19 @@ type clientServer struct {
 }
 
 func (s *clientServer) connected(id ksuid.KSUID, auth ClientAuthentication, remote net.Addr) error {
-	return s.conns.Put(ConnKey{id}, ConnValue{Token: auth.String(), Addr: remote.String()})
+	return s.conns.Put(ClientConnKey{id}, ClientConnValue{Authenication: auth, Addr: remote.String()})
 }
 
 func (s *clientServer) disconnected(id ksuid.KSUID) error {
-	return s.conns.Del(ConnKey{id})
+	return s.conns.Del(ClientConnKey{id})
 }
 
 func (s *clientServer) announce(fwd model.Forward, role model.Role, id ksuid.KSUID, peer *pbs.ClientPeer) error {
-	return s.peers.Put(PeerKey{fwd, role, id}, PeerValue{peer})
+	return s.peers.Put(ClientPeerKey{fwd, role, id}, ClientPeerValue{peer})
 }
 
 func (s *clientServer) revoke(fwd model.Forward, role model.Role, id ksuid.KSUID) error {
-	return s.peers.Del(PeerKey{fwd, role, id})
+	return s.peers.Del(ClientPeerKey{fwd, role, id})
 }
 
 func (s *clientServer) announcements(fwd model.Forward, role model.Role) ([]*pbs.ServerPeer, int64) {
@@ -184,7 +186,7 @@ func (s *clientServer) listen(ctx context.Context, fwd model.Forward, role model
 }
 
 func (s *clientServer) run(ctx context.Context) error {
-	update := func(msg logc.Message[PeerKey, PeerValue]) error {
+	update := func(msg logc.Message[ClientPeerKey, ClientPeerValue]) error {
 		s.peersMu.Lock()
 		defer s.peersMu.Unlock()
 
@@ -281,7 +283,9 @@ func (c *clientConn) runErr(ctx context.Context) error {
 		c.logger = c.logger.With("client-id", id)
 	}
 
-	c.server.connected(c.id, c.auth, c.conn.RemoteAddr())
+	if err := c.server.connected(c.id, c.auth, c.conn.RemoteAddr()); err != nil {
+		return err
+	}
 	defer c.server.disconnected(c.id)
 
 	for {

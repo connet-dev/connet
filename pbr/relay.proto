@@ -8,11 +8,13 @@ option go_package = "github.com/keihaya-com/connet/pbr";
 message AuthenticateReq {
   string token = 1;
   shared.HostPort addr = 2;
+  bytes reconnect_token = 3;
 }
 
 message AuthenticateResp {
   shared.Error error = 1;
   string control_id = 2;
+  bytes reconnect_token = 3;
 }
 
 enum ChangeType {
