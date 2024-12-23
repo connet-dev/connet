@@ -1,8 +1,6 @@
 package selfhosted
 
 import (
-	"encoding/json"
-
 	"github.com/keihaya-com/connet/control"
 	"github.com/keihaya-com/connet/model"
 	"github.com/klev-dev/kleverr"
@@ -35,15 +33,6 @@ func (a *clientAuthentication) Validate(fwd model.Forward, role model.Role) (mod
 	return fwd, nil
 }
 
-func (a *clientAuthentication) MarshalJSON() ([]byte, error) {
-	return json.Marshal(a.token)
-}
-
-func (a *clientAuthentication) UnmarshalJSON(b []byte) error {
-	var s string
-	if err := json.Unmarshal(b, &s); err != nil {
-		return err
-	}
-	*a = clientAuthentication{s}
-	return nil
+func (a *clientAuthentication) MarshalBinary() (data []byte, err error) {
+	return []byte(a.token), nil
 }

@@ -1,8 +1,6 @@
 package selfhosted
 
 import (
-	"encoding/json"
-
 	"github.com/keihaya-com/connet/control"
 	"github.com/keihaya-com/connet/model"
 	"github.com/klev-dev/kleverr"
@@ -35,15 +33,6 @@ func (r *relayAuthentication) Allow(fwd model.Forward) bool {
 	return true
 }
 
-func (r *relayAuthentication) MarshalJSON() ([]byte, error) {
-	return json.Marshal(r.token)
-}
-
-func (r *relayAuthentication) UnmarshalJSON(b []byte) error {
-	var s string
-	if err := json.Unmarshal(b, &s); err != nil {
-		return err
-	}
-	*r = relayAuthentication{s}
-	return nil
+func (r *relayAuthentication) MarshalBinary() (data []byte, err error) {
+	return []byte(r.token), nil
 }

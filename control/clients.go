@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/rand"
 	"crypto/x509"
+	"encoding"
 	"io"
 	"log/slog"
 	"net"
@@ -28,6 +29,8 @@ type ClientAuthenticator interface {
 
 type ClientAuthentication interface {
 	Validate(fwd model.Forward, role model.Role) (model.Forward, error)
+
+	encoding.BinaryMarshaler
 }
 
 type ClientRelays interface {
@@ -109,7 +112,11 @@ type clientServer struct {
 }
 
 func (s *clientServer) connected(id ksuid.KSUID, auth ClientAuthentication, remote net.Addr) error {
-	return s.conns.Put(ClientConnKey{id}, ClientConnValue{Authenication: auth, Addr: remote.String()})
+	authData, err := auth.MarshalBinary()
+	if err != nil {
+		return err
+	}
+	return s.conns.Put(ClientConnKey{id}, ClientConnValue{Authenication: authData, Addr: remote.String()})
 }
 
 func (s *clientServer) disconnected(id ksuid.KSUID) error {

@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/rand"
 	"crypto/x509"
+	"encoding"
 	"errors"
 	"io"
 	"log/slog"
@@ -28,6 +29,8 @@ type RelayAuthenticator interface {
 
 type RelayAuthentication interface {
 	Allow(fwd model.Forward) bool
+
+	encoding.BinaryMarshaler
 }
 
 func newRelayServer(
@@ -286,7 +289,12 @@ func (c *relayConn) runErr(ctx context.Context) error {
 	}
 
 	key := RelayConnKey{ID: c.id}
-	if err := c.server.conns.Put(key, RelayConnValue{Authentication: c.auth, Hostport: c.hostport}); err != nil {
+	authData, err := c.auth.MarshalBinary()
+	if err != nil {
+		return err
+	}
+	value := RelayConnValue{Authentication: authData, Hostport: c.hostport}
+	if err := c.server.conns.Put(key, value); err != nil {
 		return err
 	}
 	defer c.server.conns.Del(key)
