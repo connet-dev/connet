@@ -130,7 +130,7 @@ func (s *clientServer) announcements(fwd model.Forward, role model.Role) ([]*pbs
 	s.peersMu.RLock()
 	defer s.peersMu.RUnlock()
 
-	return s.peersCache[cacheKey{fwd, role}], s.peersOffset
+	return slices.Clone(s.peersCache[cacheKey{fwd, role}]), s.peersOffset
 }
 
 func (s *clientServer) listen(ctx context.Context, fwd model.Forward, role model.Role, notify func(peers []*pbs.ServerPeer) error) error {
