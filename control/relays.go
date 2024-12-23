@@ -4,7 +4,6 @@ import (
 	"context"
 	"crypto/rand"
 	"crypto/x509"
-	"encoding/json"
 	"errors"
 	"io"
 	"log/slog"
@@ -29,9 +28,6 @@ type RelayAuthenticator interface {
 
 type RelayAuthentication interface {
 	Allow(fwd model.Forward) bool
-
-	json.Marshaler
-	json.Unmarshaler
 }
 
 func newRelayServer(

@@ -4,7 +4,6 @@ import (
 	"context"
 	"crypto/rand"
 	"crypto/x509"
-	"encoding/json"
 	"io"
 	"log/slog"
 	"net"
@@ -29,9 +28,6 @@ type ClientAuthenticator interface {
 
 type ClientAuthentication interface {
 	Validate(fwd model.Forward, role model.Role) (model.Forward, error)
-
-	json.Marshaler
-	json.Unmarshaler
 }
 
 type ClientRelays interface {
