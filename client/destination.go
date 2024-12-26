@@ -69,10 +69,14 @@ func (d *Destination) runActive(ctx context.Context) error {
 		d.logger.Debug("active conns", "len", len(active))
 		for peer, conn := range active {
 			if dc := d.conns[peer]; dc != nil {
-				// TODO update conn?
-				continue
+				if dc.conn == conn {
+					continue
+				}
+				dc.close()
+				delete(d.conns, peer)
 			}
-			dc := &destinationConn{d, peer, conn}
+
+			dc := newDestinationConn(d, peer, conn)
 			d.conns[peer] = dc
 			go dc.run(ctx)
 		}
@@ -91,22 +95,40 @@ type destinationConn struct {
 	dst  *Destination
 	peer peerConnKey
 	conn quic.Connection
+
+	closer chan struct{}
+}
+
+func newDestinationConn(dst *Destination, peer peerConnKey, conn quic.Connection) *destinationConn {
+	return &destinationConn{dst, peer, conn, make(chan struct{})}
 }
 
 func (d *destinationConn) run(ctx context.Context) {
-	for {
-		stream, err := d.conn.AcceptStream(ctx)
-		if err != nil {
-			d.dst.logger.Debug("accept failed", "peer", d.peer.id, "style", d.peer.style, "err", err)
-			return
+	g, ctx := errgroup.WithContext(ctx)
+
+	g.Go(func() error {
+		for {
+			stream, err := d.conn.AcceptStream(ctx)
+			if err != nil {
+				d.dst.logger.Debug("accept failed", "peer", d.peer.id, "style", d.peer.style, "err", err)
+				return err
+			}
+			d.dst.logger.Debug("accepted stream from", "peer", d.peer.id, "style", d.peer.style)
+			go d.dst.runDestination(ctx, stream)
 		}
-		d.dst.logger.Debug("accepted stream from", "peer", d.peer.id, "style", d.peer.style)
-		go d.dst.runDestination(ctx, stream)
+	})
+	g.Go(func() error {
+		<-d.closer
+		return errPeeringStop
+	})
+
+	if err := g.Wait(); err != nil {
+		d.dst.logger.Debug("error while running destination", "err", err)
 	}
 }
 
 func (d *destinationConn) close() {
-	d.conn.CloseWithError(1, "done")
+	close(d.closer)
 }
 
 func (d *Destination) runDestination(ctx context.Context, stream quic.Stream) {
