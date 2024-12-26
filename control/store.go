@@ -2,6 +2,7 @@ package control
 
 import (
 	"crypto/x509"
+	"encoding/json"
 	"os"
 	"path/filepath"
 
@@ -20,6 +21,7 @@ type Stores interface {
 
 	RelayConns() (logc.KV[RelayConnKey, RelayConnValue], error)
 	RelayClients() (logc.KV[RelayClientKey, RelayClientValue], error)
+	RelayForwards(id ksuid.KSUID) (logc.KV[RelayForwardKey, RelayForwardValue], error)
 	RelayServers() (logc.KV[RelayServerKey, RelayServerValue], error)
 	RelayServerOffsets() (logc.KV[RelayConnKey, int64], error)
 }
@@ -58,6 +60,10 @@ func (f *fileStores) RelayConns() (logc.KV[RelayConnKey, RelayConnValue], error)
 
 func (f *fileStores) RelayClients() (logc.KV[RelayClientKey, RelayClientValue], error) {
 	return logc.NewKV[RelayClientKey, RelayClientValue](filepath.Join(f.dir, "relay-clients"))
+}
+
+func (f *fileStores) RelayForwards(id ksuid.KSUID) (logc.KV[RelayForwardKey, RelayForwardValue], error) {
+	return logc.NewKV[RelayForwardKey, RelayForwardValue](filepath.Join(f.dir, "relay-forwards", id.String()))
 }
 
 func (f *fileStores) RelayServers() (logc.KV[RelayServerKey, RelayServerValue], error) {
@@ -139,25 +145,69 @@ func (v *RelayClientValue) UnmarshalJSON(b []byte) error {
 	return nil
 }
 
-type RelayServerKey struct {
-	Forward  model.Forward  `json:"forward"`
-	Hostport model.HostPort `json:"hostport"`
+type RelayForwardKey struct {
+	Forward model.Forward `json:"forward"`
 }
 
-type RelayServerValue struct {
+type RelayForwardValue struct {
 	Cert *x509.Certificate `json:"cert"`
 }
 
-func (v RelayServerValue) MarshalJSON() ([]byte, error) {
+func (v RelayForwardValue) MarshalJSON() ([]byte, error) {
 	return certc.MarshalJSONCert(v.Cert)
 }
 
-func (v *RelayServerValue) UnmarshalJSON(b []byte) error {
+func (v *RelayForwardValue) UnmarshalJSON(b []byte) error {
 	cert, err := certc.UnmarshalJSONCert(b)
 	if err != nil {
 		return err
 	}
 
-	*v = RelayServerValue{cert}
+	*v = RelayForwardValue{cert}
 	return nil
+}
+
+type RelayServerKey struct {
+	Forward model.Forward `json:"forward"`
+	RelayID ksuid.KSUID   `json:"relay_id"`
+}
+
+type RelayServerValue struct {
+	Hostport model.HostPort    `json:"hostport"`
+	Cert     *x509.Certificate `json:"cert"`
+}
+
+func (v RelayServerValue) MarshalJSON() ([]byte, error) {
+	s := struct {
+		Hostport model.HostPort `json:"hostport"`
+		Cert     []byte         `json:"cert"`
+	}{
+		Hostport: v.Hostport,
+		Cert:     v.Cert.Raw,
+	}
+	return json.Marshal(s)
+}
+
+func (v *RelayServerValue) UnmarshalJSON(b []byte) error {
+	s := struct {
+		Hostport model.HostPort `json:"hostport"`
+		Cert     []byte         `json:"cert"`
+	}{}
+
+	if err := json.Unmarshal(b, &s); err != nil {
+		return err
+	}
+
+	cert, err := x509.ParseCertificate(s.Cert)
+	if err != nil {
+		return err
+	}
+
+	*v = RelayServerValue{Hostport: s.Hostport, Cert: cert}
+	return nil
+}
+
+type relayCacheValue struct {
+	Hostport model.HostPort
+	Cert     *x509.Certificate
 }

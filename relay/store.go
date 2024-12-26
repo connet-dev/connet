@@ -12,9 +12,9 @@ import (
 )
 
 type Stores interface {
-	Config(sid string) (logc.KV[ConfigKey, ConfigValue], error)
-	Clients(sid string) (logc.KV[ClientKey, ClientValue], error)
-	Servers(sid string) (logc.KV[ServerKey, ServerValue], error)
+	Config() (logc.KV[ConfigKey, ConfigValue], error)
+	Clients() (logc.KV[ClientKey, ClientValue], error)
+	Servers() (logc.KV[ServerKey, ServerValue], error)
 }
 
 func NewFileStores(dir string) Stores {
@@ -33,27 +33,31 @@ type fileStores struct {
 	dir string
 }
 
-func (f *fileStores) Config(sid string) (logc.KV[ConfigKey, ConfigValue], error) {
-	return logc.NewKV[ConfigKey, ConfigValue](filepath.Join(f.dir, sid, "config"))
+func (f *fileStores) Config() (logc.KV[ConfigKey, ConfigValue], error) {
+	return logc.NewKV[ConfigKey, ConfigValue](filepath.Join(f.dir, "config"))
 }
 
-func (f *fileStores) Clients(sid string) (logc.KV[ClientKey, ClientValue], error) {
-	return logc.NewKV[ClientKey, ClientValue](filepath.Join(f.dir, sid, "clients"))
+func (f *fileStores) Clients() (logc.KV[ClientKey, ClientValue], error) {
+	return logc.NewKV[ClientKey, ClientValue](filepath.Join(f.dir, "clients"))
 }
 
-func (f *fileStores) Servers(sid string) (logc.KV[ServerKey, ServerValue], error) {
-	return logc.NewKV[ServerKey, ServerValue](filepath.Join(f.dir, sid, "servers"))
+func (f *fileStores) Servers() (logc.KV[ServerKey, ServerValue], error) {
+	return logc.NewKV[ServerKey, ServerValue](filepath.Join(f.dir, "servers"))
 }
 
 type ConfigKey string
 
 var (
+	configControlID           ConfigKey = "control-id"
+	configControlReconnect    ConfigKey = "control-reconnect"
 	configClientsStreamOffset ConfigKey = "clients-stream-offset"
 	configClientsLogOffset    ConfigKey = "clients-log-offset"
 )
 
 type ConfigValue struct {
-	Int64 int64 `json:"int64,omitempty"`
+	Int64  int64  `json:"int64,omitempty"`
+	String string `json:"string,omitempty"`
+	Bytes  []byte `json:"bytes,omitempty"`
 }
 
 type ClientKey struct {

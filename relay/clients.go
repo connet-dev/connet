@@ -26,6 +26,19 @@ type clientAuth struct {
 	source      bool
 }
 
+func newClientsServer(cfg Config) (*clientsServer, error) {
+	return &clientsServer{
+		tlsConf: &tls.Config{
+			ClientAuth: tls.RequireAndVerifyClientCert,
+			NextProtos: []string{"connet-relay"},
+		},
+
+		forwards: map[model.Forward]*forwardClients{},
+
+		logger: cfg.Logger.With("relay-clients", cfg.Hostport),
+	}, nil
+}
+
 type clientsServer struct {
 	tlsConf *tls.Config
 	auth    func(serverName string, certs []*x509.Certificate) *clientAuth

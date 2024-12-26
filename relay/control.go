@@ -26,20 +26,10 @@ import (
 type controlClient struct {
 	hostport model.HostPort
 	root     *certc.Cert
-	stores   Stores
 
 	controlAddr    *net.UDPAddr
 	controlToken   string
 	controlTlsConf *tls.Config
-
-	state atomic.Pointer[controlServerState]
-
-	logger *slog.Logger
-}
-
-type controlServerState struct {
-	id     string
-	parent *controlClient
 
 	config  logc.KV[ConfigKey, ConfigValue]
 	clients logc.KV[ClientKey, ClientValue]
@@ -51,18 +41,25 @@ type controlServerState struct {
 
 	clientsStreamOffset int64
 	clientsLogOffset    int64
+
+	logger *slog.Logger
 }
 
-func newControlServerState(parent *controlClient, id string) (*controlServerState, error) {
-	config, err := parent.stores.Config(id)
+func newControlClient(cfg Config) (*controlClient, error) {
+	root, err := certc.NewRoot()
 	if err != nil {
 		return nil, err
 	}
-	clients, err := parent.stores.Clients(id)
+
+	config, err := cfg.Stores.Config()
 	if err != nil {
 		return nil, err
 	}
-	servers, err := parent.stores.Servers(id)
+	clients, err := cfg.Stores.Clients()
+	if err != nil {
+		return nil, err
+	}
+	servers, err := cfg.Stores.Servers()
 	if err != nil {
 		return nil, err
 	}
@@ -91,9 +88,17 @@ func newControlServerState(parent *controlClient, id string) (*controlServerStat
 		return nil, err
 	}
 
-	return &controlServerState{
-		id:     id,
-		parent: parent,
+	return &controlClient{
+		hostport: cfg.Hostport,
+		root:     root,
+
+		controlAddr:  cfg.ControlAddr,
+		controlToken: cfg.ControlToken,
+		controlTlsConf: &tls.Config{
+			ServerName: cfg.ControlHost,
+			RootCAs:    cfg.ControlCAs,
+			NextProtos: []string{"connet-relays"},
+		},
 
 		config:  config,
 		clients: clients,
@@ -104,14 +109,16 @@ func newControlServerState(parent *controlClient, id string) (*controlServerStat
 
 		clientsStreamOffset: clientsStreamOffset.Int64,
 		clientsLogOffset:    clientsLogOffset.Int64,
+
+		logger: cfg.Logger.With("relay-control", cfg.Hostport),
 	}, nil
 }
 
-func (s *controlServerState) getClientsStreamOffset() (int64, error) {
+func (s *controlClient) getClientsStreamOffset() (int64, error) {
 	return s.clientsStreamOffset, nil
 }
 
-func (s *controlServerState) setClientsStreamOffset(v int64) error {
+func (s *controlClient) setClientsStreamOffset(v int64) error {
 	if err := s.config.Put(configClientsStreamOffset, ConfigValue{Int64: v}); err != nil {
 		return err
 	}
@@ -119,11 +126,11 @@ func (s *controlServerState) setClientsStreamOffset(v int64) error {
 	return nil
 }
 
-func (s *controlServerState) getClientsLogOffset() (int64, error) {
+func (s *controlClient) getClientsLogOffset() (int64, error) {
 	return s.clientsLogOffset, nil
 }
 
-func (s *controlServerState) setClientsLogOffset(v int64) error {
+func (s *controlClient) setClientsLogOffset(v int64) error {
 	if err := s.config.Put(configClientsLogOffset, ConfigValue{Int64: v}); err != nil {
 		return err
 	}
@@ -131,53 +138,15 @@ func (s *controlServerState) setClientsLogOffset(v int64) error {
 	return nil
 }
 
-func (s *controlServerState) getServer(name string) *relayServer {
+func (s *controlClient) getServer(name string) *relayServer {
 	s.serverByNameMu.RLock()
 	defer s.serverByNameMu.RUnlock()
 
 	return s.serverByName[name]
 }
 
-func (s *controlServerState) close() error {
-	var errs []error
-	errs = append(errs, s.servers.Close())
-	errs = append(errs, s.clients.Close())
-	errs = append(errs, s.config.Close())
-	return errors.Join(errs...)
-}
-
-func (s *controlClient) setServerID(serverID string) (*controlServerState, error) {
-	switch state := s.state.Load(); {
-	case state != nil && state.id == serverID:
-		// we've got the correct state, do nothing
-		s.logger.Info("same control server, resuming", "serverID", state.id)
-		return state, nil
-	case state != nil && state.id != serverID:
-		s.logger.Info("new control server, destroying state", "serverID", state.id)
-		if err := state.close(); err != nil {
-			return nil, err
-		}
-		fallthrough
-	default:
-		s.logger.Info("new control server, loading state", "serverID", serverID)
-		state, err := newControlServerState(s, serverID)
-		if err != nil {
-			return nil, err
-		}
-		s.state.Store(state)
-		return state, nil
-	}
-}
-
-func (s *controlClient) getByName(serverName string) *relayServer {
-	if state := s.state.Load(); state != nil {
-		return state.getServer(serverName)
-	}
-	return nil
-}
-
 func (s *controlClient) clientTLSConfig(chi *tls.ClientHelloInfo, base *tls.Config) (*tls.Config, error) {
-	if srv := s.getByName(chi.ServerName); srv != nil {
+	if srv := s.getServer(chi.ServerName); srv != nil {
 		cfg := base.Clone()
 		cfg.Certificates = srv.tls
 		cfg.ClientCAs = srv.cas.Load()
@@ -187,7 +156,7 @@ func (s *controlClient) clientTLSConfig(chi *tls.ClientHelloInfo, base *tls.Conf
 }
 
 func (s *controlClient) authenticate(serverName string, certs []*x509.Certificate) *clientAuth {
-	if srv := s.getByName(serverName); srv != nil {
+	if srv := s.getServer(serverName); srv != nil {
 		return srv.authenticate(certs)
 	}
 	return nil
@@ -195,13 +164,13 @@ func (s *controlClient) authenticate(serverName string, certs []*x509.Certificat
 
 func (s *controlClient) run(ctx context.Context, transport *quic.Transport) error {
 	s.logger.Info("connecting to control server", "addr", s.controlAddr)
-	conn, serverID, retoken, err := s.connect(ctx, transport, nil)
+	conn, err := s.connect(ctx, transport)
 	if err != nil {
 		return err
 	}
 
 	for {
-		if err := s.runConnection(ctx, conn, serverID); err != nil {
+		if err := s.runConnection(ctx, conn); err != nil {
 			switch {
 			case errors.Is(err, context.Canceled):
 				return err
@@ -211,15 +180,20 @@ func (s *controlClient) run(ctx context.Context, transport *quic.Transport) erro
 		}
 
 		s.logger.Info("reconnecting to control server", "addr", s.controlAddr)
-		if conn, serverID, retoken, err = s.reconnect(ctx, transport, retoken); err != nil {
+		if conn, err = s.reconnect(ctx, transport); err != nil {
 			return err
 		}
 	}
 }
 
-var retConnect = kleverr.Ret3[quic.Connection, string, []byte]
+var retConnect = kleverr.Ret1[quic.Connection]
 
-func (s *controlClient) connect(ctx context.Context, transport *quic.Transport, retoken []byte) (quic.Connection, string, []byte, error) {
+func (s *controlClient) connect(ctx context.Context, transport *quic.Transport) (quic.Connection, error) {
+	reconnConfig, err := s.config.GetOrDefault(configControlReconnect, ConfigValue{})
+	if err != nil {
+		return retConnect(err)
+	}
+
 	conn, err := transport.Dial(ctx, s.controlAddr, s.controlTlsConf, &quic.Config{
 		KeepAlivePeriod: 25 * time.Second,
 	})
@@ -236,7 +210,7 @@ func (s *controlClient) connect(ctx context.Context, transport *quic.Transport, 
 	if err := pb.Write(authStream, &pbr.AuthenticateReq{
 		Token:          s.controlToken,
 		Addr:           s.hostport.PB(),
-		ReconnectToken: retoken,
+		ReconnectToken: reconnConfig.Bytes,
 	}); err != nil {
 		return retConnect(err)
 	}
@@ -249,10 +223,24 @@ func (s *controlClient) connect(ctx context.Context, transport *quic.Transport, 
 		return retConnect(resp.Error)
 	}
 
-	return conn, resp.ControlId, resp.ReconnectToken, nil
+	controlIDConfig, err := s.config.GetOrDefault(configControlID, ConfigValue{})
+	if controlIDConfig.String != "" && controlIDConfig.String != resp.ControlId {
+		return nil, kleverr.Newf("unexpected server id, has: %s, resp: %s", controlIDConfig.String, resp.ControlId)
+	}
+	controlIDConfig.String = resp.ControlId
+	if err := s.config.Put(configControlID, controlIDConfig); err != nil {
+		return retConnect(err)
+	}
+
+	reconnConfig.Bytes = resp.ReconnectToken
+	if err := s.config.Put(configControlReconnect, reconnConfig); err != nil {
+		return retConnect(err)
+	}
+
+	return conn, nil
 }
 
-func (c *controlClient) reconnect(ctx context.Context, transport *quic.Transport, retoken []byte) (quic.Connection, string, []byte, error) {
+func (c *controlClient) reconnect(ctx context.Context, transport *quic.Transport) (quic.Connection, error) {
 	d := netc.MinBackoff
 	t := time.NewTimer(d)
 	defer t.Stop()
@@ -260,14 +248,14 @@ func (c *controlClient) reconnect(ctx context.Context, transport *quic.Transport
 		c.logger.Debug("backoff wait", "d", d)
 		select {
 		case <-ctx.Done():
-			return nil, "", nil, ctx.Err()
+			return nil, ctx.Err()
 		case <-t.C:
 		}
 
-		if sess, serverID, retoken, err := c.connect(ctx, transport, retoken); err != nil {
+		if conn, err := c.connect(ctx, transport); err != nil {
 			c.logger.Debug("reconnect failed, retrying", "err", err)
 		} else {
-			return sess, serverID, retoken, nil
+			return conn, nil
 		}
 
 		d = netc.NextBackoff(d)
@@ -275,25 +263,20 @@ func (c *controlClient) reconnect(ctx context.Context, transport *quic.Transport
 	}
 }
 
-func (s *controlClient) runConnection(ctx context.Context, conn quic.Connection, serverID string) error {
+func (s *controlClient) runConnection(ctx context.Context, conn quic.Connection) error {
 	defer conn.CloseWithError(0, "done")
-
-	state, err := s.setServerID(serverID)
-	if err != nil {
-		return err
-	}
 
 	g, ctx := errgroup.WithContext(ctx)
 
-	g.Go(func() error { return state.runClientsStream(ctx, conn) })
-	g.Go(func() error { return state.runClientsLog(ctx) })
-	g.Go(func() error { return state.runServersLog(ctx) })
-	g.Go(func() error { return state.runServersStream(ctx, conn) })
+	g.Go(func() error { return s.runClientsStream(ctx, conn) })
+	g.Go(func() error { return s.runClientsLog(ctx) })
+	g.Go(func() error { return s.runServersLog(ctx) })
+	g.Go(func() error { return s.runServersStream(ctx, conn) })
 
 	return g.Wait()
 }
 
-func (s *controlServerState) runClientsStream(ctx context.Context, conn quic.Connection) error {
+func (s *controlClient) runClientsStream(ctx context.Context, conn quic.Connection) error {
 	stream, err := conn.OpenStreamSync(ctx)
 	if err != nil {
 		return err
@@ -361,7 +344,7 @@ func (s *controlServerState) runClientsStream(ctx context.Context, conn quic.Con
 	return g.Wait()
 }
 
-func (s *controlServerState) runClientsLog(ctx context.Context) error {
+func (s *controlClient) runClientsLog(ctx context.Context) error {
 	for {
 		offset, err := s.getClientsLogOffset()
 		if err != nil {
@@ -381,7 +364,7 @@ func (s *controlServerState) runClientsLog(ctx context.Context) error {
 			switch {
 			case errors.Is(err, klevdb.ErrNotFound):
 				serverName := model.GenServerName("connet-relay")
-				serverRoot, err := s.parent.root.NewServer(certc.CertOpts{
+				serverRoot, err := s.root.NewServer(certc.CertOpts{
 					Domains: []string{serverName},
 				})
 				if err != nil {
@@ -418,7 +401,7 @@ func (s *controlServerState) runClientsLog(ctx context.Context) error {
 	}
 }
 
-func (s *controlServerState) runServersStream(ctx context.Context, conn quic.Connection) error {
+func (s *controlClient) runServersStream(ctx context.Context, conn quic.Connection) error {
 	stream, err := conn.AcceptStream(ctx)
 	if err != nil {
 		return err
@@ -444,10 +427,10 @@ func (s *controlServerState) runServersStream(ctx context.Context, conn quic.Con
 			var nextOffset int64
 			if req.Offset == logc.OffsetOldest {
 				msgs, nextOffset, err = s.servers.Snapshot()
-				s.parent.logger.Debug("sending initial control changes", "offset", nextOffset, "changes", len(msgs))
+				s.logger.Debug("sending initial control changes", "offset", nextOffset, "changes", len(msgs))
 			} else {
 				msgs, nextOffset, err = s.servers.Consume(ctx, req.Offset)
-				s.parent.logger.Debug("sending delta control changes", "offset", nextOffset, "changes", len(msgs))
+				s.logger.Debug("sending delta control changes", "offset", nextOffset, "changes", len(msgs))
 			}
 			if err != nil {
 				return err
@@ -457,7 +440,7 @@ func (s *controlServerState) runServersStream(ctx context.Context, conn quic.Con
 
 			for _, msg := range msgs {
 				var change = &pbr.ServersResp_Change{
-					Server: msg.Key.Forward.PB(),
+					Forward: msg.Key.Forward.PB(),
 				}
 				if msg.Delete {
 					change.Change = pbr.ChangeType_ChangeDel
@@ -477,7 +460,7 @@ func (s *controlServerState) runServersStream(ctx context.Context, conn quic.Con
 	return g.Wait()
 }
 
-func (s *controlServerState) runServersLog(ctx context.Context) error {
+func (s *controlClient) runServersLog(ctx context.Context) error {
 	upsert := func(msg logc.Message[ServerKey, ServerValue]) error {
 		serverName := msg.Value.Name
 

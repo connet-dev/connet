@@ -52,7 +52,7 @@ message ServersResp {
 
   message Change {
     ChangeType change = 1;
-    shared.Forward server = 2;
+    shared.Forward forward = 2;
     bytes server_certificate = 3;
   }
 }

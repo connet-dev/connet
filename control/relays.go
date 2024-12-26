@@ -64,14 +64,14 @@ func newRelayServer(
 		return nil, err
 	}
 
-	forwardsCache := map[model.Forward]map[model.HostPort]*x509.Certificate{}
+	forwardsCache := map[model.Forward]map[ksuid.KSUID]relayCacheValue{}
 	for _, msg := range forwardsMsgs {
 		srv := forwardsCache[msg.Key.Forward]
 		if srv == nil {
-			srv = map[model.HostPort]*x509.Certificate{}
+			srv = map[ksuid.KSUID]relayCacheValue{}
 			forwardsCache[msg.Key.Forward] = srv
 		}
-		srv[msg.Key.Hostport] = msg.Value.Cert
+		srv[msg.Key.RelayID] = relayCacheValue{Hostport: msg.Value.Hostport, Cert: msg.Value.Cert}
 	}
 
 	serverIDConfig, err := config.GetOrInit(configServerID, func(ck ConfigKey) (ConfigValue, error) {
@@ -96,6 +96,7 @@ func newRelayServer(
 
 		relaySecretKey: [32]byte(serverSecret.Bytes),
 
+		stores:        stores,
 		conns:         conns,
 		clients:       clients,
 		servers:       servers,
@@ -113,17 +114,18 @@ type relayServer struct {
 
 	relaySecretKey [32]byte
 
+	stores        Stores
 	conns         logc.KV[RelayConnKey, RelayConnValue]
 	clients       logc.KV[RelayClientKey, RelayClientValue]
 	servers       logc.KV[RelayServerKey, RelayServerValue]
 	serverOffsets logc.KV[RelayConnKey, int64]
 
-	forwardsCache  map[model.Forward]map[model.HostPort]*x509.Certificate
+	forwardsCache  map[model.Forward]map[ksuid.KSUID]relayCacheValue
 	forwardsOffset int64
 	forwardsMu     sync.RWMutex
 }
 
-func (s *relayServer) getForward(fwd model.Forward) (map[model.HostPort]*x509.Certificate, int64) {
+func (s *relayServer) getForward(fwd model.Forward) (map[ksuid.KSUID]relayCacheValue, int64) {
 	s.forwardsMu.RLock()
 	defer s.forwardsMu.RUnlock()
 
@@ -131,7 +133,7 @@ func (s *relayServer) getForward(fwd model.Forward) (map[model.HostPort]*x509.Ce
 }
 
 func (s *relayServer) Client(ctx context.Context, fwd model.Forward, role model.Role, cert *x509.Certificate,
-	notifyFn func(map[model.HostPort]*x509.Certificate) error) error {
+	notifyFn func(map[ksuid.KSUID]relayCacheValue) error) error {
 
 	key := RelayClientKey{Forward: fwd, Role: role, Key: certc.NewKey(cert)}
 	val := RelayClientValue{Cert: cert}
@@ -142,7 +144,7 @@ func (s *relayServer) Client(ctx context.Context, fwd model.Forward, role model.
 }
 
 func (s *relayServer) listen(ctx context.Context, fwd model.Forward,
-	notifyFn func(map[model.HostPort]*x509.Certificate) error) error {
+	notifyFn func(map[ksuid.KSUID]relayCacheValue) error) error {
 
 	servers, offset := s.getForward(fwd)
 	if len(servers) > 0 {
@@ -164,12 +166,12 @@ func (s *relayServer) listen(ctx context.Context, fwd model.Forward,
 			}
 
 			if msg.Delete {
-				delete(servers, msg.Key.Hostport)
+				delete(servers, msg.Key.RelayID)
 			} else {
 				if servers == nil {
-					servers = map[model.HostPort]*x509.Certificate{}
+					servers = map[ksuid.KSUID]relayCacheValue{}
 				}
-				servers[msg.Key.Hostport] = msg.Value.Cert
+				servers[msg.Key.RelayID] = relayCacheValue{Hostport: msg.Value.Hostport, Cert: msg.Value.Cert}
 			}
 			changed = true
 		}
@@ -191,16 +193,16 @@ func (s *relayServer) run(ctx context.Context) error {
 
 		srv := s.forwardsCache[msg.Key.Forward]
 		if msg.Delete {
-			delete(srv, msg.Key.Hostport)
+			delete(srv, msg.Key.RelayID)
 			if len(srv) == 0 {
 				delete(s.forwardsCache, msg.Key.Forward)
 			}
 		} else {
 			if srv == nil {
-				srv = map[model.HostPort]*x509.Certificate{}
+				srv = map[ksuid.KSUID]relayCacheValue{}
 				s.forwardsCache[msg.Key.Forward] = srv
 			}
-			srv[msg.Key.Hostport] = msg.Value.Cert
+			srv[msg.Key.RelayID] = relayCacheValue{Hostport: msg.Value.Hostport, Cert: msg.Value.Cert}
 		}
 
 		s.forwardsOffset = msg.Offset + 1
@@ -260,6 +262,7 @@ type relayConn struct {
 	conn   quic.Connection
 	logger *slog.Logger
 
+	forwards logc.KV[RelayForwardKey, RelayForwardValue]
 	id       ksuid.KSUID
 	auth     RelayAuthentication
 	hostport model.HostPort
@@ -288,6 +291,13 @@ func (c *relayConn) runErr(ctx context.Context) error {
 		c.logger = c.logger.With("relay", hp)
 	}
 
+	forwards, err := c.server.stores.RelayForwards(c.id)
+	if err != nil {
+		return err
+	}
+	defer forwards.Close()
+	c.forwards = forwards
+
 	key := RelayConnKey{ID: c.id}
 	authData, err := c.auth.MarshalBinary()
 	if err != nil {
@@ -302,6 +312,7 @@ func (c *relayConn) runErr(ctx context.Context) error {
 	g, ctx := errgroup.WithContext(ctx)
 
 	g.Go(func() error { return c.runRelayClients(ctx) })
+	g.Go(func() error { return c.runRelayForwards(ctx) })
 	g.Go(func() error { return c.runRelayServers(ctx) })
 
 	return g.Wait()
@@ -467,10 +478,7 @@ func (c *relayConn) runRelayServers(ctx context.Context) error {
 		}
 
 		for _, change := range resp.Changes {
-			key := RelayServerKey{
-				Forward:  model.ForwardFromPB(change.Server),
-				Hostport: c.hostport,
-			}
+			key := RelayForwardKey{Forward: model.ForwardFromPB(change.Forward)}
 
 			switch change.Change {
 			case pbr.ChangeType_ChangePut:
@@ -478,11 +486,12 @@ func (c *relayConn) runRelayServers(ctx context.Context) error {
 				if err != nil {
 					return err
 				}
-				if err := c.server.servers.Put(key, RelayServerValue{cert}); err != nil {
+				value := RelayForwardValue{Cert: cert}
+				if err := c.forwards.Put(key, value); err != nil {
 					return err
 				}
 			case pbr.ChangeType_ChangeDel:
-				if err := c.server.servers.Del(key); err != nil {
+				if err := c.forwards.Del(key); err != nil {
 					return err
 				}
 			default:
@@ -493,5 +502,58 @@ func (c *relayConn) runRelayServers(ctx context.Context) error {
 		if err := c.server.setRelayServerOffset(c.id, resp.Offset); err != nil {
 			return err
 		}
+	}
+}
+
+func (c *relayConn) runRelayForwards(ctx context.Context) error {
+	initialMsgs, offset, err := c.forwards.Snapshot()
+	if err != nil {
+		return err
+	}
+
+	for _, msg := range initialMsgs {
+		key := RelayServerKey{Forward: msg.Key.Forward, RelayID: c.id}
+		value := RelayServerValue{Hostport: c.hostport, Cert: msg.Value.Cert}
+		if err := c.server.servers.Put(key, value); err != nil {
+			return err
+		}
+	}
+
+	defer func() {
+		msgs, _, err := c.forwards.Snapshot()
+		if err != nil {
+			c.logger.Warn("cannot snapshot forward", "err", err)
+			return
+		}
+
+		for _, msg := range msgs {
+			key := RelayServerKey{Forward: msg.Key.Forward, RelayID: c.id}
+			if err := c.server.servers.Del(key); err != nil {
+				c.logger.Warn("cannot delete forward", "key", key, "err", err)
+			}
+		}
+	}()
+
+	for {
+		msgs, nextOffset, err := c.forwards.Consume(ctx, offset)
+		if err != nil {
+			return err
+		}
+
+		for _, msg := range msgs {
+			key := RelayServerKey{Forward: msg.Key.Forward, RelayID: c.id}
+			if msg.Delete {
+				if err := c.server.servers.Del(key); err != nil {
+					return err
+				}
+			} else {
+				value := RelayServerValue{Hostport: c.hostport, Cert: msg.Value.Cert}
+				if err := c.server.servers.Put(key, value); err != nil {
+					return err
+				}
+			}
+		}
+
+		offset = nextOffset
 	}
 }

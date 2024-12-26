@@ -1,4 +1,4 @@
-#log-level = "debug"
+log-level = "debug"
 
 [client]
 token-file = "examples/client-token.secret"

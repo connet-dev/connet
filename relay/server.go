@@ -7,7 +7,6 @@ import (
 	"log/slog"
 	"net"
 
-	"github.com/keihaya-com/connet/certc"
 	"github.com/keihaya-com/connet/model"
 	"github.com/klev-dev/kleverr"
 	"github.com/quic-go/quic-go"
@@ -27,7 +26,12 @@ type Config struct {
 }
 
 func NewServer(cfg Config) (*Server, error) {
-	root, err := certc.NewRoot()
+	control, err := newControlClient(cfg)
+	if err != nil {
+		return nil, err
+	}
+
+	clients, err := newClientsServer(cfg)
 	if err != nil {
 		return nil, err
 	}
@@ -35,32 +39,8 @@ func NewServer(cfg Config) (*Server, error) {
 	s := &Server{
 		addr: cfg.Addr,
 
-		control: &controlClient{
-			hostport: cfg.Hostport,
-			root:     root,
-			stores:   cfg.Stores,
-
-			controlAddr:  cfg.ControlAddr,
-			controlToken: cfg.ControlToken,
-			controlTlsConf: &tls.Config{
-				ServerName: cfg.ControlHost,
-				RootCAs:    cfg.ControlCAs,
-				NextProtos: []string{"connet-relays"},
-			},
-
-			logger: cfg.Logger.With("relay-control", cfg.Hostport),
-		},
-
-		clients: &clientsServer{
-			tlsConf: &tls.Config{
-				ClientAuth: tls.RequireAndVerifyClientCert,
-				NextProtos: []string{"connet-relay"},
-			},
-
-			forwards: map[model.Forward]*forwardClients{},
-
-			logger: cfg.Logger.With("relay-clients", cfg.Hostport),
-		},
+		control: control,
+		clients: clients,
 
 		logger: cfg.Logger.With("relay", cfg.Hostport),
 	}

@@ -35,7 +35,7 @@ type ClientAuthentication interface {
 
 type ClientRelays interface {
 	Client(ctx context.Context, fwd model.Forward, role model.Role, cert *x509.Certificate,
-		notify func(map[model.HostPort]*x509.Certificate) error) error
+		notify func(map[ksuid.KSUID]relayCacheValue) error) error
 }
 
 func newClientServer(
@@ -537,14 +537,14 @@ func (s *clientStream) relay(ctx context.Context, req *pbs.Request_Relay) error 
 
 	g.Go(func() error {
 		defer s.conn.logger.Debug("completed relay notify")
-		return s.conn.server.relays.Client(ctx, fwd, role, clientCert, func(relays map[model.HostPort]*x509.Certificate) error {
+		return s.conn.server.relays.Client(ctx, fwd, role, clientCert, func(relays map[ksuid.KSUID]relayCacheValue) error {
 			s.conn.logger.Debug("updated relay list", "relays", len(relays))
 
 			var addrs []*pbs.Relay
-			for hp, cert := range relays {
+			for _, value := range relays {
 				addrs = append(addrs, &pbs.Relay{
-					Address:           hp.PB(),
-					ServerCertificate: cert.Raw,
+					Address:           value.Hostport.PB(),
+					ServerCertificate: value.Cert.Raw,
 				})
 			}
 
