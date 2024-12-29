@@ -1,3 +1,4 @@
 .env
 .direnv
 result
+dist

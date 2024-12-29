@@ -35,3 +35,26 @@ update-go:
 
 update-nix:
 	nix flake update
+
+.PHONY: release-clean release-build release-archive release
+
+release-clean:
+	rm -rf dist/
+
+release-build:
+	GOOS=darwin GOARCH=amd64 go build -v -o dist/build/darwin-amd64/connet github.com/keihaya-com/connet/cmd/connet
+	GOOS=darwin GOARCH=arm64 go build -v -o dist/build/darwin-arm64/connet github.com/keihaya-com/connet/cmd/connet
+	GOOS=linux GOARCH=amd64 go build -v -o dist/build/linux-amd64/connet github.com/keihaya-com/connet/cmd/connet
+	GOOS=linux GOARCH=arm64 go build -v -o dist/build/linux-arm64/connet github.com/keihaya-com/connet/cmd/connet
+	GOOS=freebsd GOARCH=amd64 go build -v -o dist/build/freebsd-amd64/connet github.com/keihaya-com/connet/cmd/connet
+	GOOS=freebsd GOARCH=arm64 go build -v -o dist/build/freebsd-arm64/connet github.com/keihaya-com/connet/cmd/connet
+	GOOS=windows GOARCH=amd64 go build -v -o dist/build/windows-amd64/connet github.com/keihaya-com/connet/cmd/connet
+	GOOS=windows GOARCH=arm64 go build -v -o dist/build/windows-arm64/connet github.com/keihaya-com/connet/cmd/connet
+
+release-version := $(shell git describe --exact-match --tags 2> /dev/null || git rev-parse --short HEAD)
+
+release-archive:
+	mkdir dist/archive
+	for x in $(shell ls dist/build); do tar -czf dist/archive/connet-$(release-version)-$$x.tar.gz -C dist/build/$$x connet; done
+
+release: release-clean release-build release-archive
