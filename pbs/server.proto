@@ -3,7 +3,7 @@ package server;
 
 import "shared.proto";
 
-option go_package = "github.com/keihaya-com/connet/pbs";
+option go_package = "github.com/connet-dev/connet/pbs";
 
 message Authenticate {
   string token = 1;

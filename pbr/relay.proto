@@ -3,7 +3,7 @@ package relay;
 
 import "shared.proto";
 
-option go_package = "github.com/keihaya-com/connet/pbr";
+option go_package = "github.com/connet-dev/connet/pbr";
 
 message AuthenticateReq {
   string token = 1;

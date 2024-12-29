@@ -9,10 +9,10 @@ import (
 	"os"
 	"path/filepath"
 
-	"github.com/keihaya-com/connet/control"
-	"github.com/keihaya-com/connet/model"
-	"github.com/keihaya-com/connet/relay"
-	"github.com/keihaya-com/connet/selfhosted"
+	"github.com/connet-dev/connet/control"
+	"github.com/connet-dev/connet/model"
+	"github.com/connet-dev/connet/relay"
+	"github.com/connet-dev/connet/selfhosted"
 	"github.com/klev-dev/kleverr"
 	"golang.org/x/sync/errgroup"
 )

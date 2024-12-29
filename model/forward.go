@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"io"
 
-	"github.com/keihaya-com/connet/pb"
+	"github.com/connet-dev/connet/pb"
 	"github.com/mr-tron/base58"
 )
 

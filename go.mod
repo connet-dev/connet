@@ -1,4 +1,4 @@
-module github.com/keihaya-com/connet
+module github.com/connet-dev/connet
 
 go 1.23.2
 

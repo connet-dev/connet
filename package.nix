@@ -27,7 +27,7 @@ lib.fileset.trace sourceFiles
 
   meta = with lib; {
     description = "A reverse proxy, written in Golang";
-    homepage = "https://github.com/keihaya-com/connet";
+    homepage = "https://github.com/connet-dev/connet";
     license = licenses.asl20;
     mainProgram = "connet";
   };

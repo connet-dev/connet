@@ -3,9 +3,9 @@ package client
 import (
 	"context"
 
-	"github.com/keihaya-com/connet/model"
-	"github.com/keihaya-com/connet/pb"
-	"github.com/keihaya-com/connet/pbs"
+	"github.com/connet-dev/connet/model"
+	"github.com/connet-dev/connet/pb"
+	"github.com/connet-dev/connet/pbs"
 	"github.com/klev-dev/kleverr"
 	"github.com/quic-go/quic-go"
 	"golang.org/x/sync/errgroup"

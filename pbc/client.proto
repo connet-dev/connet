@@ -4,7 +4,7 @@ package client;
 import "shared.proto";
 import "google/protobuf/timestamp.proto";
 
-option go_package = "github.com/keihaya-com/connet/pbc";
+option go_package = "github.com/connet-dev/connet/pbc";
 
 message Request {
   // Soft one-of

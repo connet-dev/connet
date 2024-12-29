@@ -3,7 +3,7 @@ package model
 import (
 	"fmt"
 
-	"github.com/keihaya-com/connet/pb"
+	"github.com/connet-dev/connet/pb"
 )
 
 type HostPort struct {

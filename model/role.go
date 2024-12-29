@@ -1,7 +1,7 @@
 package model
 
 import (
-	"github.com/keihaya-com/connet/pb"
+	"github.com/connet-dev/connet/pb"
 	"github.com/klev-dev/kleverr"
 )
 

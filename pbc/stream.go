@@ -3,7 +3,7 @@ package pbc
 import (
 	"io"
 
-	"github.com/keihaya-com/connet/pb"
+	"github.com/connet-dev/connet/pb"
 )
 
 func ReadRequest(r io.Reader) (*Request, error) {

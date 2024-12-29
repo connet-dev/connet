@@ -13,8 +13,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/keihaya-com/connet/certc"
-	"github.com/keihaya-com/connet/model"
+	"github.com/connet-dev/connet/certc"
+	"github.com/connet-dev/connet/model"
 	"github.com/stretchr/testify/require"
 	"golang.org/x/sync/errgroup"
 )

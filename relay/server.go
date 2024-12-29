@@ -7,7 +7,7 @@ import (
 	"log/slog"
 	"net"
 
-	"github.com/keihaya-com/connet/model"
+	"github.com/connet-dev/connet/model"
 	"github.com/klev-dev/kleverr"
 	"github.com/quic-go/quic-go"
 	"golang.org/x/sync/errgroup"

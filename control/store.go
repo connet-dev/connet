@@ -6,10 +6,10 @@ import (
 	"os"
 	"path/filepath"
 
-	"github.com/keihaya-com/connet/certc"
-	"github.com/keihaya-com/connet/logc"
-	"github.com/keihaya-com/connet/model"
-	"github.com/keihaya-com/connet/pbs"
+	"github.com/connet-dev/connet/certc"
+	"github.com/connet-dev/connet/logc"
+	"github.com/connet-dev/connet/model"
+	"github.com/connet-dev/connet/pbs"
 	"github.com/segmentio/ksuid"
 )
 

@@ -8,11 +8,11 @@ import (
 	"maps"
 	"net/netip"
 
-	"github.com/keihaya-com/connet/certc"
-	"github.com/keihaya-com/connet/model"
-	"github.com/keihaya-com/connet/notify"
-	"github.com/keihaya-com/connet/pb"
-	"github.com/keihaya-com/connet/pbs"
+	"github.com/connet-dev/connet/certc"
+	"github.com/connet-dev/connet/model"
+	"github.com/connet-dev/connet/notify"
+	"github.com/connet-dev/connet/pb"
+	"github.com/connet-dev/connet/pbs"
 	"github.com/quic-go/quic-go"
 	"golang.org/x/sync/errgroup"
 )

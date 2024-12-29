@@ -1,8 +1,8 @@
 package selfhosted
 
 import (
-	"github.com/keihaya-com/connet/control"
-	"github.com/keihaya-com/connet/model"
+	"github.com/connet-dev/connet/control"
+	"github.com/connet-dev/connet/model"
 	"github.com/klev-dev/kleverr"
 )
 
