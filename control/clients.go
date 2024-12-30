@@ -245,14 +245,13 @@ func (s *clientServer) run(ctx context.Context) error {
 	}
 }
 
-func (s *clientServer) handle(ctx context.Context, conn quic.Connection) error {
+func (s *clientServer) handle(ctx context.Context, conn quic.Connection) {
 	cc := &clientConn{
 		server: s,
 		conn:   conn,
 		logger: s.logger,
 	}
 	go cc.run(ctx)
-	return nil
 }
 
 type clientConn struct {

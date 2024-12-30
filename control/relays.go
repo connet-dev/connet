@@ -231,14 +231,13 @@ func (s *relayServer) run(ctx context.Context) error {
 	}
 }
 
-func (s *relayServer) handle(ctx context.Context, conn quic.Connection) error {
+func (s *relayServer) handle(ctx context.Context, conn quic.Connection) {
 	rc := &relayConn{
 		server: s,
 		conn:   conn,
 		logger: s.logger,
 	}
 	go rc.run(ctx)
-	return nil
 }
 
 func (s *relayServer) getRelayServerOffset(id ksuid.KSUID) (int64, error) {
