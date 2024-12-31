@@ -2,7 +2,7 @@ log-level = "debug"
 
 [client]
 token-file = "examples/client-token.secret"
-server-cas = ".direnv/localhost/cert.pem"
+server-cas = ".direnv/minica.pem"
 
 [client.destinations.sws]
 addr = ":8081"

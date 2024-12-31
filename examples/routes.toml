@@ -7,7 +7,7 @@ key-file = ".direnv/localhost/key.pem"
 
 [client]
 token-file = "examples/client-token.secret"
-server-cas = ".direnv/localhost/cert.pem"
+server-cas = ".direnv/minica.pem"
 
 [client.destinations.sws-direct]
 addr = ":8081"
