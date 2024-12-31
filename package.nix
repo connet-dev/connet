@@ -4,6 +4,7 @@ let
     (lib.fileset.maybeMissing ./result)
     ./.envrc
     ./.gitignore
+    ./default.nix
     ./examples
     ./flake.lock
     ./flake.nix

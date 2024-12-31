@@ -199,6 +199,38 @@ In which case, we recommend visiting the [wiki page](https://github.com/quic-go/
 
 ### NisOS
 
+TBD
+
+#### Flakes
+
+To configure the client as a service:
+```nix
+# flake.nix
+{
+  inputs = {
+    # ...
+    connet.url = "github.com/connet-dev/connet";
+  };
+  outputs = { connet, ... }: {
+    nixosConfigurations.example = nixpkgs.lib.nixosSystem {
+      system = "x86_64-linux";
+      modules = [
+        connet.nixosModules.default
+        {
+          services.connet = {
+            enable = true;
+            package = connet.packages."x86_64-linux".default;
+            tokenFile = "/run/keys/connet.token";
+            serverAddr = "localhost:19190";
+            sources.example.addr = ":9998";
+          };
+        }
+      ];
+    };
+  };
+}
+```
+
 ## Examples
 
 TBD
