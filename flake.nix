@@ -7,7 +7,9 @@
   };
 
   outputs = { self, nixpkgs, flake-utils }:
-    flake-utils.lib.eachDefaultSystem (system:
+    {
+      nixosModules.default = ./default.nix;
+    } // flake-utils.lib.eachDefaultSystem (system:
       let
         pkgs = import nixpkgs {
           inherit system;
@@ -16,7 +18,6 @@
       {
         formatter = pkgs.nixpkgs-fmt;
         packages.default = pkgs.callPackage ./package.nix { };
-        nixosModules.default = ./default.nix;
         devShells.default = pkgs.mkShellNoCC {
           buildInputs = with pkgs; [
             go
