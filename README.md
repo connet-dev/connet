@@ -54,7 +54,7 @@ accessible by clients. A VPS instance at one of the many cloud providers goes a 
  - Device `A` that has the `destination` service you want to connect to, running at port `3000`.
  - Device `B` (aka `source`) which you want to connect to the service, at port `8000`. 
 
-In the setup above, start `connet server` with the following `server.toml`:
+In the setup above, start `connet server --config server.toml` with the following `server.toml`:
 ```toml
 [server]
 tokens = ["client-a-token", "client-b-token"]
@@ -67,7 +67,7 @@ key-file = "key.pem"
 > 
 > This example uses a self-signed one, and we use [minica](https://github.com/jsha/minica) to generate certificates.
 
-Then, on device `A` run `connet` with the following `client-a.toml`:
+Then, on device `A` run `connet --config client-a.toml` with the following `client-a.toml`:
 ```toml
 [client]
 token = "client-a-token"
@@ -78,7 +78,7 @@ server-cas = "cert.pem"
 addr = ":3000"
 ```
 
-On device `B` run `connet` with the following `client-b.toml`:
+On device `B` run `connet --config client-b.toml` with the following `client-b.toml`:
 ```toml
 [client]
 token = "client-b-token"
@@ -119,7 +119,7 @@ route = "direct" # force only direct communication between clients
 addr = ":8000" # the address at which to listen for incoming connections to be forwarded
 route = "relay" # the kind of route to use
 
-[client.sources.serviceY]
+[client.sources.serviceY] # both sources and destinations can be defined in a single file
 addr = ":8001" # again, mulitple sources can be defined
 route = "direct" # force only direct communication between clients, even if other end allows any
 ```
@@ -215,6 +215,7 @@ To configure the client as a service:
     nixosConfigurations.example = nixpkgs.lib.nixosSystem {
       system = "x86_64-linux";
       modules = [
+        # ...
         connet.nixosModules.default
         {
           services.connet = {
