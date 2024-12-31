@@ -164,7 +164,20 @@ store-dir = "path/to/relay-store" # where does this relay persist runtime inform
 
 ### Logging
 
+At the root of the config file, you can configure logging (`connet` uses slog internally):
+```toml
+log-level = "info" # supports debug, info, warn, error, defaults to info
+log-format = "text" # supports text and json, defaults to text
+```
+
 ### Tunning
+
+On some systems, if you might see the following line in the logs:
+```
+failed to sufficiently increase receive buffer size (was: 208 kiB, wanted: 7168 kiB, got: 416 kiB). See https://github.com/quic-go/quic-go/wiki/UDP-Buffer-Sizes for details.
+```
+
+In which case, we recommend visiting the [wiki page](https://github.com/quic-go/quic-go/wiki/UDP-Buffer-Sizes) and applying the recommended changes.
 
 ### NisOS
 
