@@ -23,13 +23,23 @@ with the control server, allowing tight control over who can use `connet`.
 ## Architecture
 
 ```mermaid
-flowchart Architecture;
-  A[Client Destination] -->|Exchange Direct and Relay Info| C(ControlServer);
-  B[Client Source] -->|Exchange Direct and Relay Info| C(ControlServer);
-  A[Client Destination] -->|Direct Connection| B;
-  R[Relay] -->|Reserve| C(ControlServer);
-  A[Client Destination] -->|Relay Connection| R;
-  R -->|Relay Connection| B;
+flowchart LR
+    subgraph Server
+    C(Control Server)
+    R(Relay Server)
+    C -.->|Relay Info| R
+    end
+    subgraph Client Source
+    B[Source] -->|Exchange Direct and Relay Info| C(Control Server)
+    BC(Client) -..-> B
+    end
+    subgraph Client Destination
+    A[Destination] -->|Exchange Direct and Relay Info| C(Control Server)
+    A -..-> AC(Server)
+    end
+    B ---|Direct Connection| A
+    B -->|Relay Connection| R
+    R -->|Relay Connection| A
 ```
 
 ## Quickstart
