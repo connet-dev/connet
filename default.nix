@@ -151,7 +151,7 @@ in
 
           destinations = cfg.destinations;
           sources = cfg.sources;
-        } // lib.optionalAttrs (isPath cfg.serverCA) {
+        } // lib.optionalAttrs (builtins.isPath cfg.serverCA) {
           server-cas = cfg.serverCA;
         };
       };
