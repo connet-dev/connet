@@ -163,12 +163,12 @@ in
       after = [ "network.target" "network-online.target" ];
       requires = [ "network-online.target" ];
       wantedBy = [ "multi-user.target" ];
+      restartTriggers = [ config.environment.etc."connet.toml".source ];
       serviceConfig = {
         User = cfg.user;
         Group = cfg.group;
         ExecStart = "${pkgs.connet}/bin/connet --config /etc/connet.toml";
         Restart = "on-failure";
-        SupplementaryGroups = [ "keys" ];
       };
     };
   };
