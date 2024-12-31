@@ -83,7 +83,7 @@ in
         (lib.types.submodule {
           options = {
             addr = lib.mkOption {
-              type = lib.types.string;
+              type = lib.types.str;
               description = "The address of the destination";
             };
             route = lib.mkOption {
@@ -104,7 +104,7 @@ in
         (lib.types.submodule {
           options = {
             addr = lib.mkOption {
-              type = lib.types.string;
+              type = lib.types.str;
               description = "The address of the source";
             };
             route = lib.mkOption {
