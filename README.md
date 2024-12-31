@@ -22,7 +22,18 @@ with the control server, allowing tight control over who can use `connet`.
 
 ## Architecture
 
-TBD
+```mermaid
+flowchart Architecture
+
+A[Client Destination] -->|Exchange Direct and Relay Info| C(ControlServer)
+B[Client Source] -->|Exchange Direct and Relay Info| C(ControlServer)
+A[Client Destination] -->|Direct Connection| B
+R[Relay] -->|Reserve| C(ControlServer)
+A[Client Destination] -->|Relay Connection| R
+R -->|Relay Connection| B
+
+
+```
 
 ## Quickstart
 
@@ -193,4 +204,4 @@ by adding account management and it is one of the easiest way to start.
 
 ## Future
 
- [ ] - UDP support
+ - [ ] UDP support
