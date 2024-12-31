@@ -66,8 +66,8 @@ in
     };
 
     serverCA = lib.mkOption {
-      default = /etc/ssl/certs/ca-certificates.crt;
-      type = lib.types.path;
+      default = null;
+      type = lib.types.nullOr lib.types.path;
       description = "Server Certificate Authority file to use, required when running self-signed server";
     };
 
@@ -147,11 +147,12 @@ in
           token-file = cfg.tokenFile;
 
           server-addr = cfg.serverAddr;
-          server-cas = cfg.serverCA;
           direct-addr = ":${toString cfg.directPort}";
 
           destinations = cfg.destinations;
           sources = cfg.sources;
+        } // lib.optionalAttrs (isPath cfg.serverCA) {
+          server-cas = cfg.serverCA;
         };
       };
     };
