@@ -101,7 +101,7 @@ Here is the full client `client-config.toml` configuration:
 ```toml
 [client]
 token = "client-token-1" # the token which the client uses to authenticate against the control server
-token_file = "path/to/relay/token" # a file that contains the token, one of token or token_file is required
+token-file = "path/to/relay/token" # a file that contains the token, one of token or token-file is required
 
 server-addr = "localhost:19190" # the control server address to connect to
 server-cas = "path/to/cert.pem" # the control server certificate
@@ -169,7 +169,7 @@ Here is the full relay server `relay-config.toml` configuration:
 ```toml
 [relay]
 token = "relay-token-1" # the token which the relay server uses to authenticate against the control server
-token_file = "path/to/relay/token" # a file that contains the token, one of token or token_file is required
+token-file = "path/to/relay/token" # a file that contains the token, one of token or token-file is required
 
 addr = ":19191" # the address at which the relay will listen for connectsion, defaults to :19191
 hostname = "localhost" # the public hostname (e.g. domain, ip address) which will be advertised to clients, defaults to localhost

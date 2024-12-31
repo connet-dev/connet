@@ -16,6 +16,7 @@
       {
         formatter = pkgs.nixpkgs-fmt;
         packages.default = pkgs.callPackage ./package.nix { };
+        nixosModules.default = ./default.nix;
         devShells.default = pkgs.mkShellNoCC {
           buildInputs = with pkgs; [
             go
