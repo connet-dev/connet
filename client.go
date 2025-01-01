@@ -54,6 +54,10 @@ func NewClient(opts ...ClientOption) (*Client, error) {
 		}
 	}
 
+	if len(cfg.destinations) == 0 && len(cfg.sources) == 0 {
+		return nil, kleverr.New("missing at least on destination or source")
+	}
+
 	rootCert, err := certc.NewRoot()
 	if err != nil {
 		return nil, kleverr.Ret(err)
