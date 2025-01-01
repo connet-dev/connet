@@ -88,6 +88,9 @@ func newRelayServer(
 		}
 		return ConfigValue{Bytes: privateKey[:]}, nil
 	})
+	if err != nil {
+		return nil, err
+	}
 
 	return &relayServer{
 		id:     serverIDConfig.String,

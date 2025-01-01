@@ -341,7 +341,7 @@ func loadConfig(file string) (Config, error) {
 }
 
 func logger(cfg Config) (*slog.Logger, error) {
-	logLevel := slog.LevelInfo
+	var logLevel slog.Level
 	switch cfg.LogLevel {
 	case "debug":
 		logLevel = slog.LevelDebug

@@ -77,6 +77,9 @@ func newClientServer(
 		}
 		return ConfigValue{Bytes: privateKey[:]}, nil
 	})
+	if err != nil {
+		return nil, err
+	}
 
 	s := &clientServer{
 		auth:   auth,

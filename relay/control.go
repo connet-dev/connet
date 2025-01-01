@@ -224,6 +224,9 @@ func (s *controlClient) connect(ctx context.Context, transport *quic.Transport) 
 	}
 
 	controlIDConfig, err := s.config.GetOrDefault(configControlID, ConfigValue{})
+	if err != nil {
+		return retConnect(err)
+	}
 	if controlIDConfig.String != "" && controlIDConfig.String != resp.ControlId {
 		return nil, kleverr.Newf("unexpected server id, has: %s, resp: %s", controlIDConfig.String, resp.ControlId)
 	}

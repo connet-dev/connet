@@ -1,11 +1,18 @@
 # Connet
 
+[![GitHub release](https://img.shields.io/github/tag/connet-dev/connet.svg?label=release)](https://github.com/connet-dev/connet/releases)
+[![Go Reference](https://pkg.go.dev/badge/github.com/connet-dev/connet.svg)](https://pkg.go.dev/github.com/connet-dev/connet)
+[![Go Report Card](https://goreportcard.com/badge/github.com/connet-dev/connet)](https://goreportcard.com/report/github.com/connet-dev/connet)
+[![Apache2.0 licensed](https://img.shields.io/badge/license-Apache2.0-green.svg)](https://github.com/connet-dev/connet/blob/main/LICENSE)
+
 `connet` is a reverse proxy for NAT traversal. It is inspired by ngrok, frp, rathole and others.
 
 `connet` helps expose a service running on a device to another device on the internet. Unlike the others, 
 `connet` needs to run on both the device that exposes the service (called `destination` in connet's terms)
 and the device that wants to access the service (called `source`). This means that the communication is
 never public and visible to the rest of the internet, and in many cases the devices can communicate directly.
+
+> **Status** `connet` is currently alpha software. We expect some issues and APIs might change.
 
 ## Features
 

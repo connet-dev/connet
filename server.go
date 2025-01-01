@@ -68,6 +68,9 @@ func NewServer(opts ...ServerOption) (*Server, error) {
 		Logger:     cfg.logger,
 		Stores:     control.NewFileStores(filepath.Join(cfg.dir, "control")),
 	})
+	if err != nil {
+		return nil, err
+	}
 
 	controlCAs := x509.NewCertPool()
 	controlCAs.AddCert(cfg.controlCert.Leaf)
