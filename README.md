@@ -12,7 +12,7 @@
 and the device that wants to access the service (called `source`). This means that the communication is
 never public and visible to the rest of the internet, and in many cases the devices can communicate directly.
 
-> **Status** `connet` is currently alpha software. We expect some issues and APIs might change.
+> **Status** `connet` is currently alpha software. We expect some issues and its APIs are subject to change.
 
 ## Features
 
@@ -37,16 +37,16 @@ flowchart LR
     C -.->|Relay Info| R
     end
     subgraph Client Source
-    B[Source] -->|Exchange Direct and Relay Info| C(Control Server)
-    BC(Client) -..-> B
+    S[Source] -->|Exchange Direct and Relay Info| C(Control Server)
+    SC(Client) -..-> S
     end
     subgraph Client Destination
-    A[Destination] -->|Exchange Direct and Relay Info| C(Control Server)
-    A -..-> AC(Server)
+    D[Destination] -->|Exchange Direct and Relay Info| C(Control Server)
+    D -..-> DC(Server)
     end
-    B ---|Direct Connection| A
-    B -->|Relay Connection| R
-    R -->|Relay Connection| A
+    S ---|Direct Connection| D
+    S -->|Relay Connection| R
+    R -->|Relay Connection| D
 ```
 
 ## Quickstart
@@ -58,8 +58,10 @@ To get started with `connet`, you'll need 3 devices:
 
  - Server which your clients can communicate with. In most cases, this server will have a public IP and be directly 
 accessible by clients. A VPS instance at one of the many cloud providers goes a long way here.
- - Device `A` that has the `destination` service you want to connect to, running at port `3000`.
- - Device `B` (aka `source`) which you want to connect to the service, at port `8000`. 
+ - Device `D` that has the `destination` service you want to connect to, running at port `3000`.
+ - Device `S` (aka `source`) which you want to connect to the service, at port `8000`. 
+
+### Server
 
 In the setup above, start `connet server --config server.toml` with the following `server.toml`:
 ```toml
@@ -74,7 +76,9 @@ key-file = "key.pem"
 > 
 > This example uses a self-signed one, and we use [minica](https://github.com/jsha/minica) to generate certificates.
 
-Then, on device `A` run `connet --config client-a.toml` with the following `client-a.toml`:
+### Client D (aka the `destination`)
+
+Then, on device `D` run `connet --config client-a.toml` with the following `client-a.toml`:
 ```toml
 [client]
 token = "client-a-token"
@@ -85,7 +89,9 @@ server-cas = "cert.pem"
 addr = ":3000"
 ```
 
-On device `B` run `connet --config client-b.toml` with the following `client-b.toml`:
+### Client S (aka the `source`)
+
+On device `S` run `connet --config client-b.toml` with the following `client-b.toml`:
 ```toml
 [client]
 token = "client-b-token"
