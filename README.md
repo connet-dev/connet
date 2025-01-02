@@ -271,7 +271,7 @@ TBD
 
 ## Hosting
 
-If you want to use `connet`, but you don't wanna run the server yourself, we also have a hosted service 
+If you want to use `connet`, but you don't want to run the server yourself, we have also built a hosted service 
 at [connet.dev](https://connet.dev). It is free when clients connect directly, builds upon the open source components 
 by adding account management and it is one of the easiest way to start. 
 
