@@ -68,7 +68,7 @@ accessible by clients. A VPS instance at one of the many cloud providers goes a 
 In the setup above, start `connet server --config server.toml` with the following `server.toml`:
 ```toml
 [server]
-tokens = ["client-a-token", "client-b-token"]
+tokens = ["client-d-token", "client-s-token"]
 cert-file = "cert.pem"
 key-file = "key.pem"
 ```
@@ -88,10 +88,10 @@ configuration option is the easiest way to achieve this.
 
 ### Client D (aka the `destination`)
 
-Then, on device `D` run `connet --config client-a.toml` with the following `client-a.toml`:
+Then, on device `D` run `connet --config client-d.toml` with the following `client-d.toml`:
 ```toml
 [client]
-token = "client-a-token"
+token = "client-d-token"
 server-addr = "SERVER_IP:19190"
 server-cas = "cert.pem"
 
@@ -101,10 +101,10 @@ addr = ":3000"
 
 ### Client S (aka the `source`)
 
-On device `S` run `connet --config client-b.toml` with the following `client-b.toml`:
+On device `S` run `connet --config client-s.toml` with the following `client-s.toml`:
 ```toml
 [client]
-token = "client-b-token"
+token = "client-s-token"
 server-addr = "SERVER_IP:19190"
 server-cas = "cert.pem"
 
