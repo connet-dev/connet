@@ -75,10 +75,16 @@ key-file = "key.pem"
 
 #### TLS Certificates
 
-> **_NOTE_** To run `connet` you'll need a TLS certificate. When hosting it yourself you could either provision one
-> via ACME/Let's encrypt (in which case clients don't need a separate `server-cas`) or use openssl to generate a self-signed one.
-> 
-> This example uses a self-signed one, and we use [minica](https://github.com/jsha/minica) to generate certificates.
+To run a `connet` server, you'll need a TLS certificate. You have a few options to create such certificate:
+ - **Recommended** use an [ACME client](https://acmeclients.com/) to create one for you. We've had good experiences 
+running [lego](https://go-acme.github.io/lego/).
+ - Buy a TLS certificate from a Certificate Authority like verisign, namecheap, etc.
+ - Use a self-signed TLS certificate, an option most appropriate for testing. 
+
+To create a self-signed certificate, you can use openssl. Alternatively, you can use a tool like 
+[minica](https://github.com/jsha/minica). When using self-signed certificate, you'll need your clients (and relays) 
+trusting the server's certificate. Copying the certificate (or CA) public key to the clients and using `server-cas`
+configuration option is the easiest way to achieve this.
 
 ### Client D (aka the `destination`)
 
