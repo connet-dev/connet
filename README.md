@@ -1,4 +1,4 @@
-# Connet
+# connet
 
 [![GitHub release](https://img.shields.io/github/tag/connet-dev/connet.svg?label=release)](https://github.com/connet-dev/connet/releases)
 [![Go Reference](https://pkg.go.dev/badge/github.com/connet-dev/connet.svg)](https://pkg.go.dev/github.com/connet-dev/connet)
@@ -8,19 +8,19 @@
 `connet` is a peer-to-peer reverse proxy for NAT traversal. It is inspired by ngrok, frp, rathole and others.
 
 `connet` helps expose a service running on a device to another device on the internet. Unlike the others, 
-`connet` runs on both the device that exposes the service (called `destination` in connet's terms)
-and the device that wants to access the service (called `source`). This means that the communication is
-never public and visible to the rest of the internet, and in many cases the devices can communicate directly.
+the `connet` client runs on both the device that exposes the service (called `destination` in connet's terms) 
+and the device that wants to access the service (called `source`). This means that communication between `connet`
+clients is never public and visible to the rest of the internet, and in many cases peers can communicate directly.
 
 > **Status** `connet` is currently alpha software. We expect some issues and its APIs are subject to change.
 
 ## Features
 
  - **Peer-to-peer communication** Because you run the `connet` client on both the `destination` and the `source`, the server 
-is only used for sharing configuration. In many cases clients can communicate directly, which increases privacy and 
-performance, while reducing cost.
+is only used for sharing configuration. In many cases clients can communicate directly, which enables better privacy and 
+performance.
  - **Relay support** There are cases when clients are unable to find a path to communicate directly. In such cases, they
-can use a relay to maintain connectivity. 
+can use a relay server to maintain connectivity. 
  - **Security** Everything is private, encrypted with TLS. Public server and client certificates are exchanges between peers
 and are required and verified to establish connectivity. Clients and relays need to present a mandatory token when communicating
 with the control server, allowing tight control over who can use `connet`.
@@ -49,7 +49,7 @@ flowchart LR
     R -->|Relay Connection| D
 ```
 
-All communication in `connet` uses the QUIC protocoal, which is build on top of UDP. 
+For all communication `connet` uses the QUIC protocol, which is build on top of UDP. 
 
 ## Quickstart
 
@@ -76,7 +76,7 @@ key-file = "key.pem"
 #### TLS Certificates
 
 To run a `connet` server, you'll need a TLS certificate. You have a few options to create such certificate:
- - **Recommended** use an [ACME client](https://acmeclients.com/) to create one for you. We've had good experiences 
+ - **Recommended** use an [ACME client](https://acmeclients.com/) to provision one for you. We've had good experiences 
 running [lego](https://go-acme.github.io/lego/).
  - Buy a TLS certificate from a Certificate Authority like verisign, namecheap, etc.
  - Use a self-signed TLS certificate, an option most appropriate for testing. 
@@ -209,7 +209,7 @@ store-dir = "path/to/relay-store" # where does this relay persist runtime inform
 
 ### Storage
 
-`connet` servers (both control and relay servers) store runtime state in the file system. If you don't explicitly specify 
+`connet` servers (both control and relay servers) store runtime state on the file system. If you don't explicitly specify 
 `store-dir`, they will use a new subdirectory in `/tmp` by default, which means that every time they restart they'll loose
 any state and identity. To prevent this, you can specify an explicit `store-dir` location, which can be reused between runs.
 
