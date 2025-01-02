@@ -5,10 +5,10 @@
 [![Go Report Card](https://goreportcard.com/badge/github.com/connet-dev/connet)](https://goreportcard.com/report/github.com/connet-dev/connet)
 [![Apache2.0 licensed](https://img.shields.io/badge/license-Apache2.0-green.svg)](https://github.com/connet-dev/connet/blob/main/LICENSE)
 
-`connet` is a reverse proxy for NAT traversal. It is inspired by ngrok, frp, rathole and others.
+`connet` is a peer-to-peer reverse proxy for NAT traversal. It is inspired by ngrok, frp, rathole and others.
 
 `connet` helps expose a service running on a device to another device on the internet. Unlike the others, 
-`connet` needs to run on both the device that exposes the service (called `destination` in connet's terms)
+`connet` runs on both the device that exposes the service (called `destination` in connet's terms)
 and the device that wants to access the service (called `source`). This means that the communication is
 never public and visible to the rest of the internet, and in many cases the devices can communicate directly.
 
@@ -16,12 +16,12 @@ never public and visible to the rest of the internet, and in many cases the devi
 
 ## Features
 
- - **Direct communication** Because you run the `connet` client on both the `destination` and the `source`, the server is
-is only needed for sharing configuration. In many cases clients can communicate directly, which increases privacy and 
+ - **Peer-to-peer communication** Because you run the `connet` client on both the `destination` and the `source`, the server 
+is only used for sharing configuration. In many cases clients can communicate directly, which increases privacy and 
 performance, while reducing cost.
  - **Relay support** There are cases when clients are unable to find a path to communicate directly. In such cases, they
 can use a relay to maintain connectivity. 
- - **Security** Everything is private, encrypted with TLS. Public server and client certificates are shared between peers
+ - **Security** Everything is private, encrypted with TLS. Public server and client certificates are exchanges between peers
 and are required and verified to establish connectivity. Clients and relays need to present a mandatory token when communicating
 with the control server, allowing tight control over who can use `connet`.
  - **Embeddable** In case you want `connet` running as part of another (golang) program (as opposed to a separate executable), 
@@ -49,6 +49,8 @@ flowchart LR
     R -->|Relay Connection| D
 ```
 
+All communication in `connet` uses the QUIC protocoal, which is build on top of UDP. 
+
 ## Quickstart
 
 Latest builds of `connet` can be acquired from our [releases](https://github.com/connet-dev/connet/releases) page. 
@@ -70,6 +72,8 @@ tokens = ["client-a-token", "client-b-token"]
 cert-file = "cert.pem"
 key-file = "key.pem"
 ```
+
+#### TLS Certificates
 
 > **_NOTE_** To run `connet` you'll need a TLS certificate. When hosting it yourself you could either provision one
 > via ACME/Let's encrypt (in which case clients don't need a separate `server-cas`) or use openssl to generate a self-signed one.
@@ -110,7 +114,8 @@ only support a single `destination` or `source` configuration.
 
 ### Client
 
-Here is the full client `client-config.toml` configuration:
+To run in client mode, use `connet --config client-config.toml` command. Here is the full client `client-config.toml` 
+configuration spec:
 ```toml
 [client]
 token = "client-token-1" # the token which the client uses to authenticate against the control server
@@ -139,7 +144,8 @@ route = "direct" # force only direct communication between clients, even if othe
 
 ### Server
 
-Here is the full server `server-config.toml` configuration:
+To run in server mode (e.g. running both control and a relay server), use `connet server --config server-config.toml` command. 
+Here is the full server `server-config.toml` configuration specification:
 ```toml
 [server]
 tokens = ["client-token-1", "client-token-n"] # set of recognized client tokens
@@ -158,7 +164,8 @@ store-dir = "path/to/server-store" # where does this server persist runtime info
 
 #### Control server
 
-Here is the full control server `control-config.toml` configuration:
+To run in control server mode, use `connet control --config control-config.toml` command. Here is the full control server 
+`control-config.toml` configuration specification:
 ```toml
 [control]
 client-tokens = ["client-token-1", "client-token-n"] # set of recognized client tokens
@@ -178,7 +185,8 @@ store-dir = "path/to/control-store" # where does this control server persist run
 
 #### Relay server
 
-Here is the full relay server `relay-config.toml` configuration:
+To run in relay server mode, use `connet relay --config relay-config.toml` command. Here is the full relay server 
+`relay-config.toml` configuration specification:
 ```toml
 [relay]
 token = "relay-token-1" # the token which the relay server uses to authenticate against the control server
@@ -192,6 +200,12 @@ control-cas = "path/to/ca/file.pem" # the public certificate root of the control
 
 store-dir = "path/to/relay-store" # where does this relay persist runtime information, defaults to a /tmp subdirectory
 ```
+
+### Storage
+
+`connet` servers (both control and relay servers) store runtime state in the file system. If you don't explicitly specify 
+`store-dir`, they will use a new subdirectory in `/tmp` by default, which means that every time they restart they'll loose
+any state and identity. To prevent this, you can specify an explicit `store-dir` location, which can be reused between runs.
 
 ### Logging
 
