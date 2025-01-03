@@ -1,10 +1,10 @@
 { config, lib, pkgs, ... }:
 let
-  cfg = config.services.connet-server;
+  cfg = config.services.connet-control-server;
 in
 {
-  options.services.connet-server = {
-    enable = lib.mkEnableOption "connet server";
+  options.services.connet-control-server = {
+    enable = lib.mkEnableOption "connet control server";
 
     package = lib.mkPackageOption pkgs "connet" { };
 
@@ -54,9 +54,14 @@ in
       description = "Server log format to use.";
     };
 
-    tokensFile = lib.mkOption {
+    clientTokensFile = lib.mkOption {
       type = lib.types.path;
       description = "The file to read client tokens from.";
+    };
+
+    relayTokensFile = lib.mkOption {
+      type = lib.types.path;
+      description = "The file to read relay tokens from.";
     };
 
     controlPort = lib.mkOption {
@@ -88,18 +93,6 @@ in
       default = null;
       type = lib.types.nullOr lib.types.path;
       description = "Server private key file to use";
-    };
-
-    relayPort = lib.mkOption {
-      default = 19191;
-      type = lib.types.port;
-      description = "The port to listen for incoming relay connections.";
-    };
-
-    relayHostname = lib.mkOption {
-      type = lib.types.str;
-      description = "Relay hostname to advertise to clients.";
-      example = "localhost";
     };
   };
 
@@ -137,23 +130,21 @@ in
       connet = { };
     };
 
-    networking.firewall.allowedUDPPorts = lib.mkIf cfg.openFirewall [ cfg.controlPort cfg.relayPort ];
+    networking.firewall.allowedUDPPorts = lib.mkIf cfg.openFirewall [ cfg.controlPort ];
 
-    environment.etc."connet-server.toml" = {
+    environment.etc."connet-control-server.toml" = {
       user = cfg.user;
       group = cfg.group;
-      source = (pkgs.formats.toml { }).generate "connet-server-config.toml" {
+      source = (pkgs.formats.toml { }).generate "connet-control-server-config.toml" {
         log-level = cfg.logLevel;
         log-format = cfg.logFormat;
-        server = {
-          tokens-file = cfg.tokenFile;
+        control = {
+          client-tokens-file = cfg.clientTokensFile;
+          relay-tokens-file = cfg.relayTokensFile;
 
           addr = ":${toString cfg.controlPort}";
 
-          relay-addr = ":${toString cfg.relayPort}";
-          relay-hostname = cfg.relayHostname;
-
-          store-dir = "/var/lib/connet-server";
+          store-dir = "/var/lib/connet-control-server";
         } // (if (builtins.isString cfg.useACMEHost) then
           let
             sslCertDir = config.security.acme.certs.${cfg.useACMEHost}.directory;
@@ -170,19 +161,19 @@ in
     };
 
     systemd.packages = [ cfg.package ];
-    systemd.services.connet-server = {
-      description = "connet server";
+    systemd.services.connet-control-server = {
+      description = "connet control server";
       after = [ "network.target" "network-online.target" ];
       requires = [ "network-online.target" ]
         ++ lib.optional (builtins.isString cfg.useACMEHost) [ "acme-finished-${cfg.useACMEHost}.target" ];
       wantedBy = [ "multi-user.target" ];
-      restartTriggers = [ config.environment.etc."connet-server.toml".source ];
+      restartTriggers = [ config.environment.etc."connet-control-server.toml".source ];
       serviceConfig = {
         User = cfg.user;
         Group = cfg.group;
-        ExecStart = "${pkgs.connet}/bin/connet server --config /etc/connet-server.toml";
+        ExecStart = "${pkgs.connet}/bin/connet control --config /etc/connet-control-server.toml";
         Restart = "on-failure";
-        StateDirectory = "connet-server";
+        StateDirectory = "connet-control-server";
         StateDirectoryMode = "0700";
       };
     };

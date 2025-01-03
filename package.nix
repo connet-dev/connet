@@ -4,6 +4,7 @@ let
     (lib.fileset.maybeMissing ./result)
     ./.envrc
     ./.gitignore
+    ./control-server.nix
     ./default.nix
     ./examples
     ./flake.lock
@@ -11,6 +12,7 @@ let
     ./Makefile
     ./package.nix
     ./process-compose.yaml
+    ./relay-server.nix
     ./server.nix
   ]);
 in

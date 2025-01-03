@@ -10,6 +10,8 @@
     {
       nixosModules.default = ./default.nix;
       nixosModules.server = ./server.nix;
+      nixosModules.control-server = ./control-server.nix;
+      nixosModules.relay-server = ./relay-server.nix;
     } // flake-utils.lib.eachDefaultSystem (system:
       let
         pkgs = import nixpkgs {
