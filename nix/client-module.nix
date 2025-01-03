@@ -6,7 +6,10 @@ in
   options.services.connet = {
     enable = lib.mkEnableOption "connet client";
 
-    package = lib.mkPackageOption pkgs "connet" { };
+    package = lib.mkOption {
+      default = pkgs.callPackage ./package.nix { };
+      type = lib.types.package;
+    };
 
     user = lib.mkOption {
       default = "connet";
