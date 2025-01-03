@@ -8,10 +8,10 @@
 
   outputs = { self, nixpkgs, flake-utils }:
     {
-      nixosModules.default = ./default.nix;
-      nixosModules.server = ./server.nix;
-      nixosModules.control-server = ./control-server.nix;
-      nixosModules.relay-server = ./relay-server.nix;
+      nixosModules.default = ./client-module.nix;
+      nixosModules.server = ./server-module.nix;
+      nixosModules.control-server = ./control-server-module.nix;
+      nixosModules.relay-server = ./relay-server-module.nix;
     } // flake-utils.lib.eachDefaultSystem (system:
       let
         pkgs = import nixpkgs {
@@ -20,7 +20,7 @@
       in
       {
         formatter = pkgs.nixpkgs-fmt;
-        packages.default = pkgs.callPackage ./package.nix { };
+        packages.default = pkgs.callPackage ./default.nix { };
         devShells.default = pkgs.mkShellNoCC {
           buildInputs = with pkgs; [
             go
