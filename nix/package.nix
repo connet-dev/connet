@@ -1,19 +1,17 @@
 { pkgs, lib, ... }:
 let
-  sourceFiles = lib.fileset.difference ./. (lib.fileset.unions [
-    (lib.fileset.maybeMissing ./result)
-    ./.envrc
-    ./.gitignore
-    ./client-module.nix
-    ./control-server-module.nix
-    ./default.nix
-    ./examples
-    ./flake.lock
-    ./flake.nix
-    ./Makefile
-    ./process-compose.yaml
-    ./relay-server-module.nix
-    ./server-module.nix
+  sourceFiles = lib.fileset.difference ../. (lib.fileset.unions [
+    (lib.fileset.maybeMissing ../result)
+    ../.envrc
+    ../.gitignore
+    ../examples
+    ../flake.lock
+    ../flake.nix
+    ../LICENSE
+    ../Makefile
+    ../nix
+    ../process-compose.yaml
+    ../README.md
   ]);
 in
 lib.fileset.trace sourceFiles
@@ -22,7 +20,7 @@ lib.fileset.trace sourceFiles
   name = "connet";
 
   src = lib.fileset.toSource {
-    root = ./.;
+    root = ../.;
     fileset = sourceFiles;
   };
 
