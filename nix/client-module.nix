@@ -170,7 +170,7 @@ in
       serviceConfig = {
         User = cfg.user;
         Group = cfg.group;
-        ExecStart = "${pkgs.connet}/bin/connet --config /etc/connet.toml";
+        ExecStart = "${cfg.package}/bin/connet --config /etc/connet.toml";
         Restart = "on-failure";
       };
     };
