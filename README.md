@@ -120,7 +120,7 @@ only support a single `destination` or `source` configuration.
 
 ### Client
 
-To run in client mode, use `connet --config client-config.toml` command. Here is the full client `client-config.toml` 
+To run a client, use `connet --config client-config.toml` command. Here is the full client `client-config.toml` 
 configuration spec:
 ```toml
 [client]
@@ -150,7 +150,7 @@ route = "direct" # force only direct communication between clients, even if othe
 
 ### Server
 
-To run in server mode (e.g. running both control and a relay server), use `connet server --config server-config.toml` command. 
+To run a server (e.g. running both control and a relay server), use `connet server --config server-config.toml` command. 
 Here is the full server `server-config.toml` configuration specification:
 ```toml
 [server]
@@ -158,7 +158,7 @@ tokens = ["client-token-1", "client-token-n"] # set of recognized client tokens
 tokens-file = "path/to/client/tokens" # a file that contains a list of client tokens
 # one of tokens or tokens-file is required
 
-addr = ":19190" # the address at which the control server will listen for connections, default to :19190
+addr = ":19190" # the address at which the control server will listen for connections, defaults to :19190
 cert-file = "path/to/cert.pem" # the server certificate file, in pem format
 key-file = "path/to/key.pem" # the server certificate private key file
 
@@ -170,7 +170,7 @@ store-dir = "path/to/server-store" # where does this server persist runtime info
 
 #### Control server
 
-To run in control server mode, use `connet control --config control-config.toml` command. Here is the full control server 
+To run a control server, use `connet control --config control-config.toml` command. Here is the full control server 
 `control-config.toml` configuration specification:
 ```toml
 [control]
@@ -182,7 +182,7 @@ relay-tokens = ["relay-token-1", "relay-token-n"] # set of recognized relay toke
 relay-tokens-file = "path/to/relay/token" # a file that contains a list of relay tokens
 # one of relay-tokens or relay-tokens-file is necessary when connecting relays
 
-addr = ":19190" # the address at which the control server will listen for connections, default to :19190
+addr = ":19190" # the address at which the control server will listen for connections, defaults to :19190
 cert-file = "path/to/cert.pem" # the server certificate file, in pem format
 key-file = "path/to/key.pem" # the server certificate private key file
 
@@ -191,7 +191,7 @@ store-dir = "path/to/control-store" # where does this control server persist run
 
 #### Relay server
 
-To run in relay server mode, use `connet relay --config relay-config.toml` command. Here is the full relay server 
+To run a relay server, use `connet relay --config relay-config.toml` command. Here is the full relay server 
 `relay-config.toml` configuration specification:
 ```toml
 [relay]

@@ -11,6 +11,7 @@ let
     ./Makefile
     ./package.nix
     ./process-compose.yaml
+    ./server.nix
   ]);
 in
 lib.fileset.trace sourceFiles

@@ -9,6 +9,7 @@
   outputs = { self, nixpkgs, flake-utils }:
     {
       nixosModules.default = ./default.nix;
+      nixosModules.server = ./server.nix;
     } // flake-utils.lib.eachDefaultSystem (system:
       let
         pkgs = import nixpkgs {
