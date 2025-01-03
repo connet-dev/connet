@@ -6,7 +6,10 @@ in
   options.services.connet-server = {
     enable = lib.mkEnableOption "connet server";
 
-    package = lib.mkPackageOption pkgs "connet" { };
+    package = lib.mkOption {
+      default = pkgs.callPackage ./package.nix { };
+      type = lib.types.package;
+    };
 
     user = lib.mkOption {
       default = "connet";
@@ -180,7 +183,7 @@ in
       serviceConfig = {
         User = cfg.user;
         Group = cfg.group;
-        ExecStart = "${pkgs.connet}/bin/connet server --config /etc/connet-server.toml";
+        ExecStart = "${cfg.package}/bin/connet server --config /etc/connet-server.toml";
         Restart = "on-failure";
         StateDirectory = "connet-server";
         StateDirectoryMode = "0700";

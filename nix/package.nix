@@ -14,8 +14,8 @@ let
     ../README.md
   ]);
 in
-lib.fileset.trace sourceFiles
-  pkgs.buildGoModule
+# lib.fileset.trace sourceFiles
+pkgs.buildGoModule
 {
   name = "connet";
 

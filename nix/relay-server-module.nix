@@ -6,7 +6,10 @@ in
   options.services.connet-relay-server = {
     enable = lib.mkEnableOption "connet relay server";
 
-    package = lib.mkPackageOption pkgs "connet" { };
+    package = lib.mkOption {
+      default = pkgs.callPackage ./package.nix { };
+      type = lib.types.package;
+    };
 
     user = lib.mkOption {
       default = "connet";
@@ -132,7 +135,7 @@ in
       serviceConfig = {
         User = cfg.user;
         Group = cfg.group;
-        ExecStart = "${pkgs.connet}/bin/connet relay --config /etc/connet-relay-server.toml";
+        ExecStart = "${cfg.package}/bin/connet relay --config /etc/connet-relay-server.toml";
         Restart = "on-failure";
         StateDirectory = "connet-relay-server";
         StateDirectoryMode = "0700";
