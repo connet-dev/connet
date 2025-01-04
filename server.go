@@ -11,6 +11,7 @@ import (
 
 	"github.com/connet-dev/connet/control"
 	"github.com/connet-dev/connet/model"
+	"github.com/connet-dev/connet/netc"
 	"github.com/connet-dev/connet/relay"
 	"github.com/connet-dev/connet/selfhosted"
 	"github.com/klev-dev/kleverr"
@@ -61,12 +62,13 @@ func NewServer(opts ...ServerOption) (*Server, error) {
 	relayControlToken := model.GenServerName("relay")
 
 	control, err := control.NewServer(control.Config{
-		Addr:       cfg.controlAddr,
-		Cert:       cfg.controlCert,
-		ClientAuth: cfg.clientAuth,
-		RelayAuth:  selfhosted.NewRelayAuthenticator(relayControlToken),
-		Logger:     cfg.logger,
-		Stores:     control.NewFileStores(filepath.Join(cfg.dir, "control")),
+		Addr:        cfg.controlAddr,
+		Cert:        cfg.controlCert,
+		ClientAuth:  cfg.clientAuth,
+		ClientRestr: cfg.clientRestr,
+		RelayAuth:   selfhosted.NewRelayAuthenticator(relayControlToken),
+		Logger:      cfg.logger,
+		Stores:      control.NewFileStores(filepath.Join(cfg.dir, "control")),
 	})
 	if err != nil {
 		return nil, err
@@ -109,7 +111,8 @@ func (s *Server) Run(ctx context.Context) error {
 }
 
 type serverConfig struct {
-	clientAuth control.ClientAuthenticator
+	clientAuth  control.ClientAuthenticator
+	clientRestr netc.IPRestriction
 
 	controlAddr *net.UDPAddr
 	controlCert tls.Certificate
@@ -126,6 +129,20 @@ type ServerOption func(*serverConfig) error
 func ServerClientTokens(tokens ...string) ServerOption {
 	return func(cfg *serverConfig) error {
 		cfg.clientAuth = selfhosted.NewClientAuthenticator(tokens...)
+
+		return nil
+	}
+}
+
+func ServerClientRestrictions(allow []string, deny []string) ServerOption {
+	return func(cfg *serverConfig) error {
+		restr, err := netc.ParseIPRestriction(allow, deny)
+		if err != nil {
+			return err
+		}
+
+		cfg.clientRestr = restr
+
 		return nil
 	}
 }

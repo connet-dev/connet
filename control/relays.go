@@ -14,6 +14,7 @@ import (
 	"github.com/connet-dev/connet/certc"
 	"github.com/connet-dev/connet/logc"
 	"github.com/connet-dev/connet/model"
+	"github.com/connet-dev/connet/netc"
 	"github.com/connet-dev/connet/pb"
 	"github.com/connet-dev/connet/pbr"
 	"github.com/klev-dev/kleverr"
@@ -35,6 +36,7 @@ type RelayAuthentication interface {
 
 func newRelayServer(
 	auth RelayAuthenticator,
+	restr netc.IPRestriction,
 	config logc.KV[ConfigKey, ConfigValue],
 	stores Stores,
 	logger *slog.Logger,
@@ -95,6 +97,7 @@ func newRelayServer(
 	return &relayServer{
 		id:     serverIDConfig.String,
 		auth:   auth,
+		restr:  restr,
 		logger: logger.With("server", "relays"),
 
 		relaySecretKey: [32]byte(serverSecret.Bytes),
@@ -113,6 +116,7 @@ func newRelayServer(
 type relayServer struct {
 	id     string
 	auth   RelayAuthenticator
+	restr  netc.IPRestriction
 	logger *slog.Logger
 
 	relaySecretKey [32]byte
@@ -235,12 +239,16 @@ func (s *relayServer) run(ctx context.Context) error {
 }
 
 func (s *relayServer) handle(ctx context.Context, conn quic.Connection) {
-	rc := &relayConn{
-		server: s,
-		conn:   conn,
-		logger: s.logger,
+	if s.restr.AcceptAddr(conn.RemoteAddr()) {
+		rc := &relayConn{
+			server: s,
+			conn:   conn,
+			logger: s.logger,
+		}
+		go rc.run(ctx)
+	} else {
+		conn.CloseWithError(quic.ApplicationErrorCode(pb.Error_AuthenticationFailed), "not allowed")
 	}
-	go rc.run(ctx)
 }
 
 func (s *relayServer) getRelayServerOffset(id ksuid.KSUID) (int64, error) {

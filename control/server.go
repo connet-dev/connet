@@ -7,18 +7,21 @@ import (
 	"net"
 	"time"
 
+	"github.com/connet-dev/connet/netc"
 	"github.com/klev-dev/kleverr"
 	"github.com/quic-go/quic-go"
 	"golang.org/x/sync/errgroup"
 )
 
 type Config struct {
-	Addr       *net.UDPAddr
-	Cert       tls.Certificate
-	ClientAuth ClientAuthenticator
-	RelayAuth  RelayAuthenticator
-	Stores     Stores
-	Logger     *slog.Logger
+	Addr        *net.UDPAddr
+	Cert        tls.Certificate
+	ClientAuth  ClientAuthenticator
+	ClientRestr netc.IPRestriction
+	RelayAuth   RelayAuthenticator
+	RelayRestr  netc.IPRestriction
+	Stores      Stores
+	Logger      *slog.Logger
 }
 
 func NewServer(cfg Config) (*Server, error) {
@@ -36,13 +39,13 @@ func NewServer(cfg Config) (*Server, error) {
 		logger: cfg.Logger.With("control", cfg.Addr),
 	}
 
-	relays, err := newRelayServer(cfg.RelayAuth, config, cfg.Stores, cfg.Logger)
+	relays, err := newRelayServer(cfg.RelayAuth, cfg.RelayRestr, config, cfg.Stores, cfg.Logger)
 	if err != nil {
 		return nil, err
 	}
 	s.relays = relays
 
-	clSrv, err := newClientServer(cfg.ClientAuth, s.relays, config, cfg.Stores, cfg.Logger)
+	clSrv, err := newClientServer(cfg.ClientAuth, cfg.ClientRestr, s.relays, config, cfg.Stores, cfg.Logger)
 	if err != nil {
 		return nil, err
 	}

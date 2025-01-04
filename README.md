@@ -129,7 +129,10 @@ token-file = "path/to/relay/token" # a file that contains the token, one of toke
 
 server-addr = "localhost:19190" # the control server address to connect to
 server-cas = "path/to/cert.pem" # the control server certificate
+
 direct-addr = ":19192" # at what address this client listens for direct connections
+direct-allow-cidr = [] # set of networks in CIDR format, to allow direct connetctions from
+direct-deny-cidr = [] # set of networks in CIDR format, to deny direct connetctions from
 
 [client.destinations.serviceX]
 addr = "localhost:3000" # where this destination connects to, required
@@ -155,8 +158,10 @@ Here is the full server `server-config.toml` configuration specification:
 ```toml
 [server]
 tokens = ["client-token-1", "client-token-n"] # set of recognized client tokens
-tokens-file = "path/to/client/tokens" # a file that contains a list of client tokens
+tokens-file = "path/to/client/tokens" # a file that contains a list of client tokens, one token per line
 # one of tokens or tokens-file is required
+allow-cidr = [] # set of networks in CIDR format, to allow client connetctions from
+deny-cidr = [] # set of networks in CIDR format, to deny client connetctions from
 
 addr = ":19190" # the address at which the control server will listen for connections, defaults to :19190
 cert-file = "path/to/cert.pem" # the server certificate file, in pem format
@@ -175,12 +180,16 @@ To run a control server, use `connet control --config control-config.toml` comma
 ```toml
 [control]
 client-tokens = ["client-token-1", "client-token-n"] # set of recognized client tokens
-client-tokens-file = "path/to/client/tokens" # a file that contains a list of client tokens
+client-tokens-file = "path/to/client/tokens" # a file that contains a list of client tokens, one token per line
 # one of client-tokens or client-tokens-file is required
+client-allow-cidr = [] # set of networks in CIDR format, to allow client connetctions from
+client-deny-cidr = [] # set of networks in CIDR format, to deny client connetctions from
 
 relay-tokens = ["relay-token-1", "relay-token-n"] # set of recognized relay tokens
-relay-tokens-file = "path/to/relay/token" # a file that contains a list of relay tokens
+relay-tokens-file = "path/to/relay/token" # a file that contains a list of relay tokens, one token per line
 # one of relay-tokens or relay-tokens-file is necessary when connecting relays
+relay-allow-cidr = [] # set of networks in CIDR format, to allow client connetctions from
+relay-deny-cidr = [] # set of networks in CIDR format, to deny client connetctions from
 
 addr = ":19190" # the address at which the control server will listen for connections, defaults to :19190
 cert-file = "path/to/cert.pem" # the server certificate file, in pem format
@@ -206,6 +215,21 @@ control-cas = "path/to/ca/file.pem" # the public certificate root of the control
 
 store-dir = "path/to/relay-store" # where does this relay persist runtime information, defaults to a /tmp subdirectory
 ```
+
+### Allow CIDR and Deny CIDR
+
+You can restrict the set of direct and server connections from IPs using `*-allow-cidr` and `*-deny-cidr` options. 
+Both of these accept a list of strings in CIDR format, as defined by [RFC 4632](https://www.rfc-editor.org/rfc/rfc4632.html) and 
+[RFC 4291](https://www.rfc-editor.org/rfc/rfc4291.html), for example (to restrict the set of clients that connect to the server):
+```toml
+[server]
+allow-cidr = ["10.100.1.0/24"]
+deny-cidr = ["90.0.0.0/8"]
+```
+
+If these options are specified, an IP will be rejected if:
+ - it matches any of the CIDRs in the `deny-cidr` list
+ - it matches none of the CIDRs in the `allow-cidr` list. If the `allow-cidr` list is empty, the IP will be allowed.
 
 ### Storage
 

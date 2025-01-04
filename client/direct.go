@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/connet-dev/connet/certc"
+	"github.com/connet-dev/connet/netc"
 	"github.com/klev-dev/kleverr"
 	"github.com/quic-go/quic-go"
 	"golang.org/x/sync/errgroup"
@@ -17,15 +18,17 @@ import (
 
 type DirectServer struct {
 	transport *quic.Transport
+	restr     netc.IPRestriction
 	logger    *slog.Logger
 
 	servers   map[string]*vServer
 	serversMu sync.RWMutex
 }
 
-func NewDirectServer(transport *quic.Transport, logger *slog.Logger) (*DirectServer, error) {
+func NewDirectServer(transport *quic.Transport, restr netc.IPRestriction, logger *slog.Logger) (*DirectServer, error) {
 	return &DirectServer{
 		transport: transport,
+		restr:     restr,
 		logger:    logger.With("component", "direct-server"),
 
 		servers: map[string]*vServer{},
@@ -151,7 +154,11 @@ func (s *DirectServer) runServer(ctx context.Context) error {
 			s.logger.Debug("accept error", "err", err)
 			return kleverr.Ret(err)
 		}
-		go s.runConn(conn)
+		if s.restr.AcceptAddr(conn.RemoteAddr()) {
+			go s.runConn(conn)
+		} else {
+			conn.CloseWithError(1, "not allowed")
+		}
 	}
 }
 

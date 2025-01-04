@@ -10,6 +10,7 @@ import (
 
 	"github.com/connet-dev/connet/certc"
 	"github.com/connet-dev/connet/model"
+	"github.com/connet-dev/connet/netc"
 	"github.com/connet-dev/connet/notify"
 	"github.com/connet-dev/connet/pb"
 	"github.com/connet-dev/connet/pbs"
@@ -27,6 +28,7 @@ type peer struct {
 	direct     *DirectServer
 	serverCert tls.Certificate
 	clientCert tls.Certificate
+	restr      netc.IPRestriction
 	logger     *slog.Logger
 }
 
@@ -57,7 +59,7 @@ func (s peerStyle) String() string {
 	}
 }
 
-func newPeer(direct *DirectServer, root *certc.Cert, logger *slog.Logger) (*peer, error) {
+func newPeer(direct *DirectServer, root *certc.Cert, restr netc.IPRestriction, logger *slog.Logger) (*peer, error) {
 	serverCert, err := root.NewServer(certc.CertOpts{
 		Domains: []string{model.GenServerName("connet-direct")},
 	})
@@ -87,6 +89,7 @@ func newPeer(direct *DirectServer, root *certc.Cert, logger *slog.Logger) (*peer
 		direct:     direct,
 		serverCert: serverTLSCert,
 		clientCert: clientTLSCert,
+		restr:      restr,
 		logger:     logger,
 	}, nil
 }

@@ -252,7 +252,8 @@ type clientConfig struct {
 	controlHost string
 	controlCAs  *x509.CertPool
 
-	directAddr *net.UDPAddr
+	directAddr  *net.UDPAddr
+	directRestr netc.IPRestriction
 
 	destinations map[model.Forward]clientForwardConfig
 	sources      map[model.Forward]clientForwardConfig
@@ -330,6 +331,19 @@ func ClientDirectAddress(address string) ClientOption {
 		}
 
 		cfg.directAddr = addr
+
+		return nil
+	}
+}
+
+func ClientDirectRestrictions(allow []string, deny []string) ClientOption {
+	return func(cfg *clientConfig) error {
+		restr, err := netc.ParseIPRestriction(allow, deny)
+		if err != nil {
+			return err
+		}
+
+		cfg.directRestr = restr
 
 		return nil
 	}

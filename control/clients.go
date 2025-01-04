@@ -8,11 +8,13 @@ import (
 	"io"
 	"log/slog"
 	"net"
+	"net/netip"
 	"slices"
 	"sync"
 
 	"github.com/connet-dev/connet/logc"
 	"github.com/connet-dev/connet/model"
+	"github.com/connet-dev/connet/netc"
 	"github.com/connet-dev/connet/pb"
 	"github.com/connet-dev/connet/pbc"
 	"github.com/connet-dev/connet/pbs"
@@ -40,6 +42,7 @@ type ClientRelays interface {
 
 func newClientServer(
 	auth ClientAuthenticator,
+	restr netc.IPRestriction,
 	relays ClientRelays,
 	config logc.KV[ConfigKey, ConfigValue],
 	stores Stores,
@@ -83,6 +86,7 @@ func newClientServer(
 
 	s := &clientServer{
 		auth:   auth,
+		restr:  restr,
 		relays: relays,
 		logger: logger.With("server", "clients"),
 
@@ -100,6 +104,7 @@ func newClientServer(
 
 type clientServer struct {
 	auth   ClientAuthenticator
+	restr  netc.IPRestriction
 	relays ClientRelays
 	encode []byte
 	logger *slog.Logger
@@ -249,12 +254,16 @@ func (s *clientServer) run(ctx context.Context) error {
 }
 
 func (s *clientServer) handle(ctx context.Context, conn quic.Connection) {
-	cc := &clientConn{
-		server: s,
-		conn:   conn,
-		logger: s.logger,
+	if s.restr.AcceptAddr(conn.RemoteAddr()) {
+		cc := &clientConn{
+			server: s,
+			conn:   conn,
+			logger: s.logger,
+		}
+		go cc.run(ctx)
+	} else {
+		conn.CloseWithError(quic.ApplicationErrorCode(pb.Error_AuthenticationFailed), "not allowed")
 	}
-	go cc.run(ctx)
 }
 
 type clientConn struct {

@@ -34,9 +34,11 @@ type sourceConn struct {
 	conn quic.Connection
 }
 
-func NewSource(fwd model.Forward, addr string, opt model.RouteOption, direct *DirectServer, root *certc.Cert, logger *slog.Logger) (*Source, error) {
+func NewSource(fwd model.Forward, addr string, opt model.RouteOption,
+	direct *DirectServer, root *certc.Cert, restr netc.IPRestriction, logger *slog.Logger) (*Source, error) {
+
 	logger = logger.With("source", fwd)
-	p, err := newPeer(direct, root, logger)
+	p, err := newPeer(direct, root, restr, logger)
 	if err != nil {
 		return nil, err
 	}
