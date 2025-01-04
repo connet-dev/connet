@@ -86,14 +86,14 @@ func (c *Client) Run(ctx context.Context) error {
 	}
 	defer transport.Close()
 
-	ds, err := client.NewDirectServer(transport, c.logger)
+	ds, err := client.NewDirectServer(transport, c.directRestr, c.logger)
 	if err != nil {
 		return kleverr.Ret(err)
 	}
 
 	c.dsts = map[model.Forward]*client.Destination{}
 	for fwd, cfg := range c.destinations {
-		c.dsts[fwd], err = client.NewDestination(fwd, cfg.addr, cfg.route, ds, c.rootCert, c.logger)
+		c.dsts[fwd], err = client.NewDestination(fwd, cfg.addr, cfg.route, ds, c.rootCert, c.directRestr, c.logger)
 		if err != nil {
 			return kleverr.Ret(err)
 		}
@@ -101,7 +101,7 @@ func (c *Client) Run(ctx context.Context) error {
 
 	c.srcs = map[model.Forward]*client.Source{}
 	for fwd, cfg := range c.sources {
-		c.srcs[fwd], err = client.NewSource(fwd, cfg.addr, cfg.route, ds, c.rootCert, c.logger)
+		c.srcs[fwd], err = client.NewSource(fwd, cfg.addr, cfg.route, ds, c.rootCert, c.directRestr, c.logger)
 		if err != nil {
 			return kleverr.Ret(err)
 		}

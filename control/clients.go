@@ -8,7 +8,6 @@ import (
 	"io"
 	"log/slog"
 	"net"
-	"net/netip"
 	"slices"
 	"sync"
 

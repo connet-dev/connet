@@ -6,25 +6,25 @@ import (
 )
 
 type IPRestriction struct {
-	Allow []netip.Prefix
-	Deny  []netip.Prefix
+	allow []netip.Prefix
+	deny  []netip.Prefix
 }
 
 func ParseIPRestriction(allows []string, denys []string) (IPRestriction, error) {
 	restr := IPRestriction{
-		Allow: make([]netip.Prefix, len(allows)),
-		Deny:  make([]netip.Prefix, len(denys)),
+		allow: make([]netip.Prefix, len(allows)),
+		deny:  make([]netip.Prefix, len(denys)),
 	}
 
 	var err error
 	for i, cidr := range allows {
-		restr.Allow[i], err = netip.ParsePrefix(cidr)
+		restr.allow[i], err = netip.ParsePrefix(cidr)
 		if err != nil {
 			return IPRestriction{}, err
 		}
 	}
 	for i, cidr := range denys {
-		restr.Deny[i], err = netip.ParsePrefix(cidr)
+		restr.deny[i], err = netip.ParsePrefix(cidr)
 		if err != nil {
 			return IPRestriction{}, err
 		}
@@ -37,21 +37,32 @@ func ParseIPRestriction(allows []string, denys []string) (IPRestriction, error) 
 // If the ip matches any of the Allow rules (after checking all Deny rules), Accept returns true
 // Finally, if the ip matches no Allow or Deny rules, Accept returns true only if no explicit Allow rules were defined
 func (r IPRestriction) Accept(ip netip.Addr) bool {
-	for _, d := range r.Deny {
+	for _, d := range r.deny {
 		if d.Contains(ip) {
 			return false
 		}
 	}
 
-	for _, a := range r.Allow {
+	for _, a := range r.allow {
 		if a.Contains(ip) {
 			return true
 		}
 	}
 
-	return len(r.Allow) == 0
+	return len(r.allow) == 0
 }
 
 func (r IPRestriction) AcceptAddr(addr net.Addr) bool {
-	return false
+	switch taddr := addr.(type) {
+	case *net.UDPAddr:
+		return r.Accept(taddr.AddrPort().Addr())
+	case *net.TCPAddr:
+		return r.Accept(taddr.AddrPort().Addr())
+	default:
+		naddr, err := netip.ParseAddrPort(addr.String())
+		if err != nil {
+			return false
+		}
+		return r.Accept(naddr.Addr())
+	}
 }

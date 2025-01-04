@@ -154,8 +154,12 @@ func (s *Source) runConnErr(ctx context.Context, conn net.Conn) error {
 		return kleverr.Newf("could not write request: %w", err)
 	}
 
-	if _, err := pbc.ReadResponse(stream); err != nil {
+	resp, err := pbc.ReadResponse(stream)
+	if err != nil {
 		return kleverr.Newf("could not read response: %w", err)
+	}
+	if dst := resp.GetConnect().GetDestination(); dst != nil && !s.peer.restr.Accept(dst.AsNetip()) {
+		return kleverr.Newf("destination ip not allowed")
 	}
 
 	s.logger.Debug("joining to server")

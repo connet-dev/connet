@@ -33,15 +33,17 @@ func TestE2E(t *testing.T) {
 	srv, err := NewServer(
 		ServerClientTokens("test-token"),
 		serverControlCertificate(cert),
+		ServerControlAddress(":20000"),
+		ServerRelayAddress(":20001"),
 		ServerLogger(logger.With("test", "server")),
 	)
 	require.NoError(t, err)
 
 	clDst, err := NewClient(
 		ClientToken("test-token"),
-		ClientControlAddress("localhost:19190"),
+		ClientControlAddress("localhost:20000"),
 		clientControlCAs(cas),
-		ClientDirectAddress(":19192"),
+		ClientDirectAddress(":20002"),
 		ClientDestination("direct", hts.Listener.Addr().String(), model.RouteDirect),
 		ClientDestination("relay", hts.Listener.Addr().String(), model.RouteRelay),
 		ClientDestination("dst-any-direct-src", hts.Listener.Addr().String(), model.RouteAny),
@@ -56,9 +58,9 @@ func TestE2E(t *testing.T) {
 
 	clSrc, err := NewClient(
 		ClientToken("test-token"),
-		ClientControlAddress("localhost:19190"),
+		ClientControlAddress("localhost:20000"),
 		clientControlCAs(cas),
-		ClientDirectAddress(":19193"),
+		ClientDirectAddress(":20003"),
 		ClientSource("direct", ":9990", model.RouteDirect),
 		ClientSource("relay", ":9991", model.RouteRelay),
 		ClientSource("dst-any-direct-src", ":9992", model.RouteDirect),

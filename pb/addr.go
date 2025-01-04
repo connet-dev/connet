@@ -36,14 +36,15 @@ func AddrPortFromNetip(addr netip.AddrPort) *AddrPort {
 	}
 }
 
-func (a *AddrPort) AsNetip() netip.AddrPort {
-	var addr netip.Addr
-	if len(a.Addr.V6) > 0 {
-		addr = netip.AddrFrom16([16]byte(a.Addr.V6))
-	} else {
-		addr = netip.AddrFrom4([4]byte(a.Addr.V4))
+func (a *Addr) AsNetip() netip.Addr {
+	if len(a.V6) > 0 {
+		return netip.AddrFrom16([16]byte(a.V6))
 	}
-	return netip.AddrPortFrom(addr, uint16(a.Port))
+	return netip.AddrFrom4([4]byte(a.V4))
+}
+
+func (a *AddrPort) AsNetip() netip.AddrPort {
+	return netip.AddrPortFrom(a.Addr.AsNetip(), uint16(a.Port))
 }
 
 func AsNetips(pb []*AddrPort) []netip.AddrPort {
