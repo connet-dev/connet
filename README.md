@@ -232,7 +232,36 @@ In which case, we recommend visiting the [wiki page](https://github.com/quic-go/
 
 ### NisOS
 
-TBD
+`connet` contains NixOS modules that you can use for running:
+ - client via [client-module.nix](nix/client-module.nix)
+ - server via [server-module.nix](nix/server-module.nix)
+ - control server via [control-server-module.nix](nix/control-server-module.nix)
+ - relay server via [relay-server-module.nix](nix/relay-server-module.nix)
+
+To configure the client as a service:
+```nix
+# configuration nix
+{ config, pkgs, ... }:
+let
+  connet-repo = builtins.fetchGit {
+    url = "https://github.com/connet-dev/connet";
+    ref = "main";
+  };
+in
+{
+  imports = [
+    # ...
+    "${connet-repo}/nix/client-module.nix"
+  ];
+  # ...
+  services.connet = {
+    enable = true;
+    tokenFile = "/run/keys/connet.token";
+    serverAddr = "localhost:19190";
+    sources.example.addr = ":9000";
+  };
+}
+```
 
 #### Flakes
 
@@ -253,10 +282,9 @@ To configure the client as a service:
         {
           services.connet = {
             enable = true;
-            package = connet.packages."x86_64-linux".default;
             tokenFile = "/run/keys/connet.token";
             serverAddr = "localhost:19190";
-            sources.example.addr = ":9998";
+            sources.example.addr = ":9000";
           };
         }
       ];
