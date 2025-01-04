@@ -230,7 +230,7 @@ failed to sufficiently increase receive buffer size (was: 208 kiB, wanted: 7168 
 
 In which case, we recommend visiting the [wiki page](https://github.com/quic-go/quic-go/wiki/UDP-Buffer-Sizes) and applying the recommended changes.
 
-### NisOS
+### NixOS
 
 `connet` contains NixOS modules that you can use for running:
  - client via [client-module.nix](nix/client-module.nix)
@@ -240,7 +240,7 @@ In which case, we recommend visiting the [wiki page](https://github.com/quic-go/
 
 To configure the client as a service:
 ```nix
-# configuration nix
+# configuration.nix
 { config, pkgs, ... }:
 let
   connet-repo = builtins.fetchGit {
