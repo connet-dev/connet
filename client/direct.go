@@ -10,7 +10,6 @@ import (
 	"time"
 
 	"github.com/connet-dev/connet/certc"
-	"github.com/connet-dev/connet/netc"
 	"github.com/klev-dev/kleverr"
 	"github.com/quic-go/quic-go"
 	"golang.org/x/sync/errgroup"
@@ -18,17 +17,15 @@ import (
 
 type DirectServer struct {
 	transport *quic.Transport
-	restr     netc.IPRestriction
 	logger    *slog.Logger
 
 	servers   map[string]*vServer
 	serversMu sync.RWMutex
 }
 
-func NewDirectServer(transport *quic.Transport, restr netc.IPRestriction, logger *slog.Logger) (*DirectServer, error) {
+func NewDirectServer(transport *quic.Transport, logger *slog.Logger) (*DirectServer, error) {
 	return &DirectServer{
 		transport: transport,
-		restr:     restr,
 		logger:    logger.With("component", "direct-server"),
 
 		servers: map[string]*vServer{},
@@ -38,6 +35,7 @@ func NewDirectServer(transport *quic.Transport, restr netc.IPRestriction, logger
 type vServer struct {
 	serverName string
 	serverCert tls.Certificate
+	restr      IPRestrictions
 	clients    map[certc.Key]*vClient
 	clientCA   atomic.Pointer[x509.CertPool]
 	mu         sync.RWMutex
@@ -79,7 +77,7 @@ func (s *DirectServer) Run(ctx context.Context) error {
 	return g.Wait()
 }
 
-func (s *DirectServer) addServerCert(cert tls.Certificate) {
+func (s *DirectServer) addServerCert(cert tls.Certificate, restr IPRestrictions) {
 	serverName := cert.Leaf.DNSNames[0]
 
 	s.serversMu.Lock()
@@ -89,6 +87,7 @@ func (s *DirectServer) addServerCert(cert tls.Certificate) {
 	s.servers[serverName] = &vServer{
 		serverName: serverName,
 		serverCert: cert,
+		restr:      restr,
 		clients:    map[certc.Key]*vClient{},
 	}
 }
@@ -154,11 +153,7 @@ func (s *DirectServer) runServer(ctx context.Context) error {
 			s.logger.Debug("accept error", "err", err)
 			return kleverr.Ret(err)
 		}
-		if s.restr.AcceptAddr(conn.RemoteAddr()) {
-			go s.runConn(conn)
-		} else {
-			conn.CloseWithError(1, "not allowed")
-		}
+		go s.runConn(conn)
 	}
 }
 
@@ -166,6 +161,10 @@ func (s *DirectServer) runConn(conn quic.Connection) {
 	srv := s.getServer(conn.ConnectionState().TLS.ServerName)
 	if srv == nil {
 		conn.CloseWithError(1, "server not found")
+		return
+	}
+	if !srv.restr.AcceptAddr(conn.RemoteAddr()) {
+		conn.CloseWithError(1, "client not allowed")
 		return
 	}
 

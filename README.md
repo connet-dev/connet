@@ -129,10 +129,10 @@ token-file = "path/to/relay/token" # a file that contains the token, one of toke
 
 server-addr = "localhost:19190" # the control server address to connect to
 server-cas = "path/to/cert.pem" # the control server certificate
-
 direct-addr = ":19192" # at what address this client listens for direct connections
-direct-allow-cidr = [] # set of networks in CIDR format, to allow direct connetctions from
-direct-deny-cidr = [] # set of networks in CIDR format, to deny direct connetctions from
+
+allow-cidr = [] # set of networks in CIDR format, to allow connetctions to/from
+deny-cidr = [] # set of networks in CIDR format, to deny connetctions to/from
 
 [client.destinations.serviceX]
 addr = "localhost:3000" # where this destination connects to, required
@@ -141,6 +141,8 @@ route = "any" # what kind of routes to use, `any` will use both `direct` and `re
 [client.destinations.serviceY]
 addr = "192.168.1.100:8000" # multiple destinations can be defined, they are matched by name at the server
 route = "direct" # force only direct communication between clients
+allow-cidr = [] # set of networks in CIDR format, to allow connetctions to this destination
+deny-cidr = [] # set of networks in CIDR format, to deny connetctions to this destination
 
 [client.sources.serviceX] # matches destinations.serviceX
 addr = ":8000" # the address at which to listen for incoming connections to be forwarded
@@ -149,6 +151,8 @@ route = "relay" # the kind of route to use
 [client.sources.serviceY] # both sources and destinations can be defined in a single file
 addr = ":8001" # again, mulitple sources can be defined
 route = "direct" # force only direct communication between clients, even if other end allows any
+allow-cidr = [] # set of networks in CIDR format, to allow connetctions for this source
+deny-cidr = [] # set of networks in CIDR format, to deny connetctions for this source
 ```
 
 ### Server
@@ -218,8 +222,8 @@ store-dir = "path/to/relay-store" # where does this relay persist runtime inform
 
 ### Allow CIDR and Deny CIDR
 
-You can restrict the set of direct and server connections from IPs using `*-allow-cidr` and `*-deny-cidr` options. 
-Both of these accept a list of strings in CIDR format, as defined by [RFC 4632](https://www.rfc-editor.org/rfc/rfc4632.html) and 
+You can restrict the set of client-to-client and server connections from specific IPs using different `allow-cidr` and `deny-cidr` 
+options. Both of these accept a list of strings in CIDR format, as defined by [RFC 4632](https://www.rfc-editor.org/rfc/rfc4632.html) and 
 [RFC 4291](https://www.rfc-editor.org/rfc/rfc4291.html), for example (to restrict the set of clients that connect to the server):
 ```toml
 [server]

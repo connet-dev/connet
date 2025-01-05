@@ -41,18 +41,20 @@ type ClientConfig struct {
 
 	ServerAddr string `toml:"server-addr"`
 	ServerCAs  string `toml:"server-cas"`
+	DirectAddr string `toml:"direct-addr"`
 
-	DirectAddr      string   `toml:"direct-addr"`
-	DirectAllowCIDR []string `toml:"direct-allow-cidr"`
-	DirectDenyCIDR  []string `toml:"direct-deny-cidr"`
+	AllowCIDR []string `toml:"allow-cidr"`
+	DenyCIDR  []string `toml:"deny-cidr"`
 
 	Destinations map[string]ForwardConfig `toml:"destinations"`
 	Sources      map[string]ForwardConfig `toml:"sources"`
 }
 
 type ForwardConfig struct {
-	Addr  string `toml:"addr"`
-	Route string `toml:"route"`
+	Addr      string   `toml:"addr"`
+	Route     string   `toml:"route"`
+	AllowCIDR []string `toml:"allow-cidr"`
+	DenyCIDR  []string `toml:"deny-cidr"`
 }
 
 type ServerConfig struct {
@@ -145,8 +147,9 @@ func rootCmd() *cobra.Command {
 	cmd.Flags().StringVar(&flagsConfig.Client.ServerAddr, "server-addr", "", "control server address to connect")
 	cmd.Flags().StringVar(&flagsConfig.Client.ServerCAs, "server-cas", "", "control server CAs to use")
 	cmd.Flags().StringVar(&flagsConfig.Client.DirectAddr, "direct-addr", "", "direct server address to listen")
-	cmd.Flags().StringSliceVar(&flagsConfig.Client.DirectAllowCIDR, "direct-allow-cidr", nil, "cidr to allow direct connections from")
-	cmd.Flags().StringSliceVar(&flagsConfig.Client.DirectDenyCIDR, "direct-deny-cidr", nil, "cidr to deny direct connections from")
+
+	cmd.Flags().StringSliceVar(&flagsConfig.Client.AllowCIDR, "allow-cidr", nil, "cidr to allow connections from")
+	cmd.Flags().StringSliceVar(&flagsConfig.Client.DenyCIDR, "deny-cidr", nil, "cidr to deny connections from")
 
 	var dstName string
 	var dstCfg ForwardConfig
@@ -410,8 +413,12 @@ func clientRun(ctx context.Context, cfg ClientConfig, logger *slog.Logger) error
 	if cfg.DirectAddr != "" {
 		opts = append(opts, connet.ClientDirectAddress(cfg.DirectAddr))
 	}
-	if len(cfg.DirectAllowCIDR) > 0 || len(cfg.DirectDenyCIDR) > 0 {
-		opts = append(opts, connet.ClientDirectRestrictions(cfg.DirectAllowCIDR, cfg.DirectDenyCIDR))
+	if len(cfg.AllowCIDR) > 0 || len(cfg.DenyCIDR) > 0 {
+		restr, err := netc.ParseIPRestriction(cfg.AllowCIDR, cfg.DenyCIDR)
+		if err != nil {
+			return err
+		}
+		opts = append(opts, connet.ClientRestrictions(restr))
 	}
 
 	for name, fc := range cfg.Destinations {
@@ -419,14 +426,22 @@ func clientRun(ctx context.Context, cfg ClientConfig, logger *slog.Logger) error
 		if err != nil {
 			return err
 		}
-		opts = append(opts, connet.ClientDestination(name, fc.Addr, route))
+		restr, err := netc.ParseIPRestriction(fc.AllowCIDR, fc.DenyCIDR)
+		if err != nil {
+			return err
+		}
+		opts = append(opts, connet.ClientDestinationRestricted(name, fc.Addr, route, restr))
 	}
 	for name, fc := range cfg.Sources {
 		route, err := parseRouteOption(fc.Route)
 		if err != nil {
 			return err
 		}
-		opts = append(opts, connet.ClientSource(name, fc.Addr, route))
+		restr, err := netc.ParseIPRestriction(fc.AllowCIDR, fc.DenyCIDR)
+		if err != nil {
+			return err
+		}
+		opts = append(opts, connet.ClientSourceRestricted(name, fc.Addr, route, restr))
 	}
 
 	opts = append(opts, connet.ClientLogger(logger))
@@ -668,8 +683,9 @@ func (c *ClientConfig) merge(o ClientConfig) {
 	c.ServerAddr = override(c.ServerAddr, o.ServerAddr)
 	c.ServerCAs = override(c.ServerCAs, o.ServerCAs)
 	c.DirectAddr = override(c.DirectAddr, o.DirectAddr)
-	c.DirectAllowCIDR = append(c.DirectAllowCIDR, o.DirectAllowCIDR...)
-	c.DirectDenyCIDR = append(c.DirectDenyCIDR, o.DirectDenyCIDR...)
+
+	c.AllowCIDR = append(c.AllowCIDR, o.AllowCIDR...)
+	c.DenyCIDR = append(c.DenyCIDR, o.DenyCIDR...)
 
 	for k, v := range o.Destinations {
 		if c.Destinations == nil {
@@ -735,8 +751,10 @@ func (c *RelayConfig) merge(o RelayConfig) {
 
 func mergeForwardConfig(c, o ForwardConfig) ForwardConfig {
 	return ForwardConfig{
-		Addr:  override(c.Addr, o.Addr),
-		Route: override(c.Route, o.Route),
+		Addr:      override(c.Addr, o.Addr),
+		Route:     override(c.Route, o.Route),
+		AllowCIDR: append(c.AllowCIDR, o.AllowCIDR...),
+		DenyCIDR:  append(c.DenyCIDR, o.DenyCIDR...),
 	}
 }
 

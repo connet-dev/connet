@@ -86,14 +86,15 @@ func (c *Client) Run(ctx context.Context) error {
 	}
 	defer transport.Close()
 
-	ds, err := client.NewDirectServer(transport, c.directRestr, c.logger)
+	ds, err := client.NewDirectServer(transport, c.logger)
 	if err != nil {
 		return kleverr.Ret(err)
 	}
 
 	c.dsts = map[model.Forward]*client.Destination{}
 	for fwd, cfg := range c.destinations {
-		c.dsts[fwd], err = client.NewDestination(fwd, cfg.addr, cfg.route, ds, c.rootCert, c.directRestr, c.logger)
+		restr := client.IPRestrictions{Client: c.restr, Forward: cfg.restr}
+		c.dsts[fwd], err = client.NewDestination(fwd, cfg.addr, cfg.route, ds, c.rootCert, restr, c.logger)
 		if err != nil {
 			return kleverr.Ret(err)
 		}
@@ -101,7 +102,8 @@ func (c *Client) Run(ctx context.Context) error {
 
 	c.srcs = map[model.Forward]*client.Source{}
 	for fwd, cfg := range c.sources {
-		c.srcs[fwd], err = client.NewSource(fwd, cfg.addr, cfg.route, ds, c.rootCert, c.directRestr, c.logger)
+		restr := client.IPRestrictions{Client: c.restr, Forward: cfg.restr}
+		c.srcs[fwd], err = client.NewSource(fwd, cfg.addr, cfg.route, ds, c.rootCert, restr, c.logger)
 		if err != nil {
 			return kleverr.Ret(err)
 		}
@@ -252,9 +254,9 @@ type clientConfig struct {
 	controlHost string
 	controlCAs  *x509.CertPool
 
-	directAddr  *net.UDPAddr
-	directRestr netc.IPRestriction
+	directAddr *net.UDPAddr
 
+	restr        netc.IPRestriction
 	destinations map[model.Forward]clientForwardConfig
 	sources      map[model.Forward]clientForwardConfig
 
@@ -264,6 +266,7 @@ type clientConfig struct {
 type clientForwardConfig struct {
 	addr  string
 	route model.RouteOption
+	restr netc.IPRestriction
 }
 
 type ClientOption func(cfg *clientConfig) error
@@ -336,35 +339,40 @@ func ClientDirectAddress(address string) ClientOption {
 	}
 }
 
-func ClientDirectRestrictions(allow []string, deny []string) ClientOption {
+func ClientRestrictions(restr netc.IPRestriction) ClientOption {
 	return func(cfg *clientConfig) error {
-		restr, err := netc.ParseIPRestriction(allow, deny)
-		if err != nil {
-			return err
-		}
-
-		cfg.directRestr = restr
+		cfg.restr = restr
 
 		return nil
 	}
 }
 
 func ClientDestination(name, addr string, route model.RouteOption) ClientOption {
+	return ClientDestinationRestricted(name, addr, route, netc.IPRestriction{})
+}
+
+func ClientDestinationRestricted(name, addr string, route model.RouteOption, restr netc.IPRestriction) ClientOption {
 	return func(cfg *clientConfig) error {
 		if cfg.destinations == nil {
 			cfg.destinations = map[model.Forward]clientForwardConfig{}
 		}
-		cfg.destinations[model.NewForward(name)] = clientForwardConfig{addr, route}
+		cfg.destinations[model.NewForward(name)] = clientForwardConfig{addr, route, restr}
+
 		return nil
 	}
 }
 
 func ClientSource(name, addr string, route model.RouteOption) ClientOption {
+	return ClientSourceRestricted(name, addr, route, netc.IPRestriction{})
+}
+
+func ClientSourceRestricted(name, addr string, route model.RouteOption, restr netc.IPRestriction) ClientOption {
 	return func(cfg *clientConfig) error {
 		if cfg.sources == nil {
 			cfg.sources = map[model.Forward]clientForwardConfig{}
 		}
-		cfg.sources[model.NewForward(name)] = clientForwardConfig{addr, route}
+		cfg.sources[model.NewForward(name)] = clientForwardConfig{addr, route, restr}
+
 		return nil
 	}
 }
