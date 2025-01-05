@@ -25,7 +25,7 @@ import (
 )
 
 type ClientAuthenticator interface {
-	Authenticate(token string) (ClientAuthentication, error)
+	Authenticate(token string, addr net.Addr) (ClientAuthentication, error)
 }
 
 type ClientAuthentication interface {
@@ -330,7 +330,7 @@ func (c *clientConn) authenticate(ctx context.Context) (ClientAuthentication, ks
 		return retClientAuth(err)
 	}
 
-	auth, err := c.server.auth.Authenticate(req.Token)
+	auth, err := c.server.auth.Authenticate(req.Token, c.conn.RemoteAddr())
 	if err != nil {
 		err := pb.NewError(pb.Error_AuthenticationFailed, "Invalid or unknown token")
 		if err := pb.Write(authStream, &pbs.AuthenticateResp{Error: err}); err != nil {

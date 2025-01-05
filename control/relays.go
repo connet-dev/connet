@@ -9,6 +9,7 @@ import (
 	"io"
 	"log/slog"
 	"maps"
+	"net"
 	"sync"
 
 	"github.com/connet-dev/connet/certc"
@@ -25,7 +26,7 @@ import (
 )
 
 type RelayAuthenticator interface {
-	Authenticate(token string) (RelayAuthentication, error)
+	Authenticate(token string, addr net.Addr) (RelayAuthentication, error)
 }
 
 type RelayAuthentication interface {
@@ -343,7 +344,7 @@ func (c *relayConn) authenticate(ctx context.Context) (RelayAuthentication, ksui
 		return retRelayAuth(err)
 	}
 
-	auth, err := c.server.auth.Authenticate(req.Token)
+	auth, err := c.server.auth.Authenticate(req.Token, c.conn.RemoteAddr())
 	if err != nil {
 		err := pb.NewError(pb.Error_AuthenticationFailed, "Invalid or unknown token")
 		if err := pb.Write(authStream, &pbr.AuthenticateResp{Error: err}); err != nil {

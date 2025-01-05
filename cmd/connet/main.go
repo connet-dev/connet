@@ -58,10 +58,11 @@ type ForwardConfig struct {
 }
 
 type ServerConfig struct {
-	Tokens     []string `toml:"tokens"`
-	TokensFile string   `toml:"tokens-file"`
-	AllowCIDR  []string `toml:"allow-cidr"`
-	DenyCIDR   []string `toml:"deny-cidr"`
+	Tokens       []string             `toml:"tokens"`
+	TokensFile   string               `toml:"tokens-file"`
+	AllowCIDR    []string             `toml:"allow-cidr"`
+	DenyCIDR     []string             `toml:"deny-cidr"`
+	Restrictions []TokenIPRestriction `toml:"restrictions"`
 
 	Addr string `toml:"addr"`
 	Cert string `toml:"cert-file"`
@@ -74,21 +75,28 @@ type ServerConfig struct {
 }
 
 type ControlConfig struct {
-	ClientTokens     []string `toml:"client-tokens"`
-	ClientTokensFile string   `toml:"client-tokens-file"`
-	ClientAllowCIDR  []string `toml:"client-allow-cidr"`
-	ClientDenyCIDR   []string `toml:"client-deny-cidr"`
+	ClientTokens       []string             `toml:"client-tokens"`
+	ClientTokensFile   string               `toml:"client-tokens-file"`
+	ClientAllowCIDR    []string             `toml:"client-allow-cidr"`
+	ClientDenyCIDR     []string             `toml:"client-deny-cidr"`
+	ClientRestrictions []TokenIPRestriction `toml:"client-restrictions"`
 
-	RelayTokens     []string `toml:"relay-tokens"`
-	RelayTokensFile string   `toml:"relay-tokens-file"`
-	RelayAllowCIDR  []string `toml:"relay-allow-cidr"`
-	RelayDenyCIDR   []string `toml:"relay-deny-cidr"`
+	RelayTokens       []string             `toml:"relay-tokens"`
+	RelayTokensFile   string               `toml:"relay-tokens-file"`
+	RelayAllowCIDR    []string             `toml:"relay-allow-cidr"`
+	RelayDenyCIDR     []string             `toml:"relay-deny-cidr"`
+	RelayRestrictions []TokenIPRestriction `toml:"relay-restrictions"`
 
 	Addr string `toml:"addr"`
 	Cert string `toml:"cert-file"`
 	Key  string `toml:"key-file"`
 
 	StoreDir string `toml:"store-dir"`
+}
+
+type TokenIPRestriction struct {
+	AllowCIDR []string `toml:"allow-cidr"`
+	DenyCIDR  []string `toml:"deny-cidr"`
 }
 
 type RelayConfig struct {
@@ -456,14 +464,18 @@ func clientRun(ctx context.Context, cfg ClientConfig, logger *slog.Logger) error
 func serverRun(ctx context.Context, cfg ServerConfig, logger *slog.Logger) error {
 	var opts []connet.ServerOption
 
+	restr, err := parseTokenRestrictions(cfg.Restrictions)
+	if err != nil {
+		return err
+	}
 	if cfg.TokensFile != "" {
 		tokens, err := loadTokens(cfg.TokensFile)
 		if err != nil {
 			return err
 		}
-		opts = append(opts, connet.ServerClientTokens(tokens...))
+		opts = append(opts, connet.ServerClientTokensRestricted(tokens, restr))
 	} else {
-		opts = append(opts, connet.ServerClientTokens(cfg.Tokens...))
+		opts = append(opts, connet.ServerClientTokensRestricted(cfg.Tokens, restr))
 	}
 	if len(cfg.AllowCIDR) > 0 || len(cfg.DenyCIDR) > 0 {
 		opts = append(opts, connet.ServerClientRestrictions(cfg.AllowCIDR, cfg.DenyCIDR))
@@ -501,14 +513,18 @@ func controlRun(ctx context.Context, cfg ControlConfig, logger *slog.Logger) err
 		Logger: logger,
 	}
 
+	clientRestr, err := parseTokenRestrictions(cfg.ClientRestrictions)
+	if err != nil {
+		return err
+	}
 	if cfg.ClientTokensFile != "" {
 		tokens, err := loadTokens(cfg.ClientTokensFile)
 		if err != nil {
 			return err
 		}
-		controlCfg.ClientAuth = selfhosted.NewClientAuthenticator(tokens...)
+		controlCfg.ClientAuth, err = selfhosted.NewClientAuthenticatorRestricted(tokens, clientRestr)
 	} else {
-		controlCfg.ClientAuth = selfhosted.NewClientAuthenticator(cfg.ClientTokens...)
+		controlCfg.ClientAuth, err = selfhosted.NewClientAuthenticatorRestricted(cfg.ClientTokens, clientRestr)
 	}
 	if len(cfg.ClientAllowCIDR) > 0 || len(cfg.ClientDenyCIDR) > 0 {
 		restr, err := netc.ParseIPRestriction(cfg.ClientAllowCIDR, cfg.ClientDenyCIDR)
@@ -518,15 +534,23 @@ func controlRun(ctx context.Context, cfg ControlConfig, logger *slog.Logger) err
 		controlCfg.ClientRestr = restr
 	}
 
+	relayRestr, err := parseTokenRestrictions(cfg.RelayRestrictions)
+	if err != nil {
+		return err
+	}
 	if cfg.RelayTokensFile != "" {
 		tokens, err := loadTokens(cfg.RelayTokensFile)
 		if err != nil {
 			return err
 		}
-		controlCfg.RelayAuth = selfhosted.NewRelayAuthenticator(tokens...)
+		controlCfg.RelayAuth, err = selfhosted.NewRelayAuthenticatorRestricted(tokens, relayRestr)
 	} else {
-		controlCfg.RelayAuth = selfhosted.NewRelayAuthenticator(cfg.RelayTokens...)
+		controlCfg.RelayAuth, err = selfhosted.NewRelayAuthenticator(cfg.RelayTokens...)
 	}
+	if err != nil {
+		return err
+	}
+
 	if len(cfg.RelayAllowCIDR) > 0 || len(cfg.RelayDenyCIDR) > 0 {
 		restr, err := netc.ParseIPRestriction(cfg.RelayAllowCIDR, cfg.RelayDenyCIDR)
 		if err != nil {
@@ -663,6 +687,18 @@ func parseRouteOption(s string) (model.RouteOption, error) {
 		return model.RouteAny, nil
 	}
 	return model.ParseRouteOption(s)
+}
+
+func parseTokenRestrictions(ts []TokenIPRestriction) ([]netc.IPRestriction, error) {
+	r := make([]netc.IPRestriction, len(ts))
+	var err error
+	for i, t := range ts {
+		r[i], err = netc.ParseIPRestriction(t.AllowCIDR, t.DenyCIDR)
+		if err != nil {
+			return nil, err
+		}
+	}
+	return r, nil
 }
 
 func (c *Config) merge(o Config) {

@@ -60,13 +60,17 @@ func NewServer(opts ...ServerOption) (*Server, error) {
 	}
 
 	relayControlToken := model.GenServerName("relay")
+	relayAuth, err := selfhosted.NewRelayAuthenticator(relayControlToken)
+	if err != nil {
+		return nil, err
+	}
 
 	control, err := control.NewServer(control.Config{
 		Addr:        cfg.controlAddr,
 		Cert:        cfg.controlCert,
 		ClientAuth:  cfg.clientAuth,
 		ClientRestr: cfg.clientRestr,
-		RelayAuth:   selfhosted.NewRelayAuthenticator(relayControlToken),
+		RelayAuth:   relayAuth,
 		Logger:      cfg.logger,
 		Stores:      control.NewFileStores(filepath.Join(cfg.dir, "control")),
 	})
@@ -128,7 +132,25 @@ type ServerOption func(*serverConfig) error
 
 func ServerClientTokens(tokens ...string) ServerOption {
 	return func(cfg *serverConfig) error {
-		cfg.clientAuth = selfhosted.NewClientAuthenticator(tokens...)
+		clientAuth, err := selfhosted.NewClientAuthenticator(tokens...)
+		if err != nil {
+			return err
+		}
+
+		cfg.clientAuth = clientAuth
+
+		return nil
+	}
+}
+
+func ServerClientTokensRestricted(tokens []string, restr []netc.IPRestriction) ServerOption {
+	return func(cfg *serverConfig) error {
+		clientAuth, err := selfhosted.NewClientAuthenticatorRestricted(tokens, restr)
+		if err != nil {
+			return err
+		}
+
+		cfg.clientAuth = clientAuth
 
 		return nil
 	}
