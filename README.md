@@ -167,7 +167,7 @@ relay-hostname = "localhost" # the public hostname (e.g. domain, ip address) whi
 
 store-dir = "path/to/server-store" # where does this server persist runtime information, defaults to a /tmp subdirectory
 
-[server.ip-restriction] # defines restriction applicable for all client tokens, checked before checking the token
+[server.ip-restriction] # defines restriction applicable for all client tokens, checked before verifying the token
 allow-cidrs = [] # set of networks in CIDR format, to allow client connetctions from
 deny-cidrs = [] # set of networks in CIDR format, to deny client connetctions from
 
@@ -196,7 +196,7 @@ relay-tokens-file = "path/to/relay/token" # a file that contains a list of relay
 
 store-dir = "path/to/control-store" # where does this control server persist runtime information, defaults to a /tmp subdirectory
 
-[control.client-ip-restriction] # defines restriction applicable for all client tokens, checked before checking the token
+[control.client-ip-restriction] # defines restriction applicable for all client tokens, checked before verifying the token
 allow-cidrs = [] # set of networks in CIDR format, to allow client connetctions from
 deny-cidrs = [] # set of networks in CIDR format, to deny client connetctions from
 
@@ -204,7 +204,7 @@ deny-cidrs = [] # set of networks in CIDR format, to deny client connetctions fr
 allow-cidrs = [] # set of networks in CIDR format, to allow client connetctions from
 deny-cidrs = [] # set of networks in CIDR format, to deny client connetctions from
 
-[control.relay-ip-restriction] # defines restriction applicable for all relay tokens, checked before checking the token
+[control.relay-ip-restriction] # defines restriction applicable for all relay tokens, checked before verifying the token
 allow-cidrs = [] # set of networks in CIDR format, to allow relay connetctions from
 deny-cidrs = [] # set of networks in CIDR format, to deny relay connetctions from
 
@@ -231,15 +231,15 @@ control-cas = "path/to/ca/file.pem" # the public certificate root of the control
 store-dir = "path/to/relay-store" # where does this relay persist runtime information, defaults to a /tmp subdirectory
 ```
 
-### Allow CIDR and Deny CIDR
+### IP Restrictions
 
 You can restrict clients and relays to connect only from specific IPs using different `ip-restriction` options. 
 They accept allow/deny list of strings in CIDR format, as defined by [RFC 4632](https://www.rfc-editor.org/rfc/rfc4632.html) and 
 [RFC 4291](https://www.rfc-editor.org/rfc/rfc4291.html), for example (to restrict the set of client IPs that connect to the server):
 ```toml
 [server.ip-restriction]
-allow-cidrs = ["10.100.1.0/24"]
-deny-cidrs = ["90.0.0.0/8"]
+allow-cidrs = ["192.0.2.0/24"]
+deny-cidrs = ["198.51.100.0/24"]
 ```
 
 If these options are specified, an IP will be rejected if:

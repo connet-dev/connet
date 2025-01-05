@@ -10,6 +10,7 @@ type IPRestriction struct {
 	deny  []netip.Prefix
 }
 
+// ParseIPRestriction parses a slice of allows/denys restrictions in CIDR format
 func ParseIPRestriction(allows []string, denys []string) (IPRestriction, error) {
 	restr := IPRestriction{
 		allow: make([]netip.Prefix, len(allows)),
