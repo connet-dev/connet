@@ -161,20 +161,26 @@ To run a server (e.g. running both control and a relay server), use `connet serv
 Here is the full server `server-config.toml` configuration specification:
 ```toml
 [server]
-tokens = ["client-token-1", "client-token-n"] # set of recognized client tokens
-tokens-file = "path/to/client/tokens" # a file that contains a list of client tokens, one token per line
-# one of tokens or tokens-file is required
-allow-cidr = [] # set of networks in CIDR format, to allow client connetctions from
-deny-cidr = [] # set of networks in CIDR format, to deny client connetctions from
-
 addr = ":19190" # the address at which the control server will listen for connections, defaults to :19190
 cert-file = "path/to/cert.pem" # the server certificate file, in pem format
 key-file = "path/to/key.pem" # the server certificate private key file
+
+tokens = ["client-token-1", "client-token-n"] # set of recognized client tokens
+tokens-file = "path/to/client/tokens" # a file that contains a list of client tokens, one token per line
+# one of tokens or tokens-file is required
 
 relay-addr = ":19191" # the address at which the relay will listen for connectsion, defaults to :19191
 relay-hostname = "localhost" # the public hostname (e.g. domain, ip address) which will be advertised to clients, defaults to localhost
 
 store-dir = "path/to/server-store" # where does this server persist runtime information, defaults to a /tmp subdirectory
+
+[server.tokens-restriction]
+allow-cidr = [] # set of networks in CIDR format, to allow client connetctions from
+deny-cidr = [] # set of networks in CIDR format, to deny client connetctions from
+
+[[server.token-restrictions]] # defines restrictions per token, if specified must match the number of tokens
+allow-cidr = [] # set of networks in CIDR format, to allow token client connetctions from
+deny-cidr = [] # set of networks in CIDR format, to deny token client connetctions from
 ```
 
 #### Control server
@@ -183,23 +189,35 @@ To run a control server, use `connet control --config control-config.toml` comma
 `control-config.toml` configuration specification:
 ```toml
 [control]
-client-tokens = ["client-token-1", "client-token-n"] # set of recognized client tokens
-client-tokens-file = "path/to/client/tokens" # a file that contains a list of client tokens, one token per line
-# one of client-tokens or client-tokens-file is required
-client-allow-cidr = [] # set of networks in CIDR format, to allow client connetctions from
-client-deny-cidr = [] # set of networks in CIDR format, to deny client connetctions from
-
-relay-tokens = ["relay-token-1", "relay-token-n"] # set of recognized relay tokens
-relay-tokens-file = "path/to/relay/token" # a file that contains a list of relay tokens, one token per line
-# one of relay-tokens or relay-tokens-file is necessary when connecting relays
-relay-allow-cidr = [] # set of networks in CIDR format, to allow client connetctions from
-relay-deny-cidr = [] # set of networks in CIDR format, to deny client connetctions from
-
 addr = ":19190" # the address at which the control server will listen for connections, defaults to :19190
 cert-file = "path/to/cert.pem" # the server certificate file, in pem format
 key-file = "path/to/key.pem" # the server certificate private key file
 
+client-tokens = ["client-token-1", "client-token-n"] # set of recognized client tokens
+client-tokens-file = "path/to/client/tokens" # a file that contains a list of client tokens, one token per line
+# one of client-tokens or client-tokens-file is required
+
+relay-tokens = ["relay-token-1", "relay-token-n"] # set of recognized relay tokens
+relay-tokens-file = "path/to/relay/token" # a file that contains a list of relay tokens, one token per line
+# one of relay-tokens or relay-tokens-file is necessary when connecting relays
+
 store-dir = "path/to/control-store" # where does this control server persist runtime information, defaults to a /tmp subdirectory
+
+[control.client-restriction] # defines restrictions applicable for all tokens, check before checking the token
+allow-cidr = [] # set of networks in CIDR format, to allow client connetctions from
+deny-cidr = [] # set of networks in CIDR format, to deny client connetctions from
+
+[[control.client-restrictions]] # defines restrictions per token, if specified must match the number of tokens
+allow-cidr = [] # set of networks in CIDR format, to allow client connetctions from
+deny-cidr = [] # set of networks in CIDR format, to deny client connetctions from
+
+[control.relay-restriction] # defines restrictions applicable for all tokens, check before checking the token
+allow-cidr = [] # set of networks in CIDR format, to allow relay connetctions from
+deny-cidr = [] # set of networks in CIDR format, to deny relay connetctions from
+
+[[control.relay-restrictions]] # defines restrictions per token, if specified must match the number of tokens
+allow-cidr = [] # set of networks in CIDR format, to allow relay connetctions from
+deny-cidr = [] # set of networks in CIDR format, to deny relay connetctions from
 ```
 
 #### Relay server
