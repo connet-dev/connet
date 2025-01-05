@@ -5,6 +5,16 @@ import (
 	"net/netip"
 )
 
+func AddrFromNetip(addr netip.Addr) *Addr {
+	if addr.Is6() {
+		v6 := addr.As16()
+		return &Addr{V6: v6[:]}
+	} else {
+		v4 := addr.As4()
+		return &Addr{V4: v4[:]}
+	}
+}
+
 func AddrPortFromNet(addr net.Addr) (*AddrPort, error) {
 	switch t := addr.(type) {
 	case *net.UDPAddr:
@@ -21,17 +31,8 @@ func AddrPortFromNet(addr net.Addr) (*AddrPort, error) {
 }
 
 func AddrPortFromNetip(addr netip.AddrPort) *AddrPort {
-	var paddr *Addr
-	if addr.Addr().Is6() {
-		v6 := addr.Addr().As16()
-		paddr = &Addr{V6: v6[:]}
-	} else {
-		v4 := addr.Addr().As4()
-		paddr = &Addr{V4: v4[:]}
-	}
-
 	return &AddrPort{
-		Addr: paddr,
+		Addr: AddrFromNetip(addr.Addr()),
 		Port: uint32(addr.Port()),
 	}
 }

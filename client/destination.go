@@ -27,10 +27,10 @@ type Destination struct {
 }
 
 func NewDestination(fwd model.Forward, addr string, opt model.RouteOption,
-	direct *DirectServer, root *certc.Cert, restr netc.IPRestriction, logger *slog.Logger) (*Destination, error) {
+	direct *DirectServer, root *certc.Cert, logger *slog.Logger) (*Destination, error) {
 
 	logger = logger.With("destination", fwd)
-	p, err := newPeer(direct, root, restr, logger)
+	p, err := newPeer(direct, root, logger)
 	if err != nil {
 		return nil, err
 	}

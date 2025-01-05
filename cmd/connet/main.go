@@ -43,18 +43,13 @@ type ClientConfig struct {
 	ServerCAs  string `toml:"server-cas"`
 	DirectAddr string `toml:"direct-addr"`
 
-	AllowCIDR []string `toml:"allow-cidr"`
-	DenyCIDR  []string `toml:"deny-cidr"`
-
 	Destinations map[string]ForwardConfig `toml:"destinations"`
 	Sources      map[string]ForwardConfig `toml:"sources"`
 }
 
 type ForwardConfig struct {
-	Addr      string   `toml:"addr"`
-	Route     string   `toml:"route"`
-	AllowCIDR []string `toml:"allow-cidr"`
-	DenyCIDR  []string `toml:"deny-cidr"`
+	Addr  string `toml:"addr"`
+	Route string `toml:"route"`
 }
 
 type ServerConfig struct {
@@ -152,9 +147,6 @@ func rootCmd() *cobra.Command {
 	cmd.Flags().StringVar(&flagsConfig.Client.ServerAddr, "server-addr", "", "control server address to connect")
 	cmd.Flags().StringVar(&flagsConfig.Client.ServerCAs, "server-cas", "", "control server CAs to use")
 	cmd.Flags().StringVar(&flagsConfig.Client.DirectAddr, "direct-addr", "", "direct server address to listen")
-
-	cmd.Flags().StringSliceVar(&flagsConfig.Client.AllowCIDR, "allow-cidr", nil, "cidr to allow connections from")
-	cmd.Flags().StringSliceVar(&flagsConfig.Client.DenyCIDR, "deny-cidr", nil, "cidr to deny connections from")
 
 	var dstName string
 	var dstCfg ForwardConfig
@@ -418,35 +410,20 @@ func clientRun(ctx context.Context, cfg ClientConfig, logger *slog.Logger) error
 	if cfg.DirectAddr != "" {
 		opts = append(opts, connet.ClientDirectAddress(cfg.DirectAddr))
 	}
-	if len(cfg.AllowCIDR) > 0 || len(cfg.DenyCIDR) > 0 {
-		restr, err := netc.ParseIPRestriction(cfg.AllowCIDR, cfg.DenyCIDR)
-		if err != nil {
-			return err
-		}
-		opts = append(opts, connet.ClientRestrictions(restr))
-	}
 
 	for name, fc := range cfg.Destinations {
 		route, err := parseRouteOption(fc.Route)
 		if err != nil {
 			return err
 		}
-		restr, err := netc.ParseIPRestriction(fc.AllowCIDR, fc.DenyCIDR)
-		if err != nil {
-			return err
-		}
-		opts = append(opts, connet.ClientDestinationRestricted(name, fc.Addr, route, restr))
+		opts = append(opts, connet.ClientDestination(name, fc.Addr, route))
 	}
 	for name, fc := range cfg.Sources {
 		route, err := parseRouteOption(fc.Route)
 		if err != nil {
 			return err
 		}
-		restr, err := netc.ParseIPRestriction(fc.AllowCIDR, fc.DenyCIDR)
-		if err != nil {
-			return err
-		}
-		opts = append(opts, connet.ClientSourceRestricted(name, fc.Addr, route, restr))
+		opts = append(opts, connet.ClientSource(name, fc.Addr, route))
 	}
 
 	opts = append(opts, connet.ClientLogger(logger))
@@ -719,9 +696,6 @@ func (c *ClientConfig) merge(o ClientConfig) {
 	c.ServerCAs = override(c.ServerCAs, o.ServerCAs)
 	c.DirectAddr = override(c.DirectAddr, o.DirectAddr)
 
-	c.AllowCIDR = append(c.AllowCIDR, o.AllowCIDR...)
-	c.DenyCIDR = append(c.DenyCIDR, o.DenyCIDR...)
-
 	for k, v := range o.Destinations {
 		if c.Destinations == nil {
 			c.Destinations = map[string]ForwardConfig{}
@@ -786,10 +760,8 @@ func (c *RelayConfig) merge(o RelayConfig) {
 
 func mergeForwardConfig(c, o ForwardConfig) ForwardConfig {
 	return ForwardConfig{
-		Addr:      override(c.Addr, o.Addr),
-		Route:     override(c.Route, o.Route),
-		AllowCIDR: append(c.AllowCIDR, o.AllowCIDR...),
-		DenyCIDR:  append(c.DenyCIDR, o.DenyCIDR...),
+		Addr:  override(c.Addr, o.Addr),
+		Route: override(c.Route, o.Route),
 	}
 }
 

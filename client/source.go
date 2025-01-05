@@ -35,10 +35,10 @@ type sourceConn struct {
 }
 
 func NewSource(fwd model.Forward, addr string, opt model.RouteOption,
-	direct *DirectServer, root *certc.Cert, restr netc.IPRestriction, logger *slog.Logger) (*Source, error) {
+	direct *DirectServer, root *certc.Cert, logger *slog.Logger) (*Source, error) {
 
 	logger = logger.With("source", fwd)
-	p, err := newPeer(direct, root, restr, logger)
+	p, err := newPeer(direct, root, logger)
 	if err != nil {
 		return nil, err
 	}

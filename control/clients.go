@@ -170,16 +170,16 @@ func (s *clientServer) listen(ctx context.Context, fwd model.Forward, role model
 					return peer.Id == msg.Key.ID.String()
 				})
 			} else {
-				peer := &pbs.ServerPeer{
+				npeer := &pbs.ServerPeer{
 					Id:     msg.Key.ID.String(),
 					Direct: msg.Value.Peer.Direct,
 					Relays: msg.Value.Peer.Relays,
 				}
 				idx := slices.IndexFunc(peers, func(peer *pbs.ServerPeer) bool { return peer.Id == msg.Key.ID.String() })
 				if idx >= 0 {
-					peers[idx] = peer
+					peers[idx] = npeer
 				} else {
-					peers = append(peers, peer)
+					peers = append(peers, npeer)
 				}
 			}
 			changed = true
@@ -212,16 +212,16 @@ func (s *clientServer) run(ctx context.Context) error {
 				s.peersCache[key] = peers
 			}
 		} else {
-			peer := &pbs.ServerPeer{
+			npeer := &pbs.ServerPeer{
 				Id:     msg.Key.ID.String(),
 				Direct: msg.Value.Peer.Direct,
 				Relays: msg.Value.Peer.Relays,
 			}
 			idx := slices.IndexFunc(peers, func(peer *pbs.ServerPeer) bool { return peer.Id == msg.Key.ID.String() })
 			if idx >= 0 {
-				peers[idx] = peer
+				peers[idx] = npeer
 			} else {
-				peers = append(peers, peer)
+				peers = append(peers, npeer)
 			}
 			s.peersCache[key] = peers
 		}
@@ -445,7 +445,7 @@ func (s *clientStream) announce(ctx context.Context, req *pbs.Request_Announce) 
 	fwd := model.ForwardFromPB(req.Forward)
 	role := model.RoleFromPB(req.Role)
 	if newFwd, err := s.conn.auth.Validate(fwd, role); err != nil {
-		err := pb.NewError(pb.Error_AnnounceValidationFailed, "failed to validte desination '%s': %v", fwd, err)
+		err := pb.NewError(pb.Error_AnnounceValidationFailed, "failed to validate forward '%s': %v", fwd, err)
 		if err := pb.Write(s.stream, &pbs.Response{Error: err}); err != nil {
 			return kleverr.Newf("could not write error response: %w", err)
 		}
