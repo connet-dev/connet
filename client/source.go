@@ -35,7 +35,7 @@ type sourceConn struct {
 }
 
 func NewSource(fwd model.Forward, addr string, opt model.RouteOption,
-	direct *DirectServer, root *certc.Cert, restr IPRestrictions, logger *slog.Logger) (*Source, error) {
+	direct *DirectServer, root *certc.Cert, restr netc.IPRestriction, logger *slog.Logger) (*Source, error) {
 
 	logger = logger.With("source", fwd)
 	p, err := newPeer(direct, root, restr, logger)
@@ -154,12 +154,8 @@ func (s *Source) runConnErr(ctx context.Context, conn net.Conn) error {
 		return kleverr.Newf("could not write request: %w", err)
 	}
 
-	resp, err := pbc.ReadResponse(stream)
-	if err != nil {
+	if _, err := pbc.ReadResponse(stream); err != nil {
 		return kleverr.Newf("could not read response: %w", err)
-	}
-	if dst := resp.GetConnect().GetDestination(); dst != nil && !s.peer.restr.Accept(dst.AsNetip()) {
-		return kleverr.Newf("destination ip not allowed")
 	}
 
 	s.logger.Debug("joining to server")

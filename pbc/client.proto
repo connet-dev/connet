@@ -12,19 +12,13 @@ message Request {
   Heartbeat heartbeat = 2;
 
   message Connect {
-    shared.Addr source = 1;
   }
 }
 
 message Response {
   shared.Error error = 1;
 
-  Connect connect = 3;
   Heartbeat heartbeat = 2;
-
-  message Connect {
-    shared.Addr destination = 1;
-  }
 }
 
 message Heartbeat {

@@ -94,14 +94,9 @@ func (p *directPeer) runRemote(ctx context.Context) error {
 				}
 				addrs := map[netip.AddrPort]struct{}{}
 				for _, addr := range remote.Direct.Addresses {
-					nip := addr.AsNetip()
-					if p.local.restr.Accept(nip.Addr()) {
-						addrs[nip] = struct{}{}
-					}
+					addrs[addr.AsNetip()] = struct{}{}
 				}
-				if len(addrs) > 0 {
-					p.outgoing = newDirectPeerOutgoing(ctx, p, remoteServerConf, addrs)
-				}
+				p.outgoing = newDirectPeerOutgoing(ctx, p, remoteServerConf, addrs)
 			}
 		} else {
 			if p.incoming != nil {

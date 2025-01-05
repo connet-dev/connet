@@ -93,7 +93,7 @@ func (c *Client) Run(ctx context.Context) error {
 
 	c.dsts = map[model.Forward]*client.Destination{}
 	for fwd, cfg := range c.destinations {
-		restr := client.IPRestrictions{Client: c.restr, Forward: cfg.restr}
+		restr := c.restr.Union(cfg.restr)
 		c.dsts[fwd], err = client.NewDestination(fwd, cfg.addr, cfg.route, ds, c.rootCert, restr, c.logger)
 		if err != nil {
 			return kleverr.Ret(err)
@@ -102,7 +102,7 @@ func (c *Client) Run(ctx context.Context) error {
 
 	c.srcs = map[model.Forward]*client.Source{}
 	for fwd, cfg := range c.sources {
-		restr := client.IPRestrictions{Client: c.restr, Forward: cfg.restr}
+		restr := c.restr.Union(cfg.restr)
 		c.srcs[fwd], err = client.NewSource(fwd, cfg.addr, cfg.route, ds, c.rootCert, restr, c.logger)
 		if err != nil {
 			return kleverr.Ret(err)

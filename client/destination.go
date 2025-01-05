@@ -27,7 +27,7 @@ type Destination struct {
 }
 
 func NewDestination(fwd model.Forward, addr string, opt model.RouteOption,
-	direct *DirectServer, root *certc.Cert, restr IPRestrictions, logger *slog.Logger) (*Destination, error) {
+	direct *DirectServer, root *certc.Cert, restr netc.IPRestriction, logger *slog.Logger) (*Destination, error) {
 
 	logger = logger.With("destination", fwd)
 	p, err := newPeer(direct, root, restr, logger)
@@ -149,7 +149,7 @@ func (d *Destination) runDestinationErr(ctx context.Context, stream quic.Stream)
 
 	switch {
 	case req.Connect != nil:
-		return d.runConnect(ctx, stream, req.Connect.Source)
+		return d.runConnect(ctx, stream)
 	case req.Heartbeat != nil:
 		return d.heartbeat(ctx, stream, req.Heartbeat)
 	default:
@@ -161,16 +161,8 @@ func (d *Destination) runDestinationErr(ctx context.Context, stream quic.Stream)
 	}
 }
 
-func (d *Destination) runConnect(ctx context.Context, stream quic.Stream, sourceAddr *pb.Addr) error {
+func (d *Destination) runConnect(ctx context.Context, stream quic.Stream) error {
 	// TODO check allow from?
-
-	if sourceAddr != nil && !d.peer.restr.Accept(sourceAddr.AsNetip()) {
-		err := pb.NewError(pb.Error_DestinationNotFound, "%s is not allowed", d.fwd)
-		if err := pb.Write(stream, &pbc.Response{Error: err}); err != nil {
-			return kleverr.Newf("could not write error response: %w", err)
-		}
-		return err
-	}
 
 	conn, err := net.Dial("tcp", d.addr)
 	if err != nil {

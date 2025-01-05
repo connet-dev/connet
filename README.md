@@ -174,11 +174,11 @@ relay-hostname = "localhost" # the public hostname (e.g. domain, ip address) whi
 
 store-dir = "path/to/server-store" # where does this server persist runtime information, defaults to a /tmp subdirectory
 
-[server.tokens-restriction]
+[server.rules]
 allow-cidr = [] # set of networks in CIDR format, to allow client connetctions from
 deny-cidr = [] # set of networks in CIDR format, to deny client connetctions from
 
-[[server.token-restrictions]] # defines restrictions per token, if specified must match the number of tokens
+[[server.token-rule]] # defines restrictions per token, if specified must match the number of tokens
 allow-cidr = [] # set of networks in CIDR format, to allow token client connetctions from
 deny-cidr = [] # set of networks in CIDR format, to deny token client connetctions from
 ```
@@ -203,19 +203,19 @@ relay-tokens-file = "path/to/relay/token" # a file that contains a list of relay
 
 store-dir = "path/to/control-store" # where does this control server persist runtime information, defaults to a /tmp subdirectory
 
-[control.client-restriction] # defines restrictions applicable for all tokens, check before checking the token
+[control.client-rules] # defines restrictions applicable for all tokens, check before checking the token
 allow-cidr = [] # set of networks in CIDR format, to allow client connetctions from
 deny-cidr = [] # set of networks in CIDR format, to deny client connetctions from
 
-[[control.client-restrictions]] # defines restrictions per token, if specified must match the number of tokens
+[[control.client-token-rule]] # defines restrictions per token, if specified must match the number of tokens
 allow-cidr = [] # set of networks in CIDR format, to allow client connetctions from
 deny-cidr = [] # set of networks in CIDR format, to deny client connetctions from
 
-[control.relay-restriction] # defines restrictions applicable for all tokens, check before checking the token
+[control.relay-rule] # defines restrictions applicable for all tokens, check before checking the token
 allow-cidr = [] # set of networks in CIDR format, to allow relay connetctions from
 deny-cidr = [] # set of networks in CIDR format, to deny relay connetctions from
 
-[[control.relay-restrictions]] # defines restrictions per token, if specified must match the number of tokens
+[[control.relay-token-rule]] # defines restrictions per token, if specified must match the number of tokens
 allow-cidr = [] # set of networks in CIDR format, to allow relay connetctions from
 deny-cidr = [] # set of networks in CIDR format, to deny relay connetctions from
 ```
@@ -242,9 +242,9 @@ store-dir = "path/to/relay-store" # where does this relay persist runtime inform
 
 You can restrict the set of client-to-client and server connections from specific IPs using different `allow-cidr` and `deny-cidr` 
 options. Both of these accept a list of strings in CIDR format, as defined by [RFC 4632](https://www.rfc-editor.org/rfc/rfc4632.html) and 
-[RFC 4291](https://www.rfc-editor.org/rfc/rfc4291.html), for example (to restrict the set of clients that connect to the server):
+[RFC 4291](https://www.rfc-editor.org/rfc/rfc4291.html), for example (to restrict the set of client IPs that connect to the server):
 ```toml
-[server]
+[server.rules]
 allow-cidr = ["10.100.1.0/24"]
 deny-cidr = ["90.0.0.0/8"]
 ```

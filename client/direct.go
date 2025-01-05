@@ -35,7 +35,6 @@ func NewDirectServer(transport *quic.Transport, logger *slog.Logger) (*DirectSer
 type vServer struct {
 	serverName string
 	serverCert tls.Certificate
-	restr      IPRestrictions
 	clients    map[certc.Key]*vClient
 	clientCA   atomic.Pointer[x509.CertPool]
 	mu         sync.RWMutex
@@ -77,7 +76,7 @@ func (s *DirectServer) Run(ctx context.Context) error {
 	return g.Wait()
 }
 
-func (s *DirectServer) addServerCert(cert tls.Certificate, restr IPRestrictions) {
+func (s *DirectServer) addServerCert(cert tls.Certificate) {
 	serverName := cert.Leaf.DNSNames[0]
 
 	s.serversMu.Lock()
@@ -87,7 +86,6 @@ func (s *DirectServer) addServerCert(cert tls.Certificate, restr IPRestrictions)
 	s.servers[serverName] = &vServer{
 		serverName: serverName,
 		serverCert: cert,
-		restr:      restr,
 		clients:    map[certc.Key]*vClient{},
 	}
 }
@@ -161,10 +159,6 @@ func (s *DirectServer) runConn(conn quic.Connection) {
 	srv := s.getServer(conn.ConnectionState().TLS.ServerName)
 	if srv == nil {
 		conn.CloseWithError(1, "server not found")
-		return
-	}
-	if !srv.restr.AcceptAddr(conn.RemoteAddr()) {
-		conn.CloseWithError(1, "client not allowed")
 		return
 	}
 

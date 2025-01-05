@@ -32,6 +32,13 @@ func ParseIPRestriction(allows []string, denys []string) (IPRestriction, error) 
 	return restr, nil
 }
 
+func (r IPRestriction) Union(o IPRestriction) IPRestriction {
+	return IPRestriction{
+		allow: append(r.allow, o.allow...),
+		deny:  append(r.deny, o.deny...),
+	}
+}
+
 // Accept checks an ip address according to Allow and Deny rules
 // If the ip matches any of the Deny rules, Accept returns false
 // If the ip matches any of the Allow rules (after checking all Deny rules), Accept returns true

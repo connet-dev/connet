@@ -306,9 +306,7 @@ func (c *clientConn) connectDestination(ctx context.Context, srcStream quic.Stre
 	}
 
 	if err := pb.Write(dstStream, &pbc.Request{
-		Connect: &pbc.Request_Connect{
-			Source: c.remote,
-		},
+		Connect: &pbc.Request_Connect{},
 	}); err != nil {
 		return kleverr.Newf("could not write request: %w", err)
 	}
@@ -317,11 +315,7 @@ func (c *clientConn) connectDestination(ctx context.Context, srcStream quic.Stre
 		return kleverr.Newf("could not read response: %w", err)
 	}
 
-	if err := pb.Write(srcStream, &pbc.Response{
-		Connect: &pbc.Response_Connect{
-			Destination: dest.remote,
-		},
-	}); err != nil {
+	if err := pb.Write(srcStream, &pbc.Response{}); err != nil {
 		return kleverr.Newf("could not write response: %w", err)
 	}
 
