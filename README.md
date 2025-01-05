@@ -168,12 +168,12 @@ relay-hostname = "localhost" # the public hostname (e.g. domain, ip address) whi
 store-dir = "path/to/server-store" # where does this server persist runtime information, defaults to a /tmp subdirectory
 
 [server.ip-restriction] # defines restriction applicable for all client tokens, checked before checking the token
-allow-cidr = [] # set of networks in CIDR format, to allow client connetctions from
-deny-cidr = [] # set of networks in CIDR format, to deny client connetctions from
+allow-cidrs = [] # set of networks in CIDR format, to allow client connetctions from
+deny-cidrs = [] # set of networks in CIDR format, to deny client connetctions from
 
 [[server.token-ip-restriction]] # defines restriction per client token, if specified must match the number of client tokens
-allow-cidr = [] # set of networks in CIDR format, to allow token client connetctions from
-deny-cidr = [] # set of networks in CIDR format, to deny token client connetctions from
+allow-cidrs = [] # set of networks in CIDR format, to allow token client connetctions from
+deny-cidrs = [] # set of networks in CIDR format, to deny token client connetctions from
 ```
 
 #### Control server
@@ -197,20 +197,20 @@ relay-tokens-file = "path/to/relay/token" # a file that contains a list of relay
 store-dir = "path/to/control-store" # where does this control server persist runtime information, defaults to a /tmp subdirectory
 
 [control.client-ip-restriction] # defines restriction applicable for all client tokens, checked before checking the token
-allow-cidr = [] # set of networks in CIDR format, to allow client connetctions from
-deny-cidr = [] # set of networks in CIDR format, to deny client connetctions from
+allow-cidrs = [] # set of networks in CIDR format, to allow client connetctions from
+deny-cidrs = [] # set of networks in CIDR format, to deny client connetctions from
 
 [[control.client-token-ip-restriction]] # defines restriction per client token, if specified must match the number of client tokens
-allow-cidr = [] # set of networks in CIDR format, to allow client connetctions from
-deny-cidr = [] # set of networks in CIDR format, to deny client connetctions from
+allow-cidrs = [] # set of networks in CIDR format, to allow client connetctions from
+deny-cidrs = [] # set of networks in CIDR format, to deny client connetctions from
 
 [control.relay-ip-restriction] # defines restriction applicable for all relay tokens, checked before checking the token
-allow-cidr = [] # set of networks in CIDR format, to allow relay connetctions from
-deny-cidr = [] # set of networks in CIDR format, to deny relay connetctions from
+allow-cidrs = [] # set of networks in CIDR format, to allow relay connetctions from
+deny-cidrs = [] # set of networks in CIDR format, to deny relay connetctions from
 
 [[control.relay-token-ip-restriction]] # defines restriction per relay token, if specified must match the number of relay tokens
-allow-cidr = [] # set of networks in CIDR format, to allow relay connetctions from
-deny-cidr = [] # set of networks in CIDR format, to deny relay connetctions from
+allow-cidrs = [] # set of networks in CIDR format, to allow relay connetctions from
+deny-cidrs = [] # set of networks in CIDR format, to deny relay connetctions from
 ```
 
 #### Relay server
@@ -238,13 +238,13 @@ They accept allow/deny list of strings in CIDR format, as defined by [RFC 4632](
 [RFC 4291](https://www.rfc-editor.org/rfc/rfc4291.html), for example (to restrict the set of client IPs that connect to the server):
 ```toml
 [server.ip-restriction]
-allow-cidr = ["10.100.1.0/24"]
-deny-cidr = ["90.0.0.0/8"]
+allow-cidrs = ["10.100.1.0/24"]
+deny-cidrs = ["90.0.0.0/8"]
 ```
 
 If these options are specified, an IP will be rejected if:
- - it matches any of the CIDRs in the `deny-cidr` list
- - it matches none of the CIDRs in the `allow-cidr` list. If the `allow-cidr` list is empty, the IP will be allowed.
+ - it matches any of the CIDRs in the `deny-cidrs` list
+ - it matches none of the CIDRs in the `allow-cidrs` list. If the `allow-cidrs` list is empty, the IP will not be rejected.
 
 ### Storage
 
