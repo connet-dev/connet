@@ -24,7 +24,7 @@ pkgs.buildGoModule
     fileset = sourceFiles;
   };
 
-  vendorHash = "sha256-ALmcCl81+U+3xks1xQhztQuvm40LCn9ZMdGnYT59Hzo=";
+  vendorHash = "sha256-KwrICtuXNh7vANFo9fkiNbTXESjiKnzm4+JBmKdoNmo=";
   subPackages = [ "cmd/connet" ];
 
   meta = with lib; {
