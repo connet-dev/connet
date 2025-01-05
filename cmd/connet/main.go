@@ -57,10 +57,10 @@ type ServerConfig struct {
 	Cert string `toml:"cert-file"`
 	Key  string `toml:"key-file"`
 
-	Rules      TokenIPRestriction   `toml:"rules"`
-	Tokens     []string             `toml:"tokens"`
-	TokensFile string               `toml:"tokens-file"`
-	TokenRules []TokenIPRestriction `toml:"token-rule"`
+	IPRestriction       IPRestriction   `toml:"ip-restriction"`
+	Tokens              []string        `toml:"tokens"`
+	TokensFile          string          `toml:"tokens-file"`
+	TokenIPRestrictions []IPRestriction `toml:"token-ip-restriction"`
 
 	RelayAddr     string `toml:"relay-addr"`
 	RelayHostname string `toml:"relay-hostname"`
@@ -73,20 +73,20 @@ type ControlConfig struct {
 	Cert string `toml:"cert-file"`
 	Key  string `toml:"key-file"`
 
-	ClientRules      TokenIPRestriction   `toml:"client-rules"`
-	ClientTokens     []string             `toml:"client-tokens"`
-	ClientTokensFile string               `toml:"client-tokens-file"`
-	ClientTokenRules []TokenIPRestriction `toml:"client-token-rule"`
+	ClientIPRestriction       IPRestriction   `toml:"client-ip-restriction"`
+	ClientTokens              []string        `toml:"client-tokens"`
+	ClientTokensFile          string          `toml:"client-tokens-file"`
+	ClientTokenIPRestrictions []IPRestriction `toml:"client-token-ip-restriction"`
 
-	RelayRules      TokenIPRestriction   `toml:"relay-rules"`
-	RelayTokens     []string             `toml:"relay-tokens"`
-	RelayTokensFile string               `toml:"relay-tokens-file"`
-	RelayTokenRules []TokenIPRestriction `toml:"relay-token-rule"`
+	RelayIPRestriction       IPRestriction   `toml:"relay-ip-restriction"`
+	RelayTokens              []string        `toml:"relay-tokens"`
+	RelayTokensFile          string          `toml:"relay-tokens-file"`
+	RelayTokenIPRestrictions []IPRestriction `toml:"relay-token-ip-restriction"`
 
 	StoreDir string `toml:"store-dir"`
 }
 
-type TokenIPRestriction struct {
+type IPRestriction struct {
 	AllowCIDR []string `toml:"allow-cidr"`
 	DenyCIDR  []string `toml:"deny-cidr"`
 }
@@ -204,8 +204,8 @@ func serverCmd() *cobra.Command {
 
 	cmd.Flags().StringArrayVar(&flagsConfig.Server.Tokens, "tokens", nil, "tokens for clients to connect")
 	cmd.Flags().StringVar(&flagsConfig.Server.TokensFile, "tokens-file", "", "tokens file to load")
-	cmd.Flags().StringSliceVar(&flagsConfig.Server.Rules.AllowCIDR, "tokens-allow-cidr", nil, "cidr to allow client connections from")
-	cmd.Flags().StringSliceVar(&flagsConfig.Server.Rules.DenyCIDR, "tokens-deny-cidr", nil, "cidr to deny client connections from")
+	cmd.Flags().StringSliceVar(&flagsConfig.Server.IPRestriction.AllowCIDR, "tokens-allow-cidr", nil, "cidr to allow client connections from")
+	cmd.Flags().StringSliceVar(&flagsConfig.Server.IPRestriction.DenyCIDR, "tokens-deny-cidr", nil, "cidr to deny client connections from")
 
 	cmd.Flags().StringVar(&flagsConfig.Server.RelayAddr, "relay-addr", "", "relay server addr to use")
 	cmd.Flags().StringVar(&flagsConfig.Server.RelayHostname, "relay-hostname", "", "relay server public hostname to use")
@@ -249,13 +249,13 @@ func controlCmd() *cobra.Command {
 
 	cmd.Flags().StringArrayVar(&flagsConfig.Control.ClientTokens, "client-tokens", nil, "client tokens for clients to connect")
 	cmd.Flags().StringVar(&flagsConfig.Control.ClientTokensFile, "client-tokens-file", "", "client tokens file to load")
-	cmd.Flags().StringSliceVar(&flagsConfig.Control.ClientRules.AllowCIDR, "client-allow-cidr", nil, "cidr to allow client connections from")
-	cmd.Flags().StringSliceVar(&flagsConfig.Control.ClientRules.DenyCIDR, "client-deny-cidr", nil, "cidr to deny client connections from")
+	cmd.Flags().StringSliceVar(&flagsConfig.Control.ClientIPRestriction.AllowCIDR, "client-allow-cidr", nil, "cidr to allow client connections from")
+	cmd.Flags().StringSliceVar(&flagsConfig.Control.ClientIPRestriction.DenyCIDR, "client-deny-cidr", nil, "cidr to deny client connections from")
 
 	cmd.Flags().StringArrayVar(&flagsConfig.Control.RelayTokens, "relay-tokens", nil, "relay tokens for clients to connect")
 	cmd.Flags().StringVar(&flagsConfig.Control.RelayTokensFile, "relay-tokens-file", "", "relay tokens file to load")
-	cmd.Flags().StringSliceVar(&flagsConfig.Control.RelayRules.AllowCIDR, "relay-allow-cidr", nil, "cidr to allow relay connections from")
-	cmd.Flags().StringSliceVar(&flagsConfig.Control.RelayRules.DenyCIDR, "relay-deny-cidr", nil, "cidr to deny relay connections from")
+	cmd.Flags().StringSliceVar(&flagsConfig.Control.RelayIPRestriction.AllowCIDR, "relay-allow-cidr", nil, "cidr to allow relay connections from")
+	cmd.Flags().StringSliceVar(&flagsConfig.Control.RelayIPRestriction.DenyCIDR, "relay-deny-cidr", nil, "cidr to deny relay connections from")
 
 	cmd.Flags().StringVar(&flagsConfig.Control.StoreDir, "store-dir", "", "storage dir, /tmp subdirectory if empty")
 
@@ -445,11 +445,11 @@ func serverRun(ctx context.Context, cfg ServerConfig, logger *slog.Logger) error
 		opts = append(opts, connet.ServerControlCertificate(cfg.Cert, cfg.Key))
 	}
 
-	if len(cfg.Rules.AllowCIDR) > 0 || len(cfg.Rules.DenyCIDR) > 0 {
-		opts = append(opts, connet.ServerClientRestrictions(cfg.Rules.AllowCIDR, cfg.Rules.DenyCIDR))
+	if len(cfg.IPRestriction.AllowCIDR) > 0 || len(cfg.IPRestriction.DenyCIDR) > 0 {
+		opts = append(opts, connet.ServerClientRestrictions(cfg.IPRestriction.AllowCIDR, cfg.IPRestriction.DenyCIDR))
 	}
 
-	restr, err := parseTokenRestrictions(cfg.TokenRules)
+	restr, err := parseIPRestrictions(cfg.TokenIPRestrictions)
 	if err != nil {
 		return err
 	}
@@ -505,15 +505,15 @@ func controlRun(ctx context.Context, cfg ControlConfig, logger *slog.Logger) err
 		controlCfg.Cert = cert
 	}
 
-	if len(cfg.ClientRules.AllowCIDR) > 0 || len(cfg.ClientRules.DenyCIDR) > 0 {
-		restr, err := netc.ParseIPRestriction(cfg.ClientRules.AllowCIDR, cfg.ClientRules.DenyCIDR)
+	if len(cfg.ClientIPRestriction.AllowCIDR) > 0 || len(cfg.ClientIPRestriction.DenyCIDR) > 0 {
+		restr, err := netc.ParseIPRestriction(cfg.ClientIPRestriction.AllowCIDR, cfg.ClientIPRestriction.DenyCIDR)
 		if err != nil {
 			return err
 		}
 		controlCfg.ClientRestr = restr
 	}
 
-	clientRestr, err := parseTokenRestrictions(cfg.ClientTokenRules)
+	clientRestr, err := parseIPRestrictions(cfg.ClientTokenIPRestrictions)
 	if err != nil {
 		return err
 	}
@@ -527,15 +527,15 @@ func controlRun(ctx context.Context, cfg ControlConfig, logger *slog.Logger) err
 		controlCfg.ClientAuth, err = selfhosted.NewClientAuthenticatorRestricted(cfg.ClientTokens, clientRestr)
 	}
 
-	if len(cfg.RelayRules.AllowCIDR) > 0 || len(cfg.RelayRules.DenyCIDR) > 0 {
-		restr, err := netc.ParseIPRestriction(cfg.RelayRules.AllowCIDR, cfg.RelayRules.DenyCIDR)
+	if len(cfg.RelayIPRestriction.AllowCIDR) > 0 || len(cfg.RelayIPRestriction.DenyCIDR) > 0 {
+		restr, err := netc.ParseIPRestriction(cfg.RelayIPRestriction.AllowCIDR, cfg.RelayIPRestriction.DenyCIDR)
 		if err != nil {
 			return err
 		}
 		controlCfg.RelayRestr = restr
 	}
 
-	relayRestr, err := parseTokenRestrictions(cfg.RelayTokenRules)
+	relayRestr, err := parseIPRestrictions(cfg.RelayTokenIPRestrictions)
 	if err != nil {
 		return err
 	}
@@ -665,7 +665,7 @@ func parseRouteOption(s string) (model.RouteOption, error) {
 	return model.ParseRouteOption(s)
 }
 
-func parseTokenRestrictions(ts []TokenIPRestriction) ([]netc.IPRestriction, error) {
+func parseIPRestrictions(ts []IPRestriction) ([]netc.IPRestriction, error) {
 	r := make([]netc.IPRestriction, len(ts))
 	var err error
 	for i, t := range ts {
@@ -716,8 +716,8 @@ func (c *ServerConfig) merge(o ServerConfig) {
 	c.Cert = override(c.Cert, o.Cert)
 	c.Key = override(c.Key, o.Key)
 
-	c.Rules.AllowCIDR = append(c.Rules.AllowCIDR, o.Rules.AllowCIDR...)
-	c.Rules.DenyCIDR = append(c.Rules.DenyCIDR, o.Rules.DenyCIDR...)
+	c.IPRestriction.AllowCIDR = append(c.IPRestriction.AllowCIDR, o.IPRestriction.AllowCIDR...)
+	c.IPRestriction.DenyCIDR = append(c.IPRestriction.DenyCIDR, o.IPRestriction.DenyCIDR...)
 	c.Tokens = append(c.Tokens, o.Tokens...)
 	c.TokensFile = override(c.TokensFile, o.TokensFile)
 
@@ -732,13 +732,13 @@ func (c *ControlConfig) merge(o ControlConfig) {
 	c.Cert = override(c.Cert, o.Cert)
 	c.Key = override(c.Key, o.Key)
 
-	c.ClientRules.AllowCIDR = append(c.ClientRules.AllowCIDR, o.ClientRules.AllowCIDR...)
-	c.ClientRules.DenyCIDR = append(c.ClientRules.DenyCIDR, o.ClientRules.DenyCIDR...)
+	c.ClientIPRestriction.AllowCIDR = append(c.ClientIPRestriction.AllowCIDR, o.ClientIPRestriction.AllowCIDR...)
+	c.ClientIPRestriction.DenyCIDR = append(c.ClientIPRestriction.DenyCIDR, o.ClientIPRestriction.DenyCIDR...)
 	c.ClientTokens = append(c.ClientTokens, o.ClientTokens...)
 	c.ClientTokensFile = override(c.ClientTokensFile, o.ClientTokensFile)
 
-	c.RelayRules.AllowCIDR = append(c.RelayRules.AllowCIDR, o.RelayRules.AllowCIDR...)
-	c.RelayRules.DenyCIDR = append(c.RelayRules.DenyCIDR, o.RelayRules.DenyCIDR...)
+	c.RelayIPRestriction.AllowCIDR = append(c.RelayIPRestriction.AllowCIDR, o.RelayIPRestriction.AllowCIDR...)
+	c.RelayIPRestriction.DenyCIDR = append(c.RelayIPRestriction.DenyCIDR, o.RelayIPRestriction.DenyCIDR...)
 	c.RelayTokens = append(c.RelayTokens, o.RelayTokens...)
 	c.RelayTokensFile = override(c.RelayTokensFile, o.RelayTokensFile)
 
