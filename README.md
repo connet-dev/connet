@@ -235,7 +235,7 @@ store-dir = "path/to/relay-store" # where does this relay persist runtime inform
 
 You can restrict clients and relays to connect only from specific IPs using different `ip-restriction` options. 
 They accept allow/deny list of strings in CIDR format, as defined by [RFC 4632](https://www.rfc-editor.org/rfc/rfc4632.html) and 
-[RFC 4291](https://www.rfc-editor.org/rfc/rfc4291.html), for example (to restrict the set of client IPs that connect to the server):
+[RFC 4291](https://www.rfc-editor.org/rfc/rfc4291.html), for example (to restrict the set of client IPs that can connect to the server):
 ```toml
 [server.ip-restriction]
 allow-cidrs = ["192.0.2.0/24"]
