@@ -15,6 +15,7 @@ import (
 
 	"github.com/connet-dev/connet/certc"
 	"github.com/connet-dev/connet/model"
+	"github.com/connet-dev/connet/netc"
 	"github.com/stretchr/testify/require"
 	"golang.org/x/sync/errgroup"
 )
@@ -30,8 +31,15 @@ func TestE2E(t *testing.T) {
 
 	logger := slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{Level: slog.LevelWarn}))
 
+	noRestr := netc.IPRestriction{}
+	localRestr, err := netc.ParseIPRestriction([]string{"192.0.2.0/24"}, nil)
+	require.NoError(t, err)
+
 	srv, err := NewServer(
-		ServerClientTokens("test-token"),
+		ServerClientTokensRestricted(
+			[]string{"test-token-dst", "test-token-src", "test-token-deny"},
+			[]netc.IPRestriction{noRestr, noRestr, localRestr},
+		),
 		serverControlCertificate(cert),
 		ServerControlAddress(":20000"),
 		ServerRelayAddress(":20001"),
@@ -40,7 +48,7 @@ func TestE2E(t *testing.T) {
 	require.NoError(t, err)
 
 	clDst, err := NewClient(
-		ClientToken("test-token"),
+		ClientToken("test-token-dst"),
 		ClientControlAddress("localhost:20000"),
 		clientControlCAs(cas),
 		ClientDirectAddress(":20002"),
@@ -57,7 +65,7 @@ func TestE2E(t *testing.T) {
 	require.NoError(t, err)
 
 	clSrc, err := NewClient(
-		ClientToken("test-token"),
+		ClientToken("test-token-src"),
 		ClientControlAddress("localhost:20000"),
 		clientControlCAs(cas),
 		ClientDirectAddress(":20003"),
@@ -73,12 +81,24 @@ func TestE2E(t *testing.T) {
 	)
 	require.NoError(t, err)
 
+	clDeny, err := NewClient(
+		ClientToken("test-token-deny"),
+		ClientControlAddress("localhost:20000"),
+		clientControlCAs(cas),
+		ClientDirectAddress(":20003"),
+		ClientDestination("direct", hts.Listener.Addr().String(), model.RouteDirect),
+		ClientLogger(logger.With("test", "cl-deny")),
+	)
+	require.NoError(t, err)
+
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
 	g, ctx := errgroup.WithContext(ctx)
 	g.Go(func() error { return srv.Run(ctx) })
 	time.Sleep(time.Millisecond) // time for server to come online
+
+	require.Error(t, clDeny.Run(ctx)) // TODO rich errors
 
 	g.Go(func() error { return clDst.Run(ctx) })
 	g.Go(func() error { return clSrc.Run(ctx) })
