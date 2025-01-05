@@ -188,9 +188,8 @@ type clientConn struct {
 	conn   quic.Connection
 	logger *slog.Logger
 
-	fwd    model.Forward
-	key    certc.Key
-	remote *pb.Addr
+	fwd model.Forward
+	key certc.Key
 }
 
 func (c *clientConn) run(ctx context.Context) {
@@ -209,16 +208,10 @@ func (c *clientConn) runErr(ctx context.Context) error {
 		return c.conn.CloseWithError(1, "no auth")
 	}
 
-	remoteAddr, err := pb.AddrPortFromNet(c.conn.RemoteAddr())
-	if err != nil {
-		return c.conn.CloseWithError(2, "remote addr parse failed")
-	}
-
 	switch {
 	case auth.destination:
 		c.fwd = auth.fwd
 		c.key = certc.NewKey(certs[0])
-		c.remote = remoteAddr.Addr
 
 		fcs := c.server.addDestination(c)
 		defer c.server.removeDestination(fcs, c)
@@ -233,7 +226,6 @@ func (c *clientConn) runErr(ctx context.Context) error {
 	case auth.source:
 		c.fwd = auth.fwd
 		c.key = certc.NewKey(certs[0])
-		c.remote = remoteAddr.Addr
 
 		fcs := c.server.addSource(c)
 		defer c.server.removeSource(fcs, c)

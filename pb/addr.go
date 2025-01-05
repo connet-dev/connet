@@ -15,6 +15,13 @@ func AddrFromNetip(addr netip.Addr) *Addr {
 	}
 }
 
+func (a *Addr) AsNetip() netip.Addr {
+	if len(a.V6) > 0 {
+		return netip.AddrFrom16([16]byte(a.V6))
+	}
+	return netip.AddrFrom4([4]byte(a.V4))
+}
+
 func AddrPortFromNet(addr net.Addr) (*AddrPort, error) {
 	switch t := addr.(type) {
 	case *net.UDPAddr:
@@ -35,13 +42,6 @@ func AddrPortFromNetip(addr netip.AddrPort) *AddrPort {
 		Addr: AddrFromNetip(addr.Addr()),
 		Port: uint32(addr.Port()),
 	}
-}
-
-func (a *Addr) AsNetip() netip.Addr {
-	if len(a.V6) > 0 {
-		return netip.AddrFrom16([16]byte(a.V6))
-	}
-	return netip.AddrFrom4([4]byte(a.V4))
 }
 
 func (a *AddrPort) AsNetip() netip.AddrPort {

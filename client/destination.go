@@ -26,9 +26,7 @@ type Destination struct {
 	conns map[peerConnKey]*destinationConn
 }
 
-func NewDestination(fwd model.Forward, addr string, opt model.RouteOption,
-	direct *DirectServer, root *certc.Cert, logger *slog.Logger) (*Destination, error) {
-
+func NewDestination(fwd model.Forward, addr string, opt model.RouteOption, direct *DirectServer, root *certc.Cert, logger *slog.Logger) (*Destination, error) {
 	logger = logger.With("destination", fwd)
 	p, err := newPeer(direct, root, logger)
 	if err != nil {
