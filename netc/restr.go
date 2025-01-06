@@ -38,6 +38,8 @@ func ParseIPRestriction(allows []string, denys []string) (IPRestriction, error) 
 // If the ip matches any of the Allow rules (after checking all Deny rules), Accept returns true
 // Finally, if the ip matches no Allow or Deny rules, Accept returns true only if no explicit Allow rules were defined
 func (r IPRestriction) Accept(ip netip.Addr) bool {
+	ip = ip.Unmap() // remove any ipv6 prefix for ipv4
+
 	for _, d := range r.deny {
 		if d.Contains(ip) {
 			return false
