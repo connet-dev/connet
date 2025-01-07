@@ -148,7 +148,11 @@ func (s *relayServer) Client(ctx context.Context, fwd model.Forward, role model.
 	if err := s.clients.Put(key, val); err != nil {
 		return err
 	}
-	defer s.clients.Del(key)
+	defer func() {
+		if err := s.clients.Del(key); err != nil {
+			s.logger.Warn("failed to delete client", "key", key, "err", err)
+		}
+	}()
 
 	return s.listen(ctx, fwd, notifyFn)
 }
@@ -320,7 +324,11 @@ func (c *relayConn) runErr(ctx context.Context) error {
 	if err := c.server.conns.Put(key, value); err != nil {
 		return err
 	}
-	defer c.server.conns.Del(key)
+	defer func() {
+		if err := c.server.conns.Del(key); err != nil {
+			c.logger.Warn("failed to delete conn", "key", key, "err", err)
+		}
+	}()
 
 	g, ctx := errgroup.WithContext(ctx)
 

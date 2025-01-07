@@ -242,9 +242,15 @@ func (c *clientConn) runErr(ctx context.Context) error {
 	}
 }
 
-func (c *clientConn) runDestinationStream(ctx context.Context, stream quic.Stream) error {
+func (c *clientConn) runDestinationStream(ctx context.Context, stream quic.Stream) {
 	defer stream.Close()
 
+	if err := c.runDestinationStreamErr(ctx, stream); err != nil {
+		c.logger.Debug("error while running destination", "err", err)
+	}
+}
+
+func (c *clientConn) runDestinationStreamErr(ctx context.Context, stream quic.Stream) error {
 	req, err := pbc.ReadRequest(stream)
 	if err != nil {
 		return err
@@ -258,9 +264,15 @@ func (c *clientConn) runDestinationStream(ctx context.Context, stream quic.Strea
 	}
 }
 
-func (c *clientConn) runSourceStream(ctx context.Context, stream quic.Stream, fcs *forwardClients) error {
+func (c *clientConn) runSourceStream(ctx context.Context, stream quic.Stream, fcs *forwardClients) {
 	defer stream.Close()
 
+	if err := c.runSourceStreamErr(ctx, stream, fcs); err != nil {
+		c.logger.Debug("error while running destination", "err", err)
+	}
+}
+
+func (c *clientConn) runSourceStreamErr(ctx context.Context, stream quic.Stream, fcs *forwardClients) error {
 	req, err := pbc.ReadRequest(stream)
 	if err != nil {
 		return err

@@ -298,7 +298,11 @@ func (c *clientConn) runErr(ctx context.Context) error {
 	if err := c.server.connected(c.id, c.auth, c.conn.RemoteAddr()); err != nil {
 		return err
 	}
-	defer c.server.disconnected(c.id)
+	defer func() {
+		if err := c.server.disconnected(c.id); err != nil {
+			c.logger.Warn("failed to disconnect client", "id", c.id, "err", err)
+		}
+	}()
 
 	for {
 		stream, err := c.conn.AcceptStream(ctx)
@@ -463,7 +467,11 @@ func (s *clientStream) announce(ctx context.Context, req *pbs.Request_Announce) 
 	if err := s.conn.server.announce(fwd, role, s.conn.id, req.Peer); err != nil {
 		return err
 	}
-	defer s.conn.server.revoke(fwd, role, s.conn.id)
+	defer func() {
+		if err := s.conn.server.revoke(fwd, role, s.conn.id); err != nil {
+			s.conn.logger.Warn("failed to revoke client", "id", s.conn.id, "err", err)
+		}
+	}()
 
 	g, ctx := errgroup.WithContext(ctx)
 
