@@ -20,7 +20,10 @@
       in
       {
         formatter = pkgs.nixpkgs-fmt;
-        packages.default = pkgs.callPackage ./nix/package.nix { };
+        packages = {
+          default = pkgs.callPackage ./nix/package.nix { };
+          docker = pkgs.callPackage ./nix/docker.nix { };
+        };
         devShells.default = pkgs.mkShellNoCC {
           buildInputs = with pkgs; [
             go
