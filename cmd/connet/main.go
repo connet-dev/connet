@@ -25,7 +25,7 @@ import (
 )
 
 type Config struct {
-	LogLeve   string `toml:"log-level"`
+	LogLevel  string `toml:"log-level"`
 	LogFormat string `toml:"log-format"`
 
 	Client ClientConfig `toml:"client"`
