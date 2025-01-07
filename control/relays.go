@@ -145,7 +145,9 @@ func (s *relayServer) Client(ctx context.Context, fwd model.Forward, role model.
 
 	key := RelayClientKey{Forward: fwd, Role: role, Key: certc.NewKey(cert)}
 	val := RelayClientValue{Cert: cert}
-	s.clients.Put(key, val)
+	if err := s.clients.Put(key, val); err != nil {
+		return err
+	}
 	defer s.clients.Del(key)
 
 	return s.listen(ctx, fwd, notifyFn)

@@ -139,5 +139,6 @@ func TestE2E(t *testing.T) {
 	fmt.Println("stopping all")
 	cancel()
 
-	g.Wait()
+	// make sure everything shuts down on context cancel
+	_ = g.Wait()
 }
