@@ -25,10 +25,11 @@
           buildInputs = with pkgs; [
             go
             gopls
+            fd
             protobuf
             protoc-gen-go
-            static-web-server
             process-compose
+            static-web-server
             (pkgs.writeShellScriptBin "gen-local-certs" ''
               set -euo pipefail
               cd .direnv
