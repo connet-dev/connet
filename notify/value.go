@@ -182,7 +182,7 @@ func (v *V[T]) Notify(ctx context.Context) <-chan T {
 	ch := make(chan T, 1)
 	go func() {
 		defer close(ch)
-		v.Listen(ctx, func(t T) error {
+		_ = v.Listen(ctx, func(t T) error {
 			ch <- t
 			return nil
 		})

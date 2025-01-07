@@ -105,7 +105,6 @@ type clientServer struct {
 	auth   ClientAuthenticator
 	restr  netc.IPRestriction
 	relays ClientRelays
-	encode []byte
 	logger *slog.Logger
 
 	clientSecretKey [32]byte

@@ -518,13 +518,16 @@ func controlRun(ctx context.Context, cfg ControlConfig, logger *slog.Logger) err
 		return err
 	}
 	if cfg.ClientTokensFile != "" {
-		tokens, err := loadTokens(cfg.ClientTokensFile)
-		if err != nil {
-			return err
+		tokens, terr := loadTokens(cfg.ClientTokensFile)
+		if terr != nil {
+			return terr
 		}
 		controlCfg.ClientAuth, err = selfhosted.NewClientAuthenticatorRestricted(tokens, clientRestr)
 	} else {
 		controlCfg.ClientAuth, err = selfhosted.NewClientAuthenticatorRestricted(cfg.ClientTokens, clientRestr)
+	}
+	if err != nil {
+		return err
 	}
 
 	if len(cfg.RelayIPRestriction.AllowCIDRs) > 0 || len(cfg.RelayIPRestriction.DenyCIDRs) > 0 {
@@ -540,9 +543,9 @@ func controlRun(ctx context.Context, cfg ControlConfig, logger *slog.Logger) err
 		return err
 	}
 	if cfg.RelayTokensFile != "" {
-		tokens, err := loadTokens(cfg.RelayTokensFile)
-		if err != nil {
-			return err
+		tokens, terr := loadTokens(cfg.RelayTokensFile)
+		if terr != nil {
+			return terr
 		}
 		controlCfg.RelayAuth, err = selfhosted.NewRelayAuthenticatorRestricted(tokens, relayRestr)
 	} else {
