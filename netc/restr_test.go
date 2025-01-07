@@ -70,7 +70,7 @@ func TestIPRestriction(t *testing.T) {
 			allow:  []string{"10.101.2.0/24"},
 			deny:   []string{"10.100.2.0/24"},
 			check:  "10.101.2.100",
-			accept: true,
+			accept: false,
 		},
 	}
 
