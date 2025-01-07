@@ -43,10 +43,10 @@ type relayAuthentication struct {
 	token string
 }
 
-func (r *relayAuthentication) Allow(fwd model.Forward) bool {
+func (r *relayAuthentication) Allow(_ model.Forward) bool {
 	return true
 }
 
-func (r *relayAuthentication) MarshalBinary() (data []byte, err error) {
+func (r *relayAuthentication) MarshalBinary() ([]byte, error) {
 	return []byte(r.token), nil
 }

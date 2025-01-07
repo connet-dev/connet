@@ -9,10 +9,9 @@ func AddrFromNetip(addr netip.Addr) *Addr {
 	if addr.Is6() {
 		v6 := addr.As16()
 		return &Addr{V6: v6[:]}
-	} else {
-		v4 := addr.As4()
-		return &Addr{V4: v4[:]}
 	}
+	v4 := addr.As4()
+	return &Addr{V4: v4[:]}
 }
 
 func (a *Addr) AsNetip() netip.Addr {

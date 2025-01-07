@@ -43,10 +43,10 @@ type clientAuthentication struct {
 	token string
 }
 
-func (a *clientAuthentication) Validate(fwd model.Forward, role model.Role) (model.Forward, error) {
+func (a *clientAuthentication) Validate(fwd model.Forward, _ model.Role) (model.Forward, error) {
 	return fwd, nil
 }
 
-func (a *clientAuthentication) MarshalBinary() (data []byte, err error) {
+func (a *clientAuthentication) MarshalBinary() ([]byte, error) {
 	return []byte(a.token), nil
 }

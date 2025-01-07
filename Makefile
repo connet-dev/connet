@@ -1,14 +1,17 @@
-.PHONY: all build test test-always
+.PHONY: all build test lint test-always
 
 default: all
 
-all: build test
+all: build test lint
 
 build:
 	go install -v github.com/connet-dev/connet/cmd/... 
 
 test:
 	go test -v -cover -timeout 10s ./...
+
+lint:
+	golangci-lint run
 
 test-always:
 	go test -v -cover -timeout 10s -count 1 ./...

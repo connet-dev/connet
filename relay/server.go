@@ -31,10 +31,7 @@ func NewServer(cfg Config) (*Server, error) {
 		return nil, err
 	}
 
-	clients, err := newClientsServer(cfg)
-	if err != nil {
-		return nil, err
-	}
+	clients := newClientsServer(cfg)
 
 	s := &Server{
 		addr: cfg.Addr,

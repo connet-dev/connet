@@ -72,7 +72,7 @@ func newClientServer(
 		})
 	}
 
-	serverSecret, err := config.GetOrInit(configServerClientSecret, func(ck ConfigKey) (ConfigValue, error) {
+	serverSecret, err := config.GetOrInit(configServerClientSecret, func(_ ConfigKey) (ConfigValue, error) {
 		privateKey := [32]byte{}
 		if _, err := io.ReadFull(rand.Reader, privateKey[:]); err != nil {
 			return ConfigValue{}, err
@@ -571,7 +571,7 @@ func (s *clientStream) relay(ctx context.Context, req *pbs.Request_Relay) error 
 	return g.Wait()
 }
 
-func (s *clientStream) unknown(ctx context.Context, req *pbs.Request) error {
+func (s *clientStream) unknown(_ context.Context, req *pbs.Request) error {
 	s.conn.logger.Error("unknown request", "req", req)
 	err := pb.NewError(pb.Error_RequestUnknown, "unknown request: %v", req)
 	return pb.Write(s.stream, &pbc.Response{Error: err})

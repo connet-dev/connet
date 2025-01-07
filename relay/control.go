@@ -29,7 +29,7 @@ type controlClient struct {
 
 	controlAddr    *net.UDPAddr
 	controlToken   string
-	controlTlsConf *tls.Config
+	controlTLSConf *tls.Config
 
 	config  logc.KV[ConfigKey, ConfigValue]
 	clients logc.KV[ClientKey, ClientValue]
@@ -94,7 +94,7 @@ func newControlClient(cfg Config) (*controlClient, error) {
 
 		controlAddr:  cfg.ControlAddr,
 		controlToken: cfg.ControlToken,
-		controlTlsConf: &tls.Config{
+		controlTLSConf: &tls.Config{
 			ServerName: cfg.ControlHost,
 			RootCAs:    cfg.ControlCAs,
 			NextProtos: []string{"connet-relays"},
@@ -114,8 +114,8 @@ func newControlClient(cfg Config) (*controlClient, error) {
 	}, nil
 }
 
-func (s *controlClient) getClientsStreamOffset() (int64, error) {
-	return s.clientsStreamOffset, nil
+func (s *controlClient) getClientsStreamOffset() int64 {
+	return s.clientsStreamOffset
 }
 
 func (s *controlClient) setClientsStreamOffset(v int64) error {
@@ -126,8 +126,8 @@ func (s *controlClient) setClientsStreamOffset(v int64) error {
 	return nil
 }
 
-func (s *controlClient) getClientsLogOffset() (int64, error) {
-	return s.clientsLogOffset, nil
+func (s *controlClient) getClientsLogOffset() int64 {
+	return s.clientsLogOffset
 }
 
 func (s *controlClient) setClientsLogOffset(v int64) error {
@@ -194,7 +194,7 @@ func (s *controlClient) connect(ctx context.Context, transport *quic.Transport) 
 		return retConnect(err)
 	}
 
-	conn, err := transport.Dial(ctx, s.controlAddr, s.controlTlsConf, &quic.Config{
+	conn, err := transport.Dial(ctx, s.controlAddr, s.controlTLSConf, &quic.Config{
 		KeepAlivePeriod: 25 * time.Second,
 	})
 	if err != nil {
@@ -243,20 +243,20 @@ func (s *controlClient) connect(ctx context.Context, transport *quic.Transport) 
 	return conn, nil
 }
 
-func (c *controlClient) reconnect(ctx context.Context, transport *quic.Transport) (quic.Connection, error) {
+func (s *controlClient) reconnect(ctx context.Context, transport *quic.Transport) (quic.Connection, error) {
 	d := netc.MinBackoff
 	t := time.NewTimer(d)
 	defer t.Stop()
 	for {
-		c.logger.Debug("backoff wait", "d", d)
+		s.logger.Debug("backoff wait", "d", d)
 		select {
 		case <-ctx.Done():
 			return nil, ctx.Err()
 		case <-t.C:
 		}
 
-		if conn, err := c.connect(ctx, transport); err != nil {
-			c.logger.Debug("reconnect failed, retrying", "err", err)
+		if conn, err := s.connect(ctx, transport); err != nil {
+			s.logger.Debug("reconnect failed, retrying", "err", err)
 		} else {
 			return conn, nil
 		}
@@ -296,13 +296,8 @@ func (s *controlClient) runClientsStream(ctx context.Context, conn quic.Connecti
 
 	g.Go(func() error {
 		for {
-			serverOffset, err := s.getClientsStreamOffset()
-			if err != nil {
-				return err
-			}
-
 			req := &pbr.ClientsReq{
-				Offset: serverOffset,
+				Offset: s.getClientsStreamOffset(),
 			}
 			if err := pb.Write(stream, req); err != nil {
 				return err
@@ -349,12 +344,7 @@ func (s *controlClient) runClientsStream(ctx context.Context, conn quic.Connecti
 
 func (s *controlClient) runClientsLog(ctx context.Context) error {
 	for {
-		offset, err := s.getClientsLogOffset()
-		if err != nil {
-			return err
-		}
-
-		msgs, nextOffset, err := s.clients.Consume(ctx, offset)
+		msgs, nextOffset, err := s.clients.Consume(ctx, s.getClientsLogOffset())
 		if err != nil {
 			return err
 		}

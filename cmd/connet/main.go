@@ -160,7 +160,7 @@ func rootCmd() *cobra.Command {
 	cmd.Flags().StringVar(&srcCfg.Addr, "src-addr", "", "source address")
 	cmd.Flags().StringVar(&srcCfg.Route, "src-route", "", "source route")
 
-	cmd.RunE = func(cmd *cobra.Command, args []string) error {
+	cmd.RunE = func(cmd *cobra.Command, _ []string) error {
 		cfg, err := loadConfig(*filename)
 		if err != nil {
 			return err
@@ -212,7 +212,7 @@ func serverCmd() *cobra.Command {
 
 	cmd.Flags().StringVar(&flagsConfig.Server.StoreDir, "store-dir", "", "storage dir, /tmp subdirectory if empty")
 
-	cmd.RunE = func(cmd *cobra.Command, args []string) error {
+	cmd.RunE = func(cmd *cobra.Command, _ []string) error {
 		cfg, err := loadConfig(*filename)
 		if err != nil {
 			return err
@@ -259,7 +259,7 @@ func controlCmd() *cobra.Command {
 
 	cmd.Flags().StringVar(&flagsConfig.Control.StoreDir, "store-dir", "", "storage dir, /tmp subdirectory if empty")
 
-	cmd.RunE = func(cmd *cobra.Command, args []string) error {
+	cmd.RunE = func(cmd *cobra.Command, _ []string) error {
 		cfg, err := loadConfig(*filename)
 		if err != nil {
 			return err
@@ -301,7 +301,7 @@ func relayCmd() *cobra.Command {
 
 	cmd.Flags().StringVar(&flagsConfig.Relay.StoreDir, "store-dir", "", "storage dir, /tmp subdirectory if empty")
 
-	cmd.RunE = func(cmd *cobra.Command, args []string) error {
+	cmd.RunE = func(cmd *cobra.Command, _ []string) error {
 		cfg, err := loadConfig(*filename)
 		if err != nil {
 			return err
@@ -327,7 +327,7 @@ func checkCmd() *cobra.Command {
 		Args:  cobra.ExactArgs(1),
 	}
 
-	cmd.RunE = func(cmd *cobra.Command, args []string) error {
+	cmd.RunE = func(_ *cobra.Command, args []string) error {
 		cfg, err := loadConfig(args[0])
 		if err != nil {
 			return err

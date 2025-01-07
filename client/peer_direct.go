@@ -25,7 +25,7 @@ import (
 type directPeer struct {
 	local *peer
 
-	remoteId string
+	remoteID string
 	remote   *notify.V[*pbs.ServerPeer]
 	incoming *directPeerIncoming
 	outgoing *directPeerOutgoing
@@ -40,7 +40,7 @@ func newPeering(local *peer, remote *pbs.ServerPeer, logger *slog.Logger) *direc
 	return &directPeer{
 		local: local,
 
-		remoteId: remote.Id,
+		remoteID: remote.Id,
 		remote:   notify.New(remote),
 
 		closer: make(chan struct{}),
@@ -53,7 +53,7 @@ var errPeeringStop = errors.New("peering stopped")
 
 func (p *directPeer) run(ctx context.Context) {
 	defer func() {
-		active := p.local.removeActiveConns(p.remoteId)
+		active := p.local.removeActiveConns(p.remoteID)
 		for _, conn := range active {
 			conn.CloseWithError(1, "depeered")
 		}
@@ -113,12 +113,14 @@ func (p *directPeer) runRemote(ctx context.Context) error {
 		for _, relay := range remote.Relays {
 			relays[model.HostPortFromPB(relay)] = struct{}{}
 		}
-		if p.relays == nil {
+
+		switch {
+		case p.relays == nil:
 			p.relays = newDirectPeerRelays(ctx, p, relays)
-		} else if len(relays) == 0 {
+		case len(relays) == 0:
 			close(p.relays.closerCh)
 			p.relays = nil
-		} else {
+		default:
 			p.relays.remotes.Set(relays)
 		}
 
@@ -206,8 +208,8 @@ func (p *directPeerIncoming) keepalive(ctx context.Context, conn quic.Connection
 	defer conn.CloseWithError(1, "disconnected")
 	defer stream.Close()
 
-	p.parent.local.addActiveConn(p.parent.remoteId, peerIncoming, "", conn)
-	defer p.parent.local.removeActiveConn(p.parent.remoteId, peerIncoming, "")
+	p.parent.local.addActiveConn(p.parent.remoteID, peerIncoming, "", conn)
+	defer p.parent.local.removeActiveConn(p.parent.remoteID, peerIncoming, "")
 
 	g, ctx := errgroup.WithContext(ctx)
 
@@ -336,8 +338,8 @@ func (p *directPeerOutgoing) keepalive(ctx context.Context, conn quic.Connection
 	defer conn.CloseWithError(1, "disconnected")
 	defer stream.Close()
 
-	p.parent.local.addActiveConn(p.parent.remoteId, peerOutgoing, "", conn)
-	defer p.parent.local.removeActiveConn(p.parent.remoteId, peerOutgoing, "")
+	p.parent.local.addActiveConn(p.parent.remoteID, peerOutgoing, "", conn)
+	defer p.parent.local.removeActiveConn(p.parent.remoteID, peerOutgoing, "")
 
 	for {
 		select {
@@ -353,7 +355,7 @@ func (p *directPeerOutgoing) keepalive(ctx context.Context, conn quic.Connection
 	}
 }
 
-func (p *directPeerOutgoing) heartbeat(ctx context.Context, stream quic.Stream) error {
+func (p *directPeerOutgoing) heartbeat(_ context.Context, stream quic.Stream) error {
 	// TODO setDeadline as additional assurance we are not blocked
 	req := &pbc.Heartbeat{Time: timestamppb.Now()}
 	if err := pb.Write(stream, &pbc.Request{Heartbeat: req}); err != nil {
@@ -393,19 +395,19 @@ func (p *directPeerRelays) run(ctx context.Context) {
 		remote map[model.HostPort]struct{}
 	)
 
-	var active = map[model.HostPort]struct{}{}
+	active := map[model.HostPort]struct{}{}
 	defer func() {
 		for hp := range active {
-			p.parent.local.removeActiveConn(p.parent.remoteId, peerRelay, hp.String())
+			p.parent.local.removeActiveConn(p.parent.remoteID, peerRelay, hp.String())
 		}
 	}()
 
-	var update = func() {
+	update := func() {
 		for hp := range active {
 			_, relayed := relays[hp]
 			_, remoted := remote[hp]
 			if !(relayed && remoted) {
-				p.parent.local.removeActiveConn(p.parent.remoteId, peerRelay, hp.String())
+				p.parent.local.removeActiveConn(p.parent.remoteID, peerRelay, hp.String())
 				delete(active, hp)
 			}
 		}
@@ -413,7 +415,7 @@ func (p *directPeerRelays) run(ctx context.Context) {
 		for hp := range remote {
 			if conn := relays[hp]; conn != nil {
 				if _, ok := active[hp]; !ok {
-					p.parent.local.addActiveConn(p.parent.remoteId, peerRelay, hp.String(), conn)
+					p.parent.local.addActiveConn(p.parent.remoteID, peerRelay, hp.String(), conn)
 					active[hp] = struct{}{}
 				}
 			}

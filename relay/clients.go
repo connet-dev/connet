@@ -26,7 +26,7 @@ type clientAuth struct {
 	source      bool
 }
 
-func newClientsServer(cfg Config) (*clientsServer, error) {
+func newClientsServer(cfg Config) *clientsServer {
 	return &clientsServer{
 		tlsConf: &tls.Config{
 			ClientAuth: tls.RequireAndVerifyClientCert,
@@ -36,7 +36,7 @@ func newClientsServer(cfg Config) (*clientsServer, error) {
 		forwards: map[model.Forward]*forwardClients{},
 
 		logger: cfg.Logger.With("relay-clients", cfg.Hostport),
-	}, nil
+	}
 }
 
 type clientsServer struct {
@@ -353,7 +353,7 @@ func (c *clientConn) heartbeat(ctx context.Context, stream quic.Stream, hbt *pbc
 	return g.Wait()
 }
 
-func (c *clientConn) unknown(ctx context.Context, stream quic.Stream, req *pbc.Request) error {
+func (c *clientConn) unknown(_ context.Context, stream quic.Stream, req *pbc.Request) error {
 	c.logger.Error("unknown request", "req", req)
 	err := pb.NewError(pb.Error_RequestUnknown, "unknown request: %v", req)
 	return pb.Write(stream, &pbc.Response{Error: err})

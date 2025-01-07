@@ -117,9 +117,9 @@ func TestE2E(t *testing.T) {
 
 			resp, err := httpcl.Get(url)
 			require.NoError(t, err)
+			defer resp.Body.Close()
 
 			respData, err := io.ReadAll(resp.Body)
-			defer resp.Body.Close()
 			require.NoError(t, err)
 
 			require.Equal(t, fmt.Sprintf("hello:%d", rnd), string(respData))

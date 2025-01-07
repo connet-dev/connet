@@ -191,9 +191,9 @@ func (p *peer) runPeers(ctx context.Context) error {
 	return p.peers.Listen(ctx, func(peers []*pbs.ServerPeer) error {
 		p.logger.Debug("peers updated", "len", len(peers))
 
-		activeIds := map[string]struct{}{}
+		activeIDs := map[string]struct{}{}
 		for _, sp := range peers {
-			activeIds[sp.Id] = struct{}{}
+			activeIDs[sp.Id] = struct{}{}
 			prg := peersByID[sp.Id]
 			if prg != nil {
 				prg.remote.Set(sp)
@@ -205,7 +205,7 @@ func (p *peer) runPeers(ctx context.Context) error {
 		}
 
 		for id, prg := range peersByID {
-			if _, ok := activeIds[id]; !ok {
+			if _, ok := activeIDs[id]; !ok {
 				prg.stop()
 				delete(peersByID, id)
 			}

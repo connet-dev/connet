@@ -122,7 +122,7 @@ func (r *relayPeer) keepalive(ctx context.Context, conn quic.Connection) error {
 	}
 }
 
-func (r *relayPeer) heartbeat(ctx context.Context, stream quic.Stream) error {
+func (r *relayPeer) heartbeat(_ context.Context, stream quic.Stream) error {
 	// TODO setDeadline as additional assurance we are not blocked
 	req := &pbc.Heartbeat{Time: timestamppb.Now()}
 	if err := pb.Write(stream, &pbc.Request{Heartbeat: req}); err != nil {

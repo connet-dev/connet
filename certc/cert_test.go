@@ -198,7 +198,7 @@ func testConnectivityDyn(t *testing.T, serverCert tls.Certificate, clientCA *x50
 		ClientAuth: tls.RequireAndVerifyClientCert,
 		NextProtos: []string{"test"},
 	}
-	serverConf.GetConfigForClient = func(chi *tls.ClientHelloInfo) (*tls.Config, error) {
+	serverConf.GetConfigForClient = func(_ *tls.ClientHelloInfo) (*tls.Config, error) {
 		conf := serverConf.Clone()
 		conf.Certificates = []tls.Certificate{serverCert}
 		conf.ClientCAs = clientCA

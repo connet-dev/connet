@@ -120,14 +120,14 @@ func (l *kv[K, V]) Consume(ctx context.Context, offset int64) ([]Message[K, V], 
 	if err != nil {
 		return nil, OffsetInvalid, err
 	}
-	var nmsgs []Message[K, V]
-	for _, msg := range msgs {
-		nmsgs = append(nmsgs, Message[K, V]{
+	nmsgs := make([]Message[K, V], len(msgs))
+	for i, msg := range msgs {
+		nmsgs[i] = Message[K, V]{
 			Offset: msg.Offset,
 			Key:    msg.Key,
 			Value:  msg.Value,
 			Delete: msg.ValueEmpty,
-		})
+		}
 	}
 	return nmsgs, nextOffset, nil
 }

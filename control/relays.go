@@ -77,14 +77,14 @@ func newRelayServer(
 		srv[msg.Key.RelayID] = relayCacheValue{Hostport: msg.Value.Hostport, Cert: msg.Value.Cert}
 	}
 
-	serverIDConfig, err := config.GetOrInit(configServerID, func(ck ConfigKey) (ConfigValue, error) {
+	serverIDConfig, err := config.GetOrInit(configServerID, func(_ ConfigKey) (ConfigValue, error) {
 		return ConfigValue{String: model.GenServerName("connet")}, nil
 	})
 	if err != nil {
 		return nil, err
 	}
 
-	serverSecret, err := config.GetOrInit(configServerRelaySecret, func(ck ConfigKey) (ConfigValue, error) {
+	serverSecret, err := config.GetOrInit(configServerRelaySecret, func(_ ConfigKey) (ConfigValue, error) {
 		privateKey := [32]byte{}
 		if _, err := io.ReadFull(rand.Reader, privateKey[:]); err != nil {
 			return ConfigValue{}, err
