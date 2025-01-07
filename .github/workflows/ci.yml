@@ -1,0 +1,14 @@
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+jobs:
+  nix-build:
+    name: Build nix package
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: DeterminateSystems/nix-installer-action@main
+      - name: Run `nix build`
+        run: nix build .
