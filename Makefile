@@ -13,6 +13,7 @@ test:
 test-always:
 	go test -v -cover -timeout 10s -count 1 ./...
 
+.PHONY: gen
 gen:
 	fd --extension ".pb.go" . --exec-batch rm {}
 	protoc --proto_path=pb/ --proto_path=pbs/ --proto_path=pbc/ --proto_path=pbr/ --go_opt=module=github.com/connet-dev/connet --go_out=./ pb/*.proto pbs/*.proto pbc/*.proto pbr/*.proto

@@ -13,15 +13,17 @@ jobs:
       - uses: HatsuneMiku3939/direnv-action@v1
       - name: direnv allow
         run: direnv allow .
+      - name: go lint
+        run: direnv exec . golangci-lint run
       - name: go mod tidy
         run: direnv exec . go mod tidy
-      - name: gen
+      - name: gen proto
         run: direnv exec . make gen
       - name: exit if changed
         run: git diff --exit-code
     
   go-build:
-    name: Build and check golang
+    name: Build and test
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
