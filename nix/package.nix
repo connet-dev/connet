@@ -25,6 +25,7 @@ pkgs.buildGoModule
   };
 
   vendorHash = "sha256-KwrICtuXNh7vANFo9fkiNbTXESjiKnzm4+JBmKdoNmo=";
+  subPackages = [ "cmd/connet" ];
 
   meta = with lib; {
     description = "A reverse proxy, written in Golang";
