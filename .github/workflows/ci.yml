@@ -68,3 +68,8 @@ jobs:
       - uses: DeterminateSystems/magic-nix-cache-action@main
       - name: Build image
         run: nix build .#docker
+      - uses: HatsuneMiku3939/direnv-action@v1
+      - name: direnv allow
+        run: direnv allow .
+      - name: Push image
+        run: direnv exec . skopeo copy "docker-archive://result" "docker://ghcr.io/connet-dev/connet:latest"
