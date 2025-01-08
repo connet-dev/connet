@@ -71,5 +71,11 @@ jobs:
       - uses: HatsuneMiku3939/direnv-action@v1
       - name: direnv allow
         run: direnv allow .
+      - name: Login to GitHub Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
       - name: Push image
         run: direnv exec . skopeo copy "docker-archive:result" "docker://ghcr.io/connet-dev/connet:latest"
