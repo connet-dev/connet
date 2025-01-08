@@ -72,6 +72,4 @@ jobs:
       - name: direnv allow
         run: direnv allow .
       - name: Push image
-        run: |
-          ls -la
-          direnv exec . skopeo copy "docker-archive://result" "docker://ghcr.io/connet-dev/connet:latest"
+        run: direnv exec . skopeo copy "docker-archive:result" "docker://ghcr.io/connet-dev/connet:latest"
