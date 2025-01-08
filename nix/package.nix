@@ -27,8 +27,16 @@ pkgs.buildGoModule
   vendorHash = "sha256-KwrICtuXNh7vANFo9fkiNbTXESjiKnzm4+JBmKdoNmo=";
   subPackages = [ "cmd/connet" ];
 
+  nativeBuildInputs = [ pkgs.installShellFiles ];
+  postInstall = lib.optionalString (pkgs.stdenv.buildPlatform.canExecute pkgs.stdenv.hostPlatform) ''
+    installShellCompletion --cmd connet \
+      --bash <($out/bin/connet completion bash) \
+      --fish <($out/bin/connet completion fish) \
+      --zsh <($out/bin/connet completion zsh)
+  '';
+
   meta = with lib; {
-    description = "A reverse proxy, written in Golang";
+    description = "A p2p reverse proxy, written in Golang";
     homepage = "https://github.com/connet-dev/connet";
     license = licenses.asl20;
     mainProgram = "connet";
