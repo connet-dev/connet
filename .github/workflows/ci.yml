@@ -45,7 +45,7 @@ jobs:
       - uses: DeterminateSystems/nix-installer-action@main
       - uses: DeterminateSystems/magic-nix-cache-action@main
       - uses: DeterminateSystems/flake-checker-action@main
-      - name: Run `nix build`
+      - name: Build package
         run: nix build .
 
   docker-build:
@@ -55,8 +55,6 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - uses: cachix/install-nix-action@v27
-      - uses: HatsuneMiku3939/direnv-action@v1
-      - name: direnv allow
-        run: direnv allow .
+      - uses: DeterminateSystems/magic-nix-cache-action@main
       - name: Build image
         run: nix build .#docker
