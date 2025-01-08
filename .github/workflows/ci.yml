@@ -3,6 +3,9 @@ on:
   push:
     branches: [main]
 
+permissions:
+  packages: write
+
 jobs:
   lints:
     name: Lints and gen checks
