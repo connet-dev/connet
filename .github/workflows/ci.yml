@@ -16,13 +16,8 @@ jobs:
         with:
           nix_path: nixpkgs=channel:nixos-unstable
       - uses: DeterminateSystems/magic-nix-cache-action@main
-      - name: build
+      - name: Build connet
         run: nix develop --command make build
-      # - uses: HatsuneMiku3939/direnv-action@v0
-      # - name: direnv allow
-      #   run: direnv allow .
-      # - name: Build
-      #   run: direnv exec . go build -v ./...
 
   test:
     name: Test
@@ -33,18 +28,15 @@ jobs:
         with:
           nix_path: nixpkgs=channel:nixos-unstable
       - uses: DeterminateSystems/magic-nix-cache-action@main
-      - uses: HatsuneMiku3939/direnv-action@v1
-      - name: direnv allow
-        run: direnv allow .
-      - name: go test
-        run: direnv exec . go test -v ./...
-      - name: go lint
-        run: direnv exec . golangci-lint run
-      - name: go mod tidy
-        run: direnv exec . go mod tidy
-      - name: gen proto
-        run: direnv exec . make gen
-      - name: exit if changed
+      - name: Run tests
+        run: nix develop --command make test
+      - name: Run lint
+        run: nix develop --command make lint
+      - name: Go module tidy
+        run: nix develop --command go mod tidy
+      - name: Gen proto
+        run: nix develop --command make gen
+      - name: Check if tidy or gen proto changed anything
         run: git diff --exit-code
     
   nix-build:
@@ -64,23 +56,20 @@ jobs:
   docker-build:
     name: Build docker image
     runs-on: ubuntu-latest
-    # needs: [nix-build]
+    needs: [nix-build]
     steps:
       - uses: actions/checkout@v4
       - uses: cachix/install-nix-action@v27
         with:
           nix_path: nixpkgs=channel:nixos-unstable
       - uses: DeterminateSystems/magic-nix-cache-action@main
-      - name: Build image
+      - name: Docker build
         run: nix build .#docker
-      - uses: HatsuneMiku3939/direnv-action@v1
-      - name: direnv allow
-        run: direnv allow .
-      - name: Login to GitHub Container Registry
+      - name: Docker login
         uses: docker/login-action@v3
         with:
           registry: ghcr.io
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
-      - name: Push image
-        run: direnv exec . skopeo copy "docker-archive:result" "docker://ghcr.io/connet-dev/connet:latest"
+      - name: Docker push
+        run: nix develop --command skopeo copy "docker-archive:result" "docker://ghcr.io/connet-dev/connet:latest"
