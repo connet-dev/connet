@@ -15,7 +15,7 @@ pkgs.dockerTools.buildLayeredImage {
       "19192/udp" = { };
     };
     Volumes = {
-      "/data" = { };
+      "/tmp" = { };
     };
   };
 }
