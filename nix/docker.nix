@@ -4,7 +4,7 @@ let
 in
 pkgs.dockerTools.buildLayeredImage {
   name = "ghcr.io/connet-dev/connet";
-  tag = "latest";
+  tag = "latest-${if pkgs.stdenv.hostPlatform.isAarch then "arm64" else "amd64"}";
   contents = with pkgs; [ cacert ];
   config = {
     Entrypoint = [ "${connet}/bin/connet" ];
