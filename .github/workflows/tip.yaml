@@ -68,5 +68,5 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
       - name: Docker tag
-        run: nix develop --command manifest-tool push from-args --platforms linux/amd64,linux/arm64 --template connet-dev/connet:latest-ARCHVARIANT --target connet-dev/connet:latest
+        run: nix develop --command manifest-tool push from-args --platforms linux/amd64,linux/arm64 --template ghcr.io/connet-dev/connet:latest-ARCHVARIANT --target ghcr.io/connet-dev/connet:latest
     
