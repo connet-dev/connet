@@ -6,7 +6,7 @@
     flake-utils.url = "github:numtide/flake-utils";
   };
 
-  outputs = { self, nixpkgs, flake-utils }:
+  outputs = { nixpkgs, flake-utils, ... }:
     {
       nixosModules.default = ./nix/client-module.nix;
       nixosModules.server = ./nix/server-module.nix;
@@ -30,6 +30,7 @@
             gopls
             golangci-lint
             fd
+            manifest-tool
             protobuf
             protoc-gen-go
             process-compose
