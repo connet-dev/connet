@@ -7,7 +7,7 @@ permissions:
 
 jobs:
   docker-build-x86:
-    name: Build docker image
+    name: Build x86 image
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -25,10 +25,10 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
       - name: Docker push
-        run: nix develop --command skopeo copy "docker-archive:result" "docker://ghcr.io/connet-dev/connet:latest"
+        run: nix develop --command skopeo copy "docker-archive:result" "docker://ghcr.io/connet-dev/connet"
 
   docker-build-arm:
-    name: Build docker image
+    name: Build arm image
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -48,4 +48,4 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
       - name: Docker push
-        run: nix develop --command skopeo copy "docker-archive:result" "docker://ghcr.io/connet-dev/connet:latest"
+        run: nix develop --command skopeo copy "docker-archive:result" "docker://ghcr.io/connet-dev/connet"
