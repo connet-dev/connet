@@ -9,7 +9,13 @@ pkgs.dockerTools.buildLayeredImage {
   config = {
     Entrypoint = [ "${connet}/bin/connet" ];
     Cmd = [ "--help" ];
-    Expose = [ "19190/udp" "19191/udp" "19192/udp" ];
-    Volume = "/data";
+    ExposedPorts = {
+      "19190/udp" = { };
+      "19191/udp" = { };
+      "19192/udp" = { };
+    };
+    Volumes = {
+      "/data" = { };
+    };
   };
 }
