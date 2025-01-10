@@ -1,33 +1,33 @@
 package statusc
 
-import (
-	"context"
-	"encoding/json"
-	"fmt"
-	"net/http"
+import "github.com/klev-dev/kleverr"
+
+type Status struct{ string }
+
+var (
+	NotConnected = Status{"not_connected"}
+	Connected    = Status{"connected"}
+	Disconnected = Status{"disconnected"}
 )
 
-func Run[T any](ctx context.Context, addr string, f func(ctx context.Context) (T, error)) error {
-	srv := &http.Server{
-		Addr: addr,
-		Handler: http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			stat, err := f(r.Context())
-			if err == nil {
-				w.Header().Add("Content-Type", "application/json")
-				enc := json.NewEncoder(w)
-				err = enc.Encode(stat)
-			}
-			if err != nil {
-				w.WriteHeader(http.StatusInternalServerError)
-				fmt.Fprintf(w, "server error: %v", err.Error())
-			}
-		}),
+func (s Status) String() string {
+	return s.string
+}
+
+func (s Status) MarshalText() ([]byte, error) {
+	return []byte(s.string), nil
+}
+
+func (s *Status) UnmarshalText(b []byte) error {
+	switch str := string(b); str {
+	case NotConnected.string:
+		*s = NotConnected
+	case Connected.string:
+		*s = Connected
+	case Disconnected.string:
+		*s = Disconnected
+	default:
+		return kleverr.Newf("unknown status: %s", s)
 	}
-
-	go func() {
-		<-ctx.Done()
-		srv.Close()
-	}()
-
-	return srv.ListenAndServe()
+	return nil
 }

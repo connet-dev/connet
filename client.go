@@ -29,10 +29,11 @@ import (
 type Client struct {
 	clientConfig
 
-	rootCert   *certc.Cert
-	dsts       map[model.Forward]*client.Destination
-	srcs       map[model.Forward]*client.Source
-	connStatus atomic.Bool
+	rootCert *certc.Cert
+	dsts     map[model.Forward]*client.Destination
+	srcs     map[model.Forward]*client.Source
+
+	connStatus atomic.Value
 }
 
 func NewClient(opts ...ClientOption) (*Client, error) {
@@ -67,11 +68,14 @@ func NewClient(opts ...ClientOption) (*Client, error) {
 	}
 	cfg.logger.Debug("generated root cert")
 
-	return &Client{
+	c := &Client{
 		clientConfig: *cfg,
 
 		rootCert: rootCert,
-	}, nil
+	}
+	c.connStatus.Store(statusc.NotConnected)
+
+	return c, nil
 }
 
 func (c *Client) Run(ctx context.Context) error {
@@ -236,8 +240,8 @@ func (c *Client) reconnect(ctx context.Context, transport *quic.Transport, retok
 func (c *Client) runConnection(ctx context.Context, conn quic.Connection) error {
 	defer conn.CloseWithError(0, "done")
 
-	c.connStatus.Store(true)
-	defer c.connStatus.Store(false)
+	c.connStatus.Store(statusc.Connected)
+	defer c.connStatus.Store(statusc.Disconnected)
 
 	g, ctx := errgroup.WithContext(ctx)
 
@@ -262,18 +266,29 @@ func (c *Client) runStatus(ctx context.Context) error {
 }
 
 func (c *Client) Status(ctx context.Context) (ClientStatus, error) {
-	stat := "offline"
-	if c.connStatus.Load() {
-		stat = "online"
+	stat := c.connStatus.Load().(statusc.Status)
+
+	dsts := map[model.Forward]client.PeerStatus{}
+	for fwd, dst := range c.dsts {
+		dsts[fwd] = dst.Status()
+	}
+
+	srcs := map[model.Forward]client.PeerStatus{}
+	for fwd, src := range c.srcs {
+		srcs[fwd] = src.Status()
 	}
 
 	return ClientStatus{
-		Status: stat,
+		Status:       stat,
+		Destinations: dsts,
+		Sources:      srcs,
 	}, nil
 }
 
 type ClientStatus struct {
-	Status string `json:"status"`
+	Status       statusc.Status                      `json:"status"`
+	Destinations map[model.Forward]client.PeerStatus `json:"destinations"`
+	Sources      map[model.Forward]client.PeerStatus `json:"sources"`
 }
 
 type clientConfig struct {

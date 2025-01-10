@@ -72,6 +72,10 @@ func (s *Source) Run(ctx context.Context) error {
 	return g.Wait()
 }
 
+func (s *Source) Status() PeerStatus {
+	return PeerStatus{}
+}
+
 func (s *Source) runActive(ctx context.Context) error {
 	return s.peer.activeConnsListen(ctx, func(active map[peerConnKey]quic.Connection) error {
 		s.logger.Debug("active conns", "len", len(active))

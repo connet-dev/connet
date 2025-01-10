@@ -163,15 +163,15 @@ func (s *Server) Status(ctx context.Context) (Status, error) {
 	}, nil
 }
 
-func (s *Server) getClients() ([]statusClient, error) {
+func (s *Server) getClients() ([]StatusClient, error) {
 	clientMsgs, _, err := s.clients.conns.Snapshot()
 	if err != nil {
 		return nil, err
 	}
 
-	var clients []statusClient
+	var clients []StatusClient
 	for _, msg := range clientMsgs {
-		clients = append(clients, statusClient{
+		clients = append(clients, StatusClient{
 			ID:   msg.Key.ID,
 			Addr: msg.Value.Addr,
 		})
@@ -180,15 +180,15 @@ func (s *Server) getClients() ([]statusClient, error) {
 	return clients, nil
 }
 
-func (s *Server) getPeers() ([]statusPeer, error) {
+func (s *Server) getPeers() ([]StatusPeer, error) {
 	peerMsgs, _, err := s.clients.peers.Snapshot()
 	if err != nil {
 		return nil, err
 	}
 
-	var peers []statusPeer
+	var peers []StatusPeer
 	for _, msg := range peerMsgs {
-		peers = append(peers, statusPeer{
+		peers = append(peers, StatusPeer{
 			ID:      msg.Key.ID,
 			Role:    msg.Key.Role,
 			Forward: msg.Key.Forward,
@@ -198,15 +198,15 @@ func (s *Server) getPeers() ([]statusPeer, error) {
 	return peers, nil
 }
 
-func (s *Server) getRelays() ([]statusRelay, error) {
+func (s *Server) getRelays() ([]StatusRelay, error) {
 	msgs, _, err := s.relays.conns.Snapshot()
 	if err != nil {
 		return nil, err
 	}
 
-	var relays []statusRelay
+	var relays []StatusRelay
 	for _, msg := range msgs {
-		relays = append(relays, statusRelay{
+		relays = append(relays, StatusRelay{
 			ID:       msg.Key.ID,
 			Hostport: msg.Value.Hostport.String(),
 		})
@@ -217,23 +217,23 @@ func (s *Server) getRelays() ([]statusRelay, error) {
 
 type Status struct {
 	ServerID string         `json:"server_id"`
-	Clients  []statusClient `json:"clients"`
-	Peers    []statusPeer   `json:"peers"`
-	Relays   []statusRelay  `json:"relays"`
+	Clients  []StatusClient `json:"clients"`
+	Peers    []StatusPeer   `json:"peers"`
+	Relays   []StatusRelay  `json:"relays"`
 }
 
-type statusClient struct {
+type StatusClient struct {
 	ID   ksuid.KSUID `json:"id"`
 	Addr string      `json:"addr"`
 }
 
-type statusPeer struct {
+type StatusPeer struct {
 	ID      ksuid.KSUID   `json:"id"`
 	Role    model.Role    `json:"role"`
 	Forward model.Forward `json:"forward"`
 }
 
-type statusRelay struct {
+type StatusRelay struct {
 	ID       ksuid.KSUID `json:"id"`
 	Hostport string      `json:"hostport"`
 }

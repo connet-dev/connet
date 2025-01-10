@@ -17,6 +17,7 @@ import (
 	"github.com/connet-dev/connet/netc"
 	"github.com/connet-dev/connet/pb"
 	"github.com/connet-dev/connet/pbr"
+	"github.com/connet-dev/connet/statusc"
 	"github.com/klev-dev/klevdb"
 	"github.com/klev-dev/kleverr"
 	"github.com/quic-go/quic-go"
@@ -42,7 +43,7 @@ type controlClient struct {
 	clientsStreamOffset int64
 	clientsLogOffset    int64
 
-	connStatus atomic.Bool
+	connStatus atomic.Value
 
 	logger *slog.Logger
 }
@@ -90,7 +91,7 @@ func newControlClient(cfg Config) (*controlClient, error) {
 		return nil, err
 	}
 
-	return &controlClient{
+	c := &controlClient{
 		hostport: cfg.Hostport,
 		root:     root,
 
@@ -113,7 +114,9 @@ func newControlClient(cfg Config) (*controlClient, error) {
 		clientsLogOffset:    clientsLogOffset.Int64,
 
 		logger: cfg.Logger.With("relay-control", cfg.Hostport),
-	}, nil
+	}
+	c.connStatus.Store(statusc.NotConnected)
+	return c, nil
 }
 
 func (s *controlClient) getClientsStreamOffset() int64 {
@@ -271,8 +274,8 @@ func (s *controlClient) reconnect(ctx context.Context, transport *quic.Transport
 func (s *controlClient) runConnection(ctx context.Context, conn quic.Connection) error {
 	defer conn.CloseWithError(0, "done")
 
-	s.connStatus.Store(true)
-	defer s.connStatus.Store(false)
+	s.connStatus.Store(statusc.Connected)
+	defer s.connStatus.Store(statusc.Disconnected)
 
 	g, ctx := errgroup.WithContext(ctx)
 

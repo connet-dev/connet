@@ -101,10 +101,8 @@ func (s *Server) runStatus(ctx context.Context) error {
 }
 
 func (s *Server) Status(ctx context.Context) (Status, error) {
-	stat := "offline"
-	if s.control.connStatus.Load() {
-		stat = "online"
-	}
+	stat := s.control.connStatus.Load().(statusc.Status)
+
 	controlID, err := s.getControlID()
 	if err != nil {
 		return Status{}, err
@@ -137,7 +135,7 @@ func (s *Server) getForwards() []model.Forward {
 }
 
 type Status struct {
-	Status            string          `json:"status"`
+	Status            statusc.Status  `json:"status"`
 	Hostport          string          `json:"hostport"`
 	ControlServerAddr string          `json:"control_server_addr"`
 	ControlServerID   string          `json:"control_server_id"`
