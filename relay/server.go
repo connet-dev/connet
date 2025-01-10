@@ -95,10 +95,12 @@ func (s *Server) runStatus(ctx context.Context) error {
 	if s.statusAddr == nil {
 		return nil
 	}
-	return statusc.Run(ctx, s.statusAddr.String(), s.logger, s.Status)
+
+	s.logger.Debug("running status server", "addr", s.statusAddr)
+	return statusc.Run(ctx, s.statusAddr.String(), s.Status)
 }
 
-func (s *Server) Status() (Status, error) {
+func (s *Server) Status(ctx context.Context) (Status, error) {
 	stat := "offline"
 	if s.control.connStatus.Load() {
 		stat = "online"

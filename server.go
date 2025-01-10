@@ -14,6 +14,7 @@ import (
 	"github.com/connet-dev/connet/netc"
 	"github.com/connet-dev/connet/relay"
 	"github.com/connet-dev/connet/selfhosted"
+	"github.com/connet-dev/connet/statusc"
 	"github.com/klev-dev/kleverr"
 	"golang.org/x/sync/errgroup"
 )
@@ -114,6 +115,34 @@ func (s *Server) Run(ctx context.Context) error {
 	return g.Wait()
 }
 
+func (s *Server) runStatus(ctx context.Context) error {
+	if s.statusAddr == nil {
+		return nil
+	}
+
+	s.logger.Debug("running status server", "addr", s.statusAddr)
+	return statusc.Run(ctx, s.statusAddr.String(), s.Status)
+}
+
+func (s *Server) Status(ctx context.Context) (ServerStatus, error) {
+	control, err := s.control.Status(ctx)
+	if err != nil {
+		return ServerStatus{}, err
+	}
+
+	relay, err := s.relay.Status(ctx)
+	if err != nil {
+		return ServerStatus{}, err
+	}
+
+	return ServerStatus{control, relay}, nil
+}
+
+type ServerStatus struct {
+	Control control.Status `json:"control"`
+	Relay   relay.Status   `json:"relay"`
+}
+
 type serverConfig struct {
 	clientAuth  control.ClientAuthenticator
 	clientRestr netc.IPRestriction
@@ -123,6 +152,8 @@ type serverConfig struct {
 
 	relayAddr     *net.UDPAddr
 	relayHostname string
+
+	statusAddr *net.TCPAddr
 
 	dir    string
 	logger *slog.Logger
@@ -219,6 +250,19 @@ func ServerRelayAddress(address string) ServerOption {
 func ServerRelayHostname(hostname string) ServerOption {
 	return func(cfg *serverConfig) error {
 		cfg.relayHostname = hostname
+		return nil
+	}
+}
+
+func ServerStatusAddress(address string) ServerOption {
+	return func(cfg *serverConfig) error {
+		addr, err := net.ResolveTCPAddr("tcp", address)
+		if err != nil {
+			return kleverr.Newf("status address cannot be resolved: %w", err)
+		}
+
+		cfg.statusAddr = addr
+
 		return nil
 	}
 }

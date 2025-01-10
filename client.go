@@ -256,10 +256,12 @@ func (c *Client) runStatus(ctx context.Context) error {
 	if c.statusAddr == nil {
 		return nil
 	}
-	return statusc.Run(ctx, c.statusAddr.String(), c.logger, c.Status)
+
+	c.logger.Debug("running status server", "addr", c.statusAddr)
+	return statusc.Run(ctx, c.statusAddr.String(), c.Status)
 }
 
-func (c *Client) Status() (ClientStatus, error) {
+func (c *Client) Status(ctx context.Context) (ClientStatus, error) {
 	stat := "offline"
 	if c.connStatus.Load() {
 		stat = "online"
@@ -356,10 +358,23 @@ func ClientDirectAddress(address string) ClientOption {
 	return func(cfg *clientConfig) error {
 		addr, err := net.ResolveUDPAddr("udp", address)
 		if err != nil {
-			return err
+			return kleverr.Newf("direct address cannot be resolved: %w", err)
 		}
 
 		cfg.directAddr = addr
+
+		return nil
+	}
+}
+
+func ClientStatusAddress(address string) ClientOption {
+	return func(cfg *clientConfig) error {
+		addr, err := net.ResolveTCPAddr("tcp", address)
+		if err != nil {
+			return kleverr.Newf("status address cannot be resolved: %w", err)
+		}
+
+		cfg.statusAddr = addr
 
 		return nil
 	}
