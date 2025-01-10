@@ -41,7 +41,9 @@ type ClientConfig struct {
 
 	ServerAddr string `toml:"server-addr"`
 	ServerCAs  string `toml:"server-cas"`
+
 	DirectAddr string `toml:"direct-addr"`
+	StatusAddr string `toml:"status-addr"`
 
 	Destinations map[string]ForwardConfig `toml:"destinations"`
 	Sources      map[string]ForwardConfig `toml:"sources"`
@@ -65,7 +67,8 @@ type ServerConfig struct {
 	RelayAddr     string `toml:"relay-addr"`
 	RelayHostname string `toml:"relay-hostname"`
 
-	StoreDir string `toml:"store-dir"`
+	StatusAddr string `toml:"status-addr"`
+	StoreDir   string `toml:"store-dir"`
 }
 
 type ControlConfig struct {
@@ -83,7 +86,8 @@ type ControlConfig struct {
 	RelayTokensFile          string          `toml:"relay-tokens-file"`
 	RelayTokenIPRestrictions []IPRestriction `toml:"relay-token-ip-restriction"`
 
-	StoreDir string `toml:"store-dir"`
+	StatusAddr string `toml:"status-addr"`
+	StoreDir   string `toml:"store-dir"`
 }
 
 type IPRestriction struct {
@@ -101,7 +105,8 @@ type RelayConfig struct {
 	ControlAddr string `toml:"control-addr"`
 	ControlCAs  string `toml:"control-cas"`
 
-	StoreDir string `toml:"store-dir"`
+	StatusAddr string `toml:"status-addr"`
+	StoreDir   string `toml:"store-dir"`
 }
 
 func main() {
@@ -146,7 +151,9 @@ func rootCmd() *cobra.Command {
 
 	cmd.Flags().StringVar(&flagsConfig.Client.ServerAddr, "server-addr", "", "control server address to connect")
 	cmd.Flags().StringVar(&flagsConfig.Client.ServerCAs, "server-cas", "", "control server CAs to use")
+
 	cmd.Flags().StringVar(&flagsConfig.Client.DirectAddr, "direct-addr", "", "direct server address to listen")
+	cmd.Flags().StringVar(&flagsConfig.Client.StatusAddr, "status-addr", "", "status server address to listen")
 
 	var dstName string
 	var dstCfg ForwardConfig
@@ -210,6 +217,7 @@ func serverCmd() *cobra.Command {
 	cmd.Flags().StringVar(&flagsConfig.Server.RelayAddr, "relay-addr", "", "relay server addr to use")
 	cmd.Flags().StringVar(&flagsConfig.Server.RelayHostname, "relay-hostname", "", "relay server public hostname to use")
 
+	cmd.Flags().StringVar(&flagsConfig.Server.StatusAddr, "status-addr", "", "status server address to listen")
 	cmd.Flags().StringVar(&flagsConfig.Server.StoreDir, "store-dir", "", "storage dir, /tmp subdirectory if empty")
 
 	cmd.RunE = func(cmd *cobra.Command, _ []string) error {
@@ -257,6 +265,7 @@ func controlCmd() *cobra.Command {
 	cmd.Flags().StringSliceVar(&flagsConfig.Control.RelayIPRestriction.AllowCIDRs, "relay-allow-cidr", nil, "cidr to allow relay connections from")
 	cmd.Flags().StringSliceVar(&flagsConfig.Control.RelayIPRestriction.DenyCIDRs, "relay-deny-cidr", nil, "cidr to deny relay connections from")
 
+	cmd.Flags().StringVar(&flagsConfig.Control.StatusAddr, "status-addr", "", "status server address to listen")
 	cmd.Flags().StringVar(&flagsConfig.Control.StoreDir, "store-dir", "", "storage dir, /tmp subdirectory if empty")
 
 	cmd.RunE = func(cmd *cobra.Command, _ []string) error {
@@ -299,6 +308,7 @@ func relayCmd() *cobra.Command {
 	cmd.Flags().StringVar(&flagsConfig.Relay.ControlAddr, "control-addr", "", "control server address to connect")
 	cmd.Flags().StringVar(&flagsConfig.Relay.ControlCAs, "control-cas", "", "control server CAs to use")
 
+	cmd.Flags().StringVar(&flagsConfig.Relay.StatusAddr, "status-addr", "", "status server address to listen")
 	cmd.Flags().StringVar(&flagsConfig.Relay.StoreDir, "store-dir", "", "storage dir, /tmp subdirectory if empty")
 
 	cmd.RunE = func(cmd *cobra.Command, _ []string) error {
@@ -411,6 +421,13 @@ func clientRun(ctx context.Context, cfg ClientConfig, logger *slog.Logger) error
 		opts = append(opts, connet.ClientDirectAddress(cfg.DirectAddr))
 	}
 
+	if cfg.StatusAddr == "" {
+		cfg.StatusAddr = ":19182"
+	}
+	if cfg.StatusAddr != "none" {
+		opts = append(opts, connet.ClientStatusAddress(cfg.StatusAddr))
+	}
+
 	for name, fc := range cfg.Destinations {
 		route, err := parseRouteOption(fc.Route)
 		if err != nil {
@@ -470,6 +487,12 @@ func serverRun(ctx context.Context, cfg ServerConfig, logger *slog.Logger) error
 		opts = append(opts, connet.ServerRelayHostname(cfg.RelayHostname))
 	}
 
+	if cfg.StatusAddr == "" {
+		cfg.StatusAddr = ":19180"
+	}
+	if cfg.StatusAddr != "none" {
+		opts = append(opts, connet.ServerStatusAddress(cfg.StatusAddr))
+	}
 	if cfg.StoreDir != "" {
 		opts = append(opts, connet.ServerStoreDir(cfg.StoreDir))
 	}
@@ -555,6 +578,17 @@ func controlRun(ctx context.Context, cfg ControlConfig, logger *slog.Logger) err
 		return err
 	}
 
+	if cfg.StatusAddr == "" {
+		cfg.StatusAddr = ":19180"
+	}
+	if cfg.StatusAddr != "none" {
+		statusAddr, err := net.ResolveTCPAddr("tcp", cfg.StatusAddr)
+		if err != nil {
+			return kleverr.Newf("status address cannot be resolved: %w", err)
+		}
+		controlCfg.StatusAddr = statusAddr
+	}
+
 	if cfg.StoreDir == "" {
 		controlCfg.Stores, err = control.NewTmpFileStores()
 		if err != nil {
@@ -628,6 +662,17 @@ func relayRun(ctx context.Context, cfg RelayConfig, logger *slog.Logger) error {
 	}
 	relayCfg.ControlHost = controlHost
 
+	if cfg.StatusAddr == "" {
+		cfg.StatusAddr = ":19181"
+	}
+	if cfg.StatusAddr != "none" {
+		statusAddr, err := net.ResolveTCPAddr("tcp", cfg.StatusAddr)
+		if err != nil {
+			return kleverr.Newf("status address cannot be resolved: %w", err)
+		}
+		relayCfg.StatusAddr = statusAddr
+	}
+
 	if cfg.StoreDir == "" {
 		relayCfg.Stores, err = relay.NewTmpFileStores()
 		if err != nil {
@@ -697,7 +742,9 @@ func (c *ClientConfig) merge(o ClientConfig) {
 
 	c.ServerAddr = override(c.ServerAddr, o.ServerAddr)
 	c.ServerCAs = override(c.ServerCAs, o.ServerCAs)
+
 	c.DirectAddr = override(c.DirectAddr, o.DirectAddr)
+	c.StatusAddr = override(c.StatusAddr, o.StatusAddr)
 
 	for k, v := range o.Destinations {
 		if c.Destinations == nil {
@@ -727,6 +774,7 @@ func (c *ServerConfig) merge(o ServerConfig) {
 	c.RelayAddr = override(c.RelayAddr, o.RelayAddr)
 	c.RelayHostname = override(c.RelayHostname, o.RelayHostname)
 
+	c.StatusAddr = override(c.StatusAddr, o.StatusAddr)
 	c.StoreDir = override(c.StoreDir, o.StoreDir)
 }
 
@@ -745,6 +793,7 @@ func (c *ControlConfig) merge(o ControlConfig) {
 	c.RelayTokens = append(c.RelayTokens, o.RelayTokens...)
 	c.RelayTokensFile = override(c.RelayTokensFile, o.RelayTokensFile)
 
+	c.StatusAddr = override(c.StatusAddr, o.StatusAddr)
 	c.StoreDir = override(c.StoreDir, o.StoreDir)
 }
 
@@ -758,6 +807,7 @@ func (c *RelayConfig) merge(o RelayConfig) {
 	c.ControlAddr = override(c.ControlAddr, o.ControlAddr)
 	c.ControlCAs = override(c.ControlCAs, o.ControlCAs)
 
+	c.StatusAddr = override(c.StatusAddr, o.StatusAddr)
 	c.StoreDir = override(c.StoreDir, o.StoreDir)
 }
 

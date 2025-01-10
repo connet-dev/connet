@@ -106,12 +106,9 @@ func NewServer(opts ...ServerOption) (*Server, error) {
 
 func (s *Server) Run(ctx context.Context) error {
 	g, ctx := errgroup.WithContext(ctx)
-	g.Go(func() error {
-		return s.control.Run(ctx)
-	})
-	g.Go(func() error {
-		return s.relay.Run(ctx)
-	})
+	g.Go(func() error { return s.control.Run(ctx) })
+	g.Go(func() error { return s.relay.Run(ctx) })
+	g.Go(func() error { return s.runStatus(ctx) })
 	return g.Wait()
 }
 
