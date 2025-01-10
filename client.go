@@ -11,6 +11,7 @@ import (
 	"net/netip"
 	"os"
 	"strings"
+	"sync/atomic"
 	"time"
 
 	"github.com/connet-dev/connet/certc"
@@ -19,6 +20,7 @@ import (
 	"github.com/connet-dev/connet/netc"
 	"github.com/connet-dev/connet/pb"
 	"github.com/connet-dev/connet/pbs"
+	"github.com/connet-dev/connet/statusc"
 	"github.com/klev-dev/kleverr"
 	"github.com/quic-go/quic-go"
 	"golang.org/x/sync/errgroup"
@@ -27,9 +29,10 @@ import (
 type Client struct {
 	clientConfig
 
-	rootCert *certc.Cert
-	dsts     map[model.Forward]*client.Destination
-	srcs     map[model.Forward]*client.Source
+	rootCert   *certc.Cert
+	dsts       map[model.Forward]*client.Destination
+	srcs       map[model.Forward]*client.Source
+	connStatus atomic.Bool
 }
 
 func NewClient(opts ...ClientOption) (*Client, error) {
@@ -120,6 +123,7 @@ func (c *Client) Run(ctx context.Context) error {
 	}
 
 	g.Go(func() error { return c.run(ctx, transport) })
+	g.Go(func() error { return c.runStatus(ctx) })
 
 	return g.Wait()
 }
@@ -232,6 +236,9 @@ func (c *Client) reconnect(ctx context.Context, transport *quic.Transport, retok
 func (c *Client) runConnection(ctx context.Context, conn quic.Connection) error {
 	defer conn.CloseWithError(0, "done")
 
+	c.connStatus.Store(true)
+	defer c.connStatus.Store(false)
+
 	g, ctx := errgroup.WithContext(ctx)
 
 	for _, dstServer := range c.dsts {
@@ -245,6 +252,28 @@ func (c *Client) runConnection(ctx context.Context, conn quic.Connection) error 
 	return g.Wait()
 }
 
+func (c *Client) runStatus(ctx context.Context) error {
+	if c.statusAddr == nil {
+		return nil
+	}
+	return statusc.Run(ctx, c.statusAddr.String(), c.logger, c.Status)
+}
+
+func (c *Client) Status() (ClientStatus, error) {
+	stat := "offline"
+	if c.connStatus.Load() {
+		stat = "online"
+	}
+
+	return ClientStatus{
+		Status: stat,
+	}, nil
+}
+
+type ClientStatus struct {
+	Status string `json:"status"`
+}
+
 type clientConfig struct {
 	token string
 
@@ -253,6 +282,7 @@ type clientConfig struct {
 	controlCAs  *x509.CertPool
 
 	directAddr *net.UDPAddr
+	statusAddr *net.TCPAddr
 
 	destinations map[model.Forward]clientForwardConfig
 	sources      map[model.Forward]clientForwardConfig

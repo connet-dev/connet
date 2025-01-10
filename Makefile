@@ -2,7 +2,7 @@
 
 default: all
 
-all: build test
+all: build test lint
 
 build:
 	go install -v github.com/connet-dev/connet/cmd/... 
@@ -22,10 +22,10 @@ gen:
 	protoc --proto_path=pb/ --proto_path=pbs/ --proto_path=pbc/ --proto_path=pbr/ --go_opt=module=github.com/connet-dev/connet --go_out=./ pb/*.proto pbs/*.proto pbc/*.proto pbr/*.proto
 
 .PHONY: run-server run-client run-sws
-run-server: all
+run-server: build
 	connet server --config examples/minimal.toml
 
-run-client: all
+run-client: build
 	connet --config examples/minimal.toml
 
 run-sws:

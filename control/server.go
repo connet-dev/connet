@@ -7,21 +7,29 @@ import (
 	"net"
 	"time"
 
+	"github.com/connet-dev/connet/model"
 	"github.com/connet-dev/connet/netc"
+	"github.com/connet-dev/connet/statusc"
 	"github.com/klev-dev/kleverr"
 	"github.com/quic-go/quic-go"
+	"github.com/segmentio/ksuid"
 	"golang.org/x/sync/errgroup"
 )
 
 type Config struct {
-	Addr        *net.UDPAddr
-	Cert        tls.Certificate
+	Addr *net.UDPAddr
+	Cert tls.Certificate
+
 	ClientAuth  ClientAuthenticator
 	ClientRestr netc.IPRestriction
-	RelayAuth   RelayAuthenticator
-	RelayRestr  netc.IPRestriction
-	Stores      Stores
-	Logger      *slog.Logger
+
+	RelayAuth  RelayAuthenticator
+	RelayRestr netc.IPRestriction
+
+	Stores Stores
+
+	StatusAddr *net.TCPAddr
+	Logger     *slog.Logger
 }
 
 func NewServer(cfg Config) (*Server, error) {
@@ -36,7 +44,8 @@ func NewServer(cfg Config) (*Server, error) {
 			Certificates: []tls.Certificate{cfg.Cert},
 			NextProtos:   []string{"connet", "connet-relays"},
 		},
-		logger: cfg.Logger.With("control", cfg.Addr),
+		statusAddr: cfg.StatusAddr,
+		logger:     cfg.Logger.With("control", cfg.Addr),
 	}
 
 	relays, err := newRelayServer(cfg.RelayAuth, cfg.RelayRestr, config, cfg.Stores, cfg.Logger)
@@ -51,23 +60,18 @@ func NewServer(cfg Config) (*Server, error) {
 	}
 	s.clients = clients
 
-	s.status = &statusServer{
-		clients: clients,
-		relays:  relays,
-		logger:  cfg.Logger.With("control", "status"),
-	}
-
 	return s, nil
 }
 
 type Server struct {
 	addr    *net.UDPAddr
 	tlsConf *tls.Config
-	logger  *slog.Logger
 
 	clients *clientServer
 	relays  *relayServer
-	status  *statusServer
+
+	statusAddr *net.TCPAddr
+	logger     *slog.Logger
 }
 
 func (s *Server) Run(ctx context.Context) error {
@@ -75,8 +79,8 @@ func (s *Server) Run(ctx context.Context) error {
 
 	g.Go(func() error { return s.relays.run(ctx) })
 	g.Go(func() error { return s.clients.run(ctx) })
-	g.Go(func() error { return s.status.run(ctx) })
 	g.Go(func() error { return s.runListener(ctx) })
+	g.Go(func() error { return s.runStatus(ctx) })
 
 	return g.Wait()
 }
@@ -124,4 +128,110 @@ func (s *Server) runListener(ctx context.Context) error {
 			conn.CloseWithError(1, "unknown protocol")
 		}
 	}
+}
+
+func (s *Server) runStatus(ctx context.Context) error {
+	if s.statusAddr == nil {
+		return nil
+	}
+	return statusc.Run(ctx, s.statusAddr.String(), s.logger, s.Status)
+}
+
+func (s *Server) Status() (Status, error) {
+	clients, err := s.getClients()
+	if err != nil {
+		return Status{}, err
+	}
+
+	peers, err := s.getPeers()
+	if err != nil {
+		return Status{}, err
+	}
+
+	relays, err := s.getRelays()
+	if err != nil {
+		return Status{}, err
+	}
+
+	return Status{
+		ServerID: s.relays.id,
+		Clients:  clients,
+		Peers:    peers,
+		Relays:   relays,
+	}, nil
+}
+
+func (s *Server) getClients() ([]statusClient, error) {
+	clientMsgs, _, err := s.clients.conns.Snapshot()
+	if err != nil {
+		return nil, err
+	}
+
+	var clients []statusClient
+	for _, msg := range clientMsgs {
+		clients = append(clients, statusClient{
+			ID:   msg.Key.ID,
+			Addr: msg.Value.Addr,
+		})
+	}
+
+	return clients, nil
+}
+
+func (s *Server) getPeers() ([]statusPeer, error) {
+	peerMsgs, _, err := s.clients.peers.Snapshot()
+	if err != nil {
+		return nil, err
+	}
+
+	var peers []statusPeer
+	for _, msg := range peerMsgs {
+		peers = append(peers, statusPeer{
+			ID:      msg.Key.ID,
+			Role:    msg.Key.Role,
+			Forward: msg.Key.Forward,
+		})
+	}
+
+	return peers, nil
+}
+
+func (s *Server) getRelays() ([]statusRelay, error) {
+	msgs, _, err := s.relays.conns.Snapshot()
+	if err != nil {
+		return nil, err
+	}
+
+	var relays []statusRelay
+	for _, msg := range msgs {
+		relays = append(relays, statusRelay{
+			ID:       msg.Key.ID,
+			Hostport: msg.Value.Hostport.String(),
+		})
+	}
+
+	return relays, nil
+}
+
+type Status struct {
+	ServerID string         `json:"server_id"`
+	Clients  []statusClient `json:"clients"`
+	Peers    []statusPeer   `json:"peers"`
+	Relays   []statusRelay  `json:"relays"`
+}
+
+type statusClient struct {
+	ID   ksuid.KSUID `json:"id"`
+	Addr string      `json:"addr"`
+}
+
+type statusPeer struct {
+	ID      ksuid.KSUID   `json:"id"`
+	Role    model.Role    `json:"role"`
+	Forward model.Forward `json:"forward"`
+}
+
+type statusRelay struct {
+	ID       ksuid.KSUID `json:"id"`
+	Hostport string      `json:"hostport"`
 }
