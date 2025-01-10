@@ -72,8 +72,8 @@ func (s *Source) Run(ctx context.Context) error {
 	return g.Wait()
 }
 
-func (s *Source) Status() PeerStatus {
-	return PeerStatus{}
+func (s *Source) Status() (PeerStatus, error) {
+	return s.peer.status()
 }
 
 func (s *Source) runActive(ctx context.Context) error {

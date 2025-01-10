@@ -64,8 +64,8 @@ func (d *Destination) Run(ctx context.Context) error {
 	return g.Wait()
 }
 
-func (d *Destination) Status() PeerStatus {
-	return PeerStatus{}
+func (d *Destination) Status() (PeerStatus, error) {
+	return d.peer.status()
 }
 
 func (d *Destination) runActive(ctx context.Context) error {

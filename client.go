@@ -267,15 +267,22 @@ func (c *Client) runStatus(ctx context.Context) error {
 
 func (c *Client) Status(ctx context.Context) (ClientStatus, error) {
 	stat := c.connStatus.Load().(statusc.Status)
+	var err error
 
 	dsts := map[model.Forward]client.PeerStatus{}
 	for fwd, dst := range c.dsts {
-		dsts[fwd] = dst.Status()
+		dsts[fwd], err = dst.Status()
+		if err != nil {
+			return ClientStatus{}, err
+		}
 	}
 
 	srcs := map[model.Forward]client.PeerStatus{}
 	for fwd, src := range c.srcs {
-		srcs[fwd] = src.Status()
+		srcs[fwd], err = src.Status()
+		if err != nil {
+			return ClientStatus{}, err
+		}
 	}
 
 	return ClientStatus{
