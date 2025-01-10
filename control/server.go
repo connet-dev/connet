@@ -45,11 +45,17 @@ func NewServer(cfg Config) (*Server, error) {
 	}
 	s.relays = relays
 
-	clSrv, err := newClientServer(cfg.ClientAuth, cfg.ClientRestr, s.relays, config, cfg.Stores, cfg.Logger)
+	clients, err := newClientServer(cfg.ClientAuth, cfg.ClientRestr, s.relays, config, cfg.Stores, cfg.Logger)
 	if err != nil {
 		return nil, err
 	}
-	s.clients = clSrv
+	s.clients = clients
+
+	s.status = &statusServer{
+		clients: clients,
+		relays:  relays,
+		logger:  cfg.Logger.With("control", "status"),
+	}
 
 	return s, nil
 }
@@ -61,6 +67,7 @@ type Server struct {
 
 	clients *clientServer
 	relays  *relayServer
+	status  *statusServer
 }
 
 func (s *Server) Run(ctx context.Context) error {
@@ -68,6 +75,7 @@ func (s *Server) Run(ctx context.Context) error {
 
 	g.Go(func() error { return s.relays.run(ctx) })
 	g.Go(func() error { return s.clients.run(ctx) })
+	g.Go(func() error { return s.status.run(ctx) })
 	g.Go(func() error { return s.runListener(ctx) })
 
 	return g.Wait()

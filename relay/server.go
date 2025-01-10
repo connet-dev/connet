@@ -38,6 +38,11 @@ func NewServer(cfg Config) (*Server, error) {
 
 		control: control,
 		clients: clients,
+		status: &statusServer{
+			control: control,
+			clients: clients,
+			logger:  cfg.Logger.With("relay", "status"),
+		},
 
 		logger: cfg.Logger.With("relay", cfg.Hostport),
 	}
@@ -55,6 +60,7 @@ type Server struct {
 
 	control *controlClient
 	clients *clientsServer
+	status  *statusServer
 
 	logger *slog.Logger
 }
@@ -78,6 +84,7 @@ func (s *Server) Run(ctx context.Context) error {
 
 	g.Go(func() error { return s.control.run(ctx, transport) })
 	g.Go(func() error { return s.clients.run(ctx, transport) })
+	g.Go(func() error { return s.status.run(ctx) })
 
 	return g.Wait()
 }

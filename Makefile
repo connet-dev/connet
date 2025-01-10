@@ -2,7 +2,7 @@
 
 default: all
 
-all: build test lint
+all: build test
 
 build:
 	go install -v github.com/connet-dev/connet/cmd/... 

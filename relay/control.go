@@ -42,6 +42,8 @@ type controlClient struct {
 	clientsStreamOffset int64
 	clientsLogOffset    int64
 
+	connStatus atomic.Bool
+
 	logger *slog.Logger
 }
 
@@ -268,6 +270,9 @@ func (s *controlClient) reconnect(ctx context.Context, transport *quic.Transport
 
 func (s *controlClient) runConnection(ctx context.Context, conn quic.Connection) error {
 	defer conn.CloseWithError(0, "done")
+
+	s.connStatus.Store(true)
+	defer s.connStatus.Store(false)
 
 	g, ctx := errgroup.WithContext(ctx)
 
