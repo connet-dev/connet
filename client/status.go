@@ -13,19 +13,19 @@ type PeerConnection struct {
 
 func (p *peer) status() (PeerStatus, error) {
 	stat := PeerStatus{}
+
 	relays, err := p.relayConns.Peek()
 	if err != nil {
-		return stat, err
+		return PeerStatus{}, err
 	}
-	conns, err := p.peerConns.Peek()
-	if err != nil {
-		return stat, err
-	}
-
 	for k := range relays {
 		stat.Relays = append(stat.Relays, k.String())
 	}
 
+	conns, err := p.peerConns.Peek()
+	if err != nil {
+		return PeerStatus{}, err
+	}
 	for key, conn := range conns {
 		stat.Connections = append(stat.Connections, PeerConnection{
 			ID:    key.id,
