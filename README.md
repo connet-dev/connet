@@ -54,6 +54,8 @@ For all communication `connet` uses the QUIC protocol, which is build on top of 
 ## Quickstart
 
 Latest builds of `connet` can be acquired from our [releases](https://github.com/connet-dev/connet/releases) page. 
+We also provide [docker](https://github.com/orgs/connet-dev/packages/container/package/connet) images,
+check our [docker](#Docker) section to see how you can use them.
 If you are using [NixOS](https://nixos.org), check also the [NixOS](#NixOS) section.
 
 To get started with `connet`, you'll need 3 devices:
@@ -335,6 +337,27 @@ To configure the client as a service:
     };
   };
 }
+```
+
+### Docker
+
+Docker images are available at [ghcr.io](https://ghcr.io) and you can pull them via:
+```bash
+docker pull ghcr.io/connet-dev/connet:latest
+```
+
+To run the client you can use something like:
+```bash
+docker run -p 19192:19192 -p 9000:9000 connet \
+  --server-addr "localhost:19190" --token "CLIENT_TOKEN" \
+  --src-name "example" --src-addr ":9000"
+```
+
+Or if you are using a config file on your system:
+```bash
+docker run -p 19192:19192 -p 9000:9000 \
+  --mount "type=bind,source=/path/to/config,target=/data" \
+  connet --config "/data/config.toml"
 ```
 
 ## Examples
