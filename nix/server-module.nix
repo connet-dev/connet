@@ -104,6 +104,19 @@ in
       description = "Relay hostname to advertise to clients.";
       example = "localhost";
     };
+
+    statusPort = lib.mkOption {
+      default = 19180;
+      type = lib.types.either (lib.types.strMatching "disable") lib.types.port;
+      description = ''
+        The port to listen for status connections. 
+        Use 'disable' to disable the listener
+
+        ::: {.note}
+        openFirewall will not open the status port
+        :::
+      '';
+    };
   };
 
   config = lib.mkIf cfg.enable {
@@ -156,6 +169,7 @@ in
           relay-addr = ":${toString cfg.relayPort}";
           relay-hostname = cfg.relayHostname;
 
+          status-addr = if builtins.isInt cfg.statusPort then ":${toString cfg.statusPort}" else cfg.statusPort;
           store-dir = "/var/lib/connet-server";
         } // (if (builtins.isString cfg.useACMEHost) then
           let

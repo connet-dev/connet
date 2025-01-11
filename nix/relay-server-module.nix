@@ -85,6 +85,19 @@ in
       type = lib.types.nullOr lib.types.path;
       description = "Control server Certificate Authority file to use, required when running self-signed server";
     };
+
+    statusPort = lib.mkOption {
+      default = 19181;
+      type = lib.types.either (lib.types.strMatching "disable") lib.types.port;
+      description = ''
+        The port to listen for status connections. 
+        Use 'disable' to disable the listener
+
+        ::: {.note}
+        openFirewall will not open the status port
+        :::
+      '';
+    };
   };
 
   config = lib.mkIf cfg.enable {
@@ -118,6 +131,7 @@ in
 
           control-addr = cfg.controlAddr;
 
+          status-addr = if builtins.isInt cfg.statusPort then ":${toString cfg.statusPort}" else cfg.statusPort;
           store-dir = "/var/lib/connet-relay-server";
         } // lib.optionalAttrs (builtins.isPath cfg.controlCA) {
           control-cas = cfg.controlCA;

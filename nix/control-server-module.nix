@@ -97,6 +97,19 @@ in
       type = lib.types.nullOr lib.types.path;
       description = "Server private key file to use";
     };
+
+    statusPort = lib.mkOption {
+      default = 19180;
+      type = lib.types.either (lib.types.strMatching "disable") lib.types.port;
+      description = ''
+        The port to listen for status connections. 
+        Use 'disable' to disable the listener
+
+        ::: {.note}
+        openFirewall will not open the status port
+        :::
+      '';
+    };
   };
 
   config = lib.mkIf cfg.enable {
@@ -147,6 +160,7 @@ in
 
           addr = ":${toString cfg.controlPort}";
 
+          status-addr = if builtins.isInt cfg.statusPort then ":${toString cfg.statusPort}" else cfg.statusPort;
           store-dir = "/var/lib/connet-control-server";
         } // (if (builtins.isString cfg.useACMEHost) then
           let

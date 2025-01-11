@@ -80,6 +80,19 @@ in
       description = "The port to listen for incoming direct connections.";
     };
 
+    statusPort = lib.mkOption {
+      default = 19182;
+      type = lib.types.either (lib.types.strMatching "disable") lib.types.port;
+      description = ''
+        The port to listen for status connections. 
+        Use 'disable' to disable the listener
+
+        ::: {.note}
+        openFirewall will not open the status port
+        :::
+      '';
+    };
+
     destinations = lib.mkOption {
       default = { };
       type = lib.types.attrsOf
@@ -151,6 +164,7 @@ in
 
           server-addr = cfg.serverAddr;
           direct-addr = ":${toString cfg.directPort}";
+          status-addr = if builtins.isInt cfg.statusPort then ":${toString cfg.statusPort}" else cfg.statusPort;
 
           destinations = cfg.destinations;
           sources = cfg.sources;
