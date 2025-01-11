@@ -63,7 +63,7 @@ jobs:
         run: nix develop --command make release
       - name: Upload release
         uses: softprops/action-gh-release@v2
-        if: ${{ gihub.event_name == 'workflow_dispatch' && github.event.inputs.upload == 'true' || github.event_name == 'push' }}
+        if: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.upload == 'true' || github.event_name == 'push' }}
         with:
           files: "dist/archive/connet-*.tag.gz"
 
@@ -89,7 +89,7 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
       - name: Docker push
-        if: ${{ gihub.event_name == 'workflow_dispatch' && github.event.inputs.upload == 'true' || github.event_name == 'push' }}
+        if: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.upload == 'true' || github.event_name == 'push' }}
         run: nix develop --command skopeo copy "docker-archive:result" "docker://ghcr.io/connet-dev/connet:${CONNET_VERSION}-amd64"
 
   docker-arm:
@@ -116,7 +116,7 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
       - name: Docker push
-        if: ${{ gihub.event_name == 'workflow_dispatch' && github.event.inputs.upload == 'true' || github.event_name == 'push' }}
+        if: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.upload == 'true' || github.event_name == 'push' }}
         run: nix develop --command skopeo copy "docker-archive:result" "docker://ghcr.io/connet-dev/connet:${CONNET_VERSION}-arm64"
 
   docker-multiarch:
@@ -139,5 +139,5 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
       - name: Docker tag
-        if: ${{ gihub.event_name == 'workflow_dispatch' && github.event.inputs.upload == 'true' || github.event_name == 'push' }}
+        if: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.upload == 'true' || github.event_name == 'push' }}
         run: nix develop --command manifest-tool push from-args --platforms linux/amd64,linux/arm64 --template ghcr.io/connet-dev/connet:${CONNET_VERSION}-ARCHVARIANT --target ghcr.io/connet-dev/connet:${CONNET_VERSION}
