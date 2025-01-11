@@ -55,10 +55,10 @@ release-build:
 	GOOS=windows GOARCH=amd64 go build -v -o dist/build/windows-amd64/connet github.com/connet-dev/connet/cmd/connet
 	GOOS=windows GOARCH=arm64 go build -v -o dist/build/windows-arm64/connet github.com/connet-dev/connet/cmd/connet
 
-release-version := $(shell git describe --exact-match --tags 2> /dev/null || git rev-parse --short HEAD)
+CONNET_VERSION ?= $(shell git describe --exact-match --tags 2> /dev/null || git rev-parse --short HEAD)
 
 release-archive:
 	mkdir dist/archive
-	for x in $(shell ls dist/build); do tar -czf dist/archive/connet-$(release-version)-$$x.tar.gz -C dist/build/$$x connet; done
+	for x in $(shell ls dist/build); do tar -czf dist/archive/connet-$(CONNET_VERSION)-$$x.tar.gz -C dist/build/$$x connet; done
 
 release: release-clean release-build release-archive
