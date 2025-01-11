@@ -21,7 +21,6 @@ import (
 	"github.com/klev-dev/kleverr"
 	"github.com/quic-go/quic-go"
 	"github.com/segmentio/ksuid"
-	"golang.org/x/crypto/nacl/secretbox"
 	"golang.org/x/sync/errgroup"
 )
 
@@ -101,7 +100,7 @@ func newRelayServer(
 		restr:  restr,
 		logger: logger.With("server", "relays"),
 
-		relaySecretKey: [32]byte(serverSecret.Bytes),
+		reconnect: &reconnectToken{[32]byte(serverSecret.Bytes)},
 
 		stores:        stores,
 		conns:         conns,
@@ -120,7 +119,7 @@ type relayServer struct {
 	restr  netc.IPRestriction
 	logger *slog.Logger
 
-	relaySecretKey [32]byte
+	reconnect *reconnectToken
 
 	stores        Stores
 	conns         logc.KV[RelayConnKey, RelayConnValue]
@@ -364,17 +363,14 @@ func (c *relayConn) authenticate(ctx context.Context) (RelayAuthentication, ksui
 	}
 
 	var id ksuid.KSUID
-	if plain, err := c.decodeReconnect(req.ReconnectToken); err != nil {
-		c.logger.Debug("decode failed", "err", err)
-		id = ksuid.New()
-	} else if sid, err := ksuid.FromBytes(plain); err != nil {
+	if sid, err := c.server.reconnect.openID(req.ReconnectToken); err != nil {
 		c.logger.Debug("decode failed", "err", err)
 		id = ksuid.New()
 	} else {
 		id = sid
 	}
 
-	retoken, err := c.encodeReconnect(id.Bytes())
+	retoken, err := c.server.reconnect.sealID(id)
 	if err != nil {
 		c.logger.Debug("encrypting failed", "err", err)
 		retoken = nil
@@ -388,30 +384,6 @@ func (c *relayConn) authenticate(ctx context.Context) (RelayAuthentication, ksui
 
 	c.logger.Debug("authentication completed", "local", c.conn.LocalAddr(), "remote", c.conn.RemoteAddr())
 	return auth, id, model.HostPortFromPB(req.Addr), nil
-}
-
-func (c *relayConn) encodeReconnect(id []byte) ([]byte, error) {
-	var nonce [24]byte
-	if _, err := io.ReadFull(rand.Reader, nonce[:]); err != nil {
-		return nil, kleverr.Newf("could not read rand: %w", err)
-	}
-
-	data := secretbox.Seal(nonce[:], id, &nonce, &c.server.relaySecretKey)
-	return data, nil
-}
-
-func (c *relayConn) decodeReconnect(encrypted []byte) ([]byte, error) {
-	if len(encrypted) < 24 {
-		return nil, kleverr.New("missing encrypted data")
-	}
-
-	var decryptNonce [24]byte
-	copy(decryptNonce[:], encrypted[:24])
-	decrypted, ok := secretbox.Open(nil, encrypted[24:], &decryptNonce, &c.server.relaySecretKey)
-	if !ok {
-		return nil, kleverr.New("cannot open secretbox")
-	}
-	return decrypted, nil
 }
 
 func (c *relayConn) runRelayClients(ctx context.Context) error {

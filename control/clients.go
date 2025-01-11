@@ -20,7 +20,6 @@ import (
 	"github.com/klev-dev/kleverr"
 	"github.com/quic-go/quic-go"
 	"github.com/segmentio/ksuid"
-	"golang.org/x/crypto/nacl/secretbox"
 	"golang.org/x/sync/errgroup"
 )
 
@@ -89,7 +88,7 @@ func newClientServer(
 		relays: relays,
 		logger: logger.With("server", "clients"),
 
-		clientSecretKey: [32]byte(serverSecret.Bytes),
+		reconnect: &reconnectToken{[32]byte(serverSecret.Bytes)},
 
 		conns: conns,
 		peers: peers,
@@ -107,7 +106,7 @@ type clientServer struct {
 	relays ClientRelays
 	logger *slog.Logger
 
-	clientSecretKey [32]byte
+	reconnect *reconnectToken
 
 	conns logc.KV[ClientConnKey, ClientConnValue]
 	peers logc.KV[ClientPeerKey, ClientPeerValue]
@@ -343,10 +342,7 @@ func (c *clientConn) authenticate(ctx context.Context) (ClientAuthentication, ks
 	}
 
 	var id ksuid.KSUID
-	if plain, err := c.decodeReconnect(req.ReconnectToken); err != nil {
-		c.logger.Debug("decode failed", "err", err)
-		id = ksuid.New()
-	} else if sid, err := ksuid.FromBytes(plain); err != nil {
+	if sid, err := c.server.reconnect.openID(req.ReconnectToken); err != nil {
 		c.logger.Debug("decode failed", "err", err)
 		id = ksuid.New()
 	} else {
@@ -362,7 +358,7 @@ func (c *clientConn) authenticate(ctx context.Context) (ClientAuthentication, ks
 		return retClientAuth(err)
 	}
 
-	retoken, err := c.encodeReconnect(id.Bytes())
+	retoken, err := c.server.reconnect.sealID(id)
 	if err != nil {
 		c.logger.Debug("encrypting failed", "err", err)
 		retoken = nil
@@ -376,30 +372,6 @@ func (c *clientConn) authenticate(ctx context.Context) (ClientAuthentication, ks
 
 	c.logger.Debug("authentication completed", "local", c.conn.LocalAddr(), "remote", c.conn.RemoteAddr())
 	return auth, id, nil
-}
-
-func (c *clientConn) encodeReconnect(id []byte) ([]byte, error) {
-	var nonce [24]byte
-	if _, err := io.ReadFull(rand.Reader, nonce[:]); err != nil {
-		return nil, kleverr.Newf("could not read rand: %w", err)
-	}
-
-	data := secretbox.Seal(nonce[:], id, &nonce, &c.server.clientSecretKey)
-	return data, nil
-}
-
-func (c *clientConn) decodeReconnect(encrypted []byte) ([]byte, error) {
-	if len(encrypted) < 24 {
-		return nil, kleverr.New("missing encrypted data")
-	}
-
-	var decryptNonce [24]byte
-	copy(decryptNonce[:], encrypted[:24])
-	decrypted, ok := secretbox.Open(nil, encrypted[24:], &decryptNonce, &c.server.clientSecretKey)
-	if !ok {
-		return nil, kleverr.New("cannot open secretbox")
-	}
-	return decrypted, nil
 }
 
 type clientStream struct {

@@ -9,6 +9,7 @@ import (
 
 	"github.com/connet-dev/connet/model"
 	"github.com/connet-dev/connet/netc"
+	"github.com/connet-dev/connet/pb"
 	"github.com/connet-dev/connet/statusc"
 	"github.com/klev-dev/kleverr"
 	"github.com/quic-go/quic-go"
@@ -125,7 +126,7 @@ func (s *Server) runListener(ctx context.Context) error {
 			s.relays.handle(ctx, conn)
 		default:
 			s.logger.Debug("unknown connected", "remote", conn.RemoteAddr())
-			conn.CloseWithError(1, "unknown protocol")
+			conn.CloseWithError(quic.ApplicationErrorCode(pb.Error_AuthenticationFailed), "unknown protocol")
 		}
 	}
 }
