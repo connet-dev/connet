@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/connet-dev/connet/certc"
+	"github.com/connet-dev/connet/pb"
 	"github.com/klev-dev/kleverr"
 	"github.com/quic-go/quic-go"
 	"golang.org/x/sync/errgroup"
@@ -158,7 +159,7 @@ func (s *DirectServer) runServer(ctx context.Context) error {
 func (s *DirectServer) runConn(conn quic.Connection) {
 	srv := s.getServer(conn.ConnectionState().TLS.ServerName)
 	if srv == nil {
-		conn.CloseWithError(1, "server not found")
+		conn.CloseWithError(quic.ApplicationErrorCode(pb.Error_AuthenticationFailed), "unknown server")
 		return
 	}
 
@@ -168,7 +169,7 @@ func (s *DirectServer) runConn(conn quic.Connection) {
 
 	exp := srv.dequeue(key, cert)
 	if exp == nil {
-		conn.CloseWithError(2, "client not found")
+		conn.CloseWithError(quic.ApplicationErrorCode(pb.Error_AuthenticationFailed), "unknown client")
 		return
 	}
 

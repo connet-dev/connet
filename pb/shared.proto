@@ -49,6 +49,10 @@ message Error {
     RelayValidationFailed = 300;
     RelayInvalidCertificate = 301;
 
+    // Direct
+    DirectConnectionClosed = 400;
+    DirectKeepaliveClosed = 401;
+
     // Client connect codes
     DestinationNotFound = 500;
     DestinationDialFailed = 501;

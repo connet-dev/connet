@@ -55,7 +55,7 @@ func (p *directPeer) run(ctx context.Context) {
 	defer func() {
 		active := p.local.removeActiveConns(p.remoteID)
 		for _, conn := range active {
-			conn.CloseWithError(1, "depeered")
+			defer conn.CloseWithError(quic.ApplicationErrorCode(pb.Error_DirectConnectionClosed), "connection closed")
 		}
 	}()
 
@@ -205,7 +205,7 @@ func (p *directPeerIncoming) connect(ctx context.Context) (quic.Connection, quic
 }
 
 func (p *directPeerIncoming) keepalive(ctx context.Context, conn quic.Connection, stream quic.Stream) error {
-	defer conn.CloseWithError(1, "disconnected")
+	defer conn.CloseWithError(quic.ApplicationErrorCode(pb.Error_DirectKeepaliveClosed), "keepalive closed")
 	defer stream.Close()
 
 	p.parent.local.addActiveConn(p.parent.remoteID, peerIncoming, "", conn)
@@ -335,7 +335,7 @@ func (p *directPeerOutgoing) connect(ctx context.Context) (quic.Connection, quic
 }
 
 func (p *directPeerOutgoing) keepalive(ctx context.Context, conn quic.Connection, stream quic.Stream) error {
-	defer conn.CloseWithError(1, "disconnected")
+	defer conn.CloseWithError(quic.ApplicationErrorCode(pb.Error_DirectKeepaliveClosed), "keepalive closed")
 	defer stream.Close()
 
 	p.parent.local.addActiveConn(p.parent.remoteID, peerOutgoing, "", conn)
