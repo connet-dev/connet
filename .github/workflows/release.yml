@@ -65,8 +65,8 @@ jobs:
         uses: softprops/action-gh-release@v2
         if: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.upload == 'true' || github.event_name == 'push' }}
         with:
-          tag_name: v${{ CONNET_VERSION }}
-          files: "dist/archive/connet-${{ CONNET_VERSION }}-*.tar.gz"
+          tag_name: v${{ env.CONNET_VERSION }}
+          files: "dist/archive/connet-${{ env.CONNET_VERSION }}-*.tar.gz"
 
   docker-x86:
     name: Docker x86
