@@ -273,7 +273,7 @@ type clientConn struct {
 }
 
 func (c *clientConn) run(ctx context.Context) {
-	defer c.conn.CloseWithError(0, "done")
+	defer c.conn.CloseWithError(quic.ApplicationErrorCode(pb.Error_Unknown), "connection closed")
 
 	if err := c.runErr(ctx); err != nil {
 		c.logger.Debug("error while running", "err", err)

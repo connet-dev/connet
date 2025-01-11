@@ -272,7 +272,7 @@ func (s *controlClient) reconnect(ctx context.Context, transport *quic.Transport
 }
 
 func (s *controlClient) runConnection(ctx context.Context, conn quic.Connection) error {
-	defer conn.CloseWithError(0, "done")
+	defer conn.CloseWithError(quic.ApplicationErrorCode(pb.Error_Unknown), "connection closed")
 
 	s.connStatus.Store(statusc.Connected)
 	defer s.connStatus.Store(statusc.Disconnected)
