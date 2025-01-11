@@ -205,7 +205,7 @@ func (c *clientConn) runErr(ctx context.Context) error {
 	certs := c.conn.ConnectionState().TLS.PeerCertificates
 	auth := c.server.auth(serverName, certs)
 	if auth == nil {
-		return c.conn.CloseWithError(quic.ApplicationErrorCode(pb.Error_AuthenticationFailed), "Client authentication missing")
+		return c.conn.CloseWithError(quic.ApplicationErrorCode(pb.Error_AuthenticationFailed), "authentication missing")
 	}
 
 	switch {
