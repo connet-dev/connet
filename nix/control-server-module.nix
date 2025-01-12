@@ -100,7 +100,7 @@ in
 
     statusAddr = lib.mkOption {
       default = null;
-      type = lib.types.nullOr lib.types.string;
+      type = lib.types.nullOr lib.types.str;
       description = ''
         The address to listen for status connections. 
 
