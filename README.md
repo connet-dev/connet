@@ -133,7 +133,7 @@ server-addr = "localhost:19190" # the control server address to connect to
 server-cas = "path/to/cert.pem" # the control server certificate
 
 direct-addr = ":19192" # at what address this client listens for direct connections, defaults to :19192
-status-addr = "127.0.0.1:19182" # at what address tihs client listens for status connections, disabled/not running by default/unless set
+status-addr = "127.0.0.1:19182" # at what address this client listens for status connections, disabled/not running by default/unless set
 
 [client.destinations.serviceX]
 addr = "localhost:3000" # where this destination connects to, required
