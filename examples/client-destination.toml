@@ -4,7 +4,6 @@ log-level = "debug"
 token-file = "examples/client-token.secret"
 server-cas = ".direnv/minica.pem"
 direct-addr = ":19193"
-status-addr = ":19183"
 
 [client.destinations.sws]
 addr = ":8081"

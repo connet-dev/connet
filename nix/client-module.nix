@@ -80,15 +80,14 @@ in
       description = "The port to listen for incoming direct connections.";
     };
 
-    statusPort = lib.mkOption {
-      default = 19182;
-      type = lib.types.either (lib.types.strMatching "disable") lib.types.port;
+    statusAddr = lib.mkOption {
+      default = null;
+      type = lib.types.nullOr lib.types.string;
       description = ''
-        The port to listen for status connections. 
-        Use 'disable' to disable the listener
+        The address to listen for status connections. 
 
         ::: {.note}
-        openFirewall will not open the status port
+        openFirewall will not open the port of the status address
         :::
       '';
     };
@@ -164,12 +163,13 @@ in
 
           server-addr = cfg.serverAddr;
           direct-addr = ":${toString cfg.directPort}";
-          status-addr = if builtins.isInt cfg.statusPort then ":${toString cfg.statusPort}" else cfg.statusPort;
 
           destinations = cfg.destinations;
           sources = cfg.sources;
         } // lib.optionalAttrs (builtins.isPath cfg.serverCA) {
           server-cas = cfg.serverCA;
+        } // lib.optionalAttrs (builtins.isString cfg.statusAddr) {
+          status-addr = cfg.statusAddr;
         };
       };
     };

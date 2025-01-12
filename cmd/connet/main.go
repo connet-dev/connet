@@ -421,10 +421,7 @@ func clientRun(ctx context.Context, cfg ClientConfig, logger *slog.Logger) error
 		opts = append(opts, connet.ClientDirectAddress(cfg.DirectAddr))
 	}
 
-	if cfg.StatusAddr == "" {
-		cfg.StatusAddr = ":19182"
-	}
-	if cfg.StatusAddr != "disable" {
+	if cfg.StatusAddr != "" {
 		opts = append(opts, connet.ClientStatusAddress(cfg.StatusAddr))
 	}
 
@@ -487,10 +484,7 @@ func serverRun(ctx context.Context, cfg ServerConfig, logger *slog.Logger) error
 		opts = append(opts, connet.ServerRelayHostname(cfg.RelayHostname))
 	}
 
-	if cfg.StatusAddr == "" {
-		cfg.StatusAddr = ":19180"
-	}
-	if cfg.StatusAddr != "disable" {
+	if cfg.StatusAddr != "" {
 		opts = append(opts, connet.ServerStatusAddress(cfg.StatusAddr))
 	}
 	if cfg.StoreDir != "" {
@@ -578,10 +572,7 @@ func controlRun(ctx context.Context, cfg ControlConfig, logger *slog.Logger) err
 		return err
 	}
 
-	if cfg.StatusAddr == "" {
-		cfg.StatusAddr = ":19180"
-	}
-	if cfg.StatusAddr != "disable" {
+	if cfg.StatusAddr != "" {
 		statusAddr, err := net.ResolveTCPAddr("tcp", cfg.StatusAddr)
 		if err != nil {
 			return kleverr.Newf("status address cannot be resolved: %w", err)
@@ -662,10 +653,7 @@ func relayRun(ctx context.Context, cfg RelayConfig, logger *slog.Logger) error {
 	}
 	relayCfg.ControlHost = controlHost
 
-	if cfg.StatusAddr == "" {
-		cfg.StatusAddr = ":19181"
-	}
-	if cfg.StatusAddr != "disable" {
+	if cfg.StatusAddr != "" {
 		statusAddr, err := net.ResolveTCPAddr("tcp", cfg.StatusAddr)
 		if err != nil {
 			return kleverr.Newf("status address cannot be resolved: %w", err)

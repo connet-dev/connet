@@ -133,7 +133,7 @@ server-addr = "localhost:19190" # the control server address to connect to
 server-cas = "path/to/cert.pem" # the control server certificate
 
 direct-addr = ":19192" # at what address this client listens for direct connections, defaults to :19192
-status-addr = ":19182" # at what address this client listens for status connections, defaults to :19182. 'disable' will disable it
+status-addr = "127.0.0.1:19182" # at what address tihs client listens for status connections, disabled/not running by default/unless set
 
 [client.destinations.serviceX]
 addr = "localhost:3000" # where this destination connects to, required
@@ -169,7 +169,7 @@ tokens-file = "path/to/client/tokens" # a file that contains a list of client to
 relay-addr = ":19191" # the address at which the relay will listen for connectsion, defaults to :19191
 relay-hostname = "localhost" # the public hostname (e.g. domain, ip address) which will be advertised to clients, defaults to localhost
 
-status-addr = ":19180" # at what address the server listens for status connections, defaults to :19180. 'disable' will disable it
+status-addr = "127.0.0.1:19180" # at what address the server listens for status connections, disabled/not running by default/unless set
 store-dir = "path/to/server-store" # where does this server persist runtime information, defaults to a /tmp subdirectory
 
 [server.ip-restriction] # defines restriction applicable for all client tokens, checked before verifying the token
@@ -199,7 +199,7 @@ relay-tokens = ["relay-token-1", "relay-token-n"] # set of recognized relay toke
 relay-tokens-file = "path/to/relay/token" # a file that contains a list of relay tokens, one token per line
 # one of relay-tokens or relay-tokens-file is necessary when connecting relays
 
-status-addr = ":19180" # at what address the control server listens for status connections, defaults to :19180. 'disable' will disable it
+status-addr = "127.0.0.1:19180" # at what address the control server listens for status connections, disabled/not running by default/unless set
 store-dir = "path/to/control-store" # where does this control server persist runtime information, defaults to a /tmp subdirectory
 
 [control.client-ip-restriction] # defines restriction applicable for all client tokens, checked before verifying the token
@@ -234,7 +234,7 @@ hostname = "localhost" # the public hostname (e.g. domain, ip address) which wil
 control-addr = "localhost:19190" # the control server address to connect to, defaults to localhost:19191
 control-cas = "path/to/ca/file.pem" # the public certificate root of the control server, no default, required when using self-signed certs
 
-status-addr = ":19181" # at what address the relay server listens for status connections, defaults to :19181. 'disable' will disable it
+status-addr = "127.0.0.1:19181" # at what address the relay server listens for status connections, disabled/not running by default/unless set
 store-dir = "path/to/relay-store" # where does this relay persist runtime information, defaults to a /tmp subdirectory
 ```
 

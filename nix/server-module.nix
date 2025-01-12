@@ -105,15 +105,14 @@ in
       example = "localhost";
     };
 
-    statusPort = lib.mkOption {
-      default = 19180;
-      type = lib.types.either (lib.types.strMatching "disable") lib.types.port;
+    statusAddr = lib.mkOption {
+      default = null;
+      type = lib.types.nullOr lib.types.string;
       description = ''
-        The port to listen for status connections. 
-        Use 'disable' to disable the listener
+        The address to listen for status connections. 
 
         ::: {.note}
-        openFirewall will not open the status port
+        openFirewall will not open the port of the status address
         :::
       '';
     };
@@ -169,7 +168,6 @@ in
           relay-addr = ":${toString cfg.relayPort}";
           relay-hostname = cfg.relayHostname;
 
-          status-addr = if builtins.isInt cfg.statusPort then ":${toString cfg.statusPort}" else cfg.statusPort;
           store-dir = "/var/lib/connet-server";
         } // (if (builtins.isString cfg.useACMEHost) then
           let
@@ -182,7 +180,9 @@ in
         else {
           cert-file = cfg.serverCertFile;
           key-file = cfg.serverKeyFile;
-        });
+        }) // lib.optionalAttrs (builtins.isString cfg.statusAddr) {
+          status-addr = cfg.statusAddr;
+        };
       };
     };
 
