@@ -17,7 +17,6 @@ import (
 	"github.com/connet-dev/connet/pbc"
 	"github.com/klev-dev/kleverr"
 	"github.com/quic-go/quic-go"
-	"golang.org/x/sync/errgroup"
 )
 
 type clientAuth struct {
@@ -216,13 +215,8 @@ func (c *clientConn) runErr(ctx context.Context) error {
 		fcs := c.server.addDestination(c)
 		defer c.server.removeDestination(fcs, c)
 
-		for {
-			stream, err := c.conn.AcceptStream(ctx)
-			if err != nil {
-				return err
-			}
-			go c.runDestinationStream(ctx, stream)
-		}
+		<-c.conn.Context().Done()
+		return nil
 	case auth.source:
 		c.fwd = auth.fwd
 		c.key = certc.NewKey(certs[0])
@@ -239,28 +233,6 @@ func (c *clientConn) runErr(ctx context.Context) error {
 		}
 	default:
 		return kleverr.Newf("not a destination or a source")
-	}
-}
-
-func (c *clientConn) runDestinationStream(ctx context.Context, stream quic.Stream) {
-	defer stream.Close()
-
-	if err := c.runDestinationStreamErr(ctx, stream); err != nil {
-		c.logger.Debug("error while running destination", "err", err)
-	}
-}
-
-func (c *clientConn) runDestinationStreamErr(ctx context.Context, stream quic.Stream) error {
-	req, err := pbc.ReadRequest(stream)
-	if err != nil {
-		return err
-	}
-
-	switch {
-	case req.Heartbeat != nil:
-		return c.heartbeat(ctx, stream, req.Heartbeat)
-	default:
-		return c.unknown(ctx, stream, req)
 	}
 }
 
@@ -281,8 +253,6 @@ func (c *clientConn) runSourceStreamErr(ctx context.Context, stream quic.Stream,
 	switch {
 	case req.Connect != nil:
 		return c.connect(ctx, stream, fcs)
-	case req.Heartbeat != nil:
-		return c.heartbeat(ctx, stream, req.Heartbeat)
 	default:
 		return c.unknown(ctx, stream, req)
 	}
@@ -327,42 +297,6 @@ func (c *clientConn) connectDestination(ctx context.Context, srcStream quic.Stre
 	err = netc.Join(ctx, srcStream, dstStream)
 	c.logger.Debug("disconnected conns", "forward", c.fwd, "err", err)
 	return nil
-}
-
-func (c *clientConn) heartbeat(ctx context.Context, stream quic.Stream, hbt *pbc.Heartbeat) error {
-	if err := pb.Write(stream, &pbc.Response{Heartbeat: hbt}); err != nil {
-		return err
-	}
-
-	g, ctx := errgroup.WithContext(ctx)
-
-	g.Go(func() error {
-		<-ctx.Done()
-		stream.CancelRead(0)
-		return nil
-	})
-
-	g.Go(func() error {
-		for {
-			req, err := pbc.ReadRequest(stream)
-			if err != nil {
-				return err
-			}
-			if req.Heartbeat == nil {
-				respErr := pb.NewError(pb.Error_RequestUnknown, "unexpected request")
-				if err := pb.Write(stream, &pbc.Response{Error: respErr}); err != nil {
-					return kleverr.Ret(err)
-				}
-				return respErr
-			}
-
-			if err := pb.Write(stream, &pbc.Response{Heartbeat: req.Heartbeat}); err != nil {
-				return err
-			}
-		}
-	})
-
-	return g.Wait()
 }
 
 func (c *clientConn) unknown(_ context.Context, stream quic.Stream, req *pbc.Request) error {

@@ -2,14 +2,12 @@ syntax = "proto3";
 package client;
 
 import "shared.proto";
-import "google/protobuf/timestamp.proto";
 
 option go_package = "github.com/connet-dev/connet/pbc";
 
 message Request {
   // Soft one-of
   Connect connect = 1;
-  Heartbeat heartbeat = 2;
 
   message Connect {
   }
@@ -17,10 +15,4 @@ message Request {
 
 message Response {
   shared.Error error = 1;
-
-  Heartbeat heartbeat = 2;
-}
-
-message Heartbeat {
-  google.protobuf.Timestamp time = 1;
 }

@@ -152,8 +152,6 @@ func (d *Destination) runDestinationErr(ctx context.Context, stream quic.Stream)
 	switch {
 	case req.Connect != nil:
 		return d.runConnect(ctx, stream)
-	case req.Heartbeat != nil:
-		return d.heartbeat(ctx, stream, req.Heartbeat)
 	default:
 		err := pb.NewError(pb.Error_RequestUnknown, "unknown request: %v", req)
 		if err := pb.Write(stream, &pbc.Response{Error: err}); err != nil {
@@ -185,42 +183,6 @@ func (d *Destination) runConnect(ctx context.Context, stream quic.Stream) error 
 	d.logger.Debug("disconnected from server", "err", err)
 
 	return nil
-}
-
-func (d *Destination) heartbeat(ctx context.Context, stream quic.Stream, hbt *pbc.Heartbeat) error {
-	if err := pb.Write(stream, &pbc.Response{Heartbeat: hbt}); err != nil {
-		return err
-	}
-
-	g, ctx := errgroup.WithContext(ctx)
-
-	g.Go(func() error {
-		<-ctx.Done()
-		stream.CancelRead(0)
-		return nil
-	})
-
-	g.Go(func() error {
-		for {
-			req, err := pbc.ReadRequest(stream)
-			if err != nil {
-				return err
-			}
-			if req.Heartbeat == nil {
-				respErr := pb.NewError(pb.Error_RequestUnknown, "unexpected request")
-				if err := pb.Write(stream, &pbc.Response{Error: respErr}); err != nil {
-					return kleverr.Ret(err)
-				}
-				return respErr
-			}
-
-			if err := pb.Write(stream, &pbc.Response{Heartbeat: req.Heartbeat}); err != nil {
-				return err
-			}
-		}
-	})
-
-	return g.Wait()
 }
 
 func (d *Destination) RunControl(ctx context.Context, conn quic.Connection) error {

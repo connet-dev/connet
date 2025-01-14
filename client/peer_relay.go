@@ -11,11 +11,8 @@ import (
 
 	"github.com/connet-dev/connet/model"
 	"github.com/connet-dev/connet/netc"
-	"github.com/connet-dev/connet/pb"
-	"github.com/connet-dev/connet/pbc"
 	"github.com/quic-go/quic-go"
 	"golang.org/x/sync/errgroup"
-	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
 type relayPeer struct {
@@ -99,42 +96,11 @@ func (r *relayPeer) connect(ctx context.Context) (quic.Connection, error) {
 }
 
 func (r *relayPeer) keepalive(ctx context.Context, conn quic.Connection) error {
-	stream, err := conn.OpenStreamSync(ctx)
-	if err != nil {
-		return err
-	}
-	if err := r.heartbeat(ctx, stream); err != nil {
-		return err
-	}
-
 	r.local.addRelayConn(r.serverHostport, conn)
 	defer r.local.removeRelayConn(r.serverHostport)
 
-	for {
-		select {
-		case <-ctx.Done():
-			return ctx.Err()
-		case <-time.After(10 * time.Second):
-		}
-		if err := r.heartbeat(ctx, stream); err != nil {
-			return err
-		}
-	}
-}
-
-func (r *relayPeer) heartbeat(_ context.Context, stream quic.Stream) error {
-	// TODO setDeadline as additional assurance we are not blocked
-	req := &pbc.Heartbeat{Time: timestamppb.Now()}
-	if err := pb.Write(stream, &pbc.Request{Heartbeat: req}); err != nil {
-		return err
-	}
-	if resp, err := pbc.ReadResponse(stream); err != nil {
-		return err
-	} else {
-		dur := time.Since(resp.Heartbeat.Time.AsTime())
-		r.logger.Debug("relay heartbeat", "dur", dur)
-		return nil
-	}
+	<-conn.Context().Done()
+	return context.Cause(conn.Context())
 }
 
 func (r *relayPeer) stop() {

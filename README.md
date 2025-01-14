@@ -375,3 +375,4 @@ by adding account management and it is one of the easiest way to start.
  - [ ] UDP support
  - [ ] Use quic-go tracer, instead of ping (and duration estimation)
  - [ ] Stateless reset key for the server
+ - [ ] Name access restrictions for clients
