@@ -663,11 +663,11 @@ func relayRun(ctx context.Context, cfg RelayConfig, logger *slog.Logger) error {
 
 	if cfg.StoreDir == "" {
 		relayCfg.Stores, err = relay.NewTmpFileStores()
+		if err != nil {
+			return err
+		}
 	} else {
-		relayCfg.Stores, err = relay.NewFileStores(cfg.StoreDir)
-	}
-	if err != nil {
-		return err
+		relayCfg.Stores = relay.NewFileStores(cfg.StoreDir)
 	}
 
 	srv, err := relay.NewServer(relayCfg)

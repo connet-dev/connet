@@ -17,21 +17,8 @@ type Stores interface {
 	Servers() (logc.KV[ServerKey, ServerValue], error)
 }
 
-func NewFileStores(dir string) (Stores, error) {
-	config, err := logc.NewKV[ConfigKey, ConfigValue](filepath.Join(dir, "config"))
-	if err != nil {
-		return nil, err
-	}
-	clients, err := logc.NewKV[ClientKey, ClientValue](filepath.Join(dir, "clients"))
-	if err != nil {
-		return nil, err
-	}
-	servers, err := logc.NewKV[ServerKey, ServerValue](filepath.Join(dir, "servers"))
-	if err != nil {
-		return nil, err
-	}
-
-	return &fileStores{config, clients, servers}, nil
+func NewFileStores(dir string) Stores {
+	return &fileStores{dir}
 }
 
 func NewTmpFileStores() (Stores, error) {
@@ -39,25 +26,23 @@ func NewTmpFileStores() (Stores, error) {
 	if err != nil {
 		return nil, err
 	}
-	return NewFileStores(dir)
+	return NewFileStores(dir), nil
 }
 
 type fileStores struct {
-	config  logc.KV[ConfigKey, ConfigValue]
-	clients logc.KV[ClientKey, ClientValue]
-	servers logc.KV[ServerKey, ServerValue]
+	dir string
 }
 
 func (f *fileStores) Config() (logc.KV[ConfigKey, ConfigValue], error) {
-	return f.config, nil
+	return logc.NewKV[ConfigKey, ConfigValue](filepath.Join(f.dir, "config"))
 }
 
 func (f *fileStores) Clients() (logc.KV[ClientKey, ClientValue], error) {
-	return f.clients, nil
+	return logc.NewKV[ClientKey, ClientValue](filepath.Join(f.dir, "clients"))
 }
 
 func (f *fileStores) Servers() (logc.KV[ServerKey, ServerValue], error) {
-	return f.servers, nil
+	return logc.NewKV[ServerKey, ServerValue](filepath.Join(f.dir, "servers"))
 }
 
 type ConfigKey string

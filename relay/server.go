@@ -50,7 +50,7 @@ func NewServer(cfg Config) (*Server, error) {
 	var statelessResetKey quic.StatelessResetKey
 	copy(statelessResetKey[:], statelessResetVal.Bytes)
 
-	control, err := newControlClient(cfg)
+	control, err := newControlClient(cfg, config)
 	if err != nil {
 		return nil, err
 	}

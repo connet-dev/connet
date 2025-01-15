@@ -79,18 +79,13 @@ func NewServer(opts ...ServerOption) (*Server, error) {
 		return nil, err
 	}
 
-	relayStores, err := relay.NewFileStores(filepath.Join(cfg.dir, "relay"))
-	if err != nil {
-		return nil, err
-	}
-
 	controlCAs := x509.NewCertPool()
 	controlCAs.AddCert(cfg.controlCert.Leaf)
 	relay, err := relay.NewServer(relay.Config{
 		Addr:     cfg.relayAddr,
 		Hostport: model.HostPort{Host: cfg.relayHostname, Port: cfg.relayAddr.AddrPort().Port()},
 		Logger:   cfg.logger,
-		Stores:   relayStores,
+		Stores:   relay.NewFileStores(filepath.Join(cfg.dir, "relay")),
 
 		ControlAddr:  cfg.controlAddr,
 		ControlHost:  "localhost",

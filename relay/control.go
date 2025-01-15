@@ -48,16 +48,12 @@ type controlClient struct {
 	logger *slog.Logger
 }
 
-func newControlClient(cfg Config) (*controlClient, error) {
+func newControlClient(cfg Config, configStore logc.KV[ConfigKey, ConfigValue]) (*controlClient, error) {
 	root, err := certc.NewRoot()
 	if err != nil {
 		return nil, err
 	}
 
-	config, err := cfg.Stores.Config()
-	if err != nil {
-		return nil, err
-	}
 	clients, err := cfg.Stores.Clients()
 	if err != nil {
 		return nil, err
@@ -81,12 +77,12 @@ func newControlClient(cfg Config) (*controlClient, error) {
 		serverByName[srv.name] = srv
 	}
 
-	clientsStreamOffset, err := config.GetOrDefault(configClientsStreamOffset, ConfigValue{Int64: logc.OffsetOldest})
+	clientsStreamOffset, err := configStore.GetOrDefault(configClientsStreamOffset, ConfigValue{Int64: logc.OffsetOldest})
 	if err != nil {
 		return nil, err
 	}
 
-	clientsLogOffset, err := config.GetOrDefault(configClientsLogOffset, ConfigValue{Int64: logc.OffsetOldest})
+	clientsLogOffset, err := configStore.GetOrDefault(configClientsLogOffset, ConfigValue{Int64: logc.OffsetOldest})
 	if err != nil {
 		return nil, err
 	}
@@ -103,7 +99,7 @@ func newControlClient(cfg Config) (*controlClient, error) {
 			NextProtos: []string{"connet-relays"},
 		},
 
-		config:  config,
+		config:  configStore,
 		clients: clients,
 		servers: servers,
 
