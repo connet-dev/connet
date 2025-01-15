@@ -150,7 +150,7 @@ func (s *controlClient) getServer(name string) *relayServer {
 	return s.serverByName[name]
 }
 
-func (s *controlClient) clientTLSConfig(chi *tls.ClientHelloInfo, base *tls.Config) (*tls.Config, error) {
+func (s *controlClient) tlsAuthenticate(chi *tls.ClientHelloInfo, base *tls.Config) (*tls.Config, error) {
 	if srv := s.getServer(chi.ServerName); srv != nil {
 		cfg := base.Clone()
 		cfg.Certificates = srv.tls

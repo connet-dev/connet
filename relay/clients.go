@@ -26,12 +26,21 @@ type clientAuth struct {
 	source      bool
 }
 
-func newClientsServer(cfg Config) *clientsServer {
+type tlsAuthenticator func(chi *tls.ClientHelloInfo, base *tls.Config) (*tls.Config, error)
+type clientAuthenticator func(serverName string, certs []*x509.Certificate) *clientAuth
+
+func newClientsServer(cfg Config, tlsAuth tlsAuthenticator, clAuth clientAuthenticator) *clientsServer {
+	tlsConf := &tls.Config{
+		ClientAuth: tls.RequireAndVerifyClientCert,
+		NextProtos: []string{"connet-relay"},
+	}
+	tlsConf.GetConfigForClient = func(chi *tls.ClientHelloInfo) (*tls.Config, error) {
+		return tlsAuth(chi, tlsConf)
+	}
+
 	return &clientsServer{
-		tlsConf: &tls.Config{
-			ClientAuth: tls.RequireAndVerifyClientCert,
-			NextProtos: []string{"connet-relay"},
-		},
+		tlsConf: tlsConf,
+		auth:    clAuth,
 
 		forwards: map[model.Forward]*forwardClients{},
 
@@ -41,7 +50,7 @@ func newClientsServer(cfg Config) *clientsServer {
 
 type clientsServer struct {
 	tlsConf *tls.Config
-	auth    func(serverName string, certs []*x509.Certificate) *clientAuth
+	auth    clientAuthenticator
 
 	forwards  map[model.Forward]*forwardClients
 	forwardMu sync.RWMutex

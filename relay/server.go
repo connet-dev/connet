@@ -2,8 +2,9 @@ package relay
 
 import (
 	"context"
-	"crypto/tls"
+	"crypto/rand"
 	"crypto/x509"
+	"io"
 	"log/slog"
 	"maps"
 	"net"
@@ -32,33 +33,45 @@ type Config struct {
 }
 
 func NewServer(cfg Config) (*Server, error) {
+	config, err := cfg.Stores.Config()
+	if err != nil {
+		return nil, err
+	}
+	statelessResetVal, err := config.GetOrInit(configStatelessReset, func(ck ConfigKey) (ConfigValue, error) {
+		var key quic.StatelessResetKey
+		if _, err := io.ReadFull(rand.Reader, key[:]); err != nil {
+			return ConfigValue{}, kleverr.Newf("could not read rand: %w", err)
+		}
+		return ConfigValue{Bytes: key[:]}, nil
+	})
+	if err != nil {
+		return nil, err
+	}
+	var statelessResetKey quic.StatelessResetKey
+	copy(statelessResetKey[:], statelessResetVal.Bytes)
+
 	control, err := newControlClient(cfg)
 	if err != nil {
 		return nil, err
 	}
 
-	clients := newClientsServer(cfg)
+	clients := newClientsServer(cfg, control.tlsAuthenticate, control.authenticate)
 
-	s := &Server{
-		addr: cfg.Addr,
+	return &Server{
+		addr:              cfg.Addr,
+		statelessResetKey: &statelessResetKey,
 
 		control: control,
 		clients: clients,
 
 		statusAddr: cfg.StatusAddr,
 		logger:     cfg.Logger.With("relay", cfg.Hostport),
-	}
-
-	s.clients.tlsConf.GetConfigForClient = func(chi *tls.ClientHelloInfo) (*tls.Config, error) {
-		return s.control.clientTLSConfig(chi, s.clients.tlsConf)
-	}
-	s.clients.auth = s.control.authenticate
-
-	return s, nil
+	}, nil
 }
 
 type Server struct {
-	addr *net.UDPAddr
+	addr              *net.UDPAddr
+	statelessResetKey *quic.StatelessResetKey
 
 	control *controlClient
 	clients *clientsServer
@@ -77,7 +90,9 @@ func (s *Server) Run(ctx context.Context) error {
 
 	s.logger.Debug("start quic listener")
 	transport := &quic.Transport{
-		Conn: udpConn,
+		Conn:               udpConn,
+		ConnectionIDLength: 8,
+		StatelessResetKey:  s.statelessResetKey,
 		// TODO review other options
 	}
 	defer transport.Close()
