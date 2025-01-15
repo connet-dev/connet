@@ -2,7 +2,9 @@ package control
 
 import (
 	"context"
+	"crypto/rand"
 	"crypto/tls"
+	"io"
 	"log/slog"
 	"net"
 	"time"
@@ -34,10 +36,23 @@ type Config struct {
 }
 
 func NewServer(cfg Config) (*Server, error) {
-	config, err := cfg.Stores.Config()
+	configStore, err := cfg.Stores.Config()
 	if err != nil {
 		return nil, err
 	}
+
+	statelessResetVal, err := configStore.GetOrInit(configStatelessReset, func(ck ConfigKey) (ConfigValue, error) {
+		var key quic.StatelessResetKey
+		if _, err := io.ReadFull(rand.Reader, key[:]); err != nil {
+			return ConfigValue{}, kleverr.Newf("could not read rand: %w", err)
+		}
+		return ConfigValue{Bytes: key[:]}, nil
+	})
+	if err != nil {
+		return nil, err
+	}
+	var statelessResetKey quic.StatelessResetKey
+	copy(statelessResetKey[:], statelessResetVal.Bytes)
 
 	s := &Server{
 		addr: cfg.Addr,
@@ -45,17 +60,19 @@ func NewServer(cfg Config) (*Server, error) {
 			Certificates: []tls.Certificate{cfg.Cert},
 			NextProtos:   []string{"connet", "connet-relays"},
 		},
+		statelessResetKey: &statelessResetKey,
+
 		statusAddr: cfg.StatusAddr,
 		logger:     cfg.Logger.With("control", cfg.Addr),
 	}
 
-	relays, err := newRelayServer(cfg.RelayAuth, cfg.RelayRestr, config, cfg.Stores, cfg.Logger)
+	relays, err := newRelayServer(cfg.RelayAuth, cfg.RelayRestr, configStore, cfg.Stores, cfg.Logger)
 	if err != nil {
 		return nil, err
 	}
 	s.relays = relays
 
-	clients, err := newClientServer(cfg.ClientAuth, cfg.ClientRestr, s.relays, config, cfg.Stores, cfg.Logger)
+	clients, err := newClientServer(cfg.ClientAuth, cfg.ClientRestr, s.relays, configStore, cfg.Stores, cfg.Logger)
 	if err != nil {
 		return nil, err
 	}
@@ -65,8 +82,9 @@ func NewServer(cfg Config) (*Server, error) {
 }
 
 type Server struct {
-	addr    *net.UDPAddr
-	tlsConf *tls.Config
+	addr              *net.UDPAddr
+	tlsConf           *tls.Config
+	statelessResetKey *quic.StatelessResetKey
 
 	clients *clientServer
 	relays  *relayServer

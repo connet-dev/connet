@@ -58,6 +58,7 @@ func NewServer(opts ...ServerOption) (*Server, error) {
 		if err := serverStoreDirTemp()(cfg); err != nil {
 			return nil, err
 		}
+		cfg.logger.Info("using temporary store directory", "dir", cfg.dir)
 	}
 
 	relayControlToken := model.GenServerName("relay")

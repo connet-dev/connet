@@ -3,7 +3,6 @@ package control
 import (
 	"crypto/x509"
 	"encoding/json"
-	"os"
 	"path/filepath"
 
 	"github.com/connet-dev/connet/certc"
@@ -28,14 +27,6 @@ type Stores interface {
 
 func NewFileStores(dir string) Stores {
 	return &fileStores{dir}
-}
-
-func NewTmpFileStores() (Stores, error) {
-	dir, err := os.MkdirTemp("", "connet-control-")
-	if err != nil {
-		return nil, err
-	}
-	return NewFileStores(dir), nil
 }
 
 type fileStores struct {
@@ -77,6 +68,7 @@ func (f *fileStores) RelayServerOffsets() (logc.KV[RelayConnKey, int64], error) 
 type ConfigKey string
 
 var (
+	configStatelessReset     ConfigKey = "stateless-reset"
 	configServerID           ConfigKey = "server-id"
 	configServerClientSecret ConfigKey = "server-client-secret"
 	configServerRelaySecret  ConfigKey = "server-relay-secret"

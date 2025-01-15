@@ -581,13 +581,14 @@ func controlRun(ctx context.Context, cfg ControlConfig, logger *slog.Logger) err
 	}
 
 	if cfg.StoreDir == "" {
-		controlCfg.Stores, err = control.NewTmpFileStores()
+		dir, err := os.MkdirTemp("", "connet-control-")
 		if err != nil {
 			return err
 		}
-	} else {
-		controlCfg.Stores = control.NewFileStores(cfg.StoreDir)
+		logger.Info("using temporary store directory", "dir", dir)
+		cfg.StoreDir = dir
 	}
+	controlCfg.Stores = control.NewFileStores(cfg.StoreDir)
 
 	srv, err := control.NewServer(controlCfg)
 	if err != nil {
@@ -662,13 +663,14 @@ func relayRun(ctx context.Context, cfg RelayConfig, logger *slog.Logger) error {
 	}
 
 	if cfg.StoreDir == "" {
-		relayCfg.Stores, err = relay.NewTmpFileStores()
+		dir, err := os.MkdirTemp("", "connet-relay-")
 		if err != nil {
 			return err
 		}
-	} else {
-		relayCfg.Stores = relay.NewFileStores(cfg.StoreDir)
+		logger.Info("using temporary store directory", "dir", dir)
+		cfg.StoreDir = dir
 	}
+	relayCfg.Stores = relay.NewFileStores(cfg.StoreDir)
 
 	srv, err := relay.NewServer(relayCfg)
 	if err != nil {

@@ -33,11 +33,11 @@ type Config struct {
 }
 
 func NewServer(cfg Config) (*Server, error) {
-	config, err := cfg.Stores.Config()
+	configStore, err := cfg.Stores.Config()
 	if err != nil {
 		return nil, err
 	}
-	statelessResetVal, err := config.GetOrInit(configStatelessReset, func(ck ConfigKey) (ConfigValue, error) {
+	statelessResetVal, err := configStore.GetOrInit(configStatelessReset, func(ck ConfigKey) (ConfigValue, error) {
 		var key quic.StatelessResetKey
 		if _, err := io.ReadFull(rand.Reader, key[:]); err != nil {
 			return ConfigValue{}, kleverr.Newf("could not read rand: %w", err)
@@ -50,7 +50,7 @@ func NewServer(cfg Config) (*Server, error) {
 	var statelessResetKey quic.StatelessResetKey
 	copy(statelessResetKey[:], statelessResetVal.Bytes)
 
-	control, err := newControlClient(cfg, config)
+	control, err := newControlClient(cfg, configStore)
 	if err != nil {
 		return nil, err
 	}

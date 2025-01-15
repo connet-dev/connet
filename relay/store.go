@@ -3,7 +3,6 @@ package relay
 import (
 	"crypto/x509"
 	"encoding/json"
-	"os"
 	"path/filepath"
 
 	"github.com/connet-dev/connet/certc"
@@ -19,14 +18,6 @@ type Stores interface {
 
 func NewFileStores(dir string) Stores {
 	return &fileStores{dir}
-}
-
-func NewTmpFileStores() (Stores, error) {
-	dir, err := os.MkdirTemp("", "connet-relay-")
-	if err != nil {
-		return nil, err
-	}
-	return NewFileStores(dir), nil
 }
 
 type fileStores struct {
