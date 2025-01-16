@@ -365,6 +365,15 @@ func loadConfig(file string) (Config, error) {
 	dec := toml.NewDecoder(f)
 	dec = dec.DisallowUnknownFields()
 	err = dec.Decode(&cfg)
+	if err != nil {
+		var serr *toml.StrictMissingError
+		var derr *toml.DecodeError
+		if errors.As(err, &serr) {
+			fmt.Println(serr.String())
+		} else if errors.As(err, &derr) {
+			fmt.Println(derr.String())
+		}
+	}
 	return cfg, err
 }
 
