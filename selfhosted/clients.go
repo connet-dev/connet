@@ -5,7 +5,7 @@ import (
 
 	"github.com/connet-dev/connet/control"
 	"github.com/connet-dev/connet/model"
-	"github.com/connet-dev/connet/netc"
+	"github.com/connet-dev/connet/restr"
 	"github.com/klev-dev/kleverr"
 )
 
@@ -13,23 +13,23 @@ func NewClientAuthenticator(tokens ...string) (control.ClientAuthenticator, erro
 	return NewClientAuthenticatorRestricted(tokens, nil)
 }
 
-func NewClientAuthenticatorRestricted(tokens []string, restr []netc.IPRestriction) (control.ClientAuthenticator, error) {
+func NewClientAuthenticatorRestricted(tokens []string, iprestr []restr.IPRestriction) (control.ClientAuthenticator, error) {
 	switch {
-	case len(restr) == 0:
-		restr = make([]netc.IPRestriction, len(tokens))
-	case len(restr) != len(tokens):
+	case len(iprestr) == 0:
+		iprestr = make([]restr.IPRestriction, len(tokens))
+	case len(iprestr) != len(tokens):
 		return nil, kleverr.Newf("expected equal number of tokens and token restrictions")
 	}
 
-	s := &clientsAuthenticator{map[string]netc.IPRestriction{}}
+	s := &clientsAuthenticator{map[string]restr.IPRestriction{}}
 	for i, t := range tokens {
-		s.tokens[t] = restr[i]
+		s.tokens[t] = iprestr[i]
 	}
 	return s, nil
 }
 
 type clientsAuthenticator struct {
-	tokens map[string]netc.IPRestriction
+	tokens map[string]restr.IPRestriction
 }
 
 func (s *clientsAuthenticator) Authenticate(token string, addr net.Addr) (control.ClientAuthentication, error) {

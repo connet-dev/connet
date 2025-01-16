@@ -10,8 +10,8 @@ import (
 	"time"
 
 	"github.com/connet-dev/connet/model"
-	"github.com/connet-dev/connet/netc"
 	"github.com/connet-dev/connet/pb"
+	"github.com/connet-dev/connet/restr"
 	"github.com/connet-dev/connet/statusc"
 	"github.com/klev-dev/kleverr"
 	"github.com/quic-go/quic-go"
@@ -24,10 +24,10 @@ type Config struct {
 	Cert tls.Certificate
 
 	ClientAuth  ClientAuthenticator
-	ClientRestr netc.IPRestriction
+	ClientRestr restr.IPRestriction
 
 	RelayAuth  RelayAuthenticator
-	RelayRestr netc.IPRestriction
+	RelayRestr restr.IPRestriction
 
 	Stores Stores
 

@@ -15,7 +15,7 @@ import (
 
 	"github.com/connet-dev/connet/certc"
 	"github.com/connet-dev/connet/model"
-	"github.com/connet-dev/connet/netc"
+	"github.com/connet-dev/connet/restr"
 	"github.com/stretchr/testify/require"
 	"golang.org/x/sync/errgroup"
 )
@@ -31,14 +31,14 @@ func TestE2E(t *testing.T) {
 
 	logger := slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{Level: slog.LevelWarn}))
 
-	noRestr := netc.IPRestriction{}
-	localRestr, err := netc.ParseIPRestriction([]string{"192.0.2.0/24"}, nil)
+	noRestr := restr.IPRestriction{}
+	localRestr, err := restr.ParseIPRestriction([]string{"192.0.2.0/24"}, nil)
 	require.NoError(t, err)
 
 	srv, err := NewServer(
 		ServerClientTokensRestricted(
 			[]string{"test-token-dst", "test-token-src", "test-token-deny"},
-			[]netc.IPRestriction{noRestr, noRestr, localRestr},
+			[]restr.IPRestriction{noRestr, noRestr, localRestr},
 		),
 		serverControlCertificate(cert),
 		ServerControlAddress(":20000"),

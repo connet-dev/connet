@@ -11,8 +11,8 @@ import (
 
 	"github.com/connet-dev/connet/control"
 	"github.com/connet-dev/connet/model"
-	"github.com/connet-dev/connet/netc"
 	"github.com/connet-dev/connet/relay"
+	"github.com/connet-dev/connet/restr"
 	"github.com/connet-dev/connet/selfhosted"
 	"github.com/connet-dev/connet/statusc"
 	"github.com/klev-dev/kleverr"
@@ -143,7 +143,7 @@ type ServerStatus struct {
 
 type serverConfig struct {
 	clientAuth  control.ClientAuthenticator
-	clientRestr netc.IPRestriction
+	clientRestr restr.IPRestriction
 
 	controlAddr *net.UDPAddr
 	controlCert tls.Certificate
@@ -172,9 +172,9 @@ func ServerClientTokens(tokens ...string) ServerOption {
 	}
 }
 
-func ServerClientTokensRestricted(tokens []string, restr []netc.IPRestriction) ServerOption {
+func ServerClientTokensRestricted(tokens []string, iprestr []restr.IPRestriction) ServerOption {
 	return func(cfg *serverConfig) error {
-		clientAuth, err := selfhosted.NewClientAuthenticatorRestricted(tokens, restr)
+		clientAuth, err := selfhosted.NewClientAuthenticatorRestricted(tokens, iprestr)
 		if err != nil {
 			return err
 		}
@@ -187,12 +187,12 @@ func ServerClientTokensRestricted(tokens []string, restr []netc.IPRestriction) S
 
 func ServerClientRestrictions(allow []string, deny []string) ServerOption {
 	return func(cfg *serverConfig) error {
-		restr, err := netc.ParseIPRestriction(allow, deny)
+		iprestr, err := restr.ParseIPRestriction(allow, deny)
 		if err != nil {
 			return err
 		}
 
-		cfg.clientRestr = restr
+		cfg.clientRestr = iprestr
 
 		return nil
 	}

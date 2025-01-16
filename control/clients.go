@@ -13,10 +13,10 @@ import (
 
 	"github.com/connet-dev/connet/logc"
 	"github.com/connet-dev/connet/model"
-	"github.com/connet-dev/connet/netc"
 	"github.com/connet-dev/connet/pb"
 	"github.com/connet-dev/connet/pbc"
 	"github.com/connet-dev/connet/pbs"
+	"github.com/connet-dev/connet/restr"
 	"github.com/klev-dev/kleverr"
 	"github.com/quic-go/quic-go"
 	"github.com/segmentio/ksuid"
@@ -40,7 +40,7 @@ type ClientRelays interface {
 
 func newClientServer(
 	auth ClientAuthenticator,
-	restr netc.IPRestriction,
+	iprestr restr.IPRestriction,
 	relays ClientRelays,
 	config logc.KV[ConfigKey, ConfigValue],
 	stores Stores,
@@ -83,10 +83,10 @@ func newClientServer(
 	}
 
 	s := &clientServer{
-		auth:   auth,
-		restr:  restr,
-		relays: relays,
-		logger: logger.With("server", "clients"),
+		auth:    auth,
+		iprestr: iprestr,
+		relays:  relays,
+		logger:  logger.With("server", "clients"),
 
 		reconnect: &reconnectToken{[32]byte(serverSecret.Bytes)},
 
@@ -101,10 +101,10 @@ func newClientServer(
 }
 
 type clientServer struct {
-	auth   ClientAuthenticator
-	restr  netc.IPRestriction
-	relays ClientRelays
-	logger *slog.Logger
+	auth    ClientAuthenticator
+	iprestr restr.IPRestriction
+	relays  ClientRelays
+	logger  *slog.Logger
 
 	reconnect *reconnectToken
 
@@ -251,7 +251,7 @@ func (s *clientServer) run(ctx context.Context) error {
 }
 
 func (s *clientServer) handle(ctx context.Context, conn quic.Connection) {
-	if s.restr.AcceptAddr(conn.RemoteAddr()) {
+	if s.iprestr.AcceptAddr(conn.RemoteAddr()) {
 		cc := &clientConn{
 			server: s,
 			conn:   conn,

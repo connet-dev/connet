@@ -1,4 +1,4 @@
-package netc
+package restr
 
 import (
 	"net/netip"

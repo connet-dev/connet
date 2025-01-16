@@ -15,9 +15,9 @@ import (
 	"github.com/connet-dev/connet/certc"
 	"github.com/connet-dev/connet/logc"
 	"github.com/connet-dev/connet/model"
-	"github.com/connet-dev/connet/netc"
 	"github.com/connet-dev/connet/pb"
 	"github.com/connet-dev/connet/pbr"
+	"github.com/connet-dev/connet/restr"
 	"github.com/klev-dev/kleverr"
 	"github.com/quic-go/quic-go"
 	"github.com/segmentio/ksuid"
@@ -36,7 +36,7 @@ type RelayAuthentication interface {
 
 func newRelayServer(
 	auth RelayAuthenticator,
-	restr netc.IPRestriction,
+	iprestr restr.IPRestriction,
 	config logc.KV[ConfigKey, ConfigValue],
 	stores Stores,
 	logger *slog.Logger,
@@ -95,10 +95,10 @@ func newRelayServer(
 	}
 
 	return &relayServer{
-		id:     serverIDConfig.String,
-		auth:   auth,
-		restr:  restr,
-		logger: logger.With("server", "relays"),
+		id:      serverIDConfig.String,
+		auth:    auth,
+		iprestr: iprestr,
+		logger:  logger.With("server", "relays"),
 
 		reconnect: &reconnectToken{[32]byte(serverSecret.Bytes)},
 
@@ -114,10 +114,10 @@ func newRelayServer(
 }
 
 type relayServer struct {
-	id     string
-	auth   RelayAuthenticator
-	restr  netc.IPRestriction
-	logger *slog.Logger
+	id      string
+	auth    RelayAuthenticator
+	iprestr restr.IPRestriction
+	logger  *slog.Logger
 
 	reconnect *reconnectToken
 
@@ -245,7 +245,7 @@ func (s *relayServer) run(ctx context.Context) error {
 }
 
 func (s *relayServer) handle(ctx context.Context, conn quic.Connection) {
-	if s.restr.AcceptAddr(conn.RemoteAddr()) {
+	if s.iprestr.AcceptAddr(conn.RemoteAddr()) {
 		rc := &relayConn{
 			server: s,
 			conn:   conn,

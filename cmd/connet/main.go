@@ -16,8 +16,8 @@ import (
 	"github.com/connet-dev/connet"
 	"github.com/connet-dev/connet/control"
 	"github.com/connet-dev/connet/model"
-	"github.com/connet-dev/connet/netc"
 	"github.com/connet-dev/connet/relay"
+	"github.com/connet-dev/connet/restr"
 	"github.com/connet-dev/connet/selfhosted"
 	"github.com/klev-dev/kleverr"
 	"github.com/pelletier/go-toml/v2"
@@ -523,11 +523,11 @@ func controlRun(ctx context.Context, cfg ControlConfig, logger *slog.Logger) err
 	}
 
 	if len(cfg.ClientIPRestriction.AllowCIDRs) > 0 || len(cfg.ClientIPRestriction.DenyCIDRs) > 0 {
-		restr, err := netc.ParseIPRestriction(cfg.ClientIPRestriction.AllowCIDRs, cfg.ClientIPRestriction.DenyCIDRs)
+		iprestr, err := restr.ParseIPRestriction(cfg.ClientIPRestriction.AllowCIDRs, cfg.ClientIPRestriction.DenyCIDRs)
 		if err != nil {
 			return err
 		}
-		controlCfg.ClientRestr = restr
+		controlCfg.ClientRestr = iprestr
 	}
 
 	clientRestr, err := parseIPRestrictions(cfg.ClientTokenIPRestrictions)
@@ -548,11 +548,11 @@ func controlRun(ctx context.Context, cfg ControlConfig, logger *slog.Logger) err
 	}
 
 	if len(cfg.RelayIPRestriction.AllowCIDRs) > 0 || len(cfg.RelayIPRestriction.DenyCIDRs) > 0 {
-		restr, err := netc.ParseIPRestriction(cfg.RelayIPRestriction.AllowCIDRs, cfg.RelayIPRestriction.DenyCIDRs)
+		iprestr, err := restr.ParseIPRestriction(cfg.RelayIPRestriction.AllowCIDRs, cfg.RelayIPRestriction.DenyCIDRs)
 		if err != nil {
 			return err
 		}
-		controlCfg.RelayRestr = restr
+		controlCfg.RelayRestr = iprestr
 	}
 
 	relayRestr, err := parseIPRestrictions(cfg.RelayTokenIPRestrictions)
@@ -703,11 +703,11 @@ func parseRouteOption(s string) (model.RouteOption, error) {
 	return model.ParseRouteOption(s)
 }
 
-func parseIPRestrictions(ts []IPRestriction) ([]netc.IPRestriction, error) {
-	r := make([]netc.IPRestriction, len(ts))
+func parseIPRestrictions(ts []IPRestriction) ([]restr.IPRestriction, error) {
+	r := make([]restr.IPRestriction, len(ts))
 	var err error
 	for i, t := range ts {
-		r[i], err = netc.ParseIPRestriction(t.AllowCIDRs, t.DenyCIDRs)
+		r[i], err = restr.ParseIPRestriction(t.AllowCIDRs, t.DenyCIDRs)
 		if err != nil {
 			return nil, err
 		}
