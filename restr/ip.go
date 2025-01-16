@@ -3,71 +3,66 @@ package restr
 import (
 	"net"
 	"net/netip"
+
+	"github.com/connet-dev/connet/netc"
 )
 
-type IPRestriction struct {
-	allow []netip.Prefix
-	deny  []netip.Prefix
+type IP struct {
+	Allows []netip.Prefix `json:"allows,omitempty"`
+	Denies []netip.Prefix `json:"denies,omitempty"`
 }
 
-// ParseIPRestriction parses a slice of allows/denys restrictions in CIDR format.
-func ParseIPRestriction(allows []string, denys []string) (IPRestriction, error) {
-	restr := IPRestriction{
-		allow: make([]netip.Prefix, len(allows)),
-		deny:  make([]netip.Prefix, len(denys)),
+// ParseIP parses a slice of allows/denys restrictions in CIDR format.
+func ParseIP(allowsStr []string, deniesStr []string) (IP, error) {
+	allows, err := netc.ParseCIDRs(allowsStr)
+	if err != nil {
+		return IP{}, err
 	}
 
-	var err error
-	for i, cidr := range allows {
-		restr.allow[i], err = netip.ParsePrefix(cidr)
-		if err != nil {
-			return IPRestriction{}, err
-		}
+	denies, err := netc.ParseCIDRs(deniesStr)
+	if err != nil {
+		return IP{}, err
 	}
-	for i, cidr := range denys {
-		restr.deny[i], err = netip.ParsePrefix(cidr)
-		if err != nil {
-			return IPRestriction{}, err
-		}
-	}
-	return restr, nil
+
+	return IP{allows, denies}, nil
 }
 
-// Accept checks an ip address according to Allow and Deny rules.
+// IsAllowed checks if an IP address is allowed according to Allows and Denies rules.
 //
-// If the ip matches any of the Deny rules, Accept returns false.
-// If the ip matches any of the Allow rules (after checking all Deny rules), Accept returns true.
+// If the ip matches any of the Denies rules, IsAllowed returns false.
+// If the ip matches any of the Allows rules (after checking all Denies rules), IsAllowed returns true.
 //
-// Finally, if the ip matches no Allow or Deny rules, Accept returns true only if no explicit Allow rules were defined.
-func (r IPRestriction) Accept(ip netip.Addr) bool {
+// Finally, if the ip matches no Allows or Denies rules, IsAllowed returns true only if no explicit Allows rules were defined.
+func (r IP) IsAllowed(ip netip.Addr) bool {
 	ip = ip.Unmap() // remove any ipv6 prefix for ipv4
 
-	for _, d := range r.deny {
+	for _, d := range r.Denies {
 		if d.Contains(ip) {
 			return false
 		}
 	}
 
-	for _, a := range r.allow {
+	for _, a := range r.Allows {
 		if a.Contains(ip) {
 			return true
 		}
 	}
 
-	return len(r.allow) == 0
+	return len(r.Allows) == 0
 }
 
-func (r IPRestriction) AcceptAddr(addr net.Addr) bool {
+// IsAllowedAddr extracts the IP address from net.Addr and checks if it is allowed
+func (r IP) IsAllowedAddr(addr net.Addr) bool {
 	switch taddr := addr.(type) {
 	case *net.UDPAddr:
-		return r.Accept(taddr.AddrPort().Addr())
+		return r.IsAllowed(taddr.AddrPort().Addr())
 	case *net.TCPAddr:
-		return r.Accept(taddr.AddrPort().Addr())
+		return r.IsAllowed(taddr.AddrPort().Addr())
 	default:
 		naddr, err := netip.ParseAddrPort(addr.String())
 		if err != nil {
 			return false
 		}
-		return r.Accept(naddr.Addr())
+		return r.IsAllowed(naddr.Addr())
 	}
 }

@@ -36,7 +36,7 @@ type RelayAuthentication interface {
 
 func newRelayServer(
 	auth RelayAuthenticator,
-	iprestr restr.IPRestriction,
+	iprestr restr.IP,
 	config logc.KV[ConfigKey, ConfigValue],
 	stores Stores,
 	logger *slog.Logger,
@@ -116,7 +116,7 @@ func newRelayServer(
 type relayServer struct {
 	id      string
 	auth    RelayAuthenticator
-	iprestr restr.IPRestriction
+	iprestr restr.IP
 	logger  *slog.Logger
 
 	reconnect *reconnectToken
@@ -245,7 +245,7 @@ func (s *relayServer) run(ctx context.Context) error {
 }
 
 func (s *relayServer) handle(ctx context.Context, conn quic.Connection) {
-	if s.iprestr.AcceptAddr(conn.RemoteAddr()) {
+	if s.iprestr.IsAllowedAddr(conn.RemoteAddr()) {
 		rc := &relayConn{
 			server: s,
 			conn:   conn,

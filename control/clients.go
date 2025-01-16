@@ -40,7 +40,7 @@ type ClientRelays interface {
 
 func newClientServer(
 	auth ClientAuthenticator,
-	iprestr restr.IPRestriction,
+	iprestr restr.IP,
 	relays ClientRelays,
 	config logc.KV[ConfigKey, ConfigValue],
 	stores Stores,
@@ -102,7 +102,7 @@ func newClientServer(
 
 type clientServer struct {
 	auth    ClientAuthenticator
-	iprestr restr.IPRestriction
+	iprestr restr.IP
 	relays  ClientRelays
 	logger  *slog.Logger
 
@@ -251,7 +251,7 @@ func (s *clientServer) run(ctx context.Context) error {
 }
 
 func (s *clientServer) handle(ctx context.Context, conn quic.Connection) {
-	if s.iprestr.AcceptAddr(conn.RemoteAddr()) {
+	if s.iprestr.IsAllowedAddr(conn.RemoteAddr()) {
 		cc := &clientConn{
 			server: s,
 			conn:   conn,

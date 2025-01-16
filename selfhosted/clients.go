@@ -13,15 +13,15 @@ func NewClientAuthenticator(tokens ...string) (control.ClientAuthenticator, erro
 	return NewClientAuthenticatorRestricted(tokens, nil)
 }
 
-func NewClientAuthenticatorRestricted(tokens []string, iprestr []restr.IPRestriction) (control.ClientAuthenticator, error) {
+func NewClientAuthenticatorRestricted(tokens []string, iprestr []restr.IP) (control.ClientAuthenticator, error) {
 	switch {
 	case len(iprestr) == 0:
-		iprestr = make([]restr.IPRestriction, len(tokens))
+		iprestr = make([]restr.IP, len(tokens))
 	case len(iprestr) != len(tokens):
 		return nil, kleverr.Newf("expected equal number of tokens and token restrictions")
 	}
 
-	s := &clientsAuthenticator{map[string]restr.IPRestriction{}}
+	s := &clientsAuthenticator{map[string]restr.IP{}}
 	for i, t := range tokens {
 		s.tokens[t] = iprestr[i]
 	}
@@ -29,11 +29,11 @@ func NewClientAuthenticatorRestricted(tokens []string, iprestr []restr.IPRestric
 }
 
 type clientsAuthenticator struct {
-	tokens map[string]restr.IPRestriction
+	tokens map[string]restr.IP
 }
 
 func (s *clientsAuthenticator) Authenticate(token string, addr net.Addr) (control.ClientAuthentication, error) {
-	if r, ok := s.tokens[token]; ok && r.AcceptAddr(addr) {
+	if r, ok := s.tokens[token]; ok && r.IsAllowedAddr(addr) {
 		return &clientAuthentication{token}, nil
 	}
 	return nil, kleverr.Newf("invalid token: %s", token)

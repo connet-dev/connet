@@ -24,10 +24,10 @@ type Config struct {
 	Cert tls.Certificate
 
 	ClientAuth  ClientAuthenticator
-	ClientRestr restr.IPRestriction
+	ClientRestr restr.IP
 
 	RelayAuth  RelayAuthenticator
-	RelayRestr restr.IPRestriction
+	RelayRestr restr.IP
 
 	Stores Stores
 

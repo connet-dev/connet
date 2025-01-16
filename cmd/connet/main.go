@@ -523,7 +523,7 @@ func controlRun(ctx context.Context, cfg ControlConfig, logger *slog.Logger) err
 	}
 
 	if len(cfg.ClientIPRestriction.AllowCIDRs) > 0 || len(cfg.ClientIPRestriction.DenyCIDRs) > 0 {
-		iprestr, err := restr.ParseIPRestriction(cfg.ClientIPRestriction.AllowCIDRs, cfg.ClientIPRestriction.DenyCIDRs)
+		iprestr, err := restr.ParseIP(cfg.ClientIPRestriction.AllowCIDRs, cfg.ClientIPRestriction.DenyCIDRs)
 		if err != nil {
 			return err
 		}
@@ -548,7 +548,7 @@ func controlRun(ctx context.Context, cfg ControlConfig, logger *slog.Logger) err
 	}
 
 	if len(cfg.RelayIPRestriction.AllowCIDRs) > 0 || len(cfg.RelayIPRestriction.DenyCIDRs) > 0 {
-		iprestr, err := restr.ParseIPRestriction(cfg.RelayIPRestriction.AllowCIDRs, cfg.RelayIPRestriction.DenyCIDRs)
+		iprestr, err := restr.ParseIP(cfg.RelayIPRestriction.AllowCIDRs, cfg.RelayIPRestriction.DenyCIDRs)
 		if err != nil {
 			return err
 		}
@@ -703,11 +703,11 @@ func parseRouteOption(s string) (model.RouteOption, error) {
 	return model.ParseRouteOption(s)
 }
 
-func parseIPRestrictions(ts []IPRestriction) ([]restr.IPRestriction, error) {
-	r := make([]restr.IPRestriction, len(ts))
+func parseIPRestrictions(ts []IPRestriction) ([]restr.IP, error) {
+	r := make([]restr.IP, len(ts))
 	var err error
 	for i, t := range ts {
-		r[i], err = restr.ParseIPRestriction(t.AllowCIDRs, t.DenyCIDRs)
+		r[i], err = restr.ParseIP(t.AllowCIDRs, t.DenyCIDRs)
 		if err != nil {
 			return nil, err
 		}

@@ -7,7 +7,7 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func TestIPRestriction(t *testing.T) {
+func TestIP(t *testing.T) {
 	tcs := []struct {
 		name   string
 		allow  []string
@@ -76,9 +76,9 @@ func TestIPRestriction(t *testing.T) {
 
 	for _, tc := range tcs {
 		t.Run(tc.name, func(t *testing.T) {
-			restr, err := ParseIPRestriction(tc.allow, tc.deny)
+			restr, err := ParseIP(tc.allow, tc.deny)
 			require.NoError(t, err)
-			require.Equal(t, tc.accept, restr.Accept(netip.MustParseAddr(tc.check)))
+			require.Equal(t, tc.accept, restr.IsAllowed(netip.MustParseAddr(tc.check)))
 		})
 	}
 }

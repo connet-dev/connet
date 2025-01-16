@@ -143,7 +143,7 @@ type ServerStatus struct {
 
 type serverConfig struct {
 	clientAuth  control.ClientAuthenticator
-	clientRestr restr.IPRestriction
+	clientRestr restr.IP
 
 	controlAddr *net.UDPAddr
 	controlCert tls.Certificate
@@ -172,7 +172,7 @@ func ServerClientTokens(tokens ...string) ServerOption {
 	}
 }
 
-func ServerClientTokensRestricted(tokens []string, iprestr []restr.IPRestriction) ServerOption {
+func ServerClientTokensRestricted(tokens []string, iprestr []restr.IP) ServerOption {
 	return func(cfg *serverConfig) error {
 		clientAuth, err := selfhosted.NewClientAuthenticatorRestricted(tokens, iprestr)
 		if err != nil {
@@ -187,7 +187,7 @@ func ServerClientTokensRestricted(tokens []string, iprestr []restr.IPRestriction
 
 func ServerClientRestrictions(allow []string, deny []string) ServerOption {
 	return func(cfg *serverConfig) error {
-		iprestr, err := restr.ParseIPRestriction(allow, deny)
+		iprestr, err := restr.ParseIP(allow, deny)
 		if err != nil {
 			return err
 		}
