@@ -59,10 +59,11 @@ type ServerConfig struct {
 	Cert string `toml:"cert-file"`
 	Key  string `toml:"key-file"`
 
-	IPRestriction       IPRestriction   `toml:"ip-restriction"`
-	Tokens              []string        `toml:"tokens"`
-	TokensFile          string          `toml:"tokens-file"`
-	TokenIPRestrictions []IPRestriction `toml:"token-ip-restriction"`
+	IPRestriction         IPRestriction     `toml:"ip-restriction"`
+	Tokens                []string          `toml:"tokens"`
+	TokensFile            string            `toml:"tokens-file"`
+	TokenIPRestrictions   []IPRestriction   `toml:"token-ip-restriction"`
+	TokenNameRestrictions []NameRestriction `toml:"token-name-restriction"`
 
 	RelayAddr     string `toml:"relay-addr"`
 	RelayHostname string `toml:"relay-hostname"`
@@ -76,10 +77,11 @@ type ControlConfig struct {
 	Cert string `toml:"cert-file"`
 	Key  string `toml:"key-file"`
 
-	ClientIPRestriction       IPRestriction   `toml:"client-ip-restriction"`
-	ClientTokens              []string        `toml:"client-tokens"`
-	ClientTokensFile          string          `toml:"client-tokens-file"`
-	ClientTokenIPRestrictions []IPRestriction `toml:"client-token-ip-restriction"`
+	ClientIPRestriction         IPRestriction     `toml:"client-ip-restriction"`
+	ClientTokens                []string          `toml:"client-tokens"`
+	ClientTokensFile            string            `toml:"client-tokens-file"`
+	ClientTokenIPRestrictions   []IPRestriction   `toml:"client-token-ip-restriction"`
+	ClientTokenNameRestrictions []NameRestriction `toml:"client-token-name-restriction"`
 
 	RelayIPRestriction       IPRestriction   `toml:"relay-ip-restriction"`
 	RelayTokens              []string        `toml:"relay-tokens"`
@@ -93,6 +95,10 @@ type ControlConfig struct {
 type IPRestriction struct {
 	AllowCIDRs []string `toml:"allow-cidrs"`
 	DenyCIDRs  []string `toml:"deny-cidrs"`
+}
+
+type NameRestriction struct {
+	Matches string `toml:"matches"`
 }
 
 type RelayConfig struct {
@@ -472,7 +478,11 @@ func serverRun(ctx context.Context, cfg ServerConfig, logger *slog.Logger) error
 		opts = append(opts, connet.ServerClientRestrictions(cfg.IPRestriction.AllowCIDRs, cfg.IPRestriction.DenyCIDRs))
 	}
 
-	restr, err := parseIPRestrictions(cfg.TokenIPRestrictions)
+	iprestr, err := parseIPRestrictions(cfg.TokenIPRestrictions)
+	if err != nil {
+		return err
+	}
+	namerestr, err := parseNameRestrictions(cfg.TokenNameRestrictions)
 	if err != nil {
 		return err
 	}
@@ -481,9 +491,9 @@ func serverRun(ctx context.Context, cfg ServerConfig, logger *slog.Logger) error
 		if err != nil {
 			return err
 		}
-		opts = append(opts, connet.ServerClientTokensRestricted(tokens, restr))
+		opts = append(opts, connet.ServerClientTokensRestricted(tokens, iprestr, namerestr))
 	} else {
-		opts = append(opts, connet.ServerClientTokensRestricted(cfg.Tokens, restr))
+		opts = append(opts, connet.ServerClientTokensRestricted(cfg.Tokens, iprestr, namerestr))
 	}
 
 	if cfg.RelayAddr != "" {
@@ -539,7 +549,11 @@ func controlRun(ctx context.Context, cfg ControlConfig, logger *slog.Logger) err
 		controlCfg.ClientRestr = iprestr
 	}
 
-	clientRestr, err := parseIPRestrictions(cfg.ClientTokenIPRestrictions)
+	iprestr, err := parseIPRestrictions(cfg.ClientTokenIPRestrictions)
+	if err != nil {
+		return err
+	}
+	namerestr, err := parseNameRestrictions(cfg.ClientTokenNameRestrictions)
 	if err != nil {
 		return err
 	}
@@ -548,9 +562,9 @@ func controlRun(ctx context.Context, cfg ControlConfig, logger *slog.Logger) err
 		if terr != nil {
 			return terr
 		}
-		controlCfg.ClientAuth, err = selfhosted.NewClientAuthenticatorRestricted(tokens, clientRestr)
+		controlCfg.ClientAuth, err = selfhosted.NewClientAuthenticatorRestricted(tokens, iprestr, namerestr)
 	} else {
-		controlCfg.ClientAuth, err = selfhosted.NewClientAuthenticatorRestricted(cfg.ClientTokens, clientRestr)
+		controlCfg.ClientAuth, err = selfhosted.NewClientAuthenticatorRestricted(cfg.ClientTokens, iprestr, namerestr)
 	}
 	if err != nil {
 		return err
@@ -713,10 +727,22 @@ func parseRouteOption(s string) (model.RouteOption, error) {
 }
 
 func parseIPRestrictions(ts []IPRestriction) ([]restr.IP, error) {
-	r := make([]restr.IP, len(ts))
 	var err error
+	r := make([]restr.IP, len(ts))
 	for i, t := range ts {
 		r[i], err = restr.ParseIP(t.AllowCIDRs, t.DenyCIDRs)
+		if err != nil {
+			return nil, err
+		}
+	}
+	return r, nil
+}
+
+func parseNameRestrictions(ts []NameRestriction) ([]restr.Name, error) {
+	var err error
+	r := make([]restr.Name, len(ts))
+	for i, t := range ts {
+		r[i], err = restr.ParseName(t.Matches)
 		if err != nil {
 			return nil, err
 		}

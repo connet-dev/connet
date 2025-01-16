@@ -31,14 +31,16 @@ func TestE2E(t *testing.T) {
 
 	logger := slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{Level: slog.LevelWarn}))
 
-	noRestr := restr.IP{}
 	localRestr, err := restr.ParseIP([]string{"192.0.2.0/24"}, nil)
+	require.NoError(t, err)
+	tetRestr, err := restr.ParseName("^tet$")
 	require.NoError(t, err)
 
 	srv, err := NewServer(
 		ServerClientTokensRestricted(
-			[]string{"test-token-dst", "test-token-src", "test-token-deny"},
-			[]restr.IP{noRestr, noRestr, localRestr},
+			[]string{"test-token-dst", "test-token-src", "test-token-deny-ip", "test-token-deny-name"},
+			[]restr.IP{{}, {}, localRestr, {}},
+			[]restr.Name{{}, {}, {}, tetRestr},
 		),
 		serverControlCertificate(cert),
 		ServerControlAddress(":20000"),
@@ -81,15 +83,25 @@ func TestE2E(t *testing.T) {
 	)
 	require.NoError(t, err)
 
-	clDeny, err := NewClient(
-		ClientToken("test-token-deny"),
+	clIPDeny, err := NewClient(
+		ClientToken("test-token-deny-ip"),
 		ClientControlAddress("localhost:20000"),
 		clientControlCAs(cas),
 		ClientDirectAddress(":20003"),
 		ClientDestination("direct", hts.Listener.Addr().String(), model.RouteDirect),
-		ClientLogger(logger.With("test", "cl-deny")),
+		ClientLogger(logger.With("test", "cl-ip-deny")),
 	)
 	require.NoError(t, err)
+
+	// clNameDeny, err := NewClient(
+	// 	ClientToken("test-token-deny-name"),
+	// 	ClientControlAddress("localhost:20000"),
+	// 	clientControlCAs(cas),
+	// 	ClientDirectAddress(":20004"),
+	// 	ClientDestination("direct", hts.Listener.Addr().String(), model.RouteDirect),
+	// 	ClientLogger(logger.With("test", "cl-name-deny")),
+	// )
+	// require.NoError(t, err)
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
@@ -98,7 +110,8 @@ func TestE2E(t *testing.T) {
 	g.Go(func() error { return srv.Run(ctx) })
 	time.Sleep(time.Millisecond) // time for server to come online
 
-	require.Error(t, clDeny.Run(ctx)) // TODO rich errors
+	require.Error(t, clIPDeny.Run(ctx)) // TODO rich errors
+	// require.Error(t, clNameDeny.Run(ctx)) // TODO rich errors
 
 	g.Go(func() error { return clDst.Run(ctx) })
 	g.Go(func() error { return clSrc.Run(ctx) })

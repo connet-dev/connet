@@ -172,9 +172,9 @@ func ServerClientTokens(tokens ...string) ServerOption {
 	}
 }
 
-func ServerClientTokensRestricted(tokens []string, iprestr []restr.IP) ServerOption {
+func ServerClientTokensRestricted(tokens []string, iprestr []restr.IP, namerestr []restr.Name) ServerOption {
 	return func(cfg *serverConfig) error {
-		clientAuth, err := selfhosted.NewClientAuthenticatorRestricted(tokens, iprestr)
+		clientAuth, err := selfhosted.NewClientAuthenticatorRestricted(tokens, iprestr, namerestr)
 		if err != nil {
 			return err
 		}

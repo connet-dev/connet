@@ -10,40 +10,56 @@ import (
 )
 
 func NewClientAuthenticator(tokens ...string) (control.ClientAuthenticator, error) {
-	return NewClientAuthenticatorRestricted(tokens, nil)
+	return NewClientAuthenticatorRestricted(tokens, nil, nil)
 }
 
-func NewClientAuthenticatorRestricted(tokens []string, iprestr []restr.IP) (control.ClientAuthenticator, error) {
+func NewClientAuthenticatorRestricted(tokens []string, iprestr []restr.IP, namerestr []restr.Name) (control.ClientAuthenticator, error) {
 	switch {
 	case len(iprestr) == 0:
 		iprestr = make([]restr.IP, len(tokens))
 	case len(iprestr) != len(tokens):
-		return nil, kleverr.Newf("expected equal number of tokens and token restrictions")
+		return nil, kleverr.Newf("expected equal number of tokens and token ip restrictions")
 	}
 
-	s := &clientsAuthenticator{map[string]restr.IP{}}
+	switch {
+	case len(namerestr) == 0:
+		iprestr = make([]restr.IP, len(tokens))
+	case len(namerestr) != len(tokens):
+		return nil, kleverr.Newf("expected equal number of tokens and token name restrictions")
+	}
+
+	s := &clientsAuthenticator{map[string]*clientAuthentication{}}
 	for i, t := range tokens {
-		s.tokens[t] = iprestr[i]
+		s.tokens[t] = &clientAuthentication{
+			token: t,
+			ip:    iprestr[i],
+			name:  namerestr[i],
+		}
 	}
 	return s, nil
 }
 
 type clientsAuthenticator struct {
-	tokens map[string]restr.IP
+	tokens map[string]*clientAuthentication
 }
 
 func (s *clientsAuthenticator) Authenticate(token string, addr net.Addr) (control.ClientAuthentication, error) {
-	if r, ok := s.tokens[token]; ok && r.IsAllowedAddr(addr) {
-		return &clientAuthentication{token}, nil
+	if r, ok := s.tokens[token]; ok && r.ip.IsAllowedAddr(addr) {
+		return r, nil
 	}
 	return nil, kleverr.Newf("invalid token: %s", token)
 }
 
 type clientAuthentication struct {
 	token string
+	ip    restr.IP
+	name  restr.Name
 }
 
 func (a *clientAuthentication) Validate(fwd model.Forward, _ model.Role) (model.Forward, error) {
+	if !a.name.IsAllowed(fwd.String()) {
+		return model.Forward{}, kleverr.Newf("forward not allowed: %s", fwd)
+	}
 	return fwd, nil
 }
 
