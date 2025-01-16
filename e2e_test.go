@@ -93,15 +93,15 @@ func TestE2E(t *testing.T) {
 	)
 	require.NoError(t, err)
 
-	// clNameDeny, err := NewClient(
-	// 	ClientToken("test-token-deny-name"),
-	// 	ClientControlAddress("localhost:20000"),
-	// 	clientControlCAs(cas),
-	// 	ClientDirectAddress(":20004"),
-	// 	ClientDestination("direct", hts.Listener.Addr().String(), model.RouteDirect),
-	// 	ClientLogger(logger.With("test", "cl-name-deny")),
-	// )
-	// require.NoError(t, err)
+	clNameDeny, err := NewClient(
+		ClientToken("test-token-deny-name"),
+		ClientControlAddress("localhost:20000"),
+		clientControlCAs(cas),
+		ClientDirectAddress(":20004"),
+		ClientDestination("direct", hts.Listener.Addr().String(), model.RouteDirect),
+		ClientLogger(logger.With("test", "cl-name-deny")),
+	)
+	require.NoError(t, err)
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
@@ -110,8 +110,8 @@ func TestE2E(t *testing.T) {
 	g.Go(func() error { return srv.Run(ctx) })
 	time.Sleep(time.Millisecond) // time for server to come online
 
-	require.Error(t, clIPDeny.Run(ctx)) // TODO rich errors
-	// require.Error(t, clNameDeny.Run(ctx)) // TODO rich errors
+	require.Error(t, clIPDeny.Run(ctx))   // TODO rich errors
+	require.Error(t, clNameDeny.Run(ctx)) // TODO rich errors
 
 	g.Go(func() error { return clDst.Run(ctx) })
 	g.Go(func() error { return clSrc.Run(ctx) })
