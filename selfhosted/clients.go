@@ -5,6 +5,7 @@ import (
 
 	"github.com/connet-dev/connet/control"
 	"github.com/connet-dev/connet/model"
+	"github.com/connet-dev/connet/pb"
 	"github.com/connet-dev/connet/restr"
 	"github.com/klev-dev/kleverr"
 )
@@ -58,7 +59,7 @@ type clientAuthentication struct {
 
 func (a *clientAuthentication) Validate(fwd model.Forward, _ model.Role) (model.Forward, error) {
 	if !a.name.IsAllowed(fwd.String()) {
-		return model.Forward{}, kleverr.Newf("forward not allowed: %s", fwd)
+		return model.Forward{}, pb.NewError(pb.Error_ForwardNotAllowed, "forward not allowed: %s", fwd)
 	}
 	return fwd, nil
 }

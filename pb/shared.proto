@@ -39,6 +39,7 @@ message Error {
 
     // Authentication
     AuthenticationFailed = 100;
+    ForwardNotAllowed = 101;
 
     // Announce
     AnnounceValidationFailed = 200;

@@ -420,11 +420,14 @@ func (s *clientStream) announce(ctx context.Context, req *pbs.Request_Announce) 
 	fwd := model.ForwardFromPB(req.Forward)
 	role := model.RoleFromPB(req.Role)
 	if newFwd, err := s.conn.auth.Validate(fwd, role); err != nil {
-		err := pb.NewError(pb.Error_AnnounceValidationFailed, "failed to validate forward '%s': %v", fwd, err)
-		if err := pb.Write(s.stream, &pbs.Response{Error: err}); err != nil {
+		perr := pb.GetError(err)
+		if perr == nil {
+			perr = pb.NewError(pb.Error_AnnounceValidationFailed, "failed to validate forward '%s': %v", fwd, err)
+		}
+		if err := pb.Write(s.stream, &pbs.Response{Error: perr}); err != nil {
 			return kleverr.Newf("could not write error response: %w", err)
 		}
-		return err
+		return perr
 	} else {
 		fwd = newFwd
 	}
@@ -498,11 +501,14 @@ func (s *clientStream) relay(ctx context.Context, req *pbs.Request_Relay) error 
 	fwd := model.ForwardFromPB(req.Forward)
 	role := model.RoleFromPB(req.Role)
 	if newFwd, err := s.conn.auth.Validate(fwd, role); err != nil {
-		err := pb.NewError(pb.Error_RelayValidationFailed, "failed to validate desination '%s': %v", fwd, err)
-		if err := pb.Write(s.stream, &pbs.Response{Error: err}); err != nil {
+		perr := pb.GetError(err)
+		if perr == nil {
+			perr = pb.NewError(pb.Error_RelayValidationFailed, "failed to validate desination '%s': %v", fwd, err)
+		}
+		if err := pb.Write(s.stream, &pbs.Response{Error: perr}); err != nil {
 			return kleverr.Newf("could not write error response: %w", err)
 		}
-		return err
+		return perr
 	} else {
 		fwd = newFwd
 	}

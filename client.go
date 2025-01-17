@@ -146,11 +146,8 @@ func (c *Client) run(ctx context.Context, transport *quic.Transport) error {
 				// TODO other terminal errors
 			}
 			if perr := pb.GetError(err); perr != nil {
-				c.logger.Debug("session end error", "code", perr.Code)
 				switch perr.Code {
-				case pb.Error_AnnounceValidationFailed:
-					return err
-				case pb.Error_RelayValidationFailed:
+				case pb.Error_ForwardNotAllowed:
 					return err
 				}
 			}
