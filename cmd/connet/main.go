@@ -59,11 +59,10 @@ type ServerConfig struct {
 	Cert string `toml:"cert-file"`
 	Key  string `toml:"key-file"`
 
-	IPRestriction         IPRestriction     `toml:"ip-restriction"`
-	Tokens                []string          `toml:"tokens"`
-	TokensFile            string            `toml:"tokens-file"`
-	TokenIPRestrictions   []IPRestriction   `toml:"token-ip-restriction"`
-	TokenNameRestrictions []NameRestriction `toml:"token-name-restriction"`
+	IPRestriction     IPRestriction      `toml:"ip-restriction"`
+	Tokens            []string           `toml:"tokens"`
+	TokensFile        string             `toml:"tokens-file"`
+	TokenRestrictions []TokenRestriction `toml:"token-restriction"`
 
 	RelayAddr     string `toml:"relay-addr"`
 	RelayHostname string `toml:"relay-hostname"`
@@ -77,11 +76,10 @@ type ControlConfig struct {
 	Cert string `toml:"cert-file"`
 	Key  string `toml:"key-file"`
 
-	ClientIPRestriction         IPRestriction     `toml:"client-ip-restriction"`
-	ClientTokens                []string          `toml:"client-tokens"`
-	ClientTokensFile            string            `toml:"client-tokens-file"`
-	ClientTokenIPRestrictions   []IPRestriction   `toml:"client-token-ip-restriction"`
-	ClientTokenNameRestrictions []NameRestriction `toml:"client-token-name-restriction"`
+	ClientIPRestriction     IPRestriction      `toml:"client-ip-restriction"`
+	ClientTokens            []string           `toml:"client-tokens"`
+	ClientTokensFile        string             `toml:"client-tokens-file"`
+	ClientTokenRestrictions []TokenRestriction `toml:"client-token-restriction"`
 
 	RelayIPRestriction       IPRestriction   `toml:"relay-ip-restriction"`
 	RelayTokens              []string        `toml:"relay-tokens"`
@@ -97,8 +95,10 @@ type IPRestriction struct {
 	DenyCIDRs  []string `toml:"deny-cidrs"`
 }
 
-type NameRestriction struct {
-	Matches string `toml:"matches"`
+type TokenRestriction struct {
+	AllowCIDRs  []string `toml:"allow-cidrs"`
+	DenyCIDRs   []string `toml:"deny-cidrs"`
+	NameMatches string   `toml:"name-matches"`
 }
 
 type RelayConfig struct {
@@ -478,11 +478,7 @@ func serverRun(ctx context.Context, cfg ServerConfig, logger *slog.Logger) error
 		opts = append(opts, connet.ServerClientRestrictions(cfg.IPRestriction.AllowCIDRs, cfg.IPRestriction.DenyCIDRs))
 	}
 
-	iprestr, err := parseIPRestrictions(cfg.TokenIPRestrictions)
-	if err != nil {
-		return err
-	}
-	namerestr, err := parseNameRestrictions(cfg.TokenNameRestrictions)
+	iprestr, namerestr, err := parseTokenRestrictions(cfg.TokenRestrictions)
 	if err != nil {
 		return err
 	}
@@ -549,11 +545,7 @@ func controlRun(ctx context.Context, cfg ControlConfig, logger *slog.Logger) err
 		controlCfg.ClientRestr = iprestr
 	}
 
-	iprestr, err := parseIPRestrictions(cfg.ClientTokenIPRestrictions)
-	if err != nil {
-		return err
-	}
-	namerestr, err := parseNameRestrictions(cfg.ClientTokenNameRestrictions)
+	iprestr, namerestr, err := parseTokenRestrictions(cfg.ClientTokenRestrictions)
 	if err != nil {
 		return err
 	}
@@ -738,16 +730,21 @@ func parseIPRestrictions(ts []IPRestriction) ([]restr.IP, error) {
 	return r, nil
 }
 
-func parseNameRestrictions(ts []NameRestriction) ([]restr.Name, error) {
+func parseTokenRestrictions(ts []TokenRestriction) ([]restr.IP, []restr.Name, error) {
 	var err error
-	r := make([]restr.Name, len(ts))
+	ips := make([]restr.IP, len(ts))
+	names := make([]restr.Name, len(ts))
 	for i, t := range ts {
-		r[i], err = restr.ParseName(t.Matches)
+		ips[i], err = restr.ParseIP(t.AllowCIDRs, t.DenyCIDRs)
 		if err != nil {
-			return nil, err
+			return nil, nil, err
+		}
+		names[i], err = restr.ParseName(t.NameMatches)
+		if err != nil {
+			return nil, nil, err
 		}
 	}
-	return r, nil
+	return ips, names, nil
 }
 
 func (c *Config) merge(o Config) {

@@ -176,9 +176,10 @@ store-dir = "path/to/server-store" # where does this server persist runtime info
 allow-cidrs = [] # set of networks in CIDR format, to allow client connetctions from
 deny-cidrs = [] # set of networks in CIDR format, to deny client connetctions from
 
-[[server.token-ip-restriction]] # defines restriction per client token, if specified must match the number of client tokens
+[[server.token-restriction]] # defines restriction per client token, if specified must match the number of client tokens
 allow-cidrs = [] # set of networks in CIDR format, to allow token client connetctions from
 deny-cidrs = [] # set of networks in CIDR format, to deny token client connetctions from
+name-matches = "" # regular expression to check the name of the destination/source against
 ```
 
 #### Control server
@@ -206,9 +207,10 @@ store-dir = "path/to/control-store" # where does this control server persist run
 allow-cidrs = [] # set of networks in CIDR format, to allow client connetctions from
 deny-cidrs = [] # set of networks in CIDR format, to deny client connetctions from
 
-[[control.client-token-ip-restriction]] # defines restriction per client token, if specified must match the number of client tokens
+[[control.client-token-restriction]] # defines restriction per client token, if specified must match the number of client tokens
 allow-cidrs = [] # set of networks in CIDR format, to allow client connetctions from
 deny-cidrs = [] # set of networks in CIDR format, to deny client connetctions from
+name-matches = "" # regular expression to check the name of the destination/source against
 
 [control.relay-ip-restriction] # defines restriction applicable for all relay tokens, checked before verifying the token
 allow-cidrs = [] # set of networks in CIDR format, to allow relay connetctions from
@@ -240,7 +242,7 @@ store-dir = "path/to/relay-store" # where does this relay persist runtime inform
 
 ### IP Restrictions
 
-You can restrict clients and relays to connect only from specific IPs using different `ip-restriction` options. 
+You can restrict clients and relays to connect only from specific IPs using different `restriction` options. 
 They accept allow/deny list of strings in CIDR format, as defined by [RFC 4632](https://www.rfc-editor.org/rfc/rfc4632.html) and 
 [RFC 4291](https://www.rfc-editor.org/rfc/rfc4291.html), for example (to restrict the set of client IPs that can connect to the server):
 ```toml
@@ -252,6 +254,12 @@ deny-cidrs = ["198.51.100.0/24"]
 If these options are specified, an IP will be rejected if:
  - it matches any of the CIDRs in the `deny-cidrs` list
  - it matches none of the CIDRs in the `allow-cidrs` list. If the `allow-cidrs` list is empty, the IP will not be rejected.
+
+### Name Restrictions
+
+You can restrict what destinations/sources a client can start with `name-matches` options. The string you pass is
+compiled to a regular expression as described in [golang syntax](https://pkg.go.dev/regexp/syntax). Only names that match
+the regular expression will be allowed for this token.
 
 ### Storage
 
@@ -370,10 +378,14 @@ If you want to use `connet`, but you don't want to run the server yourself, we h
 at [connet.dev](https://connet.dev). It is free when clients connect directly, builds upon the open source components 
 by adding account management and it is one of the easiest way to start. 
 
+## Changelog
+
+### v0.5.0
+ - [x] Stateless reset key for the server
+ - [x] Name access restrictions for clients
+
 ## Future
 
  - [ ] UDP support
  - [ ] Use quic-go tracer, instead of ping (and duration estimation)
- - [ ] Name access restrictions for clients
  - [ ] Optimize global IP restrictions - check earlier
- - [x] Stateless reset key for the server
