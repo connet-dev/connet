@@ -7,7 +7,6 @@ import (
 	"log/slog"
 	"sync"
 	"sync/atomic"
-	"time"
 
 	"github.com/connet-dev/connet/certc"
 	"github.com/connet-dev/connet/pb"
@@ -139,11 +138,7 @@ func (s *DirectServer) runServer(ctx context.Context) error {
 		return conf, nil
 	}
 
-	l, err := s.transport.Listen(tlsConf, &quic.Config{
-		MaxIdleTimeout:  20 * time.Second,
-		KeepAlivePeriod: 10 * time.Second,
-		Tracer:          quicc.RTTTracer,
-	})
+	l, err := s.transport.Listen(tlsConf, quicc.StdConfig)
 	if err != nil {
 		return err
 	}

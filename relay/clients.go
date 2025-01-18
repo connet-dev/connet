@@ -8,7 +8,6 @@ import (
 	"maps"
 	"slices"
 	"sync"
-	"time"
 
 	"github.com/connet-dev/connet/certc"
 	"github.com/connet-dev/connet/model"
@@ -167,11 +166,7 @@ func (s *clientsServer) removeSource(fcs *forwardClients, conn *clientConn) {
 }
 
 func (s *clientsServer) run(ctx context.Context, transport *quic.Transport) error {
-	l, err := transport.Listen(s.tlsConf, &quic.Config{
-		MaxIdleTimeout:  20 * time.Second,
-		KeepAlivePeriod: 10 * time.Second,
-		Tracer:          quicc.RTTTracer,
-	})
+	l, err := transport.Listen(s.tlsConf, quicc.StdConfig)
 	if err != nil {
 		return kleverr.Ret(err)
 	}
@@ -372,7 +367,7 @@ func (c *clientConn) heartbeat(ctx context.Context, stream quic.Stream, hbt *pbc
 				return err
 			}
 			if rttStats := quicc.RTTStats(c.conn); rttStats != nil {
-				c.logger.Debug("rtt", "last", rttStats.LatestRTT(), "smoothed", rttStats.SmoothedRTT())
+				c.logger.Debug("rtt-client", "last", rttStats.LatestRTT(), "smoothed", rttStats.SmoothedRTT())
 			}
 		}
 	})

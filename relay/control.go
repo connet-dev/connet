@@ -17,6 +17,7 @@ import (
 	"github.com/connet-dev/connet/netc"
 	"github.com/connet-dev/connet/pb"
 	"github.com/connet-dev/connet/pbr"
+	"github.com/connet-dev/connet/quicc"
 	"github.com/connet-dev/connet/statusc"
 	"github.com/klev-dev/klevdb"
 	"github.com/klev-dev/kleverr"
@@ -195,10 +196,7 @@ func (s *controlClient) connect(ctx context.Context, transport *quic.Transport) 
 		return retConnect(err)
 	}
 
-	conn, err := transport.Dial(ctx, s.controlAddr, s.controlTLSConf, &quic.Config{
-		MaxIdleTimeout:  20 * time.Second,
-		KeepAlivePeriod: 10 * time.Second,
-	})
+	conn, err := transport.Dial(quicc.RTTContext(ctx), s.controlAddr, s.controlTLSConf, quicc.StdConfig)
 	if err != nil {
 		return retConnect(err)
 	}

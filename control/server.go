@@ -7,10 +7,10 @@ import (
 	"io"
 	"log/slog"
 	"net"
-	"time"
 
 	"github.com/connet-dev/connet/model"
 	"github.com/connet-dev/connet/pb"
+	"github.com/connet-dev/connet/quicc"
 	"github.com/connet-dev/connet/restr"
 	"github.com/connet-dev/connet/statusc"
 	"github.com/klev-dev/kleverr"
@@ -117,14 +117,12 @@ func (s *Server) runListener(ctx context.Context) error {
 		Conn:               udpConn,
 		ConnectionIDLength: 8,
 		StatelessResetKey:  s.statelessResetKey,
+		ConnContext:        quicc.RTTContext,
 		// TODO review other options
 	}
 	defer transport.Close()
 
-	l, err := transport.Listen(s.tlsConf, &quic.Config{
-		MaxIdleTimeout:  20 * time.Second,
-		KeepAlivePeriod: 10 * time.Second,
-	})
+	l, err := transport.Listen(s.tlsConf, quicc.StdConfig)
 	if err != nil {
 		return kleverr.Ret(err)
 	}

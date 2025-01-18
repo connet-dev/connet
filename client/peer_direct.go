@@ -316,11 +316,7 @@ func (p *directPeerOutgoing) connect(ctx context.Context) (quic.Connection, quic
 			RootCAs:      p.serverConf.cas,
 			ServerName:   p.serverConf.name,
 			NextProtos:   []string{"connet-direct"},
-		}, &quic.Config{
-			MaxIdleTimeout:  20 * time.Second,
-			KeepAlivePeriod: 10 * time.Second,
-			Tracer:          quicc.RTTTracer,
-		})
+		}, quicc.StdConfig)
 		if err != nil {
 			errs = append(errs, err)
 			continue

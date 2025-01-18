@@ -94,11 +94,7 @@ func (r *relayPeer) connect(ctx context.Context) (quic.Connection, error) {
 		RootCAs:      cfg.cas,
 		ServerName:   cfg.name,
 		NextProtos:   []string{"connet-relay"},
-	}, &quic.Config{
-		MaxIdleTimeout:  20 * time.Second,
-		KeepAlivePeriod: 10 * time.Second,
-		Tracer:          quicc.RTTTracer,
-	})
+	}, quicc.StdConfig)
 }
 
 func (r *relayPeer) keepalive(ctx context.Context, conn quic.Connection) error {

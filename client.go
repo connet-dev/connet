@@ -167,14 +167,11 @@ var retConnect = kleverr.Ret2[quic.Connection, []byte]
 func (c *Client) connect(ctx context.Context, transport *quic.Transport, retoken []byte) (quic.Connection, []byte, error) {
 	c.logger.Debug("dialing target", "addr", c.controlAddr)
 	// TODO dial timeout if server is not accessible?
-	conn, err := transport.Dial(ctx, c.controlAddr, &tls.Config{
+	conn, err := transport.Dial(quicc.RTTContext(ctx), c.controlAddr, &tls.Config{
 		ServerName: c.controlHost,
 		RootCAs:    c.controlCAs,
 		NextProtos: []string{"connet"},
-	}, &quic.Config{
-		MaxIdleTimeout:  20 * time.Second,
-		KeepAlivePeriod: 10 * time.Second,
-	})
+	}, quicc.StdConfig)
 	if err != nil {
 		return retConnect(err)
 	}
