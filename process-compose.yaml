@@ -34,5 +34,3 @@ processes:
         condition: process_started
       client-dst:
         condition: process_started
-  upstream:
-    command: static-web-server --port 8081 --root . --directory-listing

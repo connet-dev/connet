@@ -28,9 +28,6 @@ run-server: build
 run-client: build
 	connet --config examples/minimal.toml
 
-run-sws:
-	static-web-server --port 8081 --root . --directory-listing
-
 .PHONY: update-go update-nix
 
 update-go:

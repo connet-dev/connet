@@ -24,7 +24,7 @@ func NewClientAuthenticatorRestricted(tokens []string, iprestr []restr.IP, namer
 
 	switch {
 	case len(namerestr) == 0:
-		iprestr = make([]restr.IP, len(tokens))
+		namerestr = make([]restr.Name, len(tokens))
 	case len(namerestr) != len(tokens):
 		return nil, kleverr.Newf("expected equal number of tokens and token name restrictions")
 	}

@@ -383,6 +383,8 @@ by adding account management and it is one of the easiest way to start.
 ### v0.5.0
  - [x] Stateless reset key for the server
  - [x] Name access restrictions for clients
+ - [ ] File http server
+ - [ ] Gen config
 
 ## Future
 

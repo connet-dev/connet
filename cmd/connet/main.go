@@ -16,12 +16,14 @@ import (
 	"github.com/connet-dev/connet"
 	"github.com/connet-dev/connet/control"
 	"github.com/connet-dev/connet/model"
+	"github.com/connet-dev/connet/netc"
 	"github.com/connet-dev/connet/relay"
 	"github.com/connet-dev/connet/restr"
 	"github.com/connet-dev/connet/selfhosted"
 	"github.com/klev-dev/kleverr"
 	"github.com/pelletier/go-toml/v2"
 	"github.com/spf13/cobra"
+	"golang.org/x/sync/errgroup"
 )
 
 type Config struct {
@@ -45,11 +47,17 @@ type ClientConfig struct {
 	DirectAddr string `toml:"direct-addr"`
 	StatusAddr string `toml:"status-addr"`
 
-	Destinations map[string]ForwardConfig `toml:"destinations"`
-	Sources      map[string]ForwardConfig `toml:"sources"`
+	Destinations map[string]DestinationConfig `toml:"destinations"`
+	Sources      map[string]SourceConfig      `toml:"sources"`
 }
 
-type ForwardConfig struct {
+type DestinationConfig struct {
+	Addr  string `toml:"addr"`
+	File  string `toml:"file"`
+	Route string `toml:"route"`
+}
+
+type SourceConfig struct {
 	Addr  string `toml:"addr"`
 	Route string `toml:"route"`
 }
@@ -162,13 +170,14 @@ func rootCmd() *cobra.Command {
 	cmd.Flags().StringVar(&flagsConfig.Client.StatusAddr, "status-addr", "", "status server address to listen")
 
 	var dstName string
-	var dstCfg ForwardConfig
+	var dstCfg DestinationConfig
 	cmd.Flags().StringVar(&dstName, "dst-name", "", "destination name")
 	cmd.Flags().StringVar(&dstCfg.Addr, "dst-addr", "", "destination address")
+	cmd.Flags().StringVar(&dstCfg.File, "dst-file", "", "destination file")
 	cmd.Flags().StringVar(&dstCfg.Route, "dst-route", "", "destination route")
 
 	var srcName string
-	var srcCfg ForwardConfig
+	var srcCfg SourceConfig
 	cmd.Flags().StringVar(&srcName, "src-name", "", "source name")
 	cmd.Flags().StringVar(&srcCfg.Addr, "src-addr", "", "source address")
 	cmd.Flags().StringVar(&srcCfg.Route, "src-route", "", "source route")
@@ -180,10 +189,10 @@ func rootCmd() *cobra.Command {
 		}
 
 		if dstName != "" {
-			flagsConfig.Client.Destinations = map[string]ForwardConfig{dstName: dstCfg}
+			flagsConfig.Client.Destinations = map[string]DestinationConfig{dstName: dstCfg}
 		}
 		if srcName != "" {
-			flagsConfig.Client.Sources = map[string]ForwardConfig{srcName: srcCfg}
+			flagsConfig.Client.Sources = map[string]SourceConfig{srcName: srcCfg}
 		}
 
 		cfg.merge(flagsConfig)
@@ -440,10 +449,14 @@ func clientRun(ctx context.Context, cfg ClientConfig, logger *slog.Logger) error
 		opts = append(opts, connet.ClientStatusAddress(cfg.StatusAddr))
 	}
 
+	var srvs []*netc.FileServer
 	for name, fc := range cfg.Destinations {
 		route, err := parseRouteOption(fc.Route)
 		if err != nil {
 			return err
+		}
+		if fc.File != "" {
+			srvs = append(srvs, &netc.FileServer{Addr: fc.Addr, Root: fc.File})
 		}
 		opts = append(opts, connet.ClientDestination(name, fc.Addr, route))
 	}
@@ -460,6 +473,15 @@ func clientRun(ctx context.Context, cfg ClientConfig, logger *slog.Logger) error
 	cl, err := connet.NewClient(opts...)
 	if err != nil {
 		return err
+	}
+	if len(srvs) > 0 {
+		g, ctx := errgroup.WithContext(ctx)
+		for _, srv := range srvs {
+			g.Go(func() error { return srv.Run(ctx) })
+		}
+
+		g.Go(func() error { return cl.Run(ctx) })
+		return g.Wait()
 	}
 	return cl.Run(ctx)
 }
@@ -770,16 +792,16 @@ func (c *ClientConfig) merge(o ClientConfig) {
 
 	for k, v := range o.Destinations {
 		if c.Destinations == nil {
-			c.Destinations = map[string]ForwardConfig{}
+			c.Destinations = map[string]DestinationConfig{}
 		}
-		c.Destinations[k] = mergeForwardConfig(c.Destinations[k], v)
+		c.Destinations[k] = mergeDestinationConfig(c.Destinations[k], v)
 	}
 
 	for k, v := range o.Sources {
 		if c.Sources == nil {
-			c.Sources = map[string]ForwardConfig{}
+			c.Sources = map[string]SourceConfig{}
 		}
-		c.Sources[k] = mergeForwardConfig(c.Sources[k], v)
+		c.Sources[k] = mergeSourceConfig(c.Sources[k], v)
 	}
 }
 
@@ -833,8 +855,16 @@ func (c *RelayConfig) merge(o RelayConfig) {
 	c.StoreDir = override(c.StoreDir, o.StoreDir)
 }
 
-func mergeForwardConfig(c, o ForwardConfig) ForwardConfig {
-	return ForwardConfig{
+func mergeDestinationConfig(c, o DestinationConfig) DestinationConfig {
+	return DestinationConfig{
+		Addr:  override(c.Addr, o.Addr),
+		File:  override(c.File, o.File),
+		Route: override(c.Route, o.Route),
+	}
+}
+
+func mergeSourceConfig(c, o SourceConfig) SourceConfig {
+	return SourceConfig{
 		Addr:  override(c.Addr, o.Addr),
 		Route: override(c.Route, o.Route),
 	}
