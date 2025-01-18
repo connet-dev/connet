@@ -20,6 +20,7 @@ import (
 	"github.com/connet-dev/connet/netc"
 	"github.com/connet-dev/connet/pb"
 	"github.com/connet-dev/connet/pbs"
+	"github.com/connet-dev/connet/quicc"
 	"github.com/connet-dev/connet/statusc"
 	"github.com/klev-dev/kleverr"
 	"github.com/quic-go/quic-go"
@@ -88,7 +89,8 @@ func (c *Client) Run(ctx context.Context) error {
 
 	c.logger.Debug("start quic listener")
 	transport := &quic.Transport{
-		Conn: udpConn,
+		Conn:        udpConn,
+		ConnContext: quicc.RTTContext,
 		// TODO review other options
 	}
 	defer transport.Close()
@@ -170,7 +172,8 @@ func (c *Client) connect(ctx context.Context, transport *quic.Transport, retoken
 		RootCAs:    c.controlCAs,
 		NextProtos: []string{"connet"},
 	}, &quic.Config{
-		KeepAlivePeriod: 25 * time.Second,
+		MaxIdleTimeout:  20 * time.Second,
+		KeepAlivePeriod: 10 * time.Second,
 	})
 	if err != nil {
 		return retConnect(err)

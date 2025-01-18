@@ -16,6 +16,7 @@ import (
 	"github.com/connet-dev/connet/pb"
 	"github.com/connet-dev/connet/pbc"
 	"github.com/connet-dev/connet/pbs"
+	"github.com/connet-dev/connet/quicc"
 	"github.com/klev-dev/kleverr"
 	"github.com/quic-go/quic-go"
 	"golang.org/x/sync/errgroup"
@@ -227,6 +228,9 @@ func (p *directPeerIncoming) keepalive(ctx context.Context, conn quic.Connection
 			if err := p.heartbeat(stream); err != nil {
 				return err
 			}
+			if rttStats := quicc.RTTStats(conn); rttStats != nil {
+				p.parent.logger.Debug("rtt-in", "last", rttStats.LatestRTT(), "smoothed", rttStats.SmoothedRTT())
+			}
 		}
 	})
 
@@ -307,13 +311,15 @@ func (p *directPeerOutgoing) connect(ctx context.Context) (quic.Connection, quic
 		addr := net.UDPAddrFromAddrPort(paddr)
 
 		p.parent.logger.Debug("dialing direct", "addr", addr, "server", p.serverConf.name, "cert", p.serverConf.key)
-		conn, err := p.parent.local.direct.transport.Dial(ctx, addr, &tls.Config{
+		conn, err := p.parent.local.direct.transport.Dial(quicc.RTTContext(ctx), addr, &tls.Config{
 			Certificates: []tls.Certificate{p.parent.local.clientCert},
 			RootCAs:      p.serverConf.cas,
 			ServerName:   p.serverConf.name,
 			NextProtos:   []string{"connet-direct"},
 		}, &quic.Config{
-			KeepAlivePeriod: 25 * time.Second,
+			MaxIdleTimeout:  20 * time.Second,
+			KeepAlivePeriod: 10 * time.Second,
+			Tracer:          quicc.RTTTracer,
 		})
 		if err != nil {
 			errs = append(errs, err)
@@ -351,6 +357,9 @@ func (p *directPeerOutgoing) keepalive(ctx context.Context, conn quic.Connection
 		}
 		if err := p.heartbeat(ctx, stream); err != nil {
 			return err
+		}
+		if rttStats := quicc.RTTStats(conn); rttStats != nil {
+			p.parent.logger.Debug("rtt-out", "last", rttStats.LatestRTT(), "smoothed", rttStats.SmoothedRTT())
 		}
 	}
 }

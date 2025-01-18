@@ -122,7 +122,8 @@ func (s *Server) runListener(ctx context.Context) error {
 	defer transport.Close()
 
 	l, err := transport.Listen(s.tlsConf, &quic.Config{
-		KeepAlivePeriod: 25 * time.Second,
+		MaxIdleTimeout:  20 * time.Second,
+		KeepAlivePeriod: 10 * time.Second,
 	})
 	if err != nil {
 		return kleverr.Ret(err)

@@ -167,7 +167,8 @@ func (s *clientsServer) removeSource(fcs *forwardClients, conn *clientConn) {
 
 func (s *clientsServer) run(ctx context.Context, transport *quic.Transport) error {
 	l, err := transport.Listen(s.tlsConf, &quic.Config{
-		KeepAlivePeriod: 25 * time.Second,
+		MaxIdleTimeout:  20 * time.Second,
+		KeepAlivePeriod: 10 * time.Second,
 	})
 	if err != nil {
 		return kleverr.Ret(err)

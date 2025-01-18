@@ -196,7 +196,8 @@ func (s *controlClient) connect(ctx context.Context, transport *quic.Transport) 
 	}
 
 	conn, err := transport.Dial(ctx, s.controlAddr, s.controlTLSConf, &quic.Config{
-		KeepAlivePeriod: 25 * time.Second,
+		MaxIdleTimeout:  20 * time.Second,
+		KeepAlivePeriod: 10 * time.Second,
 	})
 	if err != nil {
 		return retConnect(err)

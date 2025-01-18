@@ -11,6 +11,7 @@ import (
 
 	"github.com/connet-dev/connet/certc"
 	"github.com/connet-dev/connet/pb"
+	"github.com/connet-dev/connet/quicc"
 	"github.com/klev-dev/kleverr"
 	"github.com/quic-go/quic-go"
 	"golang.org/x/sync/errgroup"
@@ -139,7 +140,9 @@ func (s *DirectServer) runServer(ctx context.Context) error {
 	}
 
 	l, err := s.transport.Listen(tlsConf, &quic.Config{
-		KeepAlivePeriod: 25 * time.Second,
+		MaxIdleTimeout:  20 * time.Second,
+		KeepAlivePeriod: 10 * time.Second,
+		Tracer:          quicc.RTTTracer,
 	})
 	if err != nil {
 		return err
