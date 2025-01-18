@@ -11,6 +11,7 @@ import (
 	"slices"
 
 	"github.com/connet-dev/connet/model"
+	"github.com/connet-dev/connet/quicc"
 	"github.com/connet-dev/connet/statusc"
 	"github.com/klev-dev/kleverr"
 	"github.com/quic-go/quic-go"
@@ -94,6 +95,7 @@ func (s *Server) Run(ctx context.Context) error {
 		Conn:               udpConn,
 		ConnectionIDLength: 8,
 		StatelessResetKey:  s.statelessResetKey,
+		ConnContext:        quicc.RTTContext,
 		// TODO review other options
 	}
 	defer transport.Close()

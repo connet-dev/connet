@@ -15,6 +15,7 @@ import (
 	"github.com/connet-dev/connet/netc"
 	"github.com/connet-dev/connet/pb"
 	"github.com/connet-dev/connet/pbc"
+	"github.com/connet-dev/connet/quicc"
 	"github.com/klev-dev/kleverr"
 	"github.com/quic-go/quic-go"
 	"golang.org/x/sync/errgroup"
@@ -169,6 +170,7 @@ func (s *clientsServer) run(ctx context.Context, transport *quic.Transport) erro
 	l, err := transport.Listen(s.tlsConf, &quic.Config{
 		MaxIdleTimeout:  20 * time.Second,
 		KeepAlivePeriod: 10 * time.Second,
+		Tracer:          quicc.RTTTracer,
 	})
 	if err != nil {
 		return kleverr.Ret(err)
@@ -368,6 +370,9 @@ func (c *clientConn) heartbeat(ctx context.Context, stream quic.Stream, hbt *pbc
 
 			if err := pb.Write(stream, &pbc.Response{Heartbeat: req.Heartbeat}); err != nil {
 				return err
+			}
+			if rttStats := quicc.RTTStats(c.conn); rttStats != nil {
+				c.logger.Debug("rtt", "last", rttStats.LatestRTT(), "smoothed", rttStats.SmoothedRTT())
 			}
 		}
 	})

@@ -13,6 +13,7 @@ import (
 	"github.com/connet-dev/connet/netc"
 	"github.com/connet-dev/connet/pb"
 	"github.com/connet-dev/connet/pbc"
+	"github.com/connet-dev/connet/quicc"
 	"github.com/quic-go/quic-go"
 	"golang.org/x/sync/errgroup"
 	"google.golang.org/protobuf/types/known/timestamppb"
@@ -88,7 +89,7 @@ func (r *relayPeer) connect(ctx context.Context) (quic.Connection, error) {
 
 	cfg := r.serverConf.Load()
 	r.logger.Debug("dialing relay", "relay", r.serverHostport, "addr", addr, "server", cfg.name, "cert", cfg.key)
-	return r.local.direct.transport.Dial(ctx, addr, &tls.Config{
+	return r.local.direct.transport.Dial(quicc.RTTContext(ctx), addr, &tls.Config{
 		Certificates: []tls.Certificate{r.local.clientCert},
 		RootCAs:      cfg.cas,
 		ServerName:   cfg.name,
@@ -96,6 +97,7 @@ func (r *relayPeer) connect(ctx context.Context) (quic.Connection, error) {
 	}, &quic.Config{
 		MaxIdleTimeout:  20 * time.Second,
 		KeepAlivePeriod: 10 * time.Second,
+		Tracer:          quicc.RTTTracer,
 	})
 }
 
@@ -119,6 +121,11 @@ func (r *relayPeer) keepalive(ctx context.Context, conn quic.Connection) error {
 		}
 		if err := r.heartbeat(ctx, stream); err != nil {
 			return err
+		}
+		if rttStats := quicc.RTTStats(conn); rttStats != nil {
+			r.logger.Debug("rtt-pro", "last", rttStats.LatestRTT(), "smoothed", rttStats.SmoothedRTT())
+		} else {
+			r.logger.Debug("no rtt")
 		}
 	}
 }
