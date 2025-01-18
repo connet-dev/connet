@@ -12,6 +12,7 @@ server-cas = ".direnv/minica.pem"
 [client.destinations.sws-direct]
 addr = ":8081"
 route = "direct"
+file-server-root = "."
 
 [client.sources.sws-direct]
 addr = ":9999"
