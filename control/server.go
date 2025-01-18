@@ -113,13 +113,7 @@ func (s *Server) runListener(ctx context.Context) error {
 	defer udpConn.Close()
 
 	s.logger.Debug("start quic listener")
-	transport := &quic.Transport{
-		Conn:               udpConn,
-		ConnectionIDLength: 8,
-		StatelessResetKey:  s.statelessResetKey,
-		ConnContext:        quicc.RTTContext,
-		// TODO review other options
-	}
+	transport := quicc.ServerTransport(udpConn, s.statelessResetKey)
 	defer transport.Close()
 
 	l, err := transport.Listen(s.tlsConf, quicc.StdConfig)

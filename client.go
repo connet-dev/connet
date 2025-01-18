@@ -88,11 +88,7 @@ func (c *Client) Run(ctx context.Context) error {
 	defer udpConn.Close()
 
 	c.logger.Debug("start quic listener")
-	transport := &quic.Transport{
-		Conn:        udpConn,
-		ConnContext: quicc.RTTContext,
-		// TODO review other options
-	}
+	transport := quicc.ClientTransport(udpConn)
 	defer transport.Close()
 
 	ds, err := client.NewDirectServer(transport, c.logger)
