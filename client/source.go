@@ -1,19 +1,23 @@
 package client
 
 import (
+	"cmp"
 	"context"
 	"log/slog"
 	"maps"
+	"math"
 	"net"
 	"net/netip"
 	"slices"
 	"sync/atomic"
+	"time"
 
 	"github.com/connet-dev/connet/certc"
 	"github.com/connet-dev/connet/model"
 	"github.com/connet-dev/connet/netc"
 	"github.com/connet-dev/connet/pb"
 	"github.com/connet-dev/connet/pbc"
+	"github.com/connet-dev/connet/quicc"
 	"github.com/klev-dev/kleverr"
 	"github.com/quic-go/quic-go"
 	"golang.org/x/sync/errgroup"
@@ -92,22 +96,24 @@ func (s *Source) runActive(ctx context.Context) error {
 	})
 }
 
-func (s *Source) findActive(ctx context.Context) (quic.Stream, error) {
+func (s *Source) findActive() ([]sourceConn, error) {
 	conns := s.conns.Load()
 	if conns == nil || len(*conns) == 0 {
 		return nil, kleverr.New("no active conns")
 	}
 
-	for _, sc := range *conns {
-		if stream, err := sc.conn.OpenStreamSync(ctx); err != nil {
-			s.logger.Debug("could not open active conn stream", "peer", sc.peer.id, "style", sc.peer.style, "err", err)
-		} else {
-			s.logger.Debug("found active conn", "peer", sc.peer.id, "style", sc.peer.style)
-			return stream, nil
-		}
-	}
+	return slices.SortedFunc(slices.Values(*conns), func(l, r sourceConn) int {
+		var ld, rd = time.Duration(math.MaxInt64), time.Duration(math.MaxInt64)
 
-	return nil, kleverr.New("could not open conn stream")
+		if rtt := quicc.RTTStats(l.conn); rtt != nil {
+			ld = rtt.SmoothedRTT()
+		}
+		if rtt := quicc.RTTStats(r.conn); rtt != nil {
+			rd = rtt.SmoothedRTT()
+		}
+
+		return cmp.Compare(ld, rd)
+	}), nil
 }
 
 func (s *Source) runServer(ctx context.Context) error {
@@ -144,7 +150,25 @@ func (s *Source) runConn(ctx context.Context, conn net.Conn) {
 }
 
 func (s *Source) runConnErr(ctx context.Context, conn net.Conn) error {
-	stream, err := s.findActive(ctx)
+	conns, err := s.findActive()
+	if err != nil {
+		return kleverr.Newf("could not get active conns: %w", err)
+	}
+
+	for _, dest := range conns {
+		if err := s.connectDestination(ctx, conn, dest); err != nil {
+			s.logger.Debug("could not dial destination", "err", err)
+		} else {
+			// connect was success
+			return nil
+		}
+	}
+
+	return kleverr.New("could not find route to destination")
+}
+
+func (s *Source) connectDestination(ctx context.Context, conn net.Conn, dest sourceConn) error {
+	stream, err := dest.conn.OpenStreamSync(ctx)
 	if err != nil {
 		return kleverr.Newf("could not find route: %w", err)
 	}
