@@ -99,6 +99,7 @@ func (r *relayPeer) connect(ctx context.Context) (quic.Connection, error) {
 	}
 
 	if err := r.check(ctx, conn); err != nil {
+		// TODO conn close?
 		return nil, err
 	}
 	return conn, nil
@@ -117,10 +118,13 @@ func (r *relayPeer) check(ctx context.Context, conn quic.Connection) error {
 	if _, err := pbc.ReadResponse(stream); err != nil {
 		return err
 	}
+
 	return nil
 }
 
 func (r *relayPeer) keepalive(ctx context.Context, conn quic.Connection) error {
+	defer conn.CloseWithError(quic.ApplicationErrorCode(pb.Error_DirectKeepaliveClosed), "keepalive closed") // TODO relay?
+
 	r.local.addRelayConn(r.serverHostport, conn)
 	defer r.local.removeRelayConn(r.serverHostport)
 

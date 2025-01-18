@@ -17,10 +17,8 @@ import (
 	"github.com/connet-dev/connet/pbc"
 	"github.com/connet-dev/connet/pbs"
 	"github.com/connet-dev/connet/quicc"
-	"github.com/klev-dev/kleverr"
 	"github.com/quic-go/quic-go"
 	"golang.org/x/sync/errgroup"
-	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
 type directPeer struct {
@@ -150,7 +148,7 @@ func newDirectPeerIncoming(ctx context.Context, parent *directPeer, clientCert *
 func (p *directPeerIncoming) run(ctx context.Context) {
 	boff := netc.MinBackoff
 	for {
-		conn, stream, err := p.connect(ctx)
+		conn, err := p.connect(ctx)
 		if err != nil {
 			p.parent.logger.Debug("could not connect incoming", "err", err)
 			switch {
@@ -172,7 +170,7 @@ func (p *directPeerIncoming) run(ctx context.Context) {
 		}
 		boff = netc.MinBackoff
 
-		if err := p.keepalive(ctx, conn, stream); err != nil {
+		if err := p.keepalive(ctx, conn); err != nil {
 			p.parent.logger.Debug("incoming keepalive failed", "err", err)
 			switch {
 			case errors.Is(err, context.Canceled):
@@ -184,73 +182,52 @@ func (p *directPeerIncoming) run(ctx context.Context) {
 	}
 }
 
-func (p *directPeerIncoming) connect(ctx context.Context) (quic.Connection, quic.Stream, error) {
+func (p *directPeerIncoming) connect(ctx context.Context) (quic.Connection, error) {
 	ch, cancel := p.parent.local.direct.expect(p.parent.local.serverCert, p.clientCert)
 	select {
-	case <-ctx.Done():
-		cancel()
-		return nil, nil, ctx.Err()
 	case <-p.closer:
 		cancel()
-		return nil, nil, errClosed
+		return nil, errClosed
+	case <-ctx.Done():
+		cancel()
+		return nil, ctx.Err()
 	case conn := <-ch:
 		stream, err := conn.AcceptStream(ctx)
 		if err != nil {
-			return nil, nil, err
+			return nil, err
 		}
-		if err := p.heartbeat(stream); err != nil {
-			return nil, nil, err
+		defer stream.Close()
+
+		if _, err := pbc.ReadRequest(stream); err != nil {
+			return nil, err
+		} else if err := pb.Write(stream, &pbc.Response{}); err != nil {
+			return nil, err
 		}
-		return conn, stream, nil
+
+		return conn, nil
 	}
 }
 
-func (p *directPeerIncoming) keepalive(ctx context.Context, conn quic.Connection, stream quic.Stream) error {
+func (p *directPeerIncoming) keepalive(ctx context.Context, conn quic.Connection) error {
 	defer conn.CloseWithError(quic.ApplicationErrorCode(pb.Error_DirectKeepaliveClosed), "keepalive closed")
-	defer stream.Close()
 
 	p.parent.local.addActiveConn(p.parent.remoteID, peerIncoming, "", conn)
 	defer p.parent.local.removeActiveConn(p.parent.remoteID, peerIncoming, "")
 
-	g, ctx := errgroup.WithContext(ctx)
-
-	g.Go(func() error {
+	for {
 		select {
-		case <-ctx.Done():
-			return ctx.Err()
 		case <-p.closer:
 			return errClosed
-		}
-	})
-
-	g.Go(func() error {
-		for {
-			if err := p.heartbeat(stream); err != nil {
-				return err
-			}
+		case <-ctx.Done():
+			return context.Cause(ctx)
+		case <-conn.Context().Done():
+			return context.Cause(conn.Context())
+		case <-time.After(10 * time.Second):
 			if rttStats := quicc.RTTStats(conn); rttStats != nil {
-				p.parent.logger.Debug("rtt-in", "last", rttStats.LatestRTT(), "smoothed", rttStats.SmoothedRTT())
+				p.parent.logger.Debug("rtt stats", "last", rttStats.LatestRTT(), "smoothed", rttStats.SmoothedRTT())
 			}
 		}
-	})
-
-	return g.Wait()
-}
-
-func (p *directPeerIncoming) heartbeat(stream quic.Stream) error {
-	req, err := pbc.ReadRequest(stream)
-	switch {
-	case err != nil:
-		return err
-	case req.Heartbeat == nil:
-		respErr := pb.NewError(pb.Error_RequestUnknown, "unexpected request")
-		if err := pb.Write(stream, &pbc.Response{Error: respErr}); err != nil {
-			return kleverr.Ret(err)
-		}
-		return respErr
 	}
-
-	return pb.Write(stream, &pbc.Response{Heartbeat: req.Heartbeat})
 }
 
 type directPeerOutgoing struct {
@@ -274,7 +251,7 @@ func newDirectPeerOutgoing(ctx context.Context, parent *directPeer, serverConfg 
 func (p *directPeerOutgoing) run(ctx context.Context) {
 	boff := netc.MinBackoff
 	for {
-		conn, stream, err := p.connect(ctx)
+		conn, err := p.connect(ctx)
 		if err != nil {
 			p.parent.logger.Debug("could not connect direct", "err", err)
 			if errors.Is(err, context.Canceled) {
@@ -293,7 +270,7 @@ func (p *directPeerOutgoing) run(ctx context.Context) {
 		}
 		boff = netc.MinBackoff
 
-		if err := p.keepalive(ctx, conn, stream); err != nil {
+		if err := p.keepalive(ctx, conn); err != nil {
 			p.parent.logger.Debug("disonnected peer", "err", err)
 			switch {
 			case errors.Is(err, context.Canceled):
@@ -305,7 +282,7 @@ func (p *directPeerOutgoing) run(ctx context.Context) {
 	}
 }
 
-func (p *directPeerOutgoing) connect(ctx context.Context) (quic.Connection, quic.Stream, error) {
+func (p *directPeerOutgoing) connect(ctx context.Context) (quic.Connection, error) {
 	var errs []error
 	for paddr := range p.addrs {
 		addr := net.UDPAddrFromAddrPort(paddr)
@@ -322,56 +299,52 @@ func (p *directPeerOutgoing) connect(ctx context.Context) (quic.Connection, quic
 			continue
 		}
 
-		stream, err := conn.OpenStreamSync(ctx)
-		if err != nil {
+		if err := p.check(ctx, conn); err != nil {
+			// TODO conn close?
 			errs = append(errs, err)
 			continue
 		}
-		if err := p.heartbeat(ctx, stream); err != nil {
-			errs = append(errs, err)
-			continue
-		}
-		return conn, stream, nil
+		return conn, nil
 	}
-	return nil, nil, errors.Join(errs...)
+	return nil, errors.Join(errs...)
 }
 
-func (p *directPeerOutgoing) keepalive(ctx context.Context, conn quic.Connection, stream quic.Stream) error {
-	defer conn.CloseWithError(quic.ApplicationErrorCode(pb.Error_DirectKeepaliveClosed), "keepalive closed")
+func (p *directPeerOutgoing) check(ctx context.Context, conn quic.Connection) error {
+	stream, err := conn.OpenStreamSync(ctx)
+	if err != nil {
+		return err
+	}
 	defer stream.Close()
+
+	if err := pb.Write(stream, &pbc.Request{}); err != nil {
+		return err
+	}
+	if _, err := pbc.ReadResponse(stream); err != nil {
+		return err
+	}
+
+	return nil
+}
+
+func (p *directPeerOutgoing) keepalive(ctx context.Context, conn quic.Connection) error {
+	defer conn.CloseWithError(quic.ApplicationErrorCode(pb.Error_DirectKeepaliveClosed), "keepalive closed")
 
 	p.parent.local.addActiveConn(p.parent.remoteID, peerOutgoing, "", conn)
 	defer p.parent.local.removeActiveConn(p.parent.remoteID, peerOutgoing, "")
 
 	for {
 		select {
-		case <-ctx.Done():
-			return ctx.Err()
 		case <-p.closer:
 			return errClosed
+		case <-ctx.Done():
+			return context.Cause(ctx)
+		case <-conn.Context().Done():
+			return context.Cause(conn.Context())
 		case <-time.After(10 * time.Second):
+			if rttStats := quicc.RTTStats(conn); rttStats != nil {
+				p.parent.logger.Debug("rtt stats", "last", rttStats.LatestRTT(), "smoothed", rttStats.SmoothedRTT())
+			}
 		}
-		if err := p.heartbeat(ctx, stream); err != nil {
-			return err
-		}
-		if rttStats := quicc.RTTStats(conn); rttStats != nil {
-			p.parent.logger.Debug("rtt-out", "last", rttStats.LatestRTT(), "smoothed", rttStats.SmoothedRTT())
-		}
-	}
-}
-
-func (p *directPeerOutgoing) heartbeat(_ context.Context, stream quic.Stream) error {
-	// TODO setDeadline as additional assurance we are not blocked
-	req := &pbc.Heartbeat{Time: timestamppb.Now()}
-	if err := pb.Write(stream, &pbc.Request{Heartbeat: req}); err != nil {
-		return err
-	}
-	if resp, err := pbc.ReadResponse(stream); err != nil {
-		return err
-	} else {
-		dur := time.Since(resp.Heartbeat.Time.AsTime())
-		p.parent.logger.Debug("direct heartbeat", "dur", dur)
-		return nil
 	}
 }
 
