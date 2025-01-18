@@ -586,10 +586,10 @@ func (s *relayServer) authenticate(certs []*x509.Certificate) *clientAuth {
 	key := certc.NewKey(cert)
 
 	if dst, ok := s.clients[serverClientKey{model.Destination, key}]; ok && dst.Equal(cert) {
-		return &clientAuth{s.fwd, true, false}
+		return &clientAuth{s.fwd, model.Destination, key}
 	}
 	if src, ok := s.clients[serverClientKey{model.Source, key}]; ok && src.Equal(cert) {
-		return &clientAuth{s.fwd, false, true}
+		return &clientAuth{s.fwd, model.Source, key}
 	}
 
 	return nil

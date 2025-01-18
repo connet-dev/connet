@@ -1,13 +1,16 @@
 package relay
 
 import (
+	"cmp"
 	"context"
 	"crypto/tls"
 	"crypto/x509"
 	"log/slog"
 	"maps"
+	"math"
 	"slices"
 	"sync"
+	"time"
 
 	"github.com/connet-dev/connet/certc"
 	"github.com/connet-dev/connet/model"
@@ -17,13 +20,12 @@ import (
 	"github.com/connet-dev/connet/quicc"
 	"github.com/klev-dev/kleverr"
 	"github.com/quic-go/quic-go"
-	"golang.org/x/sync/errgroup"
 )
 
 type clientAuth struct {
-	fwd         model.Forward
-	destination bool
-	source      bool
+	fwd  model.Forward
+	role model.Role
+	key  certc.Key
 }
 
 type tlsAuthenticator func(chi *tls.ClientHelloInfo, base *tls.Config) (*tls.Config, error)
@@ -65,18 +67,29 @@ type forwardClients struct {
 	mu           sync.RWMutex
 }
 
-func (d *forwardClients) get() []*clientConn {
+func (d *forwardClients) getDestinations() []*clientConn {
 	d.mu.RLock()
 	defer d.mu.RUnlock()
 
-	return slices.Collect(maps.Values(d.destinations))
+	return slices.SortedFunc(maps.Values(d.destinations), func(l, r *clientConn) int {
+		var ld, rd = time.Duration(math.MaxInt64), time.Duration(math.MaxInt64)
+
+		if rtt := quicc.RTTStats(l.conn); rtt != nil {
+			ld = rtt.SmoothedRTT()
+		}
+		if rtt := quicc.RTTStats(r.conn); rtt != nil {
+			rd = rtt.SmoothedRTT()
+		}
+
+		return cmp.Compare(ld, rd)
+	})
 }
 
 func (d *forwardClients) removeDestination(conn *clientConn) bool {
 	d.mu.Lock()
 	defer d.mu.Unlock()
 
-	delete(d.destinations, conn.key)
+	delete(d.destinations, conn.auth.key)
 
 	return d.empty()
 }
@@ -85,7 +98,7 @@ func (d *forwardClients) removeSource(conn *clientConn) bool {
 	d.mu.Lock()
 	defer d.mu.Unlock()
 
-	delete(d.sources, conn.key)
+	delete(d.sources, conn.auth.key)
 
 	return d.empty()
 }
@@ -132,12 +145,12 @@ func (s *clientsServer) removeByClients(fcs *forwardClients) {
 }
 
 func (s *clientsServer) addDestination(conn *clientConn) *forwardClients {
-	dst := s.getByForward(conn.fwd)
+	dst := s.getByForward(conn.auth.fwd)
 
 	dst.mu.Lock()
 	defer dst.mu.Unlock()
 
-	dst.destinations[conn.key] = conn
+	dst.destinations[conn.auth.key] = conn
 
 	return dst
 }
@@ -149,12 +162,12 @@ func (s *clientsServer) removeDestination(fcs *forwardClients, conn *clientConn)
 }
 
 func (s *clientsServer) addSource(conn *clientConn) *forwardClients {
-	target := s.getByForward(conn.fwd)
+	target := s.getByForward(conn.auth.fwd)
 
 	target.mu.Lock()
 	defer target.mu.Unlock()
 
-	target.sources[conn.key] = conn
+	target.sources[conn.auth.key] = conn
 
 	return target
 }
@@ -195,8 +208,7 @@ type clientConn struct {
 	conn   quic.Connection
 	logger *slog.Logger
 
-	fwd model.Forward
-	key certc.Key
+	auth *clientAuth
 }
 
 func (c *clientConn) run(ctx context.Context) {
@@ -210,64 +222,70 @@ func (c *clientConn) run(ctx context.Context) {
 func (c *clientConn) runErr(ctx context.Context) error {
 	serverName := c.conn.ConnectionState().TLS.ServerName
 	certs := c.conn.ConnectionState().TLS.PeerCertificates
-	auth := c.server.auth(serverName, certs)
-	if auth == nil {
+	if auth := c.server.auth(serverName, certs); auth == nil {
 		return c.conn.CloseWithError(quic.ApplicationErrorCode(pb.Error_AuthenticationFailed), "authentication missing")
+	} else {
+		c.auth = auth
 	}
 
-	switch {
-	case auth.destination:
-		c.fwd = auth.fwd
-		c.key = certc.NewKey(certs[0])
+	if err := c.check(ctx); err != nil {
+		return err
+	}
 
-		fcs := c.server.addDestination(c)
-		defer c.server.removeDestination(fcs, c)
-
-		for {
-			stream, err := c.conn.AcceptStream(ctx)
-			if err != nil {
-				return err
-			}
-			go c.runDestinationStream(ctx, stream)
-		}
-	case auth.source:
-		c.fwd = auth.fwd
-		c.key = certc.NewKey(certs[0])
-
-		fcs := c.server.addSource(c)
-		defer c.server.removeSource(fcs, c)
-
-		for {
-			stream, err := c.conn.AcceptStream(ctx)
-			if err != nil {
-				return err
-			}
-			go c.runSourceStream(ctx, stream, fcs)
-		}
+	switch c.auth.role {
+	case model.Destination:
+		return c.runDestination(ctx)
+	case model.Source:
+		return c.runSource(ctx)
 	default:
 		return kleverr.Newf("not a destination or a source")
 	}
 }
 
-func (c *clientConn) runDestinationStream(ctx context.Context, stream quic.Stream) {
-	defer stream.Close()
-
-	if err := c.runDestinationStreamErr(ctx, stream); err != nil {
-		c.logger.Debug("error while running destination", "err", err)
-	}
-}
-
-func (c *clientConn) runDestinationStreamErr(ctx context.Context, stream quic.Stream) error {
-	req, err := pbc.ReadRequest(stream)
+func (c *clientConn) check(ctx context.Context) error {
+	stream, err := c.conn.AcceptStream(ctx)
 	if err != nil {
 		return err
 	}
+	defer stream.Close()
 
-	switch {
-	case req.Heartbeat != nil:
-		return c.heartbeat(ctx, stream, req.Heartbeat)
-	default:
-		return c.unknown(ctx, stream, req)
+	if _, err := pbc.ReadRequest(stream); err != nil {
+		return err
+	} else if err := pb.Write(stream, &pbc.Response{}); err != nil {
+		return err
+	}
+
+	return nil
+}
+
+func (c *clientConn) runDestination(ctx context.Context) error {
+	fcs := c.server.addDestination(c)
+	defer c.server.removeDestination(fcs, c)
+
+	for {
+		select {
+		case <-ctx.Done():
+			return context.Cause(ctx)
+		case <-c.conn.Context().Done():
+			return context.Cause(c.conn.Context())
+		case <-time.After(10 * time.Second): // TODO 30 sec?
+			if rttStats := quicc.RTTStats(c.conn); rttStats != nil {
+				c.logger.Debug("rtt stats", "last", rttStats.LatestRTT(), "smoothed", rttStats.SmoothedRTT())
+			}
+		}
+	}
+}
+
+func (c *clientConn) runSource(ctx context.Context) error {
+	fcs := c.server.addSource(c)
+	defer c.server.removeSource(fcs, c)
+
+	for {
+		stream, err := c.conn.AcceptStream(ctx)
+		if err != nil {
+			return err
+		}
+		go c.runSourceStream(ctx, stream, fcs)
 	}
 }
 
@@ -288,15 +306,13 @@ func (c *clientConn) runSourceStreamErr(ctx context.Context, stream quic.Stream,
 	switch {
 	case req.Connect != nil:
 		return c.connect(ctx, stream, fcs)
-	case req.Heartbeat != nil:
-		return c.heartbeat(ctx, stream, req.Heartbeat)
 	default:
 		return c.unknown(ctx, stream, req)
 	}
 }
 
 func (c *clientConn) connect(ctx context.Context, stream quic.Stream, fcs *forwardClients) error {
-	dests := fcs.get()
+	dests := fcs.getDestinations()
 	for _, dest := range dests {
 		if err := c.connectDestination(ctx, stream, dest); err != nil {
 			c.logger.Debug("could not dial destination", "err", err)
@@ -330,49 +346,10 @@ func (c *clientConn) connectDestination(ctx context.Context, srcStream quic.Stre
 		return kleverr.Newf("could not write response: %w", err)
 	}
 
-	c.logger.Debug("joining conns", "forward", c.fwd)
+	c.logger.Debug("joining conns", "forward", c.auth.fwd)
 	err = netc.Join(ctx, srcStream, dstStream)
-	c.logger.Debug("disconnected conns", "forward", c.fwd, "err", err)
+	c.logger.Debug("disconnected conns", "forward", c.auth.fwd, "err", err)
 	return nil
-}
-
-func (c *clientConn) heartbeat(ctx context.Context, stream quic.Stream, hbt *pbc.Heartbeat) error {
-	if err := pb.Write(stream, &pbc.Response{Heartbeat: hbt}); err != nil {
-		return err
-	}
-
-	g, ctx := errgroup.WithContext(ctx)
-
-	g.Go(func() error {
-		<-ctx.Done()
-		stream.CancelRead(0)
-		return nil
-	})
-
-	g.Go(func() error {
-		for {
-			req, err := pbc.ReadRequest(stream)
-			if err != nil {
-				return err
-			}
-			if req.Heartbeat == nil {
-				respErr := pb.NewError(pb.Error_RequestUnknown, "unexpected request")
-				if err := pb.Write(stream, &pbc.Response{Error: respErr}); err != nil {
-					return kleverr.Ret(err)
-				}
-				return respErr
-			}
-
-			if err := pb.Write(stream, &pbc.Response{Heartbeat: req.Heartbeat}); err != nil {
-				return err
-			}
-			if rttStats := quicc.RTTStats(c.conn); rttStats != nil {
-				c.logger.Debug("rtt-client", "last", rttStats.LatestRTT(), "smoothed", rttStats.SmoothedRTT())
-			}
-		}
-	})
-
-	return g.Wait()
 }
 
 func (c *clientConn) unknown(_ context.Context, stream quic.Stream, req *pbc.Request) error {

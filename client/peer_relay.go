@@ -16,7 +16,6 @@ import (
 	"github.com/connet-dev/connet/quicc"
 	"github.com/quic-go/quic-go"
 	"golang.org/x/sync/errgroup"
-	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
 type relayPeer struct {
@@ -60,7 +59,7 @@ func (r *relayPeer) runConn(ctx context.Context) error {
 	for {
 		conn, err := r.connect(ctx)
 		if err != nil {
-			r.logger.Debug("could not connect relay", "relay", r.serverHostport, "err", err)
+			r.logger.Debug("could not connect relay", "err", err)
 			if errors.Is(err, context.Canceled) {
 				return err
 			}
@@ -76,7 +75,7 @@ func (r *relayPeer) runConn(ctx context.Context) error {
 		boff = netc.MinBackoff
 
 		if err := r.keepalive(ctx, conn); err != nil {
-			r.logger.Debug("disconnected relay", "relay", r.serverHostport, "err", err)
+			r.logger.Debug("disconnected relay", "err", err)
 		}
 	}
 }
@@ -88,56 +87,54 @@ func (r *relayPeer) connect(ctx context.Context) (quic.Connection, error) {
 	}
 
 	cfg := r.serverConf.Load()
-	r.logger.Debug("dialing relay", "relay", r.serverHostport, "addr", addr, "server", cfg.name, "cert", cfg.key)
-	return r.local.direct.transport.Dial(quicc.RTTContext(ctx), addr, &tls.Config{
+	r.logger.Debug("dialing relay", "addr", addr, "server", cfg.name, "cert", cfg.key)
+	conn, err := r.local.direct.transport.Dial(quicc.RTTContext(ctx), addr, &tls.Config{
 		Certificates: []tls.Certificate{r.local.clientCert},
 		RootCAs:      cfg.cas,
 		ServerName:   cfg.name,
 		NextProtos:   []string{"connet-relay"},
 	}, quicc.StdConfig)
+	if err != nil {
+		return nil, err
+	}
+
+	if err := r.check(ctx, conn); err != nil {
+		return nil, err
+	}
+	return conn, nil
 }
 
-func (r *relayPeer) keepalive(ctx context.Context, conn quic.Connection) error {
+func (r *relayPeer) check(ctx context.Context, conn quic.Connection) error {
 	stream, err := conn.OpenStreamSync(ctx)
 	if err != nil {
 		return err
 	}
-	if err := r.heartbeat(ctx, stream); err != nil {
+	defer stream.Close()
+
+	if err := pb.Write(stream, &pbc.Request{}); err != nil {
 		return err
 	}
+	if _, err := pbc.ReadResponse(stream); err != nil {
+		return err
+	}
+	return nil
+}
 
+func (r *relayPeer) keepalive(ctx context.Context, conn quic.Connection) error {
 	r.local.addRelayConn(r.serverHostport, conn)
 	defer r.local.removeRelayConn(r.serverHostport)
 
 	for {
 		select {
 		case <-ctx.Done():
-			return ctx.Err()
-		case <-time.After(10 * time.Second):
+			return context.Cause(ctx)
+		case <-conn.Context().Done():
+			return context.Cause(conn.Context())
+		case <-time.After(10 * time.Second): // TODO 30 sec?
+			if rttStats := quicc.RTTStats(conn); rttStats != nil {
+				r.logger.Debug("rtt stats", "last", rttStats.LatestRTT(), "smoothed", rttStats.SmoothedRTT())
+			}
 		}
-		if err := r.heartbeat(ctx, stream); err != nil {
-			return err
-		}
-		if rttStats := quicc.RTTStats(conn); rttStats != nil {
-			r.logger.Debug("rtt-pro", "last", rttStats.LatestRTT(), "smoothed", rttStats.SmoothedRTT())
-		} else {
-			r.logger.Debug("no rtt")
-		}
-	}
-}
-
-func (r *relayPeer) heartbeat(_ context.Context, stream quic.Stream) error {
-	// TODO setDeadline as additional assurance we are not blocked
-	req := &pbc.Heartbeat{Time: timestamppb.Now()}
-	if err := pb.Write(stream, &pbc.Request{Heartbeat: req}); err != nil {
-		return err
-	}
-	if resp, err := pbc.ReadResponse(stream); err != nil {
-		return err
-	} else {
-		dur := time.Since(resp.Heartbeat.Time.AsTime())
-		r.logger.Debug("relay heartbeat", "dur", dur)
-		return nil
 	}
 }
 
