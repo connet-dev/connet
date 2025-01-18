@@ -52,9 +52,9 @@ type ClientConfig struct {
 }
 
 type DestinationConfig struct {
-	Addr  string `toml:"addr"`
-	File  string `toml:"file"`
-	Route string `toml:"route"`
+	Addr           string `toml:"addr"`
+	Route          string `toml:"route"`
+	FileServerRoot string `toml:"file-server-root"`
 }
 
 type SourceConfig struct {
@@ -173,7 +173,7 @@ func rootCmd() *cobra.Command {
 	var dstCfg DestinationConfig
 	cmd.Flags().StringVar(&dstName, "dst-name", "", "destination name")
 	cmd.Flags().StringVar(&dstCfg.Addr, "dst-addr", "", "destination address")
-	cmd.Flags().StringVar(&dstCfg.File, "dst-file", "", "destination file")
+	cmd.Flags().StringVar(&dstCfg.FileServerRoot, "dst-file-server-root", "", "destination file server root directory")
 	cmd.Flags().StringVar(&dstCfg.Route, "dst-route", "", "destination route")
 
 	var srcName string
@@ -455,8 +455,8 @@ func clientRun(ctx context.Context, cfg ClientConfig, logger *slog.Logger) error
 		if err != nil {
 			return err
 		}
-		if fc.File != "" {
-			srvs = append(srvs, &netc.FileServer{Addr: fc.Addr, Root: fc.File})
+		if fc.FileServerRoot != "" {
+			srvs = append(srvs, &netc.FileServer{Addr: fc.Addr, Root: fc.FileServerRoot})
 		}
 		opts = append(opts, connet.ClientDestination(name, fc.Addr, route))
 	}
@@ -857,9 +857,9 @@ func (c *RelayConfig) merge(o RelayConfig) {
 
 func mergeDestinationConfig(c, o DestinationConfig) DestinationConfig {
 	return DestinationConfig{
-		Addr:  override(c.Addr, o.Addr),
-		File:  override(c.File, o.File),
-		Route: override(c.Route, o.Route),
+		Addr:           override(c.Addr, o.Addr),
+		FileServerRoot: override(c.FileServerRoot, o.FileServerRoot),
+		Route:          override(c.Route, o.Route),
 	}
 }
 

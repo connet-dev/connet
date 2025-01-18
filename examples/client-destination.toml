@@ -7,4 +7,4 @@ direct-addr = ":19193"
 
 [client.destinations.sws]
 addr = ":8081"
-file = "."
+file-server-root = "."
