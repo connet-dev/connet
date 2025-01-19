@@ -4,7 +4,6 @@ import (
 	"cmp"
 	"context"
 	"log/slog"
-	"maps"
 	"math"
 	"net"
 	"net/netip"
@@ -83,17 +82,33 @@ func (s *Source) Status() (PeerStatus, error) {
 func (s *Source) runActive(ctx context.Context) error {
 	return s.peer.activeConnsListen(ctx, func(active map[peerConnKey]quic.Connection) error {
 		s.logger.Debug("active conns", "len", len(active))
-		activePeers := slices.SortedFunc(maps.Keys(active), func(l, r peerConnKey) int {
-			return int(l.style - r.style)
-		})
 
-		var conns = make([]sourceConn, len(activePeers))
-		for i, peer := range activePeers {
-			conns[i] = sourceConn{peer, active[peer]}
+		var conns = make([]sourceConn, 0, len(active))
+		for peer, conn := range active {
+			conns = append(conns, sourceConn{peer, conn})
 		}
 		s.conns.Store(&conns)
 		return nil
 	})
+}
+
+func connCompare(l, r sourceConn) int {
+	switch {
+	case l.peer.style == peerRelay && r.peer.style != peerRelay:
+		return +1
+	case l.peer.style != peerRelay && r.peer.style == peerRelay:
+		return -1
+	}
+	var ld, rd = time.Duration(math.MaxInt64), time.Duration(math.MaxInt64)
+
+	if rtt := quicc.RTTStats(l.conn); rtt != nil {
+		ld = rtt.SmoothedRTT()
+	}
+	if rtt := quicc.RTTStats(r.conn); rtt != nil {
+		rd = rtt.SmoothedRTT()
+	}
+
+	return cmp.Compare(ld, rd)
 }
 
 func (s *Source) findActive() ([]sourceConn, error) {
@@ -102,18 +117,7 @@ func (s *Source) findActive() ([]sourceConn, error) {
 		return nil, kleverr.New("no active conns")
 	}
 
-	return slices.SortedFunc(slices.Values(*conns), func(l, r sourceConn) int {
-		var ld, rd = time.Duration(math.MaxInt64), time.Duration(math.MaxInt64)
-
-		if rtt := quicc.RTTStats(l.conn); rtt != nil {
-			ld = rtt.SmoothedRTT()
-		}
-		if rtt := quicc.RTTStats(r.conn); rtt != nil {
-			rd = rtt.SmoothedRTT()
-		}
-
-		return cmp.Compare(ld, rd)
-	}), nil
+	return slices.SortedFunc(slices.Values(*conns), connCompare), nil
 }
 
 func (s *Source) runServer(ctx context.Context) error {
@@ -184,9 +188,9 @@ func (s *Source) connectDestination(ctx context.Context, conn net.Conn, dest sou
 		return kleverr.Newf("could not read response: %w", err)
 	}
 
-	s.logger.Debug("joining to server")
+	s.logger.Debug("joining conns", "style", dest.peer.style)
 	err = netc.Join(ctx, conn, stream)
-	s.logger.Debug("disconnected to server", "err", err)
+	s.logger.Debug("disconnected conns", "err", err)
 
 	return nil
 }

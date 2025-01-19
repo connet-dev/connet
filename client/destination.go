@@ -178,9 +178,9 @@ func (d *Destination) runConnect(ctx context.Context, stream quic.Stream) error 
 		return kleverr.Newf("could not write response: %w", err)
 	}
 
-	d.logger.Debug("joining from server")
+	d.logger.Debug("joining conns")
 	err = netc.Join(ctx, stream, conn)
-	d.logger.Debug("disconnected from server", "err", err)
+	d.logger.Debug("disconnected conns", "err", err)
 
 	return nil
 }
