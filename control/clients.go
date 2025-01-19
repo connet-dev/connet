@@ -250,17 +250,17 @@ func (s *clientServer) run(ctx context.Context) error {
 	}
 }
 
+func (s *clientServer) allowConn(conn net.Conn) bool {
+	return s.iprestr.IsAllowedAddr(conn.RemoteAddr())
+}
+
 func (s *clientServer) handle(ctx context.Context, conn quic.Connection) {
-	if s.iprestr.IsAllowedAddr(conn.RemoteAddr()) {
-		cc := &clientConn{
-			server: s,
-			conn:   conn,
-			logger: s.logger,
-		}
-		go cc.run(ctx)
-	} else {
-		conn.CloseWithError(quic.ApplicationErrorCode(pb.Error_AuthenticationFailed), "not allowed")
+	cc := &clientConn{
+		server: s,
+		conn:   conn,
+		logger: s.logger,
 	}
+	go cc.run(ctx)
 }
 
 type clientConn struct {

@@ -54,31 +54,47 @@ func NewServer(cfg Config) (*Server, error) {
 	var statelessResetKey quic.StatelessResetKey
 	copy(statelessResetKey[:], statelessResetVal.Bytes)
 
-	s := &Server{
-		addr: cfg.Addr,
-		tlsConf: &tls.Config{
-			Certificates: []tls.Certificate{cfg.Cert},
-			NextProtos:   []string{"connet", "connet-relays"},
-		},
-		statelessResetKey: &statelessResetKey,
-
-		statusAddr: cfg.StatusAddr,
-		logger:     cfg.Logger.With("control", cfg.Addr),
-	}
-
 	relays, err := newRelayServer(cfg.RelayAuth, cfg.RelayRestr, configStore, cfg.Stores, cfg.Logger)
 	if err != nil {
 		return nil, err
 	}
-	s.relays = relays
 
-	clients, err := newClientServer(cfg.ClientAuth, cfg.ClientRestr, s.relays, configStore, cfg.Stores, cfg.Logger)
+	clients, err := newClientServer(cfg.ClientAuth, cfg.ClientRestr, relays, configStore, cfg.Stores, cfg.Logger)
 	if err != nil {
 		return nil, err
 	}
-	s.clients = clients
 
-	return s, nil
+	return &Server{
+		addr: cfg.Addr,
+		tlsConf: &tls.Config{
+			Certificates: []tls.Certificate{cfg.Cert},
+			NextProtos:   []string{"connet", "connet-relays"},
+			GetConfigForClient: func(chi *tls.ClientHelloInfo) (*tls.Config, error) {
+				for _, proto := range chi.SupportedProtos {
+					switch proto {
+					case "connet":
+						if !clients.allowConn(chi.Conn) {
+							return nil, kleverr.New("client not allowed")
+						}
+					case "connet-relays":
+						if !relays.allowConn(chi.Conn) {
+							return nil, kleverr.New("relay not allowed")
+						}
+					default:
+						return nil, kleverr.Newf("unknown proto: %s", proto)
+					}
+				}
+				return nil, nil
+			},
+		},
+		statelessResetKey: &statelessResetKey,
+
+		clients: clients,
+		relays:  relays,
+
+		statusAddr: cfg.StatusAddr,
+		logger:     cfg.Logger.With("control", cfg.Addr),
+	}, nil
 }
 
 type Server struct {

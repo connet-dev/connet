@@ -386,12 +386,12 @@ by adding account management and it is one of the easiest way to start.
  - [x] Name access restrictions for clients
  - [x] File http server
  - [x] Use quic-go tracer, instead of ping (and duration estimation)
- - [ ] error wrapping
+ - [x] Optimize global IP restrictions - check earlier
 
 ## Future
 
  - [ ] UDP support
- - [ ] Optimize global IP restrictions - check earlier
+ - [ ] error wrapping
  - [ ] Gen config
  - [ ] proxy proto support
  - [ ] http source

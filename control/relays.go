@@ -244,17 +244,17 @@ func (s *relayServer) run(ctx context.Context) error {
 	}
 }
 
+func (s *relayServer) allowConn(conn net.Conn) bool {
+	return s.iprestr.IsAllowedAddr(conn.RemoteAddr())
+}
+
 func (s *relayServer) handle(ctx context.Context, conn quic.Connection) {
-	if s.iprestr.IsAllowedAddr(conn.RemoteAddr()) {
-		rc := &relayConn{
-			server: s,
-			conn:   conn,
-			logger: s.logger,
-		}
-		go rc.run(ctx)
-	} else {
-		conn.CloseWithError(quic.ApplicationErrorCode(pb.Error_AuthenticationFailed), "not allowed")
+	rc := &relayConn{
+		server: s,
+		conn:   conn,
+		logger: s.logger,
 	}
+	go rc.run(ctx)
 }
 
 func (s *relayServer) getRelayServerOffset(id ksuid.KSUID) (int64, error) {
