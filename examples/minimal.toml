@@ -17,8 +17,8 @@ cert-file = ".direnv/localhost/cert.pem"
 key-file = ".direnv/localhost/key.pem"
 
 [control]
-client-tokens-file = "examples/client-token.secret"
-relay-tokens-file = "examples/relay-token.secret"
+clients-tokens-file = "examples/client-token.secret"
+relays-tokens-file = "examples/relay-token.secret"
 cert-file = ".direnv/localhost/cert.pem"
 key-file = ".direnv/localhost/key.pem"
 
