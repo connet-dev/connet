@@ -57,24 +57,24 @@ in
       description = "Server log format to use.";
     };
 
-    clientPort = lib.mkOption {
+    clientsPort = lib.mkOption {
       default = 19190;
       type = lib.types.port;
       description = "The port to listen for incoming client connections.";
     };
 
-    clientTokensFile = lib.mkOption {
+    clientsTokensFile = lib.mkOption {
       type = lib.types.path;
       description = "The file to read client tokens from.";
     };
 
-    relayPort = lib.mkOption {
+    relaysPort = lib.mkOption {
       default = 19189;
       type = lib.types.port;
       description = "The port to listen for incoming relay connections.";
     };
 
-    relayTokensFile = lib.mkOption {
+    relaysTokensFile = lib.mkOption {
       type = lib.types.path;
       description = "The file to read relay tokens from.";
     };
@@ -151,7 +151,7 @@ in
       connet = { };
     };
 
-    networking.firewall.allowedUDPPorts = lib.mkIf cfg.openFirewall [ cfg.clientPort cfg.relayPort ];
+    networking.firewall.allowedUDPPorts = lib.mkIf cfg.openFirewall [ cfg.clientsPort cfg.relaysPort ];
 
     environment.etc."connet-control-server.toml" = {
       user = cfg.user;
@@ -160,11 +160,11 @@ in
         log-level = cfg.logLevel;
         log-format = cfg.logFormat;
         control = {
-          client-addr = ":${toString cfg.clientPort}";
-          client-tokens-file = cfg.clientTokensFile;
+          clients-addr = ":${toString cfg.clientsPort}";
+          clients-tokens-file = cfg.clientsTokensFile;
 
-          relay-addr = ":${toString cfg.relayPort}";
-          relay-tokens-file = cfg.relayTokensFile;
+          relays-addr = ":${toString cfg.relaysPort}";
+          relays-tokens-file = cfg.relaysTokensFile;
 
           store-dir = "/var/lib/connet-control-server";
         } // (if (builtins.isString cfg.useACMEHost) then

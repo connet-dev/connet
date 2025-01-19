@@ -63,10 +63,10 @@ type SourceConfig struct {
 }
 
 type ServerConfig struct {
-	Addr string `toml:"addr"`
 	Cert string `toml:"cert-file"`
 	Key  string `toml:"key-file"`
 
+	Addr              string             `toml:"addr"`
 	IPRestriction     IPRestriction      `toml:"ip-restriction"`
 	Tokens            []string           `toml:"tokens"`
 	TokensFile        string             `toml:"tokens-file"`
@@ -83,17 +83,17 @@ type ControlConfig struct {
 	Cert string `toml:"cert-file"`
 	Key  string `toml:"key-file"`
 
-	ClientAddr              string             `toml:"client-addr"`
-	ClientIPRestriction     IPRestriction      `toml:"client-ip-restriction"`
-	ClientTokens            []string           `toml:"client-tokens"`
-	ClientTokensFile        string             `toml:"client-tokens-file"`
-	ClientTokenRestrictions []TokenRestriction `toml:"client-token-restriction"`
+	ClientsAddr              string             `toml:"clients-addr"`
+	ClientsIPRestriction     IPRestriction      `toml:"clients-ip-restriction"`
+	ClientsTokens            []string           `toml:"clients-tokens"`
+	ClientsTokensFile        string             `toml:"clients-tokens-file"`
+	ClientsTokenRestrictions []TokenRestriction `toml:"clients-token-restriction"`
 
-	RelayAddr                string          `toml:"relay-addr"`
-	RelayIPRestriction       IPRestriction   `toml:"relay-ip-restriction"`
-	RelayTokens              []string        `toml:"relay-tokens"`
-	RelayTokensFile          string          `toml:"relay-tokens-file"`
-	RelayTokenIPRestrictions []IPRestriction `toml:"relay-token-ip-restriction"`
+	RelaysAddr                string          `toml:"relays-addr"`
+	RelaysIPRestriction       IPRestriction   `toml:"relays-ip-restriction"`
+	RelaysTokens              []string        `toml:"relays-tokens"`
+	RelaysTokensFile          string          `toml:"relays-tokens-file"`
+	RelaysTokenIPRestrictions []IPRestriction `toml:"relays-token-ip-restriction"`
 
 	StatusAddr string `toml:"status-addr"`
 	StoreDir   string `toml:"store-dir"`
@@ -270,17 +270,17 @@ func controlCmd() *cobra.Command {
 	cmd.Flags().StringVar(&flagsConfig.Control.Cert, "cert-file", "", "control server cert to use")
 	cmd.Flags().StringVar(&flagsConfig.Control.Key, "key-file", "", "control server key to use")
 
-	cmd.Flags().StringVar(&flagsConfig.Control.ClientAddr, "client-addr", "", "control client server addr to use")
-	cmd.Flags().StringArrayVar(&flagsConfig.Control.ClientTokens, "client-tokens", nil, "client tokens for clients to connect")
-	cmd.Flags().StringVar(&flagsConfig.Control.ClientTokensFile, "client-tokens-file", "", "client tokens file to load")
-	cmd.Flags().StringSliceVar(&flagsConfig.Control.ClientIPRestriction.AllowCIDRs, "client-allow-cidr", nil, "cidr to allow client connections from")
-	cmd.Flags().StringSliceVar(&flagsConfig.Control.ClientIPRestriction.DenyCIDRs, "client-deny-cidr", nil, "cidr to deny client connections from")
+	cmd.Flags().StringVar(&flagsConfig.Control.ClientsAddr, "clients-addr", "", "control client server addr to use")
+	cmd.Flags().StringArrayVar(&flagsConfig.Control.ClientsTokens, "clients-tokens", nil, "client tokens for clients to connect")
+	cmd.Flags().StringVar(&flagsConfig.Control.ClientsTokensFile, "clients-tokens-file", "", "client tokens file to load")
+	cmd.Flags().StringSliceVar(&flagsConfig.Control.ClientsIPRestriction.AllowCIDRs, "clients-allow-cidr", nil, "cidr to allow client connections from")
+	cmd.Flags().StringSliceVar(&flagsConfig.Control.ClientsIPRestriction.DenyCIDRs, "clients-deny-cidr", nil, "cidr to deny client connections from")
 
-	cmd.Flags().StringVar(&flagsConfig.Control.RelayAddr, "relay-addr", "", "control relay server addr to use")
-	cmd.Flags().StringArrayVar(&flagsConfig.Control.RelayTokens, "relay-tokens", nil, "relay tokens for clients to connect")
-	cmd.Flags().StringVar(&flagsConfig.Control.RelayTokensFile, "relay-tokens-file", "", "relay tokens file to load")
-	cmd.Flags().StringSliceVar(&flagsConfig.Control.RelayIPRestriction.AllowCIDRs, "relay-allow-cidr", nil, "cidr to allow relay connections from")
-	cmd.Flags().StringSliceVar(&flagsConfig.Control.RelayIPRestriction.DenyCIDRs, "relay-deny-cidr", nil, "cidr to deny relay connections from")
+	cmd.Flags().StringVar(&flagsConfig.Control.RelaysAddr, "relays-addr", "", "control relay server addr to use")
+	cmd.Flags().StringArrayVar(&flagsConfig.Control.RelaysTokens, "relays-tokens", nil, "relay tokens for clients to connect")
+	cmd.Flags().StringVar(&flagsConfig.Control.RelaysTokensFile, "relays-tokens-file", "", "relay tokens file to load")
+	cmd.Flags().StringSliceVar(&flagsConfig.Control.RelaysIPRestriction.AllowCIDRs, "relays-allow-cidr", nil, "cidr to allow relay connections from")
+	cmd.Flags().StringSliceVar(&flagsConfig.Control.RelaysIPRestriction.DenyCIDRs, "relays-deny-cidr", nil, "cidr to deny relay connections from")
 
 	cmd.Flags().StringVar(&flagsConfig.Control.StatusAddr, "status-addr", "", "status server address to listen")
 	cmd.Flags().StringVar(&flagsConfig.Control.StoreDir, "store-dir", "", "storage dir, /tmp subdirectory if empty")
@@ -552,69 +552,69 @@ func controlRun(ctx context.Context, cfg ControlConfig, logger *slog.Logger) err
 		controlCfg.Cert = cert
 	}
 
-	if cfg.ClientAddr == "" {
-		cfg.ClientAddr = ":19190"
+	if cfg.ClientsAddr == "" {
+		cfg.ClientsAddr = ":19190"
 	}
-	clientAddr, err := net.ResolveUDPAddr("udp", cfg.ClientAddr)
+	clientAddr, err := net.ResolveUDPAddr("udp", cfg.ClientsAddr)
 	if err != nil {
 		return kleverr.Newf("client address cannot be resolved: %w", err)
 	}
-	controlCfg.ClientAddr = clientAddr
+	controlCfg.ClientsAddr = clientAddr
 
-	if len(cfg.ClientIPRestriction.AllowCIDRs) > 0 || len(cfg.ClientIPRestriction.DenyCIDRs) > 0 {
-		iprestr, err := restr.ParseIP(cfg.ClientIPRestriction.AllowCIDRs, cfg.ClientIPRestriction.DenyCIDRs)
+	if len(cfg.ClientsIPRestriction.AllowCIDRs) > 0 || len(cfg.ClientsIPRestriction.DenyCIDRs) > 0 {
+		iprestr, err := restr.ParseIP(cfg.ClientsIPRestriction.AllowCIDRs, cfg.ClientsIPRestriction.DenyCIDRs)
 		if err != nil {
 			return err
 		}
-		controlCfg.ClientRestr = iprestr
+		controlCfg.ClientsRestr = iprestr
 	}
 
-	iprestr, namerestr, err := parseTokenRestrictions(cfg.ClientTokenRestrictions)
+	iprestr, namerestr, err := parseTokenRestrictions(cfg.ClientsTokenRestrictions)
 	if err != nil {
 		return err
 	}
-	if cfg.ClientTokensFile != "" {
-		tokens, terr := loadTokens(cfg.ClientTokensFile)
+	if cfg.ClientsTokensFile != "" {
+		tokens, terr := loadTokens(cfg.ClientsTokensFile)
 		if terr != nil {
 			return terr
 		}
-		controlCfg.ClientAuth, err = selfhosted.NewClientAuthenticatorRestricted(tokens, iprestr, namerestr)
+		controlCfg.ClientsAuth, err = selfhosted.NewClientAuthenticatorRestricted(tokens, iprestr, namerestr)
 	} else {
-		controlCfg.ClientAuth, err = selfhosted.NewClientAuthenticatorRestricted(cfg.ClientTokens, iprestr, namerestr)
+		controlCfg.ClientsAuth, err = selfhosted.NewClientAuthenticatorRestricted(cfg.ClientsTokens, iprestr, namerestr)
 	}
 	if err != nil {
 		return err
 	}
 
-	if cfg.RelayAddr == "" {
-		cfg.RelayAddr = ":19189"
+	if cfg.RelaysAddr == "" {
+		cfg.RelaysAddr = ":19189"
 	}
-	relayAddr, err := net.ResolveUDPAddr("udp", cfg.RelayAddr)
+	relayAddr, err := net.ResolveUDPAddr("udp", cfg.RelaysAddr)
 	if err != nil {
 		return kleverr.Newf("relay address cannot be resolved: %w", err)
 	}
-	controlCfg.RelayAddr = relayAddr
+	controlCfg.RelaysAddr = relayAddr
 
-	if len(cfg.RelayIPRestriction.AllowCIDRs) > 0 || len(cfg.RelayIPRestriction.DenyCIDRs) > 0 {
-		iprestr, err := restr.ParseIP(cfg.RelayIPRestriction.AllowCIDRs, cfg.RelayIPRestriction.DenyCIDRs)
+	if len(cfg.RelaysIPRestriction.AllowCIDRs) > 0 || len(cfg.RelaysIPRestriction.DenyCIDRs) > 0 {
+		iprestr, err := restr.ParseIP(cfg.RelaysIPRestriction.AllowCIDRs, cfg.RelaysIPRestriction.DenyCIDRs)
 		if err != nil {
 			return err
 		}
-		controlCfg.RelayRestr = iprestr
+		controlCfg.RelaysRestr = iprestr
 	}
 
-	relayRestr, err := parseIPRestrictions(cfg.RelayTokenIPRestrictions)
+	relayRestr, err := parseIPRestrictions(cfg.RelaysTokenIPRestrictions)
 	if err != nil {
 		return err
 	}
-	if cfg.RelayTokensFile != "" {
-		tokens, terr := loadTokens(cfg.RelayTokensFile)
+	if cfg.RelaysTokensFile != "" {
+		tokens, terr := loadTokens(cfg.RelaysTokensFile)
 		if terr != nil {
 			return terr
 		}
-		controlCfg.RelayAuth, err = selfhosted.NewRelayAuthenticatorRestricted(tokens, relayRestr)
+		controlCfg.RelaysAuth, err = selfhosted.NewRelayAuthenticatorRestricted(tokens, relayRestr)
 	} else {
-		controlCfg.RelayAuth, err = selfhosted.NewRelayAuthenticator(cfg.RelayTokens...)
+		controlCfg.RelaysAuth, err = selfhosted.NewRelayAuthenticator(cfg.RelaysTokens...)
 	}
 	if err != nil {
 		return err
@@ -837,17 +837,17 @@ func (c *ControlConfig) merge(o ControlConfig) {
 	c.Cert = override(c.Cert, o.Cert)
 	c.Key = override(c.Key, o.Key)
 
-	c.ClientAddr = override(c.ClientAddr, o.ClientAddr)
-	c.ClientIPRestriction.AllowCIDRs = append(c.ClientIPRestriction.AllowCIDRs, o.ClientIPRestriction.AllowCIDRs...)
-	c.ClientIPRestriction.DenyCIDRs = append(c.ClientIPRestriction.DenyCIDRs, o.ClientIPRestriction.DenyCIDRs...)
-	c.ClientTokens = append(c.ClientTokens, o.ClientTokens...)
-	c.ClientTokensFile = override(c.ClientTokensFile, o.ClientTokensFile)
+	c.ClientsAddr = override(c.ClientsAddr, o.ClientsAddr)
+	c.ClientsIPRestriction.AllowCIDRs = append(c.ClientsIPRestriction.AllowCIDRs, o.ClientsIPRestriction.AllowCIDRs...)
+	c.ClientsIPRestriction.DenyCIDRs = append(c.ClientsIPRestriction.DenyCIDRs, o.ClientsIPRestriction.DenyCIDRs...)
+	c.ClientsTokens = append(c.ClientsTokens, o.ClientsTokens...)
+	c.ClientsTokensFile = override(c.ClientsTokensFile, o.ClientsTokensFile)
 
-	c.RelayAddr = override(c.RelayAddr, o.RelayAddr)
-	c.RelayIPRestriction.AllowCIDRs = append(c.RelayIPRestriction.AllowCIDRs, o.RelayIPRestriction.AllowCIDRs...)
-	c.RelayIPRestriction.DenyCIDRs = append(c.RelayIPRestriction.DenyCIDRs, o.RelayIPRestriction.DenyCIDRs...)
-	c.RelayTokens = append(c.RelayTokens, o.RelayTokens...)
-	c.RelayTokensFile = override(c.RelayTokensFile, o.RelayTokensFile)
+	c.RelaysAddr = override(c.RelaysAddr, o.RelaysAddr)
+	c.RelaysIPRestriction.AllowCIDRs = append(c.RelaysIPRestriction.AllowCIDRs, o.RelaysIPRestriction.AllowCIDRs...)
+	c.RelaysIPRestriction.DenyCIDRs = append(c.RelaysIPRestriction.DenyCIDRs, o.RelaysIPRestriction.DenyCIDRs...)
+	c.RelaysTokens = append(c.RelaysTokens, o.RelaysTokens...)
+	c.RelaysTokensFile = override(c.RelaysTokensFile, o.RelaysTokensFile)
 
 	c.StatusAddr = override(c.StatusAddr, o.StatusAddr)
 	c.StoreDir = override(c.StoreDir, o.StoreDir)

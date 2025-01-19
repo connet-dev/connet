@@ -72,14 +72,14 @@ func NewServer(opts ...ServerOption) (*Server, error) {
 	}
 
 	control, err := control.NewServer(control.Config{
-		Cert:        cfg.cert,
-		ClientAddr:  cfg.clientsAddr,
-		ClientAuth:  cfg.clientsAuth,
-		ClientRestr: cfg.clientsRestr,
-		RelayAddr:   relaysAddr,
-		RelayAuth:   relayAuth,
-		Logger:      cfg.logger,
-		Stores:      control.NewFileStores(filepath.Join(cfg.dir, "control")),
+		Cert:         cfg.cert,
+		ClientsAddr:  cfg.clientsAddr,
+		ClientsAuth:  cfg.clientsAuth,
+		ClientsRestr: cfg.clientsRestr,
+		RelaysAddr:   relaysAddr,
+		RelaysAuth:   relayAuth,
+		Logger:       cfg.logger,
+		Stores:       control.NewFileStores(filepath.Join(cfg.dir, "control")),
 	})
 	if err != nil {
 		return nil, err

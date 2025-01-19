@@ -16,13 +16,13 @@ import (
 type Config struct {
 	Cert tls.Certificate
 
-	ClientAddr  *net.UDPAddr
-	ClientAuth  ClientAuthenticator
-	ClientRestr restr.IP
+	ClientsAddr  *net.UDPAddr
+	ClientsAuth  ClientAuthenticator
+	ClientsRestr restr.IP
 
-	RelayAddr  *net.UDPAddr
-	RelayAuth  RelayAuthenticator
-	RelayRestr restr.IP
+	RelaysAddr  *net.UDPAddr
+	RelaysAuth  RelayAuthenticator
+	RelaysRestr restr.IP
 
 	Stores Stores
 
@@ -36,12 +36,12 @@ func NewServer(cfg Config) (*Server, error) {
 		return nil, err
 	}
 
-	relays, err := newRelayServer(cfg.RelayAddr, cfg.Cert, cfg.RelayAuth, cfg.RelayRestr, configStore, cfg.Stores, cfg.Logger)
+	relays, err := newRelayServer(cfg.RelaysAddr, cfg.Cert, cfg.RelaysAuth, cfg.RelaysRestr, configStore, cfg.Stores, cfg.Logger)
 	if err != nil {
 		return nil, err
 	}
 
-	clients, err := newClientServer(cfg.ClientAddr, cfg.Cert, cfg.ClientAuth, cfg.ClientRestr, relays, configStore, cfg.Stores, cfg.Logger)
+	clients, err := newClientServer(cfg.ClientsAddr, cfg.Cert, cfg.ClientsAuth, cfg.ClientsRestr, relays, configStore, cfg.Stores, cfg.Logger)
 	if err != nil {
 		return nil, err
 	}
@@ -51,7 +51,7 @@ func NewServer(cfg Config) (*Server, error) {
 		relays:  relays,
 
 		statusAddr: cfg.StatusAddr,
-		logger:     cfg.Logger.With("control", cfg.ClientAddr),
+		logger:     cfg.Logger.With("control", cfg.ClientsAddr),
 	}, nil
 }
 
