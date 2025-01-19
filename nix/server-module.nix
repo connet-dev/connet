@@ -62,10 +62,10 @@ in
       description = "The file to read client tokens from.";
     };
 
-    clientPort = lib.mkOption {
+    clientsPort = lib.mkOption {
       default = 19190;
       type = lib.types.port;
-      description = "The port to listen for incoming connections.";
+      description = "The port to listen for incoming client connections.";
     };
 
     useACMEHost = lib.mkOption {
@@ -152,7 +152,7 @@ in
       connet = { };
     };
 
-    networking.firewall.allowedUDPPorts = lib.mkIf cfg.openFirewall [ cfg.clientPort cfg.relayPort ];
+    networking.firewall.allowedUDPPorts = lib.mkIf cfg.openFirewall [ cfg.clientsPort cfg.relayPort ];
 
     environment.etc."connet-server.toml" = {
       user = cfg.user;
@@ -163,7 +163,7 @@ in
         server = {
           tokens-file = cfg.tokenFile;
 
-          addr = ":${toString cfg.clientPort}";
+          addr = ":${toString cfg.clientsPort}";
 
           relay-addr = ":${toString cfg.relayPort}";
           relay-hostname = cfg.relayHostname;
