@@ -385,7 +385,7 @@ by adding account management and it is one of the easiest way to start.
  - [x] Stateless reset key for the server
  - [x] Name access restrictions for clients
  - [x] File http server
- - [ ] Use quic-go tracer, instead of ping (and duration estimation)
+ - [x] Use quic-go tracer, instead of ping (and duration estimation)
  - [ ] error wrapping
 
 ## Future
@@ -393,3 +393,5 @@ by adding account management and it is one of the easiest way to start.
  - [ ] UDP support
  - [ ] Optimize global IP restrictions - check earlier
  - [ ] Gen config
+ - [ ] proxy proto support
+ - [ ] http source

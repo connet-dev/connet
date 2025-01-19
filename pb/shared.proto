@@ -36,6 +36,7 @@ message Error {
     // Generic
     Unknown = 0;
     RequestUnknown = 1;
+    CheckFailed = 2;
 
     // Authentication
     AuthenticationFailed = 100;
@@ -49,6 +50,7 @@ message Error {
     // Relay
     RelayValidationFailed = 300;
     RelayInvalidCertificate = 301;
+    RelayKeepaliveClosed = 302;
 
     // Direct
     DirectConnectionClosed = 400;
