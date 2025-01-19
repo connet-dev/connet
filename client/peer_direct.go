@@ -214,6 +214,9 @@ func (p *directPeerIncoming) keepalive(ctx context.Context, conn quic.Connection
 	p.parent.local.addActiveConn(p.parent.remoteID, peerIncoming, "", conn)
 	defer p.parent.local.removeActiveConn(p.parent.remoteID, peerIncoming, "")
 
+	if rttStats := quicc.RTTStats(conn); rttStats != nil {
+		p.parent.logger.Debug("rtt stats", "direction", "in", "last", rttStats.LatestRTT(), "smoothed", rttStats.SmoothedRTT())
+	}
 	for {
 		select {
 		case <-p.closer:
@@ -222,9 +225,9 @@ func (p *directPeerIncoming) keepalive(ctx context.Context, conn quic.Connection
 			return context.Cause(ctx)
 		case <-conn.Context().Done():
 			return context.Cause(conn.Context())
-		case <-time.After(10 * time.Second):
+		case <-time.After(30 * time.Second):
 			if rttStats := quicc.RTTStats(conn); rttStats != nil {
-				p.parent.logger.Debug("rtt stats", "last", rttStats.LatestRTT(), "smoothed", rttStats.SmoothedRTT())
+				p.parent.logger.Debug("rtt stats", "direction", "in", "last", rttStats.LatestRTT(), "smoothed", rttStats.SmoothedRTT())
 			}
 		}
 	}
@@ -332,6 +335,9 @@ func (p *directPeerOutgoing) keepalive(ctx context.Context, conn quic.Connection
 	p.parent.local.addActiveConn(p.parent.remoteID, peerOutgoing, "", conn)
 	defer p.parent.local.removeActiveConn(p.parent.remoteID, peerOutgoing, "")
 
+	if rttStats := quicc.RTTStats(conn); rttStats != nil {
+		p.parent.logger.Debug("rtt stats", "direction", "out", "last", rttStats.LatestRTT(), "smoothed", rttStats.SmoothedRTT())
+	}
 	for {
 		select {
 		case <-p.closer:
@@ -340,9 +346,9 @@ func (p *directPeerOutgoing) keepalive(ctx context.Context, conn quic.Connection
 			return context.Cause(ctx)
 		case <-conn.Context().Done():
 			return context.Cause(conn.Context())
-		case <-time.After(10 * time.Second):
+		case <-time.After(30 * time.Second):
 			if rttStats := quicc.RTTStats(conn); rttStats != nil {
-				p.parent.logger.Debug("rtt stats", "last", rttStats.LatestRTT(), "smoothed", rttStats.SmoothedRTT())
+				p.parent.logger.Debug("rtt stats", "direction", "out", "last", rttStats.LatestRTT(), "smoothed", rttStats.SmoothedRTT())
 			}
 		}
 	}

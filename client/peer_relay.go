@@ -128,13 +128,16 @@ func (r *relayPeer) keepalive(ctx context.Context, conn quic.Connection) error {
 	r.local.addRelayConn(r.serverHostport, conn)
 	defer r.local.removeRelayConn(r.serverHostport)
 
+	if rttStats := quicc.RTTStats(conn); rttStats != nil {
+		r.logger.Debug("rtt stats", "last", rttStats.LatestRTT(), "smoothed", rttStats.SmoothedRTT())
+	}
 	for {
 		select {
 		case <-ctx.Done():
 			return context.Cause(ctx)
 		case <-conn.Context().Done():
 			return context.Cause(conn.Context())
-		case <-time.After(10 * time.Second): // TODO 30 sec?
+		case <-time.After(30 * time.Second):
 			if rttStats := quicc.RTTStats(conn); rttStats != nil {
 				r.logger.Debug("rtt stats", "last", rttStats.LatestRTT(), "smoothed", rttStats.SmoothedRTT())
 			}

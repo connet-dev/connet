@@ -226,6 +226,7 @@ func (c *clientConn) runErr(ctx context.Context) error {
 		return c.conn.CloseWithError(quic.ApplicationErrorCode(pb.Error_AuthenticationFailed), "authentication missing")
 	} else {
 		c.auth = auth
+		c.logger = c.logger.With("fwd", auth.fwd, "key", auth.key)
 	}
 
 	if err := c.check(ctx); err != nil {
@@ -262,13 +263,16 @@ func (c *clientConn) runDestination(ctx context.Context) error {
 	fcs := c.server.addDestination(c)
 	defer c.server.removeDestination(fcs, c)
 
+	if rttStats := quicc.RTTStats(c.conn); rttStats != nil {
+		c.logger.Debug("rtt stats", "last", rttStats.LatestRTT(), "smoothed", rttStats.SmoothedRTT())
+	}
 	for {
 		select {
 		case <-ctx.Done():
 			return context.Cause(ctx)
 		case <-c.conn.Context().Done():
 			return context.Cause(c.conn.Context())
-		case <-time.After(10 * time.Second): // TODO 30 sec?
+		case <-time.After(30 * time.Second):
 			if rttStats := quicc.RTTStats(c.conn); rttStats != nil {
 				c.logger.Debug("rtt stats", "last", rttStats.LatestRTT(), "smoothed", rttStats.SmoothedRTT())
 			}
