@@ -11,9 +11,10 @@ pkgs.dockerTools.buildLayeredImage {
     Cmd = [ "--help" ];
     ExposedPorts = {
       # working ports
-      "19190/udp" = { };
-      "19191/udp" = { };
-      "19192/udp" = { };
+      "19189/udp" = { }; # control listens for relays
+      "19190/udp" = { }; # control listens for clients
+      "19191/udp" = { }; # relay listens for clients
+      "19192/udp" = { }; # client listens for clients
     };
     Volumes = {
       "/tmp" = { };

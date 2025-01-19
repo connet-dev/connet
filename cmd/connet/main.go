@@ -675,7 +675,7 @@ func relayRun(ctx context.Context, cfg RelayConfig, logger *slog.Logger) error {
 	relayCfg.Hostport = model.HostPort{Host: cfg.Hostname, Port: uint16(serverAddr.Port)}
 
 	if cfg.ControlAddr == "" {
-		cfg.ControlAddr = "localhost:19190"
+		cfg.ControlAddr = "localhost:19189"
 	}
 	controlAddr, err := net.ResolveUDPAddr("udp", cfg.ControlAddr)
 	if err != nil {
