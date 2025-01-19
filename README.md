@@ -132,7 +132,7 @@ token-file = "path/to/relay/token" # a file that contains the token, one of toke
 server-addr = "localhost:19190" # the control server address to connect to
 server-cas = "path/to/cert.pem" # the control server certificate
 
-direct-addr = ":19192" # at what address this client listens for direct connections, defaults to :19192
+direct-addr = ":19193" # at what address this client listens for direct connections, defaults to :19193
 status-addr = "127.0.0.1:19182" # at what address this client listens for status connections, disabled unless set
 
 [client.destinations.serviceX]
@@ -189,14 +189,15 @@ To run a control server, use `connet control --config control-config.toml` comma
 `control-config.toml` configuration specification:
 ```toml
 [control]
-addr = ":19190" # the address at which the control server will listen for connections, defaults to :19190
 cert-file = "path/to/cert.pem" # the server certificate file, in pem format
 key-file = "path/to/key.pem" # the server certificate private key file
 
+client-addr = ":19190" # the address at which the control server will listen for client connections, defaults to :19190
 client-tokens = ["client-token-1", "client-token-n"] # set of recognized client tokens
 client-tokens-file = "path/to/client/tokens" # a file that contains a list of client tokens, one token per line
 # one of client-tokens or client-tokens-file is required
 
+relay-addr = ":19191" # the address at which the control server will listen for relay connections, defaults to :19191
 relay-tokens = ["relay-token-1", "relay-token-n"] # set of recognized relay tokens
 relay-tokens-file = "path/to/relay/token" # a file that contains a list of relay tokens, one token per line
 # one of relay-tokens or relay-tokens-file is necessary when connecting relays
@@ -231,7 +232,7 @@ To run a relay server, use `connet relay --config relay-config.toml` command. He
 token = "relay-token-1" # the token which the relay server uses to authenticate against the control server
 token-file = "path/to/relay/token" # a file that contains the token, one of token or token-file is required
 
-addr = ":19191" # the address at which the relay will listen for connectsion, defaults to :19191
+addr = ":19192" # the address at which the relay will listen for connectsion, defaults to :19192
 hostname = "localhost" # the public hostname (e.g. domain, ip address) which will be advertised to clients, defaults to localhost
 
 control-addr = "localhost:19190" # the control server address to connect to, defaults to localhost:19191

@@ -68,10 +68,11 @@ func (f *fileStores) RelayServerOffsets() (logc.KV[RelayConnKey, int64], error) 
 type ConfigKey string
 
 var (
-	configStatelessReset     ConfigKey = "stateless-reset"
-	configServerID           ConfigKey = "server-id"
-	configServerClientSecret ConfigKey = "server-client-secret"
-	configServerRelaySecret  ConfigKey = "server-relay-secret"
+	configClientStatelessReset ConfigKey = "client-stateless-reset"
+	configRelayStatelessReset  ConfigKey = "relay-stateless-reset"
+	configServerID             ConfigKey = "server-id"
+	configServerClientSecret   ConfigKey = "server-client-secret"
+	configServerRelaySecret    ConfigKey = "server-relay-secret"
 )
 
 type ConfigValue struct {

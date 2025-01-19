@@ -27,6 +27,14 @@ func ParseIP(allowsStr []string, deniesStr []string) (IP, error) {
 	return IP{allows, denies}, nil
 }
 
+func (r IP) IsEmpty() bool {
+	return len(r.Allows) == 0 && len(r.Denies) == 0
+}
+
+func (r IP) IsNotEmpty() bool {
+	return !r.IsEmpty()
+}
+
 // IsAllowed checks if an IP address is allowed according to Allows and Denies rules.
 //
 // If the ip matches any of the Denies rules, IsAllowed returns false.

@@ -36,14 +36,14 @@ func NewServer(opts ...ServerOption) (*Server, error) {
 		}
 	}
 
-	if cfg.controlAddr == nil {
-		if err := ServerControlAddress(":19190")(cfg); err != nil {
+	if cfg.clientsAddr == nil {
+		if err := ServerClientsAddress(":19190")(cfg); err != nil {
 			return nil, err
 		}
 	}
 
 	if cfg.relayAddr == nil {
-		if err := ServerRelayAddress(":19191")(cfg); err != nil {
+		if err := ServerRelayAddress(":19192")(cfg); err != nil {
 			return nil, err
 		}
 	}
@@ -61,6 +61,10 @@ func NewServer(opts ...ServerOption) (*Server, error) {
 		cfg.logger.Info("using temporary store directory", "dir", cfg.dir)
 	}
 
+	relaysAddr, err := net.ResolveUDPAddr("udp", "127.0.0.1:19191")
+	if err != nil {
+		return nil, kleverr.Newf("control address cannot be resolved: %w", err)
+	}
 	relayControlToken := model.GenServerName("relay")
 	relayAuth, err := selfhosted.NewRelayAuthenticator(relayControlToken)
 	if err != nil {
@@ -68,10 +72,11 @@ func NewServer(opts ...ServerOption) (*Server, error) {
 	}
 
 	control, err := control.NewServer(control.Config{
-		Addr:        cfg.controlAddr,
-		Cert:        cfg.controlCert,
-		ClientAuth:  cfg.clientAuth,
-		ClientRestr: cfg.clientRestr,
+		Cert:        cfg.cert,
+		ClientAddr:  cfg.clientsAddr,
+		ClientAuth:  cfg.clientsAuth,
+		ClientRestr: cfg.clientsRestr,
+		RelayAddr:   relaysAddr,
 		RelayAuth:   relayAuth,
 		Logger:      cfg.logger,
 		Stores:      control.NewFileStores(filepath.Join(cfg.dir, "control")),
@@ -81,14 +86,14 @@ func NewServer(opts ...ServerOption) (*Server, error) {
 	}
 
 	controlCAs := x509.NewCertPool()
-	controlCAs.AddCert(cfg.controlCert.Leaf)
+	controlCAs.AddCert(cfg.cert.Leaf)
 	relay, err := relay.NewServer(relay.Config{
 		Addr:     cfg.relayAddr,
 		Hostport: model.HostPort{Host: cfg.relayHostname, Port: cfg.relayAddr.AddrPort().Port()},
 		Logger:   cfg.logger,
 		Stores:   relay.NewFileStores(filepath.Join(cfg.dir, "relay")),
 
-		ControlAddr:  cfg.controlAddr,
+		ControlAddr:  relaysAddr,
 		ControlHost:  "localhost",
 		ControlToken: relayControlToken,
 		ControlCAs:   controlCAs,
@@ -142,11 +147,11 @@ type ServerStatus struct {
 }
 
 type serverConfig struct {
-	clientAuth  control.ClientAuthenticator
-	clientRestr restr.IP
+	cert tls.Certificate
 
-	controlAddr *net.UDPAddr
-	controlCert tls.Certificate
+	clientsAddr  *net.UDPAddr
+	clientsAuth  control.ClientAuthenticator
+	clientsRestr restr.IP
 
 	relayAddr     *net.UDPAddr
 	relayHostname string
@@ -159,6 +164,32 @@ type serverConfig struct {
 
 type ServerOption func(*serverConfig) error
 
+func ServerCertificate(certFile, keyFile string) ServerOption {
+	return func(cfg *serverConfig) error {
+		cert, err := tls.LoadX509KeyPair(certFile, keyFile)
+		if err != nil {
+			return kleverr.Newf("control cert cannot be loaded: %w", err)
+		}
+
+		cfg.cert = cert
+
+		return nil
+	}
+}
+
+func ServerClientsAddress(address string) ServerOption {
+	return func(cfg *serverConfig) error {
+		addr, err := net.ResolveUDPAddr("udp", address)
+		if err != nil {
+			return kleverr.Newf("control address cannot be resolved: %w", err)
+		}
+
+		cfg.clientsAddr = addr
+
+		return nil
+	}
+}
+
 func ServerClientTokens(tokens ...string) ServerOption {
 	return func(cfg *serverConfig) error {
 		clientAuth, err := selfhosted.NewClientAuthenticator(tokens...)
@@ -166,7 +197,7 @@ func ServerClientTokens(tokens ...string) ServerOption {
 			return err
 		}
 
-		cfg.clientAuth = clientAuth
+		cfg.clientsAuth = clientAuth
 
 		return nil
 	}
@@ -179,7 +210,7 @@ func ServerClientTokensRestricted(tokens []string, iprestr []restr.IP, namerestr
 			return err
 		}
 
-		cfg.clientAuth = clientAuth
+		cfg.clientsAuth = clientAuth
 
 		return nil
 	}
@@ -192,41 +223,7 @@ func ServerClientRestrictions(allow []string, deny []string) ServerOption {
 			return err
 		}
 
-		cfg.clientRestr = iprestr
-
-		return nil
-	}
-}
-
-func ServerControlAddress(address string) ServerOption {
-	return func(cfg *serverConfig) error {
-		addr, err := net.ResolveUDPAddr("udp", address)
-		if err != nil {
-			return kleverr.Newf("control address cannot be resolved: %w", err)
-		}
-
-		cfg.controlAddr = addr
-
-		return nil
-	}
-}
-
-func ServerControlCertificate(certFile, keyFile string) ServerOption {
-	return func(cfg *serverConfig) error {
-		cert, err := tls.LoadX509KeyPair(certFile, keyFile)
-		if err != nil {
-			return kleverr.Newf("control cert cannot be loaded: %w", err)
-		}
-
-		cfg.controlCert = cert
-
-		return nil
-	}
-}
-
-func serverControlCertificate(cert tls.Certificate) ServerOption {
-	return func(cfg *serverConfig) error {
-		cfg.controlCert = cert
+		cfg.clientsRestr = iprestr
 
 		return nil
 	}

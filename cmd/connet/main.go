@@ -80,15 +80,16 @@ type ServerConfig struct {
 }
 
 type ControlConfig struct {
-	Addr string `toml:"addr"`
 	Cert string `toml:"cert-file"`
 	Key  string `toml:"key-file"`
 
+	ClientAddr              string             `toml:"client-addr"`
 	ClientIPRestriction     IPRestriction      `toml:"client-ip-restriction"`
 	ClientTokens            []string           `toml:"client-tokens"`
 	ClientTokensFile        string             `toml:"client-tokens-file"`
 	ClientTokenRestrictions []TokenRestriction `toml:"client-token-restriction"`
 
+	RelayAddr                string          `toml:"relay-addr"`
 	RelayIPRestriction       IPRestriction   `toml:"relay-ip-restriction"`
 	RelayTokens              []string        `toml:"relay-tokens"`
 	RelayTokensFile          string          `toml:"relay-tokens-file"`
@@ -266,15 +267,16 @@ func controlCmd() *cobra.Command {
 	cmd.Flags().StringVar(&flagsConfig.LogLevel, "log-level", "", "log level to use")
 	cmd.Flags().StringVar(&flagsConfig.LogFormat, "log-format", "", "log formatter to use")
 
-	cmd.Flags().StringVar(&flagsConfig.Control.Addr, "addr", "", "control server addr to use")
 	cmd.Flags().StringVar(&flagsConfig.Control.Cert, "cert-file", "", "control server cert to use")
 	cmd.Flags().StringVar(&flagsConfig.Control.Key, "key-file", "", "control server key to use")
 
+	cmd.Flags().StringVar(&flagsConfig.Control.ClientAddr, "client-addr", "", "control client server addr to use")
 	cmd.Flags().StringArrayVar(&flagsConfig.Control.ClientTokens, "client-tokens", nil, "client tokens for clients to connect")
 	cmd.Flags().StringVar(&flagsConfig.Control.ClientTokensFile, "client-tokens-file", "", "client tokens file to load")
 	cmd.Flags().StringSliceVar(&flagsConfig.Control.ClientIPRestriction.AllowCIDRs, "client-allow-cidr", nil, "cidr to allow client connections from")
 	cmd.Flags().StringSliceVar(&flagsConfig.Control.ClientIPRestriction.DenyCIDRs, "client-deny-cidr", nil, "cidr to deny client connections from")
 
+	cmd.Flags().StringVar(&flagsConfig.Control.RelayAddr, "relay-addr", "", "control relay server addr to use")
 	cmd.Flags().StringArrayVar(&flagsConfig.Control.RelayTokens, "relay-tokens", nil, "relay tokens for clients to connect")
 	cmd.Flags().StringVar(&flagsConfig.Control.RelayTokensFile, "relay-tokens-file", "", "relay tokens file to load")
 	cmd.Flags().StringSliceVar(&flagsConfig.Control.RelayIPRestriction.AllowCIDRs, "relay-allow-cidr", nil, "cidr to allow relay connections from")
@@ -490,10 +492,10 @@ func serverRun(ctx context.Context, cfg ServerConfig, logger *slog.Logger) error
 	var opts []connet.ServerOption
 
 	if cfg.Addr != "" {
-		opts = append(opts, connet.ServerControlAddress(cfg.Addr))
+		opts = append(opts, connet.ServerClientsAddress(cfg.Addr))
 	}
 	if cfg.Cert != "" {
-		opts = append(opts, connet.ServerControlCertificate(cfg.Cert, cfg.Key))
+		opts = append(opts, connet.ServerCertificate(cfg.Cert, cfg.Key))
 	}
 
 	if len(cfg.IPRestriction.AllowCIDRs) > 0 || len(cfg.IPRestriction.DenyCIDRs) > 0 {
@@ -542,15 +544,6 @@ func controlRun(ctx context.Context, cfg ControlConfig, logger *slog.Logger) err
 		Logger: logger,
 	}
 
-	if cfg.Addr == "" {
-		cfg.Addr = ":19190"
-	}
-	addr, err := net.ResolveUDPAddr("udp", cfg.Addr)
-	if err != nil {
-		return kleverr.Newf("control address cannot be resolved: %w", err)
-	}
-	controlCfg.Addr = addr
-
 	if cfg.Cert != "" {
 		cert, err := tls.LoadX509KeyPair(cfg.Cert, cfg.Key)
 		if err != nil {
@@ -558,6 +551,15 @@ func controlRun(ctx context.Context, cfg ControlConfig, logger *slog.Logger) err
 		}
 		controlCfg.Cert = cert
 	}
+
+	if cfg.ClientAddr == "" {
+		cfg.ClientAddr = ":19190"
+	}
+	clientAddr, err := net.ResolveUDPAddr("udp", cfg.ClientAddr)
+	if err != nil {
+		return kleverr.Newf("client address cannot be resolved: %w", err)
+	}
+	controlCfg.ClientAddr = clientAddr
 
 	if len(cfg.ClientIPRestriction.AllowCIDRs) > 0 || len(cfg.ClientIPRestriction.DenyCIDRs) > 0 {
 		iprestr, err := restr.ParseIP(cfg.ClientIPRestriction.AllowCIDRs, cfg.ClientIPRestriction.DenyCIDRs)
@@ -583,6 +585,15 @@ func controlRun(ctx context.Context, cfg ControlConfig, logger *slog.Logger) err
 	if err != nil {
 		return err
 	}
+
+	if cfg.RelayAddr == "" {
+		cfg.RelayAddr = ":19190"
+	}
+	relayAddr, err := net.ResolveUDPAddr("udp", cfg.RelayAddr)
+	if err != nil {
+		return kleverr.Newf("relay address cannot be resolved: %w", err)
+	}
+	controlCfg.RelayAddr = relayAddr
 
 	if len(cfg.RelayIPRestriction.AllowCIDRs) > 0 || len(cfg.RelayIPRestriction.DenyCIDRs) > 0 {
 		iprestr, err := restr.ParseIP(cfg.RelayIPRestriction.AllowCIDRs, cfg.RelayIPRestriction.DenyCIDRs)
@@ -650,7 +661,7 @@ func relayRun(ctx context.Context, cfg RelayConfig, logger *slog.Logger) error {
 	}
 
 	if cfg.Addr == "" {
-		cfg.Addr = ":19191"
+		cfg.Addr = ":19192"
 		if cfg.Hostname == "" {
 			cfg.Hostname = "localhost"
 		}
@@ -823,15 +834,16 @@ func (c *ServerConfig) merge(o ServerConfig) {
 }
 
 func (c *ControlConfig) merge(o ControlConfig) {
-	c.Addr = override(c.Addr, o.Addr)
 	c.Cert = override(c.Cert, o.Cert)
 	c.Key = override(c.Key, o.Key)
 
+	c.ClientAddr = override(c.ClientAddr, o.ClientAddr)
 	c.ClientIPRestriction.AllowCIDRs = append(c.ClientIPRestriction.AllowCIDRs, o.ClientIPRestriction.AllowCIDRs...)
 	c.ClientIPRestriction.DenyCIDRs = append(c.ClientIPRestriction.DenyCIDRs, o.ClientIPRestriction.DenyCIDRs...)
 	c.ClientTokens = append(c.ClientTokens, o.ClientTokens...)
 	c.ClientTokensFile = override(c.ClientTokensFile, o.ClientTokensFile)
 
+	c.RelayAddr = override(c.RelayAddr, o.RelayAddr)
 	c.RelayIPRestriction.AllowCIDRs = append(c.RelayIPRestriction.AllowCIDRs, o.RelayIPRestriction.AllowCIDRs...)
 	c.RelayIPRestriction.DenyCIDRs = append(c.RelayIPRestriction.DenyCIDRs, o.RelayIPRestriction.DenyCIDRs...)
 	c.RelayTokens = append(c.RelayTokens, o.RelayTokens...)

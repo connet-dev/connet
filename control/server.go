@@ -2,30 +2,25 @@ package control
 
 import (
 	"context"
-	"crypto/rand"
 	"crypto/tls"
-	"io"
 	"log/slog"
 	"net"
 
+	"github.com/connet-dev/connet/groupc"
 	"github.com/connet-dev/connet/model"
-	"github.com/connet-dev/connet/pb"
-	"github.com/connet-dev/connet/quicc"
 	"github.com/connet-dev/connet/restr"
 	"github.com/connet-dev/connet/statusc"
-	"github.com/klev-dev/kleverr"
-	"github.com/quic-go/quic-go"
 	"github.com/segmentio/ksuid"
-	"golang.org/x/sync/errgroup"
 )
 
 type Config struct {
-	Addr *net.UDPAddr
 	Cert tls.Certificate
 
+	ClientAddr  *net.UDPAddr
 	ClientAuth  ClientAuthenticator
 	ClientRestr restr.IP
 
+	RelayAddr  *net.UDPAddr
 	RelayAuth  RelayAuthenticator
 	RelayRestr restr.IP
 
@@ -41,67 +36,26 @@ func NewServer(cfg Config) (*Server, error) {
 		return nil, err
 	}
 
-	statelessResetVal, err := configStore.GetOrInit(configStatelessReset, func(ck ConfigKey) (ConfigValue, error) {
-		var key quic.StatelessResetKey
-		if _, err := io.ReadFull(rand.Reader, key[:]); err != nil {
-			return ConfigValue{}, kleverr.Newf("could not read rand: %w", err)
-		}
-		return ConfigValue{Bytes: key[:]}, nil
-	})
-	if err != nil {
-		return nil, err
-	}
-	var statelessResetKey quic.StatelessResetKey
-	copy(statelessResetKey[:], statelessResetVal.Bytes)
-
-	relays, err := newRelayServer(cfg.RelayAuth, cfg.RelayRestr, configStore, cfg.Stores, cfg.Logger)
+	relays, err := newRelayServer(cfg.RelayAddr, cfg.Cert, cfg.RelayAuth, cfg.RelayRestr, configStore, cfg.Stores, cfg.Logger)
 	if err != nil {
 		return nil, err
 	}
 
-	clients, err := newClientServer(cfg.ClientAuth, cfg.ClientRestr, relays, configStore, cfg.Stores, cfg.Logger)
+	clients, err := newClientServer(cfg.ClientAddr, cfg.Cert, cfg.ClientAuth, cfg.ClientRestr, relays, configStore, cfg.Stores, cfg.Logger)
 	if err != nil {
 		return nil, err
 	}
 
 	return &Server{
-		addr: cfg.Addr,
-		tlsConf: &tls.Config{
-			Certificates: []tls.Certificate{cfg.Cert},
-			NextProtos:   []string{"connet", "connet-relays"},
-			GetConfigForClient: func(chi *tls.ClientHelloInfo) (*tls.Config, error) {
-				for _, proto := range chi.SupportedProtos {
-					switch proto {
-					case "connet":
-						if !clients.allowConn(chi.Conn) {
-							return nil, kleverr.New("client not allowed")
-						}
-					case "connet-relays":
-						if !relays.allowConn(chi.Conn) {
-							return nil, kleverr.New("relay not allowed")
-						}
-					default:
-						return nil, kleverr.Newf("unknown proto: %s", proto)
-					}
-				}
-				return nil, nil
-			},
-		},
-		statelessResetKey: &statelessResetKey,
-
 		clients: clients,
 		relays:  relays,
 
 		statusAddr: cfg.StatusAddr,
-		logger:     cfg.Logger.With("control", cfg.Addr),
+		logger:     cfg.Logger.With("control", cfg.ClientAddr),
 	}, nil
 }
 
 type Server struct {
-	addr              *net.UDPAddr
-	tlsConf           *tls.Config
-	statelessResetKey *quic.StatelessResetKey
-
 	clients *clientServer
 	relays  *relayServer
 
@@ -110,54 +64,13 @@ type Server struct {
 }
 
 func (s *Server) Run(ctx context.Context) error {
-	g, ctx := errgroup.WithContext(ctx)
+	g := groupc.New(ctx)
 
-	g.Go(func() error { return s.relays.run(ctx) })
-	g.Go(func() error { return s.clients.run(ctx) })
-	g.Go(func() error { return s.runListener(ctx) })
-	g.Go(func() error { return s.runStatus(ctx) })
+	g.Go(s.relays.run)
+	g.Go(s.clients.run)
+	g.Go(s.runStatus)
 
 	return g.Wait()
-}
-
-func (s *Server) runListener(ctx context.Context) error {
-	s.logger.Debug("start udp listener")
-	udpConn, err := net.ListenUDP("udp", s.addr)
-	if err != nil {
-		return kleverr.Ret(err)
-	}
-	defer udpConn.Close()
-
-	s.logger.Debug("start quic listener")
-	transport := quicc.ServerTransport(udpConn, s.statelessResetKey)
-	defer transport.Close()
-
-	l, err := transport.Listen(s.tlsConf, quicc.StdConfig)
-	if err != nil {
-		return kleverr.Ret(err)
-	}
-	defer l.Close()
-
-	s.logger.Info("waiting for connections")
-	for {
-		conn, err := l.Accept(ctx)
-		if err != nil {
-			s.logger.Debug("accept error", "err", err)
-			return kleverr.Ret(err)
-		}
-
-		switch conn.ConnectionState().TLS.NegotiatedProtocol {
-		case "connet":
-			s.logger.Info("new client connected", "remote", conn.RemoteAddr())
-			s.clients.handle(ctx, conn)
-		case "connet-relays":
-			s.logger.Info("new relay connected", "remote", conn.RemoteAddr())
-			s.relays.handle(ctx, conn)
-		default:
-			s.logger.Debug("unknown connected", "remote", conn.RemoteAddr())
-			conn.CloseWithError(quic.ApplicationErrorCode(pb.Error_AuthenticationFailed), "unknown protocol")
-		}
-	}
 }
 
 func (s *Server) runStatus(ctx context.Context) error {

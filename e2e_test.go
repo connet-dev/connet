@@ -2,6 +2,7 @@ package connet
 
 import (
 	"context"
+	"crypto/tls"
 	"fmt"
 	"io"
 	"log/slog"
@@ -42,8 +43,8 @@ func TestE2E(t *testing.T) {
 			[]restr.IP{{}, {}, localRestr, {}},
 			[]restr.Name{{}, {}, {}, tetRestr},
 		),
-		serverControlCertificate(cert),
-		ServerControlAddress(":20000"),
+		serverCertificate(cert),
+		ServerClientsAddress(":20000"),
 		ServerRelayAddress(":20001"),
 		ServerLogger(logger.With("test", "server")),
 	)
@@ -154,4 +155,12 @@ func TestE2E(t *testing.T) {
 
 	// make sure everything shuts down on context cancel
 	_ = g.Wait()
+}
+
+func serverCertificate(cert tls.Certificate) ServerOption {
+	return func(cfg *serverConfig) error {
+		cfg.cert = cert
+
+		return nil
+	}
 }

@@ -3,6 +3,7 @@ package control
 import (
 	"context"
 	"crypto/rand"
+	"crypto/tls"
 	"crypto/x509"
 	"encoding"
 	"io"
@@ -11,11 +12,13 @@ import (
 	"slices"
 	"sync"
 
+	"github.com/connet-dev/connet/groupc"
 	"github.com/connet-dev/connet/logc"
 	"github.com/connet-dev/connet/model"
 	"github.com/connet-dev/connet/pb"
 	"github.com/connet-dev/connet/pbc"
 	"github.com/connet-dev/connet/pbs"
+	"github.com/connet-dev/connet/quicc"
 	"github.com/connet-dev/connet/restr"
 	"github.com/klev-dev/kleverr"
 	"github.com/quic-go/quic-go"
@@ -39,6 +42,8 @@ type ClientRelays interface {
 }
 
 func newClientServer(
+	addr *net.UDPAddr,
+	cert tls.Certificate,
 	auth ClientAuthenticator,
 	iprestr restr.IP,
 	relays ClientRelays,
@@ -82,7 +87,27 @@ func newClientServer(
 		return nil, err
 	}
 
-	s := &clientServer{
+	statelessResetVal, err := config.GetOrInit(configClientStatelessReset, func(ck ConfigKey) (ConfigValue, error) {
+		var key quic.StatelessResetKey
+		if _, err := io.ReadFull(rand.Reader, key[:]); err != nil {
+			return ConfigValue{}, kleverr.Newf("could not read rand: %w", err)
+		}
+		return ConfigValue{Bytes: key[:]}, nil
+	})
+	if err != nil {
+		return nil, err
+	}
+	var statelessResetKey quic.StatelessResetKey
+	copy(statelessResetKey[:], statelessResetVal.Bytes)
+
+	return &clientServer{
+		addr: addr,
+		tlsConf: &tls.Config{
+			Certificates: []tls.Certificate{cert},
+			NextProtos:   []string{"connet"},
+		},
+		statelessResetKey: &statelessResetKey,
+
 		auth:    auth,
 		iprestr: iprestr,
 		relays:  relays,
@@ -95,12 +120,14 @@ func newClientServer(
 
 		peersCache:  peersCache,
 		peersOffset: clientsOffset,
-	}
-
-	return s, nil
+	}, nil
 }
 
 type clientServer struct {
+	addr              *net.UDPAddr
+	tlsConf           *tls.Config
+	statelessResetKey *quic.StatelessResetKey
+
 	auth    ClientAuthenticator
 	iprestr restr.IP
 	relays  ClientRelays
@@ -194,6 +221,61 @@ func (s *clientServer) listen(ctx context.Context, fwd model.Forward, role model
 }
 
 func (s *clientServer) run(ctx context.Context) error {
+	g := groupc.New(ctx)
+
+	g.Go(s.runListener)
+	g.Go(s.runPeerCache)
+
+	return g.Wait()
+}
+
+func (s *clientServer) runListener(ctx context.Context) error {
+	s.logger.Debug("start udp listener")
+	udpConn, err := net.ListenUDP("udp", s.addr)
+	if err != nil {
+		return kleverr.Ret(err)
+	}
+	defer udpConn.Close()
+
+	s.logger.Debug("start quic listener")
+	transport := quicc.ServerTransport(udpConn, s.statelessResetKey)
+	defer transport.Close()
+
+	quicConf := quicc.StdConfig
+	if s.iprestr.IsNotEmpty() {
+		quicConf = quicConf.Clone()
+		quicConf.GetConfigForClient = func(info *quic.ClientHelloInfo) (*quic.Config, error) {
+			if s.iprestr.IsAllowedAddr(info.RemoteAddr) {
+				return quicConf, nil
+			}
+			return nil, kleverr.New("not allowed")
+		}
+	}
+
+	l, err := transport.Listen(s.tlsConf, quicConf)
+	if err != nil {
+		return kleverr.Ret(err)
+	}
+	defer l.Close()
+
+	s.logger.Info("waiting for connections")
+	for {
+		conn, err := l.Accept(ctx)
+		if err != nil {
+			s.logger.Debug("accept error", "err", err)
+			return kleverr.Ret(err)
+		}
+
+		cc := &clientConn{
+			server: s,
+			conn:   conn,
+			logger: s.logger,
+		}
+		go cc.run(ctx)
+	}
+}
+
+func (s *clientServer) runPeerCache(ctx context.Context) error {
 	update := func(msg logc.Message[ClientPeerKey, ClientPeerValue]) error {
 		s.peersMu.Lock()
 		defer s.peersMu.Unlock()
@@ -248,19 +330,6 @@ func (s *clientServer) run(ctx context.Context) error {
 		s.peersOffset = nextOffset
 		s.peersMu.Unlock()
 	}
-}
-
-func (s *clientServer) allowConn(conn net.Conn) bool {
-	return s.iprestr.IsAllowedAddr(conn.RemoteAddr())
-}
-
-func (s *clientServer) handle(ctx context.Context, conn quic.Connection) {
-	cc := &clientConn{
-		server: s,
-		conn:   conn,
-		logger: s.logger,
-	}
-	go cc.run(ctx)
 }
 
 type clientConn struct {
