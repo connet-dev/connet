@@ -3,7 +3,7 @@ log-level = "debug"
 [client]
 token-file = "examples/client-token.secret"
 server-cas = ".direnv/minica.pem"
-direct-addr = ":19194"
+direct-addr = ":19193"
 
 [client.sources.sws]
 addr = ":9999"

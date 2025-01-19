@@ -587,7 +587,7 @@ func controlRun(ctx context.Context, cfg ControlConfig, logger *slog.Logger) err
 	}
 
 	if cfg.RelayAddr == "" {
-		cfg.RelayAddr = ":19190"
+		cfg.RelayAddr = ":19189"
 	}
 	relayAddr, err := net.ResolveUDPAddr("udp", cfg.RelayAddr)
 	if err != nil {
@@ -661,7 +661,7 @@ func relayRun(ctx context.Context, cfg RelayConfig, logger *slog.Logger) error {
 	}
 
 	if cfg.Addr == "" {
-		cfg.Addr = ":19192"
+		cfg.Addr = ":19191"
 		if cfg.Hostname == "" {
 			cfg.Hostname = "localhost"
 		}

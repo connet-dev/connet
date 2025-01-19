@@ -43,7 +43,7 @@ func NewServer(opts ...ServerOption) (*Server, error) {
 	}
 
 	if cfg.relayAddr == nil {
-		if err := ServerRelayAddress(":19192")(cfg); err != nil {
+		if err := ServerRelayAddress(":19191")(cfg); err != nil {
 			return nil, err
 		}
 	}
@@ -61,7 +61,7 @@ func NewServer(opts ...ServerOption) (*Server, error) {
 		cfg.logger.Info("using temporary store directory", "dir", cfg.dir)
 	}
 
-	relaysAddr, err := net.ResolveUDPAddr("udp", "127.0.0.1:19191")
+	relaysAddr, err := net.ResolveUDPAddr("udp", "127.0.0.1:19189")
 	if err != nil {
 		return nil, kleverr.Newf("control address cannot be resolved: %w", err)
 	}

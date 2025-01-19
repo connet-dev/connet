@@ -54,7 +54,7 @@ func NewClient(opts ...ClientOption) (*Client, error) {
 	}
 
 	if cfg.directAddr == nil {
-		if err := ClientDirectAddress(":19193")(cfg); err != nil {
+		if err := ClientDirectAddress(":19192")(cfg); err != nil {
 			return nil, kleverr.Ret(err)
 		}
 	}
