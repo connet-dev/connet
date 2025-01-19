@@ -77,7 +77,7 @@ in
     controlAddr = lib.mkOption {
       type = lib.types.str;
       description = "Control server address to connect to";
-      example = "localhost:19190";
+      example = "localhost:19189";
     };
 
     controlCA = lib.mkOption {
