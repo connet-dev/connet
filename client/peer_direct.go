@@ -133,6 +133,7 @@ type directPeerIncoming struct {
 	parent     *directPeer
 	clientCert *x509.Certificate
 	closer     chan struct{}
+	logger     *slog.Logger
 }
 
 func newDirectPeerIncoming(ctx context.Context, parent *directPeer, clientCert *x509.Certificate) *directPeerIncoming {
@@ -140,6 +141,7 @@ func newDirectPeerIncoming(ctx context.Context, parent *directPeer, clientCert *
 		parent:     parent,
 		clientCert: clientCert,
 		closer:     make(chan struct{}),
+		logger:     parent.logger.With("style", "incoming"),
 	}
 	go p.run(ctx)
 	return p
@@ -150,7 +152,7 @@ func (p *directPeerIncoming) run(ctx context.Context) {
 	for {
 		conn, err := p.connect(ctx)
 		if err != nil {
-			p.parent.logger.Debug("could not connect incoming", "err", err)
+			p.logger.Debug("could not connect", "err", err)
 			switch {
 			case errors.Is(err, context.Canceled):
 				return
@@ -171,7 +173,7 @@ func (p *directPeerIncoming) run(ctx context.Context) {
 		boff = netc.MinBackoff
 
 		if err := p.keepalive(ctx, conn); err != nil {
-			p.parent.logger.Debug("incoming keepalive failed", "err", err)
+			p.logger.Debug("keepalive failed", "err", err)
 			switch {
 			case errors.Is(err, context.Canceled):
 				return
@@ -214,9 +216,7 @@ func (p *directPeerIncoming) keepalive(ctx context.Context, conn quic.Connection
 	p.parent.local.addActiveConn(p.parent.remoteID, peerIncoming, "", conn)
 	defer p.parent.local.removeActiveConn(p.parent.remoteID, peerIncoming, "")
 
-	if rttStats := quicc.RTTStats(conn); rttStats != nil {
-		p.parent.logger.Debug("rtt stats", "direction", "in", "last", rttStats.LatestRTT(), "smoothed", rttStats.SmoothedRTT())
-	}
+	quicc.RTTLogStats(conn, p.logger)
 	for {
 		select {
 		case <-p.closer:
@@ -226,9 +226,7 @@ func (p *directPeerIncoming) keepalive(ctx context.Context, conn quic.Connection
 		case <-conn.Context().Done():
 			return context.Cause(conn.Context())
 		case <-time.After(30 * time.Second):
-			if rttStats := quicc.RTTStats(conn); rttStats != nil {
-				p.parent.logger.Debug("rtt stats", "direction", "in", "last", rttStats.LatestRTT(), "smoothed", rttStats.SmoothedRTT())
-			}
+			quicc.RTTLogStats(conn, p.logger)
 		}
 	}
 }
@@ -238,6 +236,7 @@ type directPeerOutgoing struct {
 	serverConf *serverTLSConfig
 	addrs      map[netip.AddrPort]struct{}
 	closer     chan struct{}
+	logger     *slog.Logger
 }
 
 func newDirectPeerOutgoing(ctx context.Context, parent *directPeer, serverConfg *serverTLSConfig, addrs map[netip.AddrPort]struct{}) *directPeerOutgoing {
@@ -246,6 +245,7 @@ func newDirectPeerOutgoing(ctx context.Context, parent *directPeer, serverConfg 
 		serverConf: serverConfg,
 		addrs:      addrs,
 		closer:     make(chan struct{}),
+		logger:     parent.logger.With("style", "outgoing"),
 	}
 	go p.run(ctx)
 	return p
@@ -256,7 +256,7 @@ func (p *directPeerOutgoing) run(ctx context.Context) {
 	for {
 		conn, err := p.connect(ctx)
 		if err != nil {
-			p.parent.logger.Debug("could not connect direct", "err", err)
+			p.logger.Debug("could not connect", "err", err)
 			if errors.Is(err, context.Canceled) {
 				return
 			}
@@ -274,7 +274,7 @@ func (p *directPeerOutgoing) run(ctx context.Context) {
 		boff = netc.MinBackoff
 
 		if err := p.keepalive(ctx, conn); err != nil {
-			p.parent.logger.Debug("disonnected peer", "err", err)
+			p.logger.Debug("keepalive failed", "err", err)
 			switch {
 			case errors.Is(err, context.Canceled):
 				return
@@ -290,7 +290,7 @@ func (p *directPeerOutgoing) connect(ctx context.Context) (quic.Connection, erro
 	for paddr := range p.addrs {
 		addr := net.UDPAddrFromAddrPort(paddr)
 
-		p.parent.logger.Debug("dialing direct", "addr", addr, "server", p.serverConf.name, "cert", p.serverConf.key)
+		p.logger.Debug("dialing direct", "addr", addr, "server", p.serverConf.name, "cert", p.serverConf.key)
 		conn, err := p.parent.local.direct.transport.Dial(quicc.RTTContext(ctx), addr, &tls.Config{
 			Certificates: []tls.Certificate{p.parent.local.clientCert},
 			RootCAs:      p.serverConf.cas,
@@ -335,9 +335,7 @@ func (p *directPeerOutgoing) keepalive(ctx context.Context, conn quic.Connection
 	p.parent.local.addActiveConn(p.parent.remoteID, peerOutgoing, "", conn)
 	defer p.parent.local.removeActiveConn(p.parent.remoteID, peerOutgoing, "")
 
-	if rttStats := quicc.RTTStats(conn); rttStats != nil {
-		p.parent.logger.Debug("rtt stats", "direction", "out", "last", rttStats.LatestRTT(), "smoothed", rttStats.SmoothedRTT())
-	}
+	quicc.RTTLogStats(conn, p.logger)
 	for {
 		select {
 		case <-p.closer:
@@ -347,9 +345,7 @@ func (p *directPeerOutgoing) keepalive(ctx context.Context, conn quic.Connection
 		case <-conn.Context().Done():
 			return context.Cause(conn.Context())
 		case <-time.After(30 * time.Second):
-			if rttStats := quicc.RTTStats(conn); rttStats != nil {
-				p.parent.logger.Debug("rtt stats", "direction", "out", "last", rttStats.LatestRTT(), "smoothed", rttStats.SmoothedRTT())
-			}
+			quicc.RTTLogStats(conn, p.logger)
 		}
 	}
 }

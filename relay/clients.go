@@ -20,6 +20,7 @@ import (
 	"github.com/connet-dev/connet/quicc"
 	"github.com/klev-dev/kleverr"
 	"github.com/quic-go/quic-go"
+	"golang.org/x/sync/errgroup"
 )
 
 type clientAuth struct {
@@ -263,9 +264,7 @@ func (c *clientConn) runDestination(ctx context.Context) error {
 	fcs := c.server.addDestination(c)
 	defer c.server.removeDestination(fcs, c)
 
-	if rttStats := quicc.RTTStats(c.conn); rttStats != nil {
-		c.logger.Debug("rtt stats", "last", rttStats.LatestRTT(), "smoothed", rttStats.SmoothedRTT())
-	}
+	quicc.RTTLogStats(c.conn, c.logger)
 	for {
 		select {
 		case <-ctx.Done():
@@ -273,9 +272,7 @@ func (c *clientConn) runDestination(ctx context.Context) error {
 		case <-c.conn.Context().Done():
 			return context.Cause(c.conn.Context())
 		case <-time.After(30 * time.Second):
-			if rttStats := quicc.RTTStats(c.conn); rttStats != nil {
-				c.logger.Debug("rtt stats", "last", rttStats.LatestRTT(), "smoothed", rttStats.SmoothedRTT())
-			}
+			quicc.RTTLogStats(c.conn, c.logger)
 		}
 	}
 }
@@ -284,13 +281,33 @@ func (c *clientConn) runSource(ctx context.Context) error {
 	fcs := c.server.addSource(c)
 	defer c.server.removeSource(fcs, c)
 
-	for {
-		stream, err := c.conn.AcceptStream(ctx)
-		if err != nil {
-			return err
+	g, ctx := errgroup.WithContext(ctx)
+
+	g.Go(func() error {
+		quicc.RTTLogStats(c.conn, c.logger)
+		for {
+			select {
+			case <-ctx.Done():
+				return context.Cause(ctx)
+			case <-c.conn.Context().Done():
+				return context.Cause(c.conn.Context())
+			case <-time.After(30 * time.Second):
+				quicc.RTTLogStats(c.conn, c.logger)
+			}
 		}
-		go c.runSourceStream(ctx, stream, fcs)
-	}
+	})
+
+	g.Go(func() error {
+		for {
+			stream, err := c.conn.AcceptStream(ctx)
+			if err != nil {
+				return err
+			}
+			go c.runSourceStream(ctx, stream, fcs)
+		}
+	})
+
+	return g.Wait()
 }
 
 func (c *clientConn) runSourceStream(ctx context.Context, stream quic.Stream, fcs *forwardClients) {
@@ -350,9 +367,9 @@ func (c *clientConn) connectDestination(ctx context.Context, srcStream quic.Stre
 		return kleverr.Newf("could not write response: %w", err)
 	}
 
-	c.logger.Debug("joining conns", "forward", c.auth.fwd)
+	c.logger.Debug("joining conns")
 	err = netc.Join(ctx, srcStream, dstStream)
-	c.logger.Debug("disconnected conns", "forward", c.auth.fwd, "err", err)
+	c.logger.Debug("disconnected conns", "err", err)
 	return nil
 }
 

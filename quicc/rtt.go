@@ -2,6 +2,7 @@ package quicc
 
 import (
 	"context"
+	"log/slog"
 	"sync/atomic"
 
 	"github.com/quic-go/quic-go"
@@ -40,4 +41,10 @@ func RTTStats(conn quic.Connection) *logging.RTTStats {
 		return nil
 	}
 	return v.stats.Load()
+}
+
+func RTTLogStats(conn quic.Connection, logger *slog.Logger) {
+	if rttStats := RTTStats(conn); rttStats != nil {
+		logger.Debug("rtt stats", "last", rttStats.LatestRTT(), "smoothed", rttStats.SmoothedRTT())
+	}
 }
