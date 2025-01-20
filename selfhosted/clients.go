@@ -7,7 +7,6 @@ import (
 	"github.com/connet-dev/connet/model"
 	"github.com/connet-dev/connet/pb"
 	"github.com/connet-dev/connet/restr"
-	"github.com/klev-dev/kleverr"
 )
 
 func NewClientAuthenticator(auths ...ClientAuthentication) control.ClientAuthenticator {
@@ -23,10 +22,14 @@ type clientsAuthenticator struct {
 }
 
 func (s *clientsAuthenticator) Authenticate(token string, addr net.Addr) (control.ClientAuthentication, error) {
-	if r, ok := s.tokens[token]; ok && r.IPs.IsAllowedAddr(addr) {
-		return r, nil
+	r, ok := s.tokens[token]
+	if !ok {
+		return nil, pb.NewError(pb.Error_AuthenticationFailed, "unknown token")
 	}
-	return nil, kleverr.Newf("invalid token: %s", token)
+	if !r.IPs.IsAllowedAddr(addr) {
+		return nil, pb.NewError(pb.Error_AuthenticationFailed, "address not allowed: %s", addr)
+	}
+	return r, nil
 }
 
 type ClientAuthentication struct {

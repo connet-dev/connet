@@ -67,7 +67,6 @@ func NewServer(opts ...ServerOption) (*Server, error) {
 	}
 	relayAuth := selfhosted.RelayAuthentication{
 		Token: model.GenServerName("relay"),
-		// TODO Add IPS?
 	}
 
 	control, err := control.NewServer(control.Config{

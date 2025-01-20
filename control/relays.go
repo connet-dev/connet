@@ -425,11 +425,14 @@ func (c *relayConn) authenticate(ctx context.Context) (RelayAuthentication, ksui
 
 	auth, err := c.server.auth.Authenticate(req.Token, c.conn.RemoteAddr())
 	if err != nil {
-		err := pb.NewError(pb.Error_AuthenticationFailed, "Invalid or unknown token")
-		if err := pb.Write(authStream, &pbr.AuthenticateResp{Error: err}); err != nil {
+		perr := pb.GetError(err)
+		if perr == nil {
+			perr = pb.NewError(pb.Error_AuthenticationFailed, "authentication failed: %v", err)
+		}
+		if err := pb.Write(authStream, &pbr.AuthenticateResp{Error: perr}); err != nil {
 			return retRelayAuth(err)
 		}
-		return retRelayAuth(err)
+		return retRelayAuth(perr)
 	}
 
 	var id ksuid.KSUID

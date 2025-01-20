@@ -388,6 +388,7 @@ by adding account management and it is one of the easiest way to start.
  - [x] File http server
  - [x] Use quic-go tracer, instead of ping (and duration estimation)
  - [x] Optimize global IP restrictions - check earlier
+ - [ ] Role restrictions for clients
  - [ ] update nix modules with new config options
 
 ## Future

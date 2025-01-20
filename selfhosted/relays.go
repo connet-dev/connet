@@ -5,8 +5,8 @@ import (
 
 	"github.com/connet-dev/connet/control"
 	"github.com/connet-dev/connet/model"
+	"github.com/connet-dev/connet/pb"
 	"github.com/connet-dev/connet/restr"
-	"github.com/klev-dev/kleverr"
 )
 
 func NewRelayAuthenticator(auths ...RelayAuthentication) control.RelayAuthenticator {
@@ -22,10 +22,14 @@ type relayAuthenticator struct {
 }
 
 func (s *relayAuthenticator) Authenticate(token string, addr net.Addr) (control.RelayAuthentication, error) {
-	if r, ok := s.tokens[token]; ok && r.IPs.IsAllowedAddr(addr) {
-		return r, nil
+	r, ok := s.tokens[token]
+	if !ok {
+		return nil, pb.NewError(pb.Error_AuthenticationFailed, "unknown token")
 	}
-	return nil, kleverr.Newf("invalid token: %s", token)
+	if !r.IPs.IsAllowedAddr(addr) {
+		return nil, pb.NewError(pb.Error_AuthenticationFailed, "address not allowed: %s", addr)
+	}
+	return r, nil
 }
 
 type RelayAuthentication struct {

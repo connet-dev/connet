@@ -402,11 +402,14 @@ func (c *clientConn) authenticate(ctx context.Context) (ClientAuthentication, ks
 
 	auth, err := c.server.auth.Authenticate(req.Token, c.conn.RemoteAddr())
 	if err != nil {
-		err := pb.NewError(pb.Error_AuthenticationFailed, "Invalid or unknown token")
-		if err := pb.Write(authStream, &pbs.AuthenticateResp{Error: err}); err != nil {
+		perr := pb.GetError(err)
+		if perr == nil {
+			perr = pb.NewError(pb.Error_AuthenticationFailed, "authentication failed: %v", err)
+		}
+		if err := pb.Write(authStream, &pbs.AuthenticateResp{Error: perr}); err != nil {
 			return retClientAuth(err)
 		}
-		return retClientAuth(err)
+		return retClientAuth(perr)
 	}
 
 	var id ksuid.KSUID

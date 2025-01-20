@@ -115,7 +115,7 @@ func TestE2E(t *testing.T) {
 	time.Sleep(time.Millisecond) // time for server to come online
 
 	t.Run("deny-ip", func(t *testing.T) {
-		require.ErrorContains(t, clIPDeny.Run(ctx), "Invalid or unknown token") // TODO richer errors
+		require.ErrorContains(t, clIPDeny.Run(ctx), "address not allowed")
 	})
 	t.Run("deny-name", func(t *testing.T) {
 		require.ErrorContains(t, clNameDeny.Run(ctx), "forward not allowed")
