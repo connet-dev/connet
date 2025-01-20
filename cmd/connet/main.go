@@ -754,7 +754,7 @@ func parseClientAuth(tokens []string, restrs []TokenRestriction) (control.Client
 	case len(restrs) == 0:
 		restrs = make([]TokenRestriction, len(tokens))
 	case len(tokens) != len(restrs):
-		return nil, kleverr.Newf("expected equal number of tokens (%d) and token restrictions (%d)", len(tokens), len(restrs))
+		return nil, kleverr.Newf("expected equal number of client tokens (%d) and token restrictions (%d)", len(tokens), len(restrs))
 	}
 
 	auths := make([]selfhosted.ClientAuthentication, len(tokens))
@@ -786,7 +786,7 @@ func parseRelayAuth(tokens []string, restrs []IPRestriction) (control.RelayAuthe
 	case len(restrs) == 0:
 		restrs = make([]IPRestriction, len(tokens))
 	case len(tokens) != len(restrs):
-		return nil, kleverr.Newf("expected equal number of tokens (%d) and ip restrictions (%d)", len(tokens), len(restrs))
+		return nil, kleverr.Newf("expected equal number of relay tokens (%d) and ip restrictions (%d)", len(tokens), len(restrs))
 	}
 
 	auths := make([]selfhosted.RelayAuthentication, len(tokens))
