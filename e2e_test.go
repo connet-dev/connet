@@ -42,6 +42,7 @@ func TestE2E(t *testing.T) {
 		selfhosted.ClientAuthentication{Token: "test-token-src"},
 		selfhosted.ClientAuthentication{Token: "test-token-deny-ip", IPs: localRestr},
 		selfhosted.ClientAuthentication{Token: "test-token-deny-name", Names: tetRestr},
+		selfhosted.ClientAuthentication{Token: "test-token-deny-role", Role: model.Source},
 	)
 
 	srv, err := NewServer(
@@ -87,26 +88,6 @@ func TestE2E(t *testing.T) {
 	)
 	require.NoError(t, err)
 
-	clIPDeny, err := NewClient(
-		ClientToken("test-token-deny-ip"),
-		ClientControlAddress("localhost:20000"),
-		clientControlCAs(cas),
-		ClientDirectAddress(":20003"),
-		ClientDestination("direct", hts.Listener.Addr().String(), model.RouteDirect),
-		ClientLogger(logger.With("test", "cl-ip-deny")),
-	)
-	require.NoError(t, err)
-
-	clNameDeny, err := NewClient(
-		ClientToken("test-token-deny-name"),
-		ClientControlAddress("localhost:20000"),
-		clientControlCAs(cas),
-		ClientDirectAddress(":20004"),
-		ClientDestination("direct", hts.Listener.Addr().String(), model.RouteDirect),
-		ClientLogger(logger.With("test", "cl-name-deny")),
-	)
-	require.NoError(t, err)
-
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
@@ -115,10 +96,43 @@ func TestE2E(t *testing.T) {
 	time.Sleep(time.Millisecond) // time for server to come online
 
 	t.Run("deny-ip", func(t *testing.T) {
+		clIPDeny, err := NewClient(
+			ClientToken("test-token-deny-ip"),
+			ClientControlAddress("localhost:20000"),
+			clientControlCAs(cas),
+			ClientDirectAddress(":20003"),
+			ClientDestination("direct", hts.Listener.Addr().String(), model.RouteDirect),
+			ClientLogger(logger.With("test", "cl-ip-deny")),
+		)
+		require.NoError(t, err)
+
 		require.ErrorContains(t, clIPDeny.Run(ctx), "address not allowed")
 	})
 	t.Run("deny-name", func(t *testing.T) {
+		clNameDeny, err := NewClient(
+			ClientToken("test-token-deny-name"),
+			ClientControlAddress("localhost:20000"),
+			clientControlCAs(cas),
+			ClientDirectAddress(":20004"),
+			ClientDestination("direct", hts.Listener.Addr().String(), model.RouteDirect),
+			ClientLogger(logger.With("test", "cl-name-deny")),
+		)
+		require.NoError(t, err)
+
 		require.ErrorContains(t, clNameDeny.Run(ctx), "forward not allowed")
+	})
+	t.Run("deny-role", func(t *testing.T) {
+		clNameDeny, err := NewClient(
+			ClientToken("test-token-deny-role"),
+			ClientControlAddress("localhost:20000"),
+			clientControlCAs(cas),
+			ClientDirectAddress(":20005"),
+			ClientDestination("direct", hts.Listener.Addr().String(), model.RouteDirect),
+			ClientLogger(logger.With("test", "cl-role-deny")),
+		)
+		require.NoError(t, err)
+
+		require.ErrorContains(t, clNameDeny.Run(ctx), "role not allowed")
 	})
 
 	g.Go(func() error { return clDst.Run(ctx) })

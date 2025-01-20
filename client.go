@@ -143,11 +143,8 @@ func (c *Client) run(ctx context.Context, transport *quic.Transport) error {
 				return err
 				// TODO other terminal errors
 			}
-			if perr := pb.GetError(err); perr != nil {
-				switch perr.Code {
-				case pb.Error_ForwardNotAllowed:
-					return err
-				}
+			if perr := pb.GetError(err); perr != nil && perr.IsAuthenticationError() {
+				return err
 			}
 			c.logger.Error("session ended", "err", err)
 		}

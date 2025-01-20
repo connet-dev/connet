@@ -24,6 +24,16 @@ func RoleFromPB(r pb.Role) Role {
 	}
 }
 
+func ParseRole(s string) (Role, error) {
+	switch s {
+	case Destination.string:
+		return Destination, nil
+	case Source.string:
+		return Source, nil
+	}
+	return UnknownRole, kleverr.Newf("unknown role: %s", s)
+}
+
 func (r Role) PB() pb.Role {
 	switch r {
 	case Destination:

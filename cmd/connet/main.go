@@ -108,6 +108,7 @@ type TokenRestriction struct {
 	AllowCIDRs  []string `toml:"allow-cidrs"`
 	DenyCIDRs   []string `toml:"deny-cidrs"`
 	NameMatches string   `toml:"name-matches"`
+	RoleMatches string   `toml:"role-matches"`
 }
 
 type RelayConfig struct {
@@ -741,6 +742,13 @@ func parseRouteOption(s string) (model.RouteOption, error) {
 	return model.ParseRouteOption(s)
 }
 
+func parseRole(s string) (model.Role, error) {
+	if s == "" {
+		return model.UnknownRole, nil
+	}
+	return model.ParseRole(s)
+}
+
 func parseClientAuth(tokens []string, restrs []TokenRestriction) (control.ClientAuthenticator, error) {
 	switch {
 	case len(restrs) == 0:
@@ -759,10 +767,15 @@ func parseClientAuth(tokens []string, restrs []TokenRestriction) (control.Client
 		if err != nil {
 			return nil, err
 		}
+		role, err := parseRole(r.RoleMatches)
+		if err != nil {
+			return nil, err
+		}
 		auths[i] = selfhosted.ClientAuthentication{
 			Token: tokens[i],
 			IPs:   ips,
 			Names: names,
+			Role:  role,
 		}
 	}
 	return selfhosted.NewClientAuthenticator(auths...), nil

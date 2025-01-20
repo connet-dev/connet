@@ -181,6 +181,7 @@ deny-cidrs = [] # set of networks in CIDR format, to deny client connetctions fr
 allow-cidrs = [] # set of networks in CIDR format, to allow token client connetctions from
 deny-cidrs = [] # set of networks in CIDR format, to deny token client connetctions from
 name-matches = "" # regular expression to check the name of the destination/source against
+role-matches = "" # only allow specific role for this token, either 'source' or 'destination'
 ```
 
 #### Control server
@@ -213,6 +214,7 @@ deny-cidrs = [] # set of networks in CIDR format, to deny client connetctions fr
 allow-cidrs = [] # set of networks in CIDR format, to allow client connetctions from
 deny-cidrs = [] # set of networks in CIDR format, to deny client connetctions from
 name-matches = "" # regular expression to check the name of the destination/source against
+role-matches = "" # only allow specific role for this token, either 'source' or 'destination'
 
 [control.relays-ip-restriction] # defines restriction applicable for all relay tokens, checked before verifying the token
 allow-cidrs = [] # set of networks in CIDR format, to allow relay connetctions from
@@ -263,6 +265,11 @@ You can restrict what destinations/sources a client can start with `name-matches
 compiled to a regular expression as described in [golang syntax](https://pkg.go.dev/regexp/syntax). Only names that match
 the regular expression will be allowed for this token.
 
+### Role Restrictions
+
+You can restrict client role via `role-matches` options. Clients using role restricted token are only allowed to act as
+a `destination` or a `source`, depending on the value of the `role-matches` option.
+
 ### Storage
 
 `connet` servers (both control and relay servers) store runtime state on the file system. If you don't explicitly specify 
@@ -285,6 +292,11 @@ failed to sufficiently increase receive buffer size (was: 208 kiB, wanted: 7168 
 ```
 
 In which case, we recommend visiting the [wiki page](https://github.com/quic-go/quic-go/wiki/UDP-Buffer-Sizes) and applying the recommended changes.
+
+## Installation
+
+Latest builds of `connet` can be acquired from our [releases](https://github.com/connet-dev/connet/releases) page. Alternatively,
+you can use the following installation methods:
 
 ### NixOS
 
@@ -388,7 +400,7 @@ by adding account management and it is one of the easiest way to start.
  - [x] File http server
  - [x] Use quic-go tracer, instead of ping (and duration estimation)
  - [x] Optimize global IP restrictions - check earlier
- - [ ] Role restrictions for clients
+ - [x] Role restrictions for clients
  - [ ] update nix modules with new config options
 
 ## Future

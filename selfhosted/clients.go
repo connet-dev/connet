@@ -36,11 +36,15 @@ type ClientAuthentication struct {
 	Token string
 	IPs   restr.IP
 	Names restr.Name
+	Role  model.Role
 }
 
-func (a *ClientAuthentication) Validate(fwd model.Forward, _ model.Role) (model.Forward, error) {
+func (a *ClientAuthentication) Validate(fwd model.Forward, role model.Role) (model.Forward, error) {
 	if !a.Names.IsAllowed(fwd.String()) {
 		return model.Forward{}, pb.NewError(pb.Error_ForwardNotAllowed, "forward not allowed: %s", fwd)
+	}
+	if a.Role != model.UnknownRole && a.Role != role {
+		return model.Forward{}, pb.NewError(pb.Error_RoleNotAllowed, "role not allowed: %s", role)
 	}
 	return fwd, nil
 }
