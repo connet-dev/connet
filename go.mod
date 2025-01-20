@@ -23,6 +23,7 @@ require (
 	github.com/google/pprof v0.0.0-20241210010833-40e02aabc2ad // indirect
 	github.com/inconshreveable/mousetrap v1.1.0 // indirect
 	github.com/onsi/ginkgo/v2 v2.22.2 // indirect
+	github.com/pires/go-proxyproto v0.8.0 // indirect
 	github.com/plar/go-adaptive-radix-tree/v2 v2.0.3 // indirect
 	github.com/pmezard/go-difflib v1.0.0 // indirect
 	github.com/spf13/pflag v1.0.5 // indirect

@@ -15,4 +15,16 @@ message Request {
 
 message Response {
   shared.Error error = 1;
+
+  Connect connect = 2;
+
+  message Connect {
+    ProxyProtoVersion ProxyProto = 1;
+  }
+}
+
+enum ProxyProtoVersion {
+  None = 0;
+  V1 = 1;
+  V2 = 2;
 }

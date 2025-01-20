@@ -307,13 +307,18 @@ type clientConfig struct {
 	directAddr *net.UDPAddr
 	statusAddr *net.TCPAddr
 
-	destinations map[model.Forward]clientForwardConfig
-	sources      map[model.Forward]clientForwardConfig
+	destinations map[model.Forward]clientDestinationConfig
+	sources      map[model.Forward]clientSourceConfig
 
 	logger *slog.Logger
 }
 
-type clientForwardConfig struct {
+type clientDestinationConfig struct {
+	addr  string
+	route model.RouteOption
+}
+
+type clientSourceConfig struct {
 	addr  string
 	route model.RouteOption
 }
@@ -404,9 +409,9 @@ func ClientStatusAddress(address string) ClientOption {
 func ClientDestination(name, addr string, route model.RouteOption) ClientOption {
 	return func(cfg *clientConfig) error {
 		if cfg.destinations == nil {
-			cfg.destinations = map[model.Forward]clientForwardConfig{}
+			cfg.destinations = map[model.Forward]clientDestinationConfig{}
 		}
-		cfg.destinations[model.NewForward(name)] = clientForwardConfig{addr, route}
+		cfg.destinations[model.NewForward(name)] = clientDestinationConfig{addr, route}
 
 		return nil
 	}
@@ -415,9 +420,9 @@ func ClientDestination(name, addr string, route model.RouteOption) ClientOption 
 func ClientSource(name, addr string, route model.RouteOption) ClientOption {
 	return func(cfg *clientConfig) error {
 		if cfg.sources == nil {
-			cfg.sources = map[model.Forward]clientForwardConfig{}
+			cfg.sources = map[model.Forward]clientSourceConfig{}
 		}
-		cfg.sources[model.NewForward(name)] = clientForwardConfig{addr, route}
+		cfg.sources[model.NewForward(name)] = clientSourceConfig{addr, route}
 
 		return nil
 	}

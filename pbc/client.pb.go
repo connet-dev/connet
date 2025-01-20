@@ -21,6 +21,55 @@ const (
 	_ = protoimpl.EnforceVersion(protoimpl.MaxVersion - 20)
 )
 
+type ProxyProtoVersion int32
+
+const (
+	ProxyProtoVersion_None ProxyProtoVersion = 0
+	ProxyProtoVersion_V1   ProxyProtoVersion = 1
+	ProxyProtoVersion_V2   ProxyProtoVersion = 2
+)
+
+// Enum value maps for ProxyProtoVersion.
+var (
+	ProxyProtoVersion_name = map[int32]string{
+		0: "None",
+		1: "V1",
+		2: "V2",
+	}
+	ProxyProtoVersion_value = map[string]int32{
+		"None": 0,
+		"V1":   1,
+		"V2":   2,
+	}
+)
+
+func (x ProxyProtoVersion) Enum() *ProxyProtoVersion {
+	p := new(ProxyProtoVersion)
+	*p = x
+	return p
+}
+
+func (x ProxyProtoVersion) String() string {
+	return protoimpl.X.EnumStringOf(x.Descriptor(), protoreflect.EnumNumber(x))
+}
+
+func (ProxyProtoVersion) Descriptor() protoreflect.EnumDescriptor {
+	return file_client_proto_enumTypes[0].Descriptor()
+}
+
+func (ProxyProtoVersion) Type() protoreflect.EnumType {
+	return &file_client_proto_enumTypes[0]
+}
+
+func (x ProxyProtoVersion) Number() protoreflect.EnumNumber {
+	return protoreflect.EnumNumber(x)
+}
+
+// Deprecated: Use ProxyProtoVersion.Descriptor instead.
+func (ProxyProtoVersion) EnumDescriptor() ([]byte, []int) {
+	return file_client_proto_rawDescGZIP(), []int{0}
+}
+
 type Request struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
 	// Soft one-of
@@ -69,6 +118,7 @@ func (x *Request) GetConnect() *Request_Connect {
 type Response struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Error         *pb.Error              `protobuf:"bytes,1,opt,name=error,proto3" json:"error,omitempty"`
+	Connect       *Response_Connect      `protobuf:"bytes,2,opt,name=connect,proto3" json:"connect,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -110,6 +160,13 @@ func (x *Response) GetError() *pb.Error {
 	return nil
 }
 
+func (x *Response) GetConnect() *Response_Connect {
+	if x != nil {
+		return x.Connect
+	}
+	return nil
+}
+
 type Request_Connect struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	unknownFields protoimpl.UnknownFields
@@ -146,6 +203,50 @@ func (*Request_Connect) Descriptor() ([]byte, []int) {
 	return file_client_proto_rawDescGZIP(), []int{0, 0}
 }
 
+type Response_Connect struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	ProxyProto    ProxyProtoVersion      `protobuf:"varint,1,opt,name=ProxyProto,proto3,enum=client.ProxyProtoVersion" json:"ProxyProto,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *Response_Connect) Reset() {
+	*x = Response_Connect{}
+	mi := &file_client_proto_msgTypes[3]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *Response_Connect) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*Response_Connect) ProtoMessage() {}
+
+func (x *Response_Connect) ProtoReflect() protoreflect.Message {
+	mi := &file_client_proto_msgTypes[3]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use Response_Connect.ProtoReflect.Descriptor instead.
+func (*Response_Connect) Descriptor() ([]byte, []int) {
+	return file_client_proto_rawDescGZIP(), []int{1, 0}
+}
+
+func (x *Response_Connect) GetProxyProto() ProxyProtoVersion {
+	if x != nil {
+		return x.ProxyProto
+	}
+	return ProxyProtoVersion_None
+}
+
 var File_client_proto protoreflect.FileDescriptor
 
 var file_client_proto_rawDesc = []byte{
@@ -155,13 +256,24 @@ var file_client_proto_rawDesc = []byte{
 	0x31, 0x0a, 0x07, 0x63, 0x6f, 0x6e, 0x6e, 0x65, 0x63, 0x74, 0x18, 0x01, 0x20, 0x01, 0x28, 0x0b,
 	0x32, 0x17, 0x2e, 0x63, 0x6c, 0x69, 0x65, 0x6e, 0x74, 0x2e, 0x52, 0x65, 0x71, 0x75, 0x65, 0x73,
 	0x74, 0x2e, 0x43, 0x6f, 0x6e, 0x6e, 0x65, 0x63, 0x74, 0x52, 0x07, 0x63, 0x6f, 0x6e, 0x6e, 0x65,
-	0x63, 0x74, 0x1a, 0x09, 0x0a, 0x07, 0x43, 0x6f, 0x6e, 0x6e, 0x65, 0x63, 0x74, 0x22, 0x2f, 0x0a,
-	0x08, 0x52, 0x65, 0x73, 0x70, 0x6f, 0x6e, 0x73, 0x65, 0x12, 0x23, 0x0a, 0x05, 0x65, 0x72, 0x72,
-	0x6f, 0x72, 0x18, 0x01, 0x20, 0x01, 0x28, 0x0b, 0x32, 0x0d, 0x2e, 0x73, 0x68, 0x61, 0x72, 0x65,
-	0x64, 0x2e, 0x45, 0x72, 0x72, 0x6f, 0x72, 0x52, 0x05, 0x65, 0x72, 0x72, 0x6f, 0x72, 0x42, 0x22,
-	0x5a, 0x20, 0x67, 0x69, 0x74, 0x68, 0x75, 0x62, 0x2e, 0x63, 0x6f, 0x6d, 0x2f, 0x63, 0x6f, 0x6e,
-	0x6e, 0x65, 0x74, 0x2d, 0x64, 0x65, 0x76, 0x2f, 0x63, 0x6f, 0x6e, 0x6e, 0x65, 0x74, 0x2f, 0x70,
-	0x62, 0x63, 0x62, 0x06, 0x70, 0x72, 0x6f, 0x74, 0x6f, 0x33,
+	0x63, 0x74, 0x1a, 0x09, 0x0a, 0x07, 0x43, 0x6f, 0x6e, 0x6e, 0x65, 0x63, 0x74, 0x22, 0xa9, 0x01,
+	0x0a, 0x08, 0x52, 0x65, 0x73, 0x70, 0x6f, 0x6e, 0x73, 0x65, 0x12, 0x23, 0x0a, 0x05, 0x65, 0x72,
+	0x72, 0x6f, 0x72, 0x18, 0x01, 0x20, 0x01, 0x28, 0x0b, 0x32, 0x0d, 0x2e, 0x73, 0x68, 0x61, 0x72,
+	0x65, 0x64, 0x2e, 0x45, 0x72, 0x72, 0x6f, 0x72, 0x52, 0x05, 0x65, 0x72, 0x72, 0x6f, 0x72, 0x12,
+	0x32, 0x0a, 0x07, 0x63, 0x6f, 0x6e, 0x6e, 0x65, 0x63, 0x74, 0x18, 0x02, 0x20, 0x01, 0x28, 0x0b,
+	0x32, 0x18, 0x2e, 0x63, 0x6c, 0x69, 0x65, 0x6e, 0x74, 0x2e, 0x52, 0x65, 0x73, 0x70, 0x6f, 0x6e,
+	0x73, 0x65, 0x2e, 0x43, 0x6f, 0x6e, 0x6e, 0x65, 0x63, 0x74, 0x52, 0x07, 0x63, 0x6f, 0x6e, 0x6e,
+	0x65, 0x63, 0x74, 0x1a, 0x44, 0x0a, 0x07, 0x43, 0x6f, 0x6e, 0x6e, 0x65, 0x63, 0x74, 0x12, 0x39,
+	0x0a, 0x0a, 0x50, 0x72, 0x6f, 0x78, 0x79, 0x50, 0x72, 0x6f, 0x74, 0x6f, 0x18, 0x01, 0x20, 0x01,
+	0x28, 0x0e, 0x32, 0x19, 0x2e, 0x63, 0x6c, 0x69, 0x65, 0x6e, 0x74, 0x2e, 0x50, 0x72, 0x6f, 0x78,
+	0x79, 0x50, 0x72, 0x6f, 0x74, 0x6f, 0x56, 0x65, 0x72, 0x73, 0x69, 0x6f, 0x6e, 0x52, 0x0a, 0x50,
+	0x72, 0x6f, 0x78, 0x79, 0x50, 0x72, 0x6f, 0x74, 0x6f, 0x2a, 0x2d, 0x0a, 0x11, 0x50, 0x72, 0x6f,
+	0x78, 0x79, 0x50, 0x72, 0x6f, 0x74, 0x6f, 0x56, 0x65, 0x72, 0x73, 0x69, 0x6f, 0x6e, 0x12, 0x08,
+	0x0a, 0x04, 0x4e, 0x6f, 0x6e, 0x65, 0x10, 0x00, 0x12, 0x06, 0x0a, 0x02, 0x56, 0x31, 0x10, 0x01,
+	0x12, 0x06, 0x0a, 0x02, 0x56, 0x32, 0x10, 0x02, 0x42, 0x22, 0x5a, 0x20, 0x67, 0x69, 0x74, 0x68,
+	0x75, 0x62, 0x2e, 0x63, 0x6f, 0x6d, 0x2f, 0x63, 0x6f, 0x6e, 0x6e, 0x65, 0x74, 0x2d, 0x64, 0x65,
+	0x76, 0x2f, 0x63, 0x6f, 0x6e, 0x6e, 0x65, 0x74, 0x2f, 0x70, 0x62, 0x63, 0x62, 0x06, 0x70, 0x72,
+	0x6f, 0x74, 0x6f, 0x33,
 }
 
 var (
@@ -176,21 +288,26 @@ func file_client_proto_rawDescGZIP() []byte {
 	return file_client_proto_rawDescData
 }
 
-var file_client_proto_msgTypes = make([]protoimpl.MessageInfo, 3)
+var file_client_proto_enumTypes = make([]protoimpl.EnumInfo, 1)
+var file_client_proto_msgTypes = make([]protoimpl.MessageInfo, 4)
 var file_client_proto_goTypes = []any{
-	(*Request)(nil),         // 0: client.Request
-	(*Response)(nil),        // 1: client.Response
-	(*Request_Connect)(nil), // 2: client.Request.Connect
-	(*pb.Error)(nil),        // 3: shared.Error
+	(ProxyProtoVersion)(0),   // 0: client.ProxyProtoVersion
+	(*Request)(nil),          // 1: client.Request
+	(*Response)(nil),         // 2: client.Response
+	(*Request_Connect)(nil),  // 3: client.Request.Connect
+	(*Response_Connect)(nil), // 4: client.Response.Connect
+	(*pb.Error)(nil),         // 5: shared.Error
 }
 var file_client_proto_depIdxs = []int32{
-	2, // 0: client.Request.connect:type_name -> client.Request.Connect
-	3, // 1: client.Response.error:type_name -> shared.Error
-	2, // [2:2] is the sub-list for method output_type
-	2, // [2:2] is the sub-list for method input_type
-	2, // [2:2] is the sub-list for extension type_name
-	2, // [2:2] is the sub-list for extension extendee
-	0, // [0:2] is the sub-list for field type_name
+	3, // 0: client.Request.connect:type_name -> client.Request.Connect
+	5, // 1: client.Response.error:type_name -> shared.Error
+	4, // 2: client.Response.connect:type_name -> client.Response.Connect
+	0, // 3: client.Response.Connect.ProxyProto:type_name -> client.ProxyProtoVersion
+	4, // [4:4] is the sub-list for method output_type
+	4, // [4:4] is the sub-list for method input_type
+	4, // [4:4] is the sub-list for extension type_name
+	4, // [4:4] is the sub-list for extension extendee
+	0, // [0:4] is the sub-list for field type_name
 }
 
 func init() { file_client_proto_init() }
@@ -203,13 +320,14 @@ func file_client_proto_init() {
 		File: protoimpl.DescBuilder{
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: file_client_proto_rawDesc,
-			NumEnums:      0,
-			NumMessages:   3,
+			NumEnums:      1,
+			NumMessages:   4,
 			NumExtensions: 0,
 			NumServices:   0,
 		},
 		GoTypes:           file_client_proto_goTypes,
 		DependencyIndexes: file_client_proto_depIdxs,
+		EnumInfos:         file_client_proto_enumTypes,
 		MessageInfos:      file_client_proto_msgTypes,
 	}.Build()
 	File_client_proto = out.File

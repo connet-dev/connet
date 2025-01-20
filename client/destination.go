@@ -17,10 +17,11 @@ import (
 )
 
 type Destination struct {
-	fwd    model.Forward
-	addr   string
-	opt    model.RouteOption
-	logger *slog.Logger
+	fwd        model.Forward
+	addr       string
+	opt        model.RouteOption
+	proxyProto pbc.ProxyProtoVersion
+	logger     *slog.Logger
 
 	peer  *peer
 	conns map[peerConnKey]*destinationConn
@@ -174,7 +175,11 @@ func (d *Destination) runConnect(ctx context.Context, stream quic.Stream) error 
 	}
 	defer conn.Close()
 
-	if err := pb.Write(stream, &pbc.Response{}); err != nil {
+	if err := pb.Write(stream, &pbc.Response{
+		Connect: &pbc.Response_Connect{
+			ProxyProto: d.proxyProto,
+		},
+	}); err != nil {
 		return kleverr.Newf("could not write response: %w", err)
 	}
 
