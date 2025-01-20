@@ -17,6 +17,7 @@ import (
 	"github.com/connet-dev/connet/certc"
 	"github.com/connet-dev/connet/model"
 	"github.com/connet-dev/connet/restr"
+	"github.com/connet-dev/connet/selfhosted"
 	"github.com/stretchr/testify/require"
 	"golang.org/x/sync/errgroup"
 )
@@ -36,13 +37,15 @@ func TestE2E(t *testing.T) {
 	require.NoError(t, err)
 	tetRestr, err := restr.ParseName("^tet$")
 	require.NoError(t, err)
+	clientAuth := selfhosted.NewClientAuthenticator(
+		selfhosted.ClientAuthentication{Token: "test-token-dst"},
+		selfhosted.ClientAuthentication{Token: "test-token-src"},
+		selfhosted.ClientAuthentication{Token: "test-token-deny-ip", IPs: localRestr},
+		selfhosted.ClientAuthentication{Token: "test-token-deny-name", Names: tetRestr},
+	)
 
 	srv, err := NewServer(
-		ServerClientTokensRestricted(
-			[]string{"test-token-dst", "test-token-src", "test-token-deny-ip", "test-token-deny-name"},
-			[]restr.IP{{}, {}, localRestr, {}},
-			[]restr.Name{{}, {}, {}, tetRestr},
-		),
+		ServerClientAuthenticator(clientAuth),
 		serverCertificate(cert),
 		ServerClientsAddress(":20000"),
 		ServerRelayAddress(":20001"),
@@ -111,8 +114,12 @@ func TestE2E(t *testing.T) {
 	g.Go(func() error { return srv.Run(ctx) })
 	time.Sleep(time.Millisecond) // time for server to come online
 
-	require.Error(t, clIPDeny.Run(ctx))   // TODO rich errors
-	require.Error(t, clNameDeny.Run(ctx)) // TODO rich errors
+	t.Run("deny-ip", func(t *testing.T) {
+		require.ErrorContains(t, clIPDeny.Run(ctx), "Invalid or unknown token") // TODO richer errors
+	})
+	t.Run("deny-name", func(t *testing.T) {
+		require.ErrorContains(t, clNameDeny.Run(ctx), "forward not allowed")
+	})
 
 	g.Go(func() error { return clDst.Run(ctx) })
 	g.Go(func() error { return clSrc.Run(ctx) })

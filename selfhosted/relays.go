@@ -9,44 +9,34 @@ import (
 	"github.com/klev-dev/kleverr"
 )
 
-func NewRelayAuthenticator(tokens ...string) (control.RelayAuthenticator, error) {
-	return NewRelayAuthenticatorRestricted(tokens, nil)
-}
-
-func NewRelayAuthenticatorRestricted(tokens []string, iprestr []restr.IP) (control.RelayAuthenticator, error) {
-	switch {
-	case len(iprestr) == 0:
-		iprestr = make([]restr.IP, len(tokens))
-	case len(iprestr) != len(tokens):
-		return nil, kleverr.Newf("expected equal number of tokens and token restrictions")
+func NewRelayAuthenticator(auths ...RelayAuthentication) control.RelayAuthenticator {
+	s := &relayAuthenticator{map[string]*RelayAuthentication{}}
+	for _, auth := range auths {
+		s.tokens[auth.Token] = &auth
 	}
-
-	s := &relayAuthenticator{map[string]restr.IP{}}
-	for i, t := range tokens {
-		s.tokens[t] = iprestr[i]
-	}
-	return s, nil
+	return s
 }
 
 type relayAuthenticator struct {
-	tokens map[string]restr.IP
+	tokens map[string]*RelayAuthentication
 }
 
 func (s *relayAuthenticator) Authenticate(token string, addr net.Addr) (control.RelayAuthentication, error) {
-	if r, ok := s.tokens[token]; ok && r.IsAllowedAddr(addr) {
-		return &relayAuthentication{token}, nil
+	if r, ok := s.tokens[token]; ok && r.IPs.IsAllowedAddr(addr) {
+		return r, nil
 	}
 	return nil, kleverr.Newf("invalid token: %s", token)
 }
 
-type relayAuthentication struct {
-	token string
+type RelayAuthentication struct {
+	Token string
+	IPs   restr.IP
 }
 
-func (r *relayAuthentication) Allow(_ model.Forward) bool {
+func (r *RelayAuthentication) Allow(_ model.Forward) bool {
 	return true
 }
 
-func (r *relayAuthentication) MarshalBinary() ([]byte, error) {
-	return []byte(r.token), nil
+func (r *RelayAuthentication) MarshalBinary() ([]byte, error) {
+	return []byte(r.Token), nil
 }

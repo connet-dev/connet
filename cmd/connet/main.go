@@ -502,19 +502,19 @@ func serverRun(ctx context.Context, cfg ServerConfig, logger *slog.Logger) error
 		opts = append(opts, connet.ServerClientRestrictions(cfg.IPRestriction.AllowCIDRs, cfg.IPRestriction.DenyCIDRs))
 	}
 
-	iprestr, namerestr, err := parseTokenRestrictions(cfg.TokenRestrictions)
-	if err != nil {
-		return err
-	}
+	var err error
+	tokens := cfg.Tokens
 	if cfg.TokensFile != "" {
-		tokens, err := loadTokens(cfg.TokensFile)
+		tokens, err = loadTokens(cfg.TokensFile)
 		if err != nil {
 			return err
 		}
-		opts = append(opts, connet.ServerClientTokensRestricted(tokens, iprestr, namerestr))
-	} else {
-		opts = append(opts, connet.ServerClientTokensRestricted(cfg.Tokens, iprestr, namerestr))
 	}
+	clientAuth, err := parseClientAuth(tokens, cfg.TokenRestrictions)
+	if err != nil {
+		return err
+	}
+	opts = append(opts, connet.ServerClientAuthenticator(clientAuth))
 
 	if cfg.RelayAddr != "" {
 		opts = append(opts, connet.ServerRelayAddress(cfg.RelayAddr))
@@ -569,19 +569,14 @@ func controlRun(ctx context.Context, cfg ControlConfig, logger *slog.Logger) err
 		controlCfg.ClientsRestr = iprestr
 	}
 
-	iprestr, namerestr, err := parseTokenRestrictions(cfg.ClientsTokenRestrictions)
-	if err != nil {
-		return err
-	}
+	clientTokens := cfg.ClientsTokens
 	if cfg.ClientsTokensFile != "" {
-		tokens, terr := loadTokens(cfg.ClientsTokensFile)
-		if terr != nil {
-			return terr
+		clientTokens, err = loadTokens(cfg.ClientsTokensFile)
+		if err != nil {
+			return err
 		}
-		controlCfg.ClientsAuth, err = selfhosted.NewClientAuthenticatorRestricted(tokens, iprestr, namerestr)
-	} else {
-		controlCfg.ClientsAuth, err = selfhosted.NewClientAuthenticatorRestricted(cfg.ClientsTokens, iprestr, namerestr)
 	}
+	controlCfg.ClientsAuth, err = parseClientAuth(clientTokens, cfg.ClientsTokenRestrictions)
 	if err != nil {
 		return err
 	}
@@ -603,19 +598,14 @@ func controlRun(ctx context.Context, cfg ControlConfig, logger *slog.Logger) err
 		controlCfg.RelaysRestr = iprestr
 	}
 
-	relayRestr, err := parseIPRestrictions(cfg.RelaysTokenIPRestrictions)
-	if err != nil {
-		return err
-	}
+	relayTokens := cfg.RelaysTokens
 	if cfg.RelaysTokensFile != "" {
-		tokens, terr := loadTokens(cfg.RelaysTokensFile)
-		if terr != nil {
-			return terr
+		relayTokens, err = loadTokens(cfg.RelaysTokensFile)
+		if err != nil {
+			return err
 		}
-		controlCfg.RelaysAuth, err = selfhosted.NewRelayAuthenticatorRestricted(tokens, relayRestr)
-	} else {
-		controlCfg.RelaysAuth, err = selfhosted.NewRelayAuthenticator(cfg.RelaysTokens...)
 	}
+	controlCfg.RelaysAuth, err = parseRelayAuth(relayTokens, cfg.RelaysTokenIPRestrictions)
 	if err != nil {
 		return err
 	}
@@ -751,33 +741,54 @@ func parseRouteOption(s string) (model.RouteOption, error) {
 	return model.ParseRouteOption(s)
 }
 
-func parseIPRestrictions(ts []IPRestriction) ([]restr.IP, error) {
-	var err error
-	r := make([]restr.IP, len(ts))
-	for i, t := range ts {
-		r[i], err = restr.ParseIP(t.AllowCIDRs, t.DenyCIDRs)
+func parseClientAuth(tokens []string, restrs []TokenRestriction) (control.ClientAuthenticator, error) {
+	switch {
+	case len(restrs) == 0:
+		restrs = make([]TokenRestriction, len(tokens))
+	case len(tokens) != len(restrs):
+		return nil, kleverr.Newf("expected equal number of tokens (%d) and token restrictions (%d)", len(tokens), len(restrs))
+	}
+
+	auths := make([]selfhosted.ClientAuthentication, len(tokens))
+	for i, r := range restrs {
+		ips, err := restr.ParseIP(r.AllowCIDRs, r.DenyCIDRs)
 		if err != nil {
 			return nil, err
 		}
+		names, err := restr.ParseName(r.NameMatches)
+		if err != nil {
+			return nil, err
+		}
+		auths[i] = selfhosted.ClientAuthentication{
+			Token: tokens[i],
+			IPs:   ips,
+			Names: names,
+		}
 	}
-	return r, nil
+	return selfhosted.NewClientAuthenticator(auths...), nil
 }
 
-func parseTokenRestrictions(ts []TokenRestriction) ([]restr.IP, []restr.Name, error) {
-	var err error
-	ips := make([]restr.IP, len(ts))
-	names := make([]restr.Name, len(ts))
-	for i, t := range ts {
-		ips[i], err = restr.ParseIP(t.AllowCIDRs, t.DenyCIDRs)
+func parseRelayAuth(tokens []string, restrs []IPRestriction) (control.RelayAuthenticator, error) {
+	switch {
+	case len(restrs) == 0:
+		restrs = make([]IPRestriction, len(tokens))
+	case len(tokens) != len(restrs):
+		return nil, kleverr.Newf("expected equal number of tokens (%d) and ip restrictions (%d)", len(tokens), len(restrs))
+	}
+
+	auths := make([]selfhosted.RelayAuthentication, len(tokens))
+	for i, r := range restrs {
+		ips, err := restr.ParseIP(r.AllowCIDRs, r.DenyCIDRs)
 		if err != nil {
-			return nil, nil, err
+			return nil, err
 		}
-		names[i], err = restr.ParseName(t.NameMatches)
-		if err != nil {
-			return nil, nil, err
+		auths[i] = selfhosted.RelayAuthentication{
+			Token: tokens[i],
+			IPs:   ips,
 		}
 	}
-	return ips, names, nil
+
+	return selfhosted.NewRelayAuthenticator(auths...), nil
 }
 
 func (c *Config) merge(o Config) {

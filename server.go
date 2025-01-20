@@ -65,10 +65,9 @@ func NewServer(opts ...ServerOption) (*Server, error) {
 	if err != nil {
 		return nil, kleverr.Newf("control address cannot be resolved: %w", err)
 	}
-	relayControlToken := model.GenServerName("relay")
-	relayAuth, err := selfhosted.NewRelayAuthenticator(relayControlToken)
-	if err != nil {
-		return nil, err
+	relayAuth := selfhosted.RelayAuthentication{
+		Token: model.GenServerName("relay"),
+		// TODO Add IPS?
 	}
 
 	control, err := control.NewServer(control.Config{
@@ -77,7 +76,7 @@ func NewServer(opts ...ServerOption) (*Server, error) {
 		ClientsAuth:  cfg.clientsAuth,
 		ClientsRestr: cfg.clientsRestr,
 		RelaysAddr:   relaysAddr,
-		RelaysAuth:   relayAuth,
+		RelaysAuth:   selfhosted.NewRelayAuthenticator(relayAuth),
 		Logger:       cfg.logger,
 		Stores:       control.NewFileStores(filepath.Join(cfg.dir, "control")),
 	})
@@ -95,7 +94,7 @@ func NewServer(opts ...ServerOption) (*Server, error) {
 
 		ControlAddr:  relaysAddr,
 		ControlHost:  "localhost",
-		ControlToken: relayControlToken,
+		ControlToken: relayAuth.Token,
 		ControlCAs:   controlCAs,
 	})
 	if err != nil {
@@ -205,25 +204,20 @@ func ServerClientRestrictions(allow []string, deny []string) ServerOption {
 
 func ServerClientTokens(tokens ...string) ServerOption {
 	return func(cfg *serverConfig) error {
-		clientAuth, err := selfhosted.NewClientAuthenticator(tokens...)
-		if err != nil {
-			return err
+		auths := make([]selfhosted.ClientAuthentication, len(tokens))
+		for i, t := range tokens {
+			auths[i] = selfhosted.ClientAuthentication{Token: t}
 		}
 
-		cfg.clientsAuth = clientAuth
+		cfg.clientsAuth = selfhosted.NewClientAuthenticator(auths...)
 
 		return nil
 	}
 }
 
-func ServerClientTokensRestricted(tokens []string, iprestr []restr.IP, namerestr []restr.Name) ServerOption {
+func ServerClientAuthenticator(clientsAuth control.ClientAuthenticator) ServerOption {
 	return func(cfg *serverConfig) error {
-		clientAuth, err := selfhosted.NewClientAuthenticatorRestricted(tokens, iprestr, namerestr)
-		if err != nil {
-			return err
-		}
-
-		cfg.clientsAuth = clientAuth
+		cfg.clientsAuth = clientsAuth
 
 		return nil
 	}
