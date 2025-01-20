@@ -14,7 +14,6 @@ import (
 	"sync"
 
 	"github.com/connet-dev/connet/certc"
-	"github.com/connet-dev/connet/groupc"
 	"github.com/connet-dev/connet/logc"
 	"github.com/connet-dev/connet/model"
 	"github.com/connet-dev/connet/pb"
@@ -229,10 +228,10 @@ func (s *relayServer) listen(ctx context.Context, fwd model.Forward,
 }
 
 func (s *relayServer) run(ctx context.Context) error {
-	g := groupc.New(ctx)
+	g, ctx := errgroup.WithContext(ctx)
 
-	g.Go(s.runListener)
-	g.Go(s.runForwardsCache)
+	g.Go(func() error { return s.runListener(ctx) })
+	g.Go(func() error { return s.runForwardsCache(ctx) })
 
 	return g.Wait()
 }

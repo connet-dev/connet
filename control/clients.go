@@ -12,7 +12,6 @@ import (
 	"slices"
 	"sync"
 
-	"github.com/connet-dev/connet/groupc"
 	"github.com/connet-dev/connet/logc"
 	"github.com/connet-dev/connet/model"
 	"github.com/connet-dev/connet/pb"
@@ -221,10 +220,10 @@ func (s *clientServer) listen(ctx context.Context, fwd model.Forward, role model
 }
 
 func (s *clientServer) run(ctx context.Context) error {
-	g := groupc.New(ctx)
+	g, ctx := errgroup.WithContext(ctx)
 
-	g.Go(s.runListener)
-	g.Go(s.runPeerCache)
+	g.Go(func() error { return s.runListener(ctx) })
+	g.Go(func() error { return s.runPeerCache(ctx) })
 
 	return g.Wait()
 }

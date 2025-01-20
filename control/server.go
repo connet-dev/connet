@@ -6,11 +6,11 @@ import (
 	"log/slog"
 	"net"
 
-	"github.com/connet-dev/connet/groupc"
 	"github.com/connet-dev/connet/model"
 	"github.com/connet-dev/connet/restr"
 	"github.com/connet-dev/connet/statusc"
 	"github.com/segmentio/ksuid"
+	"golang.org/x/sync/errgroup"
 )
 
 type Config struct {
@@ -64,11 +64,11 @@ type Server struct {
 }
 
 func (s *Server) Run(ctx context.Context) error {
-	g := groupc.New(ctx)
+	g, ctx := errgroup.WithContext(ctx)
 
-	g.Go(s.relays.run)
-	g.Go(s.clients.run)
-	g.Go(s.runStatus)
+	g.Go(func() error { return s.relays.run(ctx) })
+	g.Go(func() error { return s.clients.run(ctx) })
+	g.Go(func() error { return s.runStatus(ctx) })
 
 	return g.Wait()
 }
