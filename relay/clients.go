@@ -227,7 +227,7 @@ func (c *clientConn) runErr(ctx context.Context) error {
 		return c.conn.CloseWithError(quic.ApplicationErrorCode(pb.Error_AuthenticationFailed), "authentication missing")
 	} else {
 		c.auth = auth
-		c.logger = c.logger.With("fwd", auth.fwd, "key", auth.key)
+		c.logger = c.logger.With("fwd", auth.fwd, "role", auth.role, "key", auth.key)
 	}
 
 	if err := c.check(ctx); err != nil {

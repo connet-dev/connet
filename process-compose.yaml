@@ -2,7 +2,7 @@ version: "0.5"
 
 processes:
   build:
-    command: make
+    command: make build
     availability:
       restart: "exit_on_failure"
   certs:
