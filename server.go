@@ -190,6 +190,19 @@ func ServerClientsAddress(address string) ServerOption {
 	}
 }
 
+func ServerClientRestrictions(allow []string, deny []string) ServerOption {
+	return func(cfg *serverConfig) error {
+		iprestr, err := restr.ParseIP(allow, deny)
+		if err != nil {
+			return err
+		}
+
+		cfg.clientsRestr = iprestr
+
+		return nil
+	}
+}
+
 func ServerClientTokens(tokens ...string) ServerOption {
 	return func(cfg *serverConfig) error {
 		clientAuth, err := selfhosted.NewClientAuthenticator(tokens...)
@@ -211,19 +224,6 @@ func ServerClientTokensRestricted(tokens []string, iprestr []restr.IP, namerestr
 		}
 
 		cfg.clientsAuth = clientAuth
-
-		return nil
-	}
-}
-
-func ServerClientRestrictions(allow []string, deny []string) ServerOption {
-	return func(cfg *serverConfig) error {
-		iprestr, err := restr.ParseIP(allow, deny)
-		if err != nil {
-			return err
-		}
-
-		cfg.clientsRestr = iprestr
 
 		return nil
 	}
