@@ -1,12 +1,14 @@
 package connet
 
 import (
+	"bufio"
 	"context"
 	"crypto/tls"
 	"fmt"
 	"io"
 	"log/slog"
 	"math/rand/v2"
+	"net"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -16,8 +18,10 @@ import (
 
 	"github.com/connet-dev/connet/certc"
 	"github.com/connet-dev/connet/model"
+	"github.com/connet-dev/connet/pbc"
 	"github.com/connet-dev/connet/restr"
 	"github.com/connet-dev/connet/selfhosted"
+	"github.com/pires/go-proxyproto"
 	"github.com/stretchr/testify/require"
 	"golang.org/x/sync/errgroup"
 )
@@ -29,7 +33,13 @@ func TestE2E(t *testing.T) {
 	hts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		fmt.Fprintf(w, "hello:%s", r.URL.Query().Get("rand"))
 	}))
+	htAddr := hts.Listener.Addr().String()
 	defer hts.Close()
+
+	ppListen, err := net.Listen("tcp", "127.0.0.1:0")
+	require.NoError(t, err)
+	ppAddr := ppListen.Addr().String()
+	defer ppListen.Close()
 
 	logger := slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{Level: slog.LevelWarn}))
 
@@ -59,14 +69,16 @@ func TestE2E(t *testing.T) {
 		ClientControlAddress("localhost:20000"),
 		clientControlCAs(cas),
 		ClientDirectAddress(":20002"),
-		ClientDestination("direct", hts.Listener.Addr().String(), model.RouteDirect),
-		ClientDestination("relay", hts.Listener.Addr().String(), model.RouteRelay),
-		ClientDestination("dst-any-direct-src", hts.Listener.Addr().String(), model.RouteAny),
-		ClientDestination("dst-any-relay-src", hts.Listener.Addr().String(), model.RouteAny),
-		ClientDestination("dst-direct-any-src", hts.Listener.Addr().String(), model.RouteDirect),
-		ClientDestination("dst-relay-any-src", hts.Listener.Addr().String(), model.RouteRelay),
-		ClientDestination("dst-direct-relay-src", hts.Listener.Addr().String(), model.RouteDirect),
-		ClientDestination("dst-relay-direct-src", hts.Listener.Addr().String(), model.RouteRelay),
+		ClientDestination("direct", htAddr, model.RouteDirect),
+		ClientDestination("relay", htAddr, model.RouteRelay),
+		ClientDestination("dst-any-direct-src", htAddr, model.RouteAny),
+		ClientDestination("dst-any-relay-src", htAddr, model.RouteAny),
+		ClientDestination("dst-direct-any-src", htAddr, model.RouteDirect),
+		ClientDestination("dst-relay-any-src", htAddr, model.RouteRelay),
+		ClientDestination("dst-direct-relay-src", htAddr, model.RouteDirect),
+		ClientDestination("dst-relay-direct-src", htAddr, model.RouteRelay),
+		ClientDestinationPP("dst-direct-proxy-proto", ppAddr, model.RouteDirect, pbc.ProxyProtoVersion_V1),
+		ClientDestinationPP("dst-relay-proxy-proto", ppAddr, model.RouteRelay, pbc.ProxyProtoVersion_V1),
 		ClientLogger(logger.With("test", "cl-dst")),
 	)
 	require.NoError(t, err)
@@ -84,6 +96,8 @@ func TestE2E(t *testing.T) {
 		ClientSource("dst-relay-any-src", ":9995", model.RouteAny),
 		ClientSource("dst-direct-relay-src", ":9996", model.RouteRelay),
 		ClientSource("dst-relay-direct-src", ":9997", model.RouteDirect),
+		ClientSource("dst-direct-proxy-proto", ":9998", model.RouteAny),
+		ClientSource("dst-relay-proxy-proto", ":9999", model.RouteAny),
 		ClientLogger(logger.With("test", "cl-src")),
 	)
 	require.NoError(t, err)
@@ -92,6 +106,7 @@ func TestE2E(t *testing.T) {
 	defer cancel()
 
 	g, ctx := errgroup.WithContext(ctx)
+	g.Go(func() error { return proxyProtoServer(ctx, ppListen) })
 	g.Go(func() error { return srv.Run(ctx) })
 	time.Sleep(time.Millisecond) // time for server to come online
 
@@ -171,6 +186,29 @@ func TestE2E(t *testing.T) {
 		})
 	}
 
+	for i, port := range []int{9998, 9999} {
+		t.Run(fmt.Sprintf("proxy-proto-%d:%d", i, port), func(t *testing.T) {
+			conn, err := net.Dial("tcp", fmt.Sprintf("127.0.0.1:%d", port))
+			require.NoError(t, err)
+			defer conn.Close()
+
+			_, err = conn.Write([]byte("abc\n"))
+			require.NoError(t, err)
+
+			buf := bufio.NewReader(conn)
+			hdr, err := proxyproto.Read(buf)
+			require.NoError(t, err)
+			require.NotNil(t, hdr)
+			require.Equal(t, byte(1), hdr.Version)
+			require.Equal(t, conn.LocalAddr(), hdr.SourceAddr)
+			require.Equal(t, conn.RemoteAddr(), hdr.DestinationAddr)
+
+			rest, err := buf.ReadBytes('\n')
+			require.NoError(t, err)
+			require.Equal(t, "abc\n", string(rest))
+		})
+	}
+
 	fmt.Println("stopping all")
 	cancel()
 
@@ -183,5 +221,32 @@ func serverCertificate(cert tls.Certificate) ServerOption {
 		cfg.cert = cert
 
 		return nil
+	}
+}
+
+func proxyProtoServer(ctx context.Context, l net.Listener) error {
+	go func() {
+		<-ctx.Done()
+		l.Close()
+	}()
+	for {
+		conn, err := l.Accept()
+		if err != nil {
+			return nil
+		}
+		defer conn.Close()
+
+		buf := bufio.NewReader(conn)
+		if hdr, err := proxyproto.Read(buf); err != nil {
+			return err
+		} else if _, err := hdr.WriteTo(conn); err != nil {
+			return err
+		}
+
+		if b, err := buf.ReadBytes('\n'); err != nil {
+			return err
+		} else if _, err := conn.Write(b); err != nil {
+			return err
+		}
 	}
 }

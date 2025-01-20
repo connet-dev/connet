@@ -27,7 +27,7 @@ type Destination struct {
 	conns map[peerConnKey]*destinationConn
 }
 
-func NewDestination(fwd model.Forward, addr string, opt model.RouteOption, direct *DirectServer, root *certc.Cert, logger *slog.Logger) (*Destination, error) {
+func NewDestination(fwd model.Forward, addr string, opt model.RouteOption, proxyProto pbc.ProxyProtoVersion, direct *DirectServer, root *certc.Cert, logger *slog.Logger) (*Destination, error) {
 	logger = logger.With("destination", fwd)
 	p, err := newPeer(direct, root, logger)
 	if err != nil {
@@ -38,10 +38,11 @@ func NewDestination(fwd model.Forward, addr string, opt model.RouteOption, direc
 	}
 
 	return &Destination{
-		fwd:    fwd,
-		addr:   addr,
-		opt:    opt,
-		logger: logger,
+		fwd:        fwd,
+		addr:       addr,
+		opt:        opt,
+		proxyProto: proxyProto,
+		logger:     logger,
 
 		peer:  p,
 		conns: map[peerConnKey]*destinationConn{},
