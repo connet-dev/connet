@@ -57,15 +57,33 @@ in
       description = "Server log format to use.";
     };
 
-    tokensFile = lib.mkOption {
-      type = lib.types.path;
-      description = "The file to read client tokens from.";
-    };
-
     clientsPort = lib.mkOption {
       default = 19190;
       type = lib.types.port;
       description = "The port to listen for incoming client connections.";
+    };
+
+    clientsIPRestriction = lib.mkOption {
+      default = { };
+      type = lib.types.submodule {
+        options = {
+          allowCIDRs = lib.mkOption {
+            default = [ ];
+            type = lib.types.listOf lib.types.str;
+            description = "list of allowed CIDRs as specified by RFC 4632";
+          };
+          denyCIDRs = lib.mkOption {
+            default = [ ];
+            type = lib.types.listOf lib.types.str;
+            description = "list of denied CIDRs as specified by RFC 4632";
+          };
+        };
+      };
+    };
+
+    tokensFile = lib.mkOption {
+      type = lib.types.path;
+      description = "The file to read client tokens from.";
     };
 
     useACMEHost = lib.mkOption {
@@ -161,9 +179,10 @@ in
         log-level = cfg.logLevel;
         log-format = cfg.logFormat;
         server = {
-          tokens-file = cfg.tokenFile;
-
           addr = ":${toString cfg.clientsPort}";
+
+          tokens-file = cfg.tokenFile;
+          ip-restriction = cfg.clientIPRestriction;
 
           relay-addr = ":${toString cfg.relayPort}";
           relay-hostname = cfg.relayHostname;
