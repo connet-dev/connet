@@ -108,7 +108,7 @@ in
             };
             proxyProto = lib.mkOption {
               default = null;
-              type = lib.types.nullOr lib.types.enum [ "" "v1" "v2" ];
+              type = lib.types.nullOr (lib.types.enum [ "" "v1" "v2" ]);
               description = "Proxy proto version to use for this destination";
             };
             fileServerRoot = lib.mkOption {
