@@ -403,7 +403,7 @@ by adding account management and it is one of the easiest way to start.
  - [x] Optimize global IP restrictions - check earlier
  - [x] Role restrictions for clients
  - [x] proxy proto support
- - [ ] update nix modules with new config options
+ - [x] update nix modules with new config options
 
 ## Future
 
@@ -411,3 +411,4 @@ by adding account management and it is one of the easiest way to start.
  - [ ] error wrapping
  - [ ] Gen config
  - [ ] http source
+ - [ ] client stateless reset key

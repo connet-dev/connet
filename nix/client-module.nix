@@ -106,6 +106,16 @@ in
               type = lib.types.enum [ "any" "direct" "relay" ];
               description = "The route to use for this destination";
             };
+            proxyProto = lib.mkOption {
+              default = "";
+              type = lib.types.enum [ "" "v1" "v2" ];
+              description = "Proxy proto version to use for this destination";
+            };
+            fileServerRoot = lib.mkOption {
+              default = "";
+              type = lib.types.str;
+              description = "Expose destination as a file server with the target as a root";
+            };
           };
         });
       example = ''
