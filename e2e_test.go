@@ -18,7 +18,6 @@ import (
 
 	"github.com/connet-dev/connet/certc"
 	"github.com/connet-dev/connet/model"
-	"github.com/connet-dev/connet/pbc"
 	"github.com/connet-dev/connet/restr"
 	"github.com/connet-dev/connet/selfhosted"
 	"github.com/pires/go-proxyproto"
@@ -77,8 +76,8 @@ func TestE2E(t *testing.T) {
 		ClientDestination("dst-relay-any-src", htAddr, model.RouteRelay),
 		ClientDestination("dst-direct-relay-src", htAddr, model.RouteDirect),
 		ClientDestination("dst-relay-direct-src", htAddr, model.RouteRelay),
-		ClientDestinationPP("dst-direct-proxy-proto", ppAddr, model.RouteDirect, pbc.ProxyProtoVersion_V1),
-		ClientDestinationPP("dst-relay-proxy-proto", ppAddr, model.RouteRelay, pbc.ProxyProtoVersion_V1),
+		ClientDestinationPP("dst-direct-proxy-proto", ppAddr, model.RouteDirect, model.V1),
+		ClientDestinationPP("dst-relay-proxy-proto", ppAddr, model.RouteRelay, model.V2),
 		ClientLogger(logger.With("test", "cl-dst")),
 	)
 	require.NoError(t, err)
@@ -199,7 +198,7 @@ func TestE2E(t *testing.T) {
 			hdr, err := proxyproto.Read(buf)
 			require.NoError(t, err)
 			require.NotNil(t, hdr)
-			require.Equal(t, byte(1), hdr.Version)
+			require.Equal(t, byte(i+1), hdr.Version)
 			require.Equal(t, conn.LocalAddr(), hdr.SourceAddr)
 			require.Equal(t, conn.RemoteAddr(), hdr.DestinationAddr)
 

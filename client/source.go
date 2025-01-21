@@ -18,7 +18,6 @@ import (
 	"github.com/connet-dev/connet/pbc"
 	"github.com/connet-dev/connet/quicc"
 	"github.com/klev-dev/kleverr"
-	proxyproto "github.com/pires/go-proxyproto"
 	"github.com/quic-go/quic-go"
 	"golang.org/x/sync/errgroup"
 )
@@ -190,11 +189,9 @@ func (s *Source) connectDestination(ctx context.Context, conn net.Conn, dest sou
 		return kleverr.Newf("could not read response: %w", err)
 	}
 
-	if ppversion := resp.GetConnect().GetProxyProto(); ppversion != pbc.ProxyProtoVersion_None {
-		pp := proxyproto.HeaderProxyFromAddrs(byte(ppversion), conn.RemoteAddr(), conn.LocalAddr())
-		if _, err := pp.WriteTo(stream); err != nil {
-			return kleverr.Newf("could not write proxy proto: %w", err)
-		}
+	proxy := model.ProxyVersionFromPB(resp.GetConnect().GetProxyProto())
+	if err := proxy.Write(stream, conn); err != nil {
+		return kleverr.Newf("could not write proxy proto: %w", err)
 	}
 
 	s.logger.Debug("joining conns", "style", dest.peer.style)

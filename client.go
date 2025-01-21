@@ -19,7 +19,6 @@ import (
 	"github.com/connet-dev/connet/model"
 	"github.com/connet-dev/connet/netc"
 	"github.com/connet-dev/connet/pb"
-	"github.com/connet-dev/connet/pbc"
 	"github.com/connet-dev/connet/pbs"
 	"github.com/connet-dev/connet/quicc"
 	"github.com/connet-dev/connet/statusc"
@@ -99,7 +98,7 @@ func (c *Client) Run(ctx context.Context) error {
 
 	c.dsts = map[model.Forward]*client.Destination{}
 	for fwd, cfg := range c.destinations {
-		c.dsts[fwd], err = client.NewDestination(fwd, cfg.addr, cfg.route, cfg.proxyProto, ds, c.rootCert, c.logger)
+		c.dsts[fwd], err = client.NewDestination(fwd, cfg.addr, cfg.route, cfg.proxy, ds, c.rootCert, c.logger)
 		if err != nil {
 			return kleverr.Ret(err)
 		}
@@ -315,9 +314,9 @@ type clientConfig struct {
 }
 
 type clientDestinationConfig struct {
-	addr       string
-	route      model.RouteOption
-	proxyProto pbc.ProxyProtoVersion
+	addr  string
+	route model.RouteOption
+	proxy model.ProxyVersion
 }
 
 type clientSourceConfig struct {
@@ -413,18 +412,18 @@ func ClientDestination(name, addr string, route model.RouteOption) ClientOption 
 		if cfg.destinations == nil {
 			cfg.destinations = map[model.Forward]clientDestinationConfig{}
 		}
-		cfg.destinations[model.NewForward(name)] = clientDestinationConfig{addr, route, pbc.ProxyProtoVersion_None}
+		cfg.destinations[model.NewForward(name)] = clientDestinationConfig{addr, route, model.NoVersion}
 
 		return nil
 	}
 }
 
-func ClientDestinationPP(name, addr string, route model.RouteOption, pp pbc.ProxyProtoVersion) ClientOption {
+func ClientDestinationPP(name, addr string, route model.RouteOption, proxy model.ProxyVersion) ClientOption {
 	return func(cfg *clientConfig) error {
 		if cfg.destinations == nil {
 			cfg.destinations = map[model.Forward]clientDestinationConfig{}
 		}
-		cfg.destinations[model.NewForward(name)] = clientDestinationConfig{addr, route, pp}
+		cfg.destinations[model.NewForward(name)] = clientDestinationConfig{addr, route, proxy}
 
 		return nil
 	}

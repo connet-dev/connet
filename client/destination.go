@@ -17,17 +17,17 @@ import (
 )
 
 type Destination struct {
-	fwd        model.Forward
-	addr       string
-	opt        model.RouteOption
-	proxyProto pbc.ProxyProtoVersion
-	logger     *slog.Logger
+	fwd    model.Forward
+	addr   string
+	opt    model.RouteOption
+	proxy  model.ProxyVersion
+	logger *slog.Logger
 
 	peer  *peer
 	conns map[peerConnKey]*destinationConn
 }
 
-func NewDestination(fwd model.Forward, addr string, opt model.RouteOption, proxyProto pbc.ProxyProtoVersion, direct *DirectServer, root *certc.Cert, logger *slog.Logger) (*Destination, error) {
+func NewDestination(fwd model.Forward, addr string, opt model.RouteOption, proxy model.ProxyVersion, direct *DirectServer, root *certc.Cert, logger *slog.Logger) (*Destination, error) {
 	logger = logger.With("destination", fwd)
 	p, err := newPeer(direct, root, logger)
 	if err != nil {
@@ -38,11 +38,11 @@ func NewDestination(fwd model.Forward, addr string, opt model.RouteOption, proxy
 	}
 
 	return &Destination{
-		fwd:        fwd,
-		addr:       addr,
-		opt:        opt,
-		proxyProto: proxyProto,
-		logger:     logger,
+		fwd:    fwd,
+		addr:   addr,
+		opt:    opt,
+		proxy:  proxy,
+		logger: logger,
 
 		peer:  p,
 		conns: map[peerConnKey]*destinationConn{},
@@ -178,7 +178,7 @@ func (d *Destination) runConnect(ctx context.Context, stream quic.Stream) error 
 
 	if err := pb.Write(stream, &pbc.Response{
 		Connect: &pbc.Response_Connect{
-			ProxyProto: d.proxyProto,
+			ProxyProto: d.proxy.PB(),
 		},
 	}); err != nil {
 		return kleverr.Newf("could not write response: %w", err)
