@@ -14,6 +14,7 @@ import (
 	"syscall"
 
 	"github.com/connet-dev/connet"
+	"github.com/connet-dev/connet/client"
 	"github.com/connet-dev/connet/control"
 	"github.com/connet-dev/connet/model"
 	"github.com/connet-dev/connet/netc"
@@ -52,9 +53,10 @@ type ClientConfig struct {
 }
 
 type DestinationConfig struct {
-	Addr           string `toml:"addr"`
-	Route          string `toml:"route"`
-	FileServerRoot string `toml:"file-server-root"`
+	Addr              string `toml:"addr"`
+	Route             string `toml:"route"`
+	ProxyProtoVersion string `toml:"proxy-proto-version"`
+	FileServerRoot    string `toml:"file-server-root"`
 }
 
 type SourceConfig struct {
@@ -458,17 +460,30 @@ func clientRun(ctx context.Context, cfg ClientConfig, logger *slog.Logger) error
 		if err != nil {
 			return err
 		}
+		proxy, err := parseProxyVersion(fc.ProxyProtoVersion)
+		if err != nil {
+			return err
+		}
 		if fc.FileServerRoot != "" {
 			srvs = append(srvs, &netc.FileServer{Addr: fc.Addr, Root: fc.FileServerRoot})
 		}
-		opts = append(opts, connet.ClientDestination(name, fc.Addr, route))
+		opts = append(opts, connet.ClientDestination(client.DestinationConfig{
+			Forward: model.NewForward(name),
+			Address: fc.Addr,
+			Route:   route,
+			Proxy:   proxy,
+		}))
 	}
 	for name, fc := range cfg.Sources {
 		route, err := parseRouteOption(fc.Route)
 		if err != nil {
 			return err
 		}
-		opts = append(opts, connet.ClientSource(name, fc.Addr, route))
+		opts = append(opts, connet.ClientSource(client.SourceConfig{
+			Forward: model.NewForward(name),
+			Address: fc.Addr,
+			Route:   route,
+		}))
 	}
 
 	opts = append(opts, connet.ClientLogger(logger))
@@ -740,6 +755,13 @@ func parseRouteOption(s string) (model.RouteOption, error) {
 		return model.RouteAny, nil
 	}
 	return model.ParseRouteOption(s)
+}
+
+func parseProxyVersion(s string) (model.ProxyVersion, error) {
+	if s == "" {
+		return model.NoVersion, nil
+	}
+	return model.ParseProxyVersion(s)
 }
 
 func parseRole(s string) (model.Role, error) {

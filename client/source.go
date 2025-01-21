@@ -22,10 +22,23 @@ import (
 	"golang.org/x/sync/errgroup"
 )
 
+type SourceConfig struct {
+	Forward model.Forward
+	Address string
+	Route   model.RouteOption
+}
+
+func NewSourceConfig(name string, addr string) SourceConfig {
+	return SourceConfig{Forward: model.NewForward(name), Address: addr, Route: model.RouteAny}
+}
+
+func (cfg SourceConfig) WithRoute(route model.RouteOption) SourceConfig {
+	cfg.Route = route
+	return cfg
+}
+
 type Source struct {
-	fwd    model.Forward
-	addr   string
-	opt    model.RouteOption
+	cfg    SourceConfig
 	logger *slog.Logger
 
 	peer  *peer
@@ -37,20 +50,18 @@ type sourceConn struct {
 	conn quic.Connection
 }
 
-func NewSource(fwd model.Forward, addr string, opt model.RouteOption, direct *DirectServer, root *certc.Cert, logger *slog.Logger) (*Source, error) {
-	logger = logger.With("source", fwd)
+func NewSource(cfg SourceConfig, direct *DirectServer, root *certc.Cert, logger *slog.Logger) (*Source, error) {
+	logger = logger.With("source", cfg.Forward)
 	p, err := newPeer(direct, root, logger)
 	if err != nil {
 		return nil, err
 	}
-	if opt.AllowDirect() {
+	if cfg.Route.AllowDirect() {
 		p.expectDirect()
 	}
 
 	return &Source{
-		fwd:    fwd,
-		addr:   addr,
-		opt:    opt,
+		cfg:    cfg,
 		logger: logger,
 
 		peer: p,
@@ -58,7 +69,7 @@ func NewSource(fwd model.Forward, addr string, opt model.RouteOption, direct *Di
 }
 
 func (s *Source) SetDirectAddrs(addrs []netip.AddrPort) {
-	if !s.opt.AllowDirect() {
+	if !s.cfg.Route.AllowDirect() {
 		return
 	}
 
@@ -121,8 +132,8 @@ func (s *Source) findActive() ([]sourceConn, error) {
 }
 
 func (s *Source) runServer(ctx context.Context) error {
-	s.logger.Debug("starting server", "addr", s.addr)
-	l, err := net.Listen("tcp", s.addr)
+	s.logger.Debug("starting server", "addr", s.cfg.Address)
+	l, err := net.Listen("tcp", s.cfg.Address)
 	if err != nil {
 		return kleverr.Ret(err)
 	}
@@ -204,9 +215,9 @@ func (s *Source) connectDestination(ctx context.Context, conn net.Conn, dest sou
 func (s *Source) RunControl(ctx context.Context, conn quic.Connection) error {
 	return (&peerControl{
 		local: s.peer,
-		fwd:   s.fwd,
+		fwd:   s.cfg.Forward,
 		role:  model.Source,
-		opt:   s.opt,
+		opt:   s.cfg.Route,
 		conn:  conn,
 	}).run(ctx)
 }

@@ -16,32 +16,47 @@ import (
 	"golang.org/x/sync/errgroup"
 )
 
+type DestinationConfig struct {
+	Forward model.Forward
+	Address string
+	Route   model.RouteOption
+	Proxy   model.ProxyVersion
+}
+
+func NewDestinationConfig(name string, addr string) DestinationConfig {
+	return DestinationConfig{Forward: model.NewForward(name), Address: addr, Route: model.RouteAny}
+}
+
+func (cfg DestinationConfig) WithRoute(route model.RouteOption) DestinationConfig {
+	cfg.Route = route
+	return cfg
+}
+
+func (cfg DestinationConfig) WithProxy(proxy model.ProxyVersion) DestinationConfig {
+	cfg.Proxy = proxy
+	return cfg
+}
+
 type Destination struct {
-	fwd    model.Forward
-	addr   string
-	opt    model.RouteOption
-	proxy  model.ProxyVersion
+	cfg    DestinationConfig
 	logger *slog.Logger
 
 	peer  *peer
 	conns map[peerConnKey]*destinationConn
 }
 
-func NewDestination(fwd model.Forward, addr string, opt model.RouteOption, proxy model.ProxyVersion, direct *DirectServer, root *certc.Cert, logger *slog.Logger) (*Destination, error) {
-	logger = logger.With("destination", fwd)
+func NewDestination(cfg DestinationConfig, direct *DirectServer, root *certc.Cert, logger *slog.Logger) (*Destination, error) {
+	logger = logger.With("destination", cfg.Forward)
 	p, err := newPeer(direct, root, logger)
 	if err != nil {
 		return nil, err
 	}
-	if opt.AllowDirect() {
+	if cfg.Route.AllowDirect() {
 		p.expectDirect()
 	}
 
 	return &Destination{
-		fwd:    fwd,
-		addr:   addr,
-		opt:    opt,
-		proxy:  proxy,
+		cfg:    cfg,
 		logger: logger,
 
 		peer:  p,
@@ -50,7 +65,7 @@ func NewDestination(fwd model.Forward, addr string, opt model.RouteOption, proxy
 }
 
 func (d *Destination) SetDirectAddrs(addrs []netip.AddrPort) {
-	if !d.opt.AllowDirect() {
+	if !d.cfg.Route.AllowDirect() {
 		return
 	}
 
@@ -166,9 +181,9 @@ func (d *Destination) runDestinationErr(ctx context.Context, stream quic.Stream)
 func (d *Destination) runConnect(ctx context.Context, stream quic.Stream) error {
 	// TODO check allow from?
 
-	conn, err := net.Dial("tcp", d.addr)
+	conn, err := net.Dial("tcp", d.cfg.Address)
 	if err != nil {
-		err := pb.NewError(pb.Error_DestinationDialFailed, "%s could not be dialed: %v", d.fwd, err)
+		err := pb.NewError(pb.Error_DestinationDialFailed, "%s could not be dialed: %v", d.cfg.Forward, err)
 		if err := pb.Write(stream, &pbc.Response{Error: err}); err != nil {
 			return kleverr.Newf("could not write error response: %w", err)
 		}
@@ -178,7 +193,7 @@ func (d *Destination) runConnect(ctx context.Context, stream quic.Stream) error 
 
 	if err := pb.Write(stream, &pbc.Response{
 		Connect: &pbc.Response_Connect{
-			ProxyProto: d.proxy.PB(),
+			ProxyProto: d.cfg.Proxy.PB(),
 		},
 	}); err != nil {
 		return kleverr.Newf("could not write response: %w", err)
@@ -194,9 +209,9 @@ func (d *Destination) runConnect(ctx context.Context, stream quic.Stream) error 
 func (d *Destination) RunControl(ctx context.Context, conn quic.Connection) error {
 	return (&peerControl{
 		local: d.peer,
-		fwd:   d.fwd,
+		fwd:   d.cfg.Forward,
 		role:  model.Destination,
-		opt:   d.opt,
+		opt:   d.cfg.Route,
 		conn:  conn,
 	}).run(ctx)
 }

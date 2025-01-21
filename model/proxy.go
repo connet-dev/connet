@@ -5,6 +5,7 @@ import (
 	"net"
 
 	"github.com/connet-dev/connet/pbc"
+	"github.com/klev-dev/kleverr"
 	"github.com/pires/go-proxyproto"
 )
 
@@ -25,6 +26,16 @@ func ProxyVersionFromPB(r pbc.ProxyProtoVersion) ProxyVersion {
 	default:
 		return NoVersion
 	}
+}
+
+func ParseProxyVersion(s string) (ProxyVersion, error) {
+	switch s {
+	case V1.string:
+		return V1, nil
+	case V2.string:
+		return V2, nil
+	}
+	return NoVersion, kleverr.Newf("unknown proxy proto version: %s", s)
 }
 
 func (v ProxyVersion) PB() pbc.ProxyProtoVersion {

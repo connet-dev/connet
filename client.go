@@ -98,7 +98,7 @@ func (c *Client) Run(ctx context.Context) error {
 
 	c.dsts = map[model.Forward]*client.Destination{}
 	for fwd, cfg := range c.destinations {
-		c.dsts[fwd], err = client.NewDestination(fwd, cfg.addr, cfg.route, cfg.proxy, ds, c.rootCert, c.logger)
+		c.dsts[fwd], err = client.NewDestination(cfg, ds, c.rootCert, c.logger)
 		if err != nil {
 			return kleverr.Ret(err)
 		}
@@ -106,7 +106,7 @@ func (c *Client) Run(ctx context.Context) error {
 
 	c.srcs = map[model.Forward]*client.Source{}
 	for fwd, cfg := range c.sources {
-		c.srcs[fwd], err = client.NewSource(fwd, cfg.addr, cfg.route, ds, c.rootCert, c.logger)
+		c.srcs[fwd], err = client.NewSource(cfg, ds, c.rootCert, c.logger)
 		if err != nil {
 			return kleverr.Ret(err)
 		}
@@ -307,21 +307,10 @@ type clientConfig struct {
 	directAddr *net.UDPAddr
 	statusAddr *net.TCPAddr
 
-	destinations map[model.Forward]clientDestinationConfig
-	sources      map[model.Forward]clientSourceConfig
+	destinations map[model.Forward]client.DestinationConfig
+	sources      map[model.Forward]client.SourceConfig
 
 	logger *slog.Logger
-}
-
-type clientDestinationConfig struct {
-	addr  string
-	route model.RouteOption
-	proxy model.ProxyVersion
-}
-
-type clientSourceConfig struct {
-	addr  string
-	route model.RouteOption
 }
 
 type ClientOption func(cfg *clientConfig) error
@@ -407,34 +396,23 @@ func ClientStatusAddress(address string) ClientOption {
 	}
 }
 
-func ClientDestination(name, addr string, route model.RouteOption) ClientOption {
+func ClientDestination(dcfg client.DestinationConfig) ClientOption {
 	return func(cfg *clientConfig) error {
 		if cfg.destinations == nil {
-			cfg.destinations = map[model.Forward]clientDestinationConfig{}
+			cfg.destinations = map[model.Forward]client.DestinationConfig{}
 		}
-		cfg.destinations[model.NewForward(name)] = clientDestinationConfig{addr, route, model.NoVersion}
+		cfg.destinations[dcfg.Forward] = dcfg
 
 		return nil
 	}
 }
 
-func ClientDestinationPP(name, addr string, route model.RouteOption, proxy model.ProxyVersion) ClientOption {
-	return func(cfg *clientConfig) error {
-		if cfg.destinations == nil {
-			cfg.destinations = map[model.Forward]clientDestinationConfig{}
-		}
-		cfg.destinations[model.NewForward(name)] = clientDestinationConfig{addr, route, proxy}
-
-		return nil
-	}
-}
-
-func ClientSource(name, addr string, route model.RouteOption) ClientOption {
+func ClientSource(scfg client.SourceConfig) ClientOption {
 	return func(cfg *clientConfig) error {
 		if cfg.sources == nil {
-			cfg.sources = map[model.Forward]clientSourceConfig{}
+			cfg.sources = map[model.Forward]client.SourceConfig{}
 		}
-		cfg.sources[model.NewForward(name)] = clientSourceConfig{addr, route}
+		cfg.sources[scfg.Forward] = scfg
 
 		return nil
 	}

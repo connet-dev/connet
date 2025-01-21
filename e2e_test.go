@@ -17,6 +17,7 @@ import (
 	"time"
 
 	"github.com/connet-dev/connet/certc"
+	"github.com/connet-dev/connet/client"
 	"github.com/connet-dev/connet/model"
 	"github.com/connet-dev/connet/restr"
 	"github.com/connet-dev/connet/selfhosted"
@@ -68,16 +69,16 @@ func TestE2E(t *testing.T) {
 		ClientControlAddress("localhost:20000"),
 		clientControlCAs(cas),
 		ClientDirectAddress(":20002"),
-		ClientDestination("direct", htAddr, model.RouteDirect),
-		ClientDestination("relay", htAddr, model.RouteRelay),
-		ClientDestination("dst-any-direct-src", htAddr, model.RouteAny),
-		ClientDestination("dst-any-relay-src", htAddr, model.RouteAny),
-		ClientDestination("dst-direct-any-src", htAddr, model.RouteDirect),
-		ClientDestination("dst-relay-any-src", htAddr, model.RouteRelay),
-		ClientDestination("dst-direct-relay-src", htAddr, model.RouteDirect),
-		ClientDestination("dst-relay-direct-src", htAddr, model.RouteRelay),
-		ClientDestinationPP("dst-direct-proxy-proto", ppAddr, model.RouteDirect, model.V1),
-		ClientDestinationPP("dst-relay-proxy-proto", ppAddr, model.RouteRelay, model.V2),
+		ClientDestination(client.NewDestinationConfig("direct", htAddr).WithRoute(model.RouteDirect)),
+		ClientDestination(client.NewDestinationConfig("relay", htAddr).WithRoute(model.RouteRelay)),
+		ClientDestination(client.NewDestinationConfig("dst-any-direct-src", htAddr)),
+		ClientDestination(client.NewDestinationConfig("dst-any-relay-src", htAddr)),
+		ClientDestination(client.NewDestinationConfig("dst-direct-any-src", htAddr).WithRoute(model.RouteDirect)),
+		ClientDestination(client.NewDestinationConfig("dst-relay-any-src", htAddr).WithRoute(model.RouteRelay)),
+		ClientDestination(client.NewDestinationConfig("dst-direct-relay-src", htAddr).WithRoute(model.RouteDirect)),
+		ClientDestination(client.NewDestinationConfig("dst-relay-direct-src", htAddr).WithRoute(model.RouteRelay)),
+		ClientDestination(client.NewDestinationConfig("dst-direct-proxy-proto", ppAddr).WithRoute(model.RouteDirect).WithProxy(model.V1)),
+		ClientDestination(client.NewDestinationConfig("dst-relay-proxy-proto", ppAddr).WithRoute(model.RouteRelay).WithProxy(model.V2)),
 		ClientLogger(logger.With("test", "cl-dst")),
 	)
 	require.NoError(t, err)
@@ -87,16 +88,16 @@ func TestE2E(t *testing.T) {
 		ClientControlAddress("localhost:20000"),
 		clientControlCAs(cas),
 		ClientDirectAddress(":20003"),
-		ClientSource("direct", ":9990", model.RouteDirect),
-		ClientSource("relay", ":9991", model.RouteRelay),
-		ClientSource("dst-any-direct-src", ":9992", model.RouteDirect),
-		ClientSource("dst-any-relay-src", ":9993", model.RouteRelay),
-		ClientSource("dst-direct-any-src", ":9994", model.RouteAny),
-		ClientSource("dst-relay-any-src", ":9995", model.RouteAny),
-		ClientSource("dst-direct-relay-src", ":9996", model.RouteRelay),
-		ClientSource("dst-relay-direct-src", ":9997", model.RouteDirect),
-		ClientSource("dst-direct-proxy-proto", ":9998", model.RouteAny),
-		ClientSource("dst-relay-proxy-proto", ":9999", model.RouteAny),
+		ClientSource(client.NewSourceConfig("direct", ":9990").WithRoute(model.RouteDirect)),
+		ClientSource(client.NewSourceConfig("relay", ":9991").WithRoute(model.RouteRelay)),
+		ClientSource(client.NewSourceConfig("dst-any-direct-src", ":9992").WithRoute(model.RouteDirect)),
+		ClientSource(client.NewSourceConfig("dst-any-relay-src", ":9993").WithRoute(model.RouteRelay)),
+		ClientSource(client.NewSourceConfig("dst-direct-any-src", ":9994").WithRoute(model.RouteAny)),
+		ClientSource(client.NewSourceConfig("dst-relay-any-src", ":9995").WithRoute(model.RouteAny)),
+		ClientSource(client.NewSourceConfig("dst-direct-relay-src", ":9996").WithRoute(model.RouteRelay)),
+		ClientSource(client.NewSourceConfig("dst-relay-direct-src", ":9997").WithRoute(model.RouteDirect)),
+		ClientSource(client.NewSourceConfig("dst-direct-proxy-proto", ":9998").WithRoute(model.RouteAny)),
+		ClientSource(client.NewSourceConfig("dst-relay-proxy-proto", ":9999").WithRoute(model.RouteAny)),
 		ClientLogger(logger.With("test", "cl-src")),
 	)
 	require.NoError(t, err)
@@ -115,7 +116,7 @@ func TestE2E(t *testing.T) {
 			ClientControlAddress("localhost:20000"),
 			clientControlCAs(cas),
 			ClientDirectAddress(":20003"),
-			ClientDestination("direct", hts.Listener.Addr().String(), model.RouteDirect),
+			ClientDestination(client.NewDestinationConfig("direct", htAddr)),
 			ClientLogger(logger.With("test", "cl-ip-deny")),
 		)
 		require.NoError(t, err)
@@ -128,7 +129,7 @@ func TestE2E(t *testing.T) {
 			ClientControlAddress("localhost:20000"),
 			clientControlCAs(cas),
 			ClientDirectAddress(":20004"),
-			ClientDestination("direct", hts.Listener.Addr().String(), model.RouteDirect),
+			ClientDestination(client.NewDestinationConfig("direct", htAddr)),
 			ClientLogger(logger.With("test", "cl-name-deny")),
 		)
 		require.NoError(t, err)
@@ -141,7 +142,7 @@ func TestE2E(t *testing.T) {
 			ClientControlAddress("localhost:20000"),
 			clientControlCAs(cas),
 			ClientDirectAddress(":20005"),
-			ClientDestination("direct", hts.Listener.Addr().String(), model.RouteDirect),
+			ClientDestination(client.NewDestinationConfig("direct", htAddr)),
 			ClientLogger(logger.With("test", "cl-role-deny")),
 		)
 		require.NoError(t, err)
