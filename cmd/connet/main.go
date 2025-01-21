@@ -467,23 +467,17 @@ func clientRun(ctx context.Context, cfg ClientConfig, logger *slog.Logger) error
 		if fc.FileServerRoot != "" {
 			srvs = append(srvs, &netc.FileServer{Addr: fc.Addr, Root: fc.FileServerRoot})
 		}
-		opts = append(opts, connet.ClientDestination(client.DestinationConfig{
-			Forward: model.NewForward(name),
-			Address: fc.Addr,
-			Route:   route,
-			Proxy:   proxy,
-		}))
+		opts = append(opts, connet.ClientDestination(
+			client.NewDestinationConfig(name, fc.Addr).WithRoute(route).WithProxy(proxy)))
 	}
+
 	for name, fc := range cfg.Sources {
 		route, err := parseRouteOption(fc.Route)
 		if err != nil {
 			return err
 		}
-		opts = append(opts, connet.ClientSource(client.SourceConfig{
-			Forward: model.NewForward(name),
-			Address: fc.Addr,
-			Route:   route,
-		}))
+		opts = append(opts, connet.ClientSource(
+			client.NewSourceConfig(name, fc.Addr).WithRoute(route)))
 	}
 
 	opts = append(opts, connet.ClientLogger(logger))
@@ -759,7 +753,7 @@ func parseRouteOption(s string) (model.RouteOption, error) {
 
 func parseProxyVersion(s string) (model.ProxyVersion, error) {
 	if s == "" {
-		return model.NoVersion, nil
+		return model.ProxyNone, nil
 	}
 	return model.ParseProxyVersion(s)
 }

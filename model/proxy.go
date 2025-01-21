@@ -12,37 +12,37 @@ import (
 type ProxyVersion struct{ string }
 
 var (
-	NoVersion = ProxyVersion{}
-	V1        = ProxyVersion{"v1"}
-	V2        = ProxyVersion{"v2"}
+	ProxyNone = ProxyVersion{"none"}
+	ProxyV1   = ProxyVersion{"v1"}
+	ProxyV2   = ProxyVersion{"v2"}
 )
 
 func ProxyVersionFromPB(r pbc.ProxyProtoVersion) ProxyVersion {
 	switch r {
 	case pbc.ProxyProtoVersion_V1:
-		return V1
+		return ProxyV1
 	case pbc.ProxyProtoVersion_V2:
-		return V2
+		return ProxyV2
 	default:
-		return NoVersion
+		return ProxyNone
 	}
 }
 
 func ParseProxyVersion(s string) (ProxyVersion, error) {
 	switch s {
-	case V1.string:
-		return V1, nil
-	case V2.string:
-		return V2, nil
+	case ProxyV1.string:
+		return ProxyV1, nil
+	case ProxyV2.string:
+		return ProxyV2, nil
 	}
-	return NoVersion, kleverr.Newf("unknown proxy proto version: %s", s)
+	return ProxyNone, kleverr.Newf("unknown proxy proto version: %s", s)
 }
 
 func (v ProxyVersion) PB() pbc.ProxyProtoVersion {
 	switch v {
-	case V1:
+	case ProxyV1:
 		return pbc.ProxyProtoVersion_V1
-	case V2:
+	case ProxyV2:
 		return pbc.ProxyProtoVersion_V2
 	default:
 		return pbc.ProxyProtoVersion_None
@@ -50,11 +50,11 @@ func (v ProxyVersion) PB() pbc.ProxyProtoVersion {
 }
 
 func (v ProxyVersion) Write(w io.Writer, conn net.Conn) error {
-	if v == NoVersion {
+	if v == ProxyNone {
 		return nil
 	}
 	version := byte(2)
-	if v == V1 {
+	if v == ProxyV1 {
 		version = byte(1)
 	}
 	pp := proxyproto.HeaderProxyFromAddrs(version, conn.RemoteAddr(), conn.LocalAddr())

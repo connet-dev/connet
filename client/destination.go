@@ -24,7 +24,7 @@ type DestinationConfig struct {
 }
 
 func NewDestinationConfig(name string, addr string) DestinationConfig {
-	return DestinationConfig{Forward: model.NewForward(name), Address: addr, Route: model.RouteAny}
+	return DestinationConfig{Forward: model.NewForward(name), Address: addr, Route: model.RouteAny, Proxy: model.ProxyNone}
 }
 
 func (cfg DestinationConfig) WithRoute(route model.RouteOption) DestinationConfig {

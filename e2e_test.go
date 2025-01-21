@@ -77,8 +77,8 @@ func TestE2E(t *testing.T) {
 		ClientDestination(client.NewDestinationConfig("dst-relay-any-src", htAddr).WithRoute(model.RouteRelay)),
 		ClientDestination(client.NewDestinationConfig("dst-direct-relay-src", htAddr).WithRoute(model.RouteDirect)),
 		ClientDestination(client.NewDestinationConfig("dst-relay-direct-src", htAddr).WithRoute(model.RouteRelay)),
-		ClientDestination(client.NewDestinationConfig("dst-direct-proxy-proto", ppAddr).WithRoute(model.RouteDirect).WithProxy(model.V1)),
-		ClientDestination(client.NewDestinationConfig("dst-relay-proxy-proto", ppAddr).WithRoute(model.RouteRelay).WithProxy(model.V2)),
+		ClientDestination(client.NewDestinationConfig("dst-direct-proxy-proto", ppAddr).WithRoute(model.RouteDirect).WithProxy(model.ProxyV1)),
+		ClientDestination(client.NewDestinationConfig("dst-relay-proxy-proto", ppAddr).WithRoute(model.RouteRelay).WithProxy(model.ProxyV2)),
 		ClientLogger(logger.With("test", "cl-dst")),
 	)
 	require.NoError(t, err)
