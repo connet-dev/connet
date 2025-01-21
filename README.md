@@ -138,7 +138,8 @@ status-addr = "127.0.0.1:19182" # at what address this client listens for status
 [client.destinations.serviceX]
 addr = "localhost:3000" # where this destination connects to, required
 route = "any" # what kind of routes to use, `any` will use both `direct` and `relay`
-file-server-root = "." # run a file server at current directory, on localhost:3000 address
+proxy-proto-version = "" # proxy proto version to push origin information to the server, supports `v1` and `v2`
+file-server-root = "." # when set, run a file server at current directory, on localhost:3000 address
 
 [client.destinations.serviceY]
 addr = "192.168.1.100:8000" # multiple destinations can be defined, they are matched by name at the server
@@ -401,6 +402,7 @@ by adding account management and it is one of the easiest way to start.
  - [x] Use quic-go tracer, instead of ping (and duration estimation)
  - [x] Optimize global IP restrictions - check earlier
  - [x] Role restrictions for clients
+ - [x] proxy proto support
  - [ ] update nix modules with new config options
 
 ## Future
@@ -408,5 +410,4 @@ by adding account management and it is one of the easiest way to start.
  - [ ] UDP support
  - [ ] error wrapping
  - [ ] Gen config
- - [ ] proxy proto support
  - [ ] http source
