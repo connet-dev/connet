@@ -1,10 +1,20 @@
 { config, lib, pkgs, ... }:
 let
   cfg = config.services.connet-server;
-  renameAttr =
-    old:
-    new:
-    lib.mapAttrs' (name: value: lib.nameValuePair (if name == old then new else name) value);
+
+  renameAttrs = mappings: lib.mapAttrs' (
+    name: value: lib.nameValuePair (if builtins.hasAttr name mappings then builtins.getAttr name mappings else name) value
+  );
+  renameIPRestrAttrs = renameAttrs {
+    allowCIDRs = "allow-cidrs";
+    denyCIDRs = "deny-cidrs";
+  };
+  renameTokenRestrAttrs = renameAttrs {
+    allowCIDRs = "allow-cidrs";
+    denyCIDRs = "deny-cidrs";
+    nameMatches = "name-matches";
+    roleMatches = "role-matches";
+  };
 in
 {
   options.services.connet-server = {
@@ -212,18 +222,10 @@ in
         log-format = cfg.logFormat;
         server = {
           addr = ":${toString cfg.clientsPort}";
-          ip-restriction = lib.trivial.pipe cfg.clientsIPRestriction [
-            (renameAttr "allowCIDRs" "allow-cidrs")
-            (renameAttr "denyCIDRs" "deny-cidrs")
-          ];
+          ip-restriction = renameIPRestrAttrs cfg.clientsIPRestriction;
 
           tokens-file = cfg.tokensFile;
-          token-restriction = lib.lists.forEach cfg.tokensRestriction (restr: lib.trivial.pipe restr [
-            (renameAttr "allowCIDRs" "allow-cidrs")
-            (renameAttr "denyCIDRs" "deny-cidrs")
-            (renameAttr "nameMatches" "name-matches")
-            (renameAttr "roleMatches" "role-matches")
-          ]);
+          token-restriction = lib.lists.forEach cfg.tokensRestriction renameTokenRestrAttrs;
 
           relay-addr = ":${toString cfg.relayPort}";
           relay-hostname = cfg.relayHostname;

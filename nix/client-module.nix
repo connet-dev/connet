@@ -2,10 +2,13 @@
 let
   cfg = config.services.connet;
 
-  renameAttr =
-    old:
-    new:
-    lib.mapAttrs' (name: value: lib.nameValuePair (if name == old then new else name) value);
+  renameAttrs = mappings: lib.mapAttrs' (
+    name: value: lib.nameValuePair (if builtins.hasAttr name mappings then builtins.getAttr name mappings else name) value
+  );
+  renameDestinationAttrs = renameAttrs {
+    fileServerRoot = "file-server-root";
+    proxyProto = "proxy-proto-version";
+  };
 in
 {
   options.services.connet = {
@@ -178,12 +181,7 @@ in
           server-addr = cfg.serverAddr;
           direct-addr = ":${toString cfg.directPort}";
 
-          destinations = lib.mapAttrs
-            (name: value: lib.trivial.pipe value [
-              (renameAttr "fileServerRoot" "file-server-root")
-              (renameAttr "proxyProto" "proxy-proto-version")
-            ])
-            cfg.destinations;
+          destinations = lib.mapAttrs (name: value: renameDestinationAttrs value) cfg.destinations;
           sources = cfg.sources;
         } // lib.optionalAttrs (builtins.isPath cfg.serverCA) {
           server-cas = cfg.serverCA;
