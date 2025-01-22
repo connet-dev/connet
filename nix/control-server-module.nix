@@ -124,16 +124,16 @@ in
 
     assertions = [
       {
-        assertion = builtins.isNull cfg.useACMEHost && builtins.isNull cfg.serverCertFile;
+        assertion = !(builtins.isNull cfg.useACMEHost && builtins.isNull cfg.serverCertFile);
         message = "connet server requires certificate, either provide useACMEHost or serverCertFile/serverKeyFile";
       }
       {
-        assertion = builtins.isPath cfg.serverCertFile && builtins.isNull cfg.serverKeyFile;
-        message = "serverKeyFile is required when serverCertFile is set";
+        assertion = builtins.isNull cfg.serverCertFile -> builtins.isNull cfg.serverKeyFile;
+        message = "serverCertFile is required when serverKeyFile is set";
       }
       {
-        assertion = builtins.isNull cfg.serverCertFile && builtins.isPath cfg.serverKeyFile;
-        message = "serverCertFile is required when serverKeyFile is set";
+        assertion = builtins.isNull cfg.serverKeyFile -> builtins.isNull cfg.serverCertFile;
+        message = "serverKeyFile is required when serverCertFile is set";
       }
     ];
 

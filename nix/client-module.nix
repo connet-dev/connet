@@ -1,6 +1,11 @@
 { config, lib, pkgs, ... }:
 let
   cfg = config.services.connet;
+
+  renameAttr =
+    old:
+    new:
+    lib.mapAttrs' (name: value: lib.nameValuePair (if name == old then new else name) value);
 in
 {
   options.services.connet = {
@@ -107,13 +112,13 @@ in
               description = "The route to use for this destination";
             };
             proxyProto = lib.mkOption {
-              default = null;
-              type = lib.types.nullOr (lib.types.enum [ "" "v1" "v2" ]);
+              default = "";
+              type = lib.types.enum [ "" "v1" "v2" ];
               description = "Proxy proto version to use for this destination";
             };
             fileServerRoot = lib.mkOption {
-              default = null;
-              type = lib.types.nullOr lib.types.str;
+              default = "";
+              type = lib.types.str;
               description = "Expose destination as a file server with the target as a root";
             };
           };
@@ -125,20 +130,19 @@ in
 
     sources = lib.mkOption {
       default = { };
-      type = lib.types.attrsOf
-        (lib.types.submodule {
-          options = {
-            addr = lib.mkOption {
-              type = lib.types.str;
-              description = "The address of the source";
-            };
-            route = lib.mkOption {
-              default = "any";
-              type = lib.types.enum [ "any" "direct" "relay" ];
-              description = "The route to use for this source";
-            };
+      type = lib.types.attrsOf (lib.types.submodule {
+        options = {
+          addr = lib.mkOption {
+            type = lib.types.str;
+            description = "The address of the source";
           };
-        });
+          route = lib.mkOption {
+            default = "any";
+            type = lib.types.enum [ "any" "direct" "relay" ];
+            description = "The route to use for this source";
+          };
+        };
+      });
       example = ''
         express.addr = ":8000";
       '';
@@ -174,7 +178,12 @@ in
           server-addr = cfg.serverAddr;
           direct-addr = ":${toString cfg.directPort}";
 
-          destinations = cfg.destinations;
+          destinations = lib.mapAttrs
+            (name: value: lib.trivial.pipe value [
+              (renameAttr "fileServerRoot" "file-server-root")
+              (renameAttr "proxyProto" "proxy-proto-version")
+            ])
+            cfg.destinations;
           sources = cfg.sources;
         } // lib.optionalAttrs (builtins.isPath cfg.serverCA) {
           server-cas = cfg.serverCA;

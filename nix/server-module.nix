@@ -1,6 +1,10 @@
 { config, lib, pkgs, ... }:
 let
   cfg = config.services.connet-server;
+  renameAttr =
+    old:
+    new:
+    lib.mapAttrs' (name: value: lib.nameValuePair (if name == old then new else name) value);
 in
 {
   options.services.connet-server = {
@@ -86,6 +90,34 @@ in
       description = "The file to read client tokens from.";
     };
 
+    tokensRestriction = lib.mkOption {
+      default = [ ];
+      type = lib.types.listOf (lib.types.submodule {
+        options = {
+          allowCIDRs = lib.mkOption {
+            default = [ ];
+            type = lib.types.listOf lib.types.str;
+            description = "list of allowed CIDRs as specified by RFC 4632";
+          };
+          denyCIDRs = lib.mkOption {
+            default = [ ];
+            type = lib.types.listOf lib.types.str;
+            description = "list of denied CIDRs as specified by RFC 4632";
+          };
+          nameMatches = lib.mkOption {
+            default = "";
+            type = lib.types.str;
+            description = "regex to match names against";
+          };
+          roleMatches = lib.mkOption {
+            default = "";
+            type = lib.types.enum [ "" "destination" "source" ];
+            description = "only allow specific roles with this token";
+          };
+        };
+      });
+    };
+
     useACMEHost = lib.mkOption {
       default = null;
       type = lib.types.nullOr lib.types.str;
@@ -143,16 +175,16 @@ in
 
     assertions = [
       {
-        assertion = builtins.isNull cfg.useACMEHost && builtins.isNull cfg.serverCertFile;
+        assertion = !(builtins.isNull cfg.useACMEHost && builtins.isNull cfg.serverCertFile);
         message = "connet server requires certificate, either provide useACMEHost or serverCertFile/serverKeyFile";
       }
       {
-        assertion = builtins.isPath cfg.serverCertFile && builtins.isNull cfg.serverKeyFile;
-        message = "serverKeyFile is required when serverCertFile is set";
+        assertion = builtins.isNull cfg.serverCertFile -> builtins.isNull cfg.serverKeyFile;
+        message = "serverCertFile is required when serverKeyFile is set";
       }
       {
-        assertion = builtins.isNull cfg.serverCertFile && builtins.isPath cfg.serverKeyFile;
-        message = "serverCertFile is required when serverKeyFile is set";
+        assertion = builtins.isNull cfg.serverKeyFile -> builtins.isNull cfg.serverCertFile;
+        message = "serverKeyFile is required when serverCertFile is set";
       }
     ];
 
@@ -180,9 +212,18 @@ in
         log-format = cfg.logFormat;
         server = {
           addr = ":${toString cfg.clientsPort}";
+          ip-restriction = lib.trivial.pipe cfg.clientsIPRestriction [
+            (renameAttr "allowCIDRs" "allow-cidrs")
+            (renameAttr "denyCIDRs" "deny-cidrs")
+          ];
 
-          tokens-file = cfg.tokenFile;
-          ip-restriction = cfg.clientIPRestriction;
+          tokens-file = cfg.tokensFile;
+          token-restriction = lib.lists.forEach cfg.tokensRestriction (restr: lib.trivial.pipe restr [
+            (renameAttr "allowCIDRs" "allow-cidrs")
+            (renameAttr "denyCIDRs" "deny-cidrs")
+            (renameAttr "nameMatches" "name-matches")
+            (renameAttr "roleMatches" "role-matches")
+          ]);
 
           relay-addr = ":${toString cfg.relayPort}";
           relay-hostname = cfg.relayHostname;
