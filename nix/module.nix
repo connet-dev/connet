@@ -2,6 +2,7 @@
 let
   cfg = config.services."connet-${role}";
   settingsFormat = pkgs.formats.toml { };
+  usesCerts = role == "server" || role == "control";
 in
 {
   options.services."connet-${role}" = {
@@ -53,6 +54,18 @@ in
       type = lib.types.bool;
       description = "Whether to open the firewall for the specified port.";
     };
+  } // lib.optionalAttrs usesCerts {
+    useACMEHost = lib.mkOption {
+      default = null;
+      type = lib.types.nullOr lib.types.str;
+      description = ''
+        A host of an existing ACME certificate to use.
+        *Note that this option does not create any certificates, nor
+        does it add subdomains to existing ones – you will need to create them
+        manually using [](#opt-security.acme.certs).*
+      '';
+      example = "example.com";
+    };
   };
 
   config = lib.mkIf cfg.enable {
@@ -75,14 +88,28 @@ in
     environment.etc."connet-${role}.toml" = {
       user = cfg.user;
       group = cfg.group;
-      source = settingsFormat.generate "connet-config-${role}.toml" cfg.settings;
+      source = settingsFormat.generate "connet-config-${role}.toml"
+        (cfg.settings // lib.optionalAttrs (usesCerts && builtins.isString cfg.useACMEHost)
+          (
+            let
+              sslCertDir = config.security.acme.certs.${cfg.useACMEHost}.directory;
+              sslCert = "${sslCertDir}/cert.pem";
+              sslKey = "${sslCertDir}/key.pem";
+            in
+            {
+              server.cert-file = sslCert;
+              server.key-file = sslKey;
+              control.cert-file = sslCert;
+              control.key-file = sslKey;
+            }
+          ));
     };
 
     systemd.packages = [ cfg.package ];
     systemd.services."connet-${role}" = {
       description = "connet ${role}";
       after = [ "network.target" "network-online.target" ];
-      requires = [ "network-online.target" ];
+      requires = [ "network-online.target" ] ++ lib.optionals (usesCerts && builtins.isString cfg.useACMEHost) [ "acme-finished-${cfg.useACMEHost}.target" ];
       wantedBy = [ "multi-user.target" ];
       restartTriggers = [ config.environment.etc."connet-${role}.toml".source ];
       serviceConfig = {
