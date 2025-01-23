@@ -3,6 +3,12 @@ let
   cfg = config.services."connet-${role}";
   settingsFormat = pkgs.formats.toml { };
   usesCerts = role == "server" || role == "control";
+  portFromPath = { path, default }: lib.trivial.pipe cfg.settings [
+    (lib.attrByPath path default)
+    (lib.splitString ":")
+    lib.last
+    lib.toInt
+  ];
 in
 {
   options.services."connet-${role}" = {
@@ -83,7 +89,7 @@ in
       connet = { };
     };
 
-    networking.firewall.allowedUDPPorts = lib.mkIf cfg.openFirewall (ports cfg.settings);
+    networking.firewall.allowedUDPPorts = lib.mkIf cfg.openFirewall (builtins.map portFromPath ports);
 
     environment.etc."connet-${role}.toml" = {
       user = cfg.user;
