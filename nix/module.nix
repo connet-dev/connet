@@ -1,4 +1,4 @@
-{ role, ports, usesCerts ? false, config, lib, pkgs, ... }:
+{ role, ports, hasCerts ? false, hasStorage ? false, config, lib, pkgs, ... }:
 let
   cfg = config.services."connet-${role}";
   settingsFormat = pkgs.formats.toml { };
@@ -8,7 +8,8 @@ let
     lib.last
     lib.toInt
   ];
-  usesACME = usesCerts && builtins.isString cfg.useACMEHost;
+  usesACME = hasCerts && builtins.isString cfg.useACMEHost;
+  noStorageSpec = hasStorage && builtins.isNull (lib.attrByPath [ role "store-dir" ] null cfg.settings);
 in
 {
   options.services."connet-${role}" = {
@@ -60,7 +61,7 @@ in
       type = lib.types.bool;
       description = "Whether to open the firewall for the specified port.";
     };
-  } // lib.optionalAttrs usesCerts {
+  } // lib.optionalAttrs hasCerts {
     useACMEHost = lib.mkOption {
       default = null;
       type = lib.types.nullOr lib.types.str;
@@ -77,17 +78,11 @@ in
   config = lib.mkIf cfg.enable {
     warnings = lib.flatten [
       (lib.optionals
-        (usesACME && builtins.isString (lib.attrByPath [ "server" "cert-file" ] null cfg.settings))
-        [ "ACME config for ${cfg.useACMEHost} overrides `server.cert-file`" ])
+        (usesACME && builtins.isString (lib.attrByPath [ role "cert-file" ] null cfg.settings))
+        [ "ACME config for ${cfg.useACMEHost} overrides `${role}.cert-file`" ])
       (lib.optionals
-        (usesACME && builtins.isString (lib.attrByPath [ "server" "key-file" ] null cfg.settings))
-        [ "ACME config for ${cfg.useACMEHost} overrides `server.key-file`" ])
-      (lib.optionals
-        (usesACME && builtins.isString (lib.attrByPath [ "control" "cert-file" ] null cfg.settings))
-        [ "ACME config for ${cfg.useACMEHost} overrides `control.cert-file`" ])
-      (lib.optionals
-        (usesACME && builtins.isString (lib.attrByPath [ "control" "key-file" ] null cfg.settings))
-        [ "ACME config for ${cfg.useACMEHost} overrides `control.key-file`" ])
+        (usesACME && builtins.isString (lib.attrByPath [ role "key-file" ] null cfg.settings))
+        [ "ACME config for ${cfg.useACMEHost} overrides `${role}.key-file`" ])
     ];
 
     boot.kernel.sysctl."net.core.rmem_max" = lib.mkDefault 7500000;
@@ -109,20 +104,23 @@ in
     environment.etc."connet-${role}.toml" = {
       user = cfg.user;
       group = cfg.group;
-      source = settingsFormat.generate "connet-config-${role}.toml"
-        (cfg.settings // lib.optionalAttrs usesACME (
-          let
-            sslCertDir = config.security.acme.certs.${cfg.useACMEHost}.directory;
-            sslCert = "${sslCertDir}/cert.pem";
-            sslKey = "${sslCertDir}/key.pem";
-          in
-          {
-            server.cert-file = sslCert;
-            server.key-file = sslKey;
-            control.cert-file = sslCert;
-            control.key-file = sslKey;
-          }
-        ));
+      source = settingsFormat.generate "connet-config-${role}.toml" (lib.recursiveUpdate
+        cfg.settings
+        (lib.recursiveUpdate
+          (lib.optionalAttrs usesACME (
+            let
+              sslCertDir = config.security.acme.certs.${cfg.useACMEHost}.directory;
+            in
+            {
+              ${role} = {
+                cert-file = "${sslCertDir}/cert.pem";
+                key-file = "${sslCertDir}/key.pem";
+              };
+            }
+          ))
+          (lib.optionalAttrs noStorageSpec {
+            ${role} = { "store-dir" = "/var/lib/connet-${role}"; };
+          })));
     };
 
     systemd.packages = [ cfg.package ];
@@ -137,8 +135,8 @@ in
         Group = cfg.group;
         ExecStart = "${cfg.package}/bin/connet ${if role == "client" then "" else "${role} "} --config /etc/connet.toml";
         Restart = "on-failure";
-      } // lib.optionalAttrs (role != "client") {
-        StateDirectory = "connet-${if role == "server" then "" else "${role}-"}server";
+      } // lib.optionalAttrs noStorageSpec {
+        StateDirectory = "connet-${role}";
         StateDirectoryMode = "0700";
       };
     };
