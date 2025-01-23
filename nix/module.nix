@@ -1,14 +1,14 @@
-{ role, ports, config, lib, pkgs, ... }:
+{ role, ports, usesCerts ? false, config, lib, pkgs, ... }:
 let
   cfg = config.services."connet-${role}";
   settingsFormat = pkgs.formats.toml { };
-  usesCerts = role == "server" || role == "control";
   portFromPath = { path, default }: lib.trivial.pipe cfg.settings [
     (lib.attrByPath path default)
     (lib.splitString ":")
     lib.last
     lib.toInt
   ];
+  usesACME = usesCerts && builtins.isString cfg.useACMEHost;
 in
 {
   options.services."connet-${role}" = {
@@ -75,6 +75,21 @@ in
   };
 
   config = lib.mkIf cfg.enable {
+    warnings = lib.flatten [
+      (lib.optionals
+        (usesACME && builtins.isString (lib.attrByPath [ "server" "cert-file" ] null cfg.settings))
+        [ "ACME config for ${cfg.useACMEHost} overrides `server.cert-file`" ])
+      (lib.optionals
+        (usesACME && builtins.isString (lib.attrByPath [ "server" "key-file" ] null cfg.settings))
+        [ "ACME config for ${cfg.useACMEHost} overrides `server.key-file`" ])
+      (lib.optionals
+        (usesACME && builtins.isString (lib.attrByPath [ "control" "cert-file" ] null cfg.settings))
+        [ "ACME config for ${cfg.useACMEHost} overrides `control.cert-file`" ])
+      (lib.optionals
+        (usesACME && builtins.isString (lib.attrByPath [ "control" "key-file" ] null cfg.settings))
+        [ "ACME config for ${cfg.useACMEHost} overrides `control.key-file`" ])
+    ];
+
     boot.kernel.sysctl."net.core.rmem_max" = lib.mkDefault 7500000;
     boot.kernel.sysctl."net.core.wmem_max" = lib.mkDefault 7500000;
 
@@ -95,27 +110,26 @@ in
       user = cfg.user;
       group = cfg.group;
       source = settingsFormat.generate "connet-config-${role}.toml"
-        (cfg.settings // lib.optionalAttrs (usesCerts && builtins.isString cfg.useACMEHost)
-          (
-            let
-              sslCertDir = config.security.acme.certs.${cfg.useACMEHost}.directory;
-              sslCert = "${sslCertDir}/cert.pem";
-              sslKey = "${sslCertDir}/key.pem";
-            in
-            {
-              server.cert-file = sslCert;
-              server.key-file = sslKey;
-              control.cert-file = sslCert;
-              control.key-file = sslKey;
-            }
-          ));
+        (cfg.settings // lib.optionalAttrs usesACME (
+          let
+            sslCertDir = config.security.acme.certs.${cfg.useACMEHost}.directory;
+            sslCert = "${sslCertDir}/cert.pem";
+            sslKey = "${sslCertDir}/key.pem";
+          in
+          {
+            server.cert-file = sslCert;
+            server.key-file = sslKey;
+            control.cert-file = sslCert;
+            control.key-file = sslKey;
+          }
+        ));
     };
 
     systemd.packages = [ cfg.package ];
     systemd.services."connet-${role}" = {
       description = "connet ${role}";
       after = [ "network.target" "network-online.target" ];
-      requires = [ "network-online.target" ] ++ lib.optionals (usesCerts && builtins.isString cfg.useACMEHost) [ "acme-finished-${cfg.useACMEHost}.target" ];
+      requires = [ "network-online.target" ] ++ lib.optionals usesACME [ "acme-finished-${cfg.useACMEHost}.target" ];
       wantedBy = [ "multi-user.target" ];
       restartTriggers = [ config.environment.etc."connet-${role}.toml".source ];
       serviceConfig = {
