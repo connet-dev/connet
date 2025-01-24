@@ -325,9 +325,11 @@ in
   # ...
   services.connet = {
     enable = true;
-    tokenFile = "/run/keys/connet.token";
-    serverAddr = "localhost:19190";
-    sources.example.addr = ":9000";
+    settings.client = {
+      token-file = "/run/keys/connet.token";
+      server-addr = "localhost:19190";
+      sources.example.addr = ":9000";
+    };
   };
 }
 ```
@@ -349,11 +351,13 @@ To configure the client as a service:
         # ...
         connet.nixosModules.default
         {
-          services.connet = {
+          services.connet-client = {
             enable = true;
-            tokenFile = "/run/keys/connet.token";
-            serverAddr = "localhost:19190";
-            sources.example.addr = ":9000";
+            settings.client = {
+              token-file = "/run/keys/connet.token";
+              server-addr = "localhost:19190";
+              sources.example.addr = ":9000";
+            };
           };
         }
       ];
