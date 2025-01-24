@@ -323,7 +323,7 @@ in
     "${connet-repo}/nix/client-module.nix"
   ];
   # ...
-  services.connet = {
+  services.connet-client = {
     enable = true;
     settings.client = {
       token-file = "/run/keys/connet.token";
