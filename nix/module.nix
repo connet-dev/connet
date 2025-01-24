@@ -133,7 +133,7 @@ in
       serviceConfig = {
         User = cfg.user;
         Group = cfg.group;
-        ExecStart = "${cfg.package}/bin/connet ${if role == "client" then "" else "${role} "} --config /etc/connet.toml";
+        ExecStart = "${cfg.package}/bin/connet ${if role == "client" then "" else "${role} "} --config /etc/connet-${role}.toml";
         Restart = "on-failure";
       } // lib.optionalAttrs noStorageSpec {
         StateDirectory = "connet-${role}";
