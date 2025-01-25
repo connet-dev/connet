@@ -411,8 +411,18 @@ by adding account management and it is one of the easiest way to start.
 
 ## Future
 
- - [ ] UDP support
  - [ ] error wrapping
+ - [ ] zip and name windows executable .exe
+ - [ ] UDP support
  - [ ] Gen config
  - [ ] http source
  - [ ] client stateless reset key
+ - [ ] systemd dynamic user in nixos
+ - [ ] client versioning support
+ - [ ] UPnP and other methods for hole-punching
+ - [ ] Docs section for building the project
+ - [ ] Docs section for embedding into golang programs
+ - [ ] mininet testing
+ - [ ] nixos testing
+ - [ ] notarize mac app
+ - [ ] websocket tcp converter

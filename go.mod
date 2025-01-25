@@ -8,20 +8,20 @@ require (
 	github.com/mr-tron/base58 v1.2.0
 	github.com/pelletier/go-toml/v2 v2.2.3
 	github.com/pires/go-proxyproto v0.8.0
-	github.com/quic-go/quic-go v0.48.2
+	github.com/quic-go/quic-go v0.49.0
 	github.com/segmentio/ksuid v1.0.4
 	github.com/spf13/cobra v1.8.1
 	github.com/stretchr/testify v1.9.0
 	golang.org/x/crypto v0.32.0
 	golang.org/x/sync v0.10.0
-	google.golang.org/protobuf v1.36.3
+	google.golang.org/protobuf v1.36.4
 )
 
 require (
 	github.com/davecgh/go-spew v1.1.1 // indirect
 	github.com/go-task/slim-sprig/v3 v3.0.0 // indirect
 	github.com/gofrs/flock v0.12.1 // indirect
-	github.com/google/pprof v0.0.0-20241210010833-40e02aabc2ad // indirect
+	github.com/google/pprof v0.0.0-20250125003558-7fdb3d7e6fa0 // indirect
 	github.com/inconshreveable/mousetrap v1.1.0 // indirect
 	github.com/onsi/ginkgo/v2 v2.22.2 // indirect
 	github.com/plar/go-adaptive-radix-tree/v2 v2.0.3 // indirect
