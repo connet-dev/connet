@@ -16,6 +16,12 @@ lint:
 test-always:
 	go test -v -cover -timeout 10s -count 1 ./...
 
+test-nix:
+	nix build .#checks.x86_64-linux.moduleTest
+
+test-nix-interactive:
+	nix run .#checks.x86_64-linux.moduleTest.driverInteractive
+
 .PHONY: gen
 gen:
 	fd --extension ".pb.go" . --exec-batch rm {}

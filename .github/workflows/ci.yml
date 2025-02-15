@@ -55,3 +55,5 @@ jobs:
         run: nix build .
       - name: Build docker
         run: nix build .#docker
+      - name: Flake check
+        run: nix flake check
