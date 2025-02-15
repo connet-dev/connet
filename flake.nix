@@ -19,7 +19,7 @@
         };
         testCerts = pkgs.runCommand "test-certs" { } ''
           mkdir $out && cd $out
-          ${pkgs.minica}/bin/minica -ip-addresses 192.168.1.3
+          ${pkgs.minica}/bin/minica -ip-addresses 192.168.1.2
         '';
       in
       {
@@ -56,13 +56,34 @@
         checks = {
           moduleTest = pkgs.testers.runNixOSTest {
             name = "moduleTest";
+            nodes.client = {
+              imports = [ self.nixosModules.default ];
+              environment.etc."server.cert" = {
+                source = "${testCerts}/192.168.1.2/cert.pem";
+              };
+              environment.etc."tokens" = {
+                text = "abcba";
+              };
+              services.connet-client = {
+                enable = true;
+                openFirewall = true;
+                settings.client = {
+                  token-file = "/etc/tokens";
+                  server-addr = "192.168.1.2:19190";
+                  server-cas = "/etc/server.cert";
+                  destinations.abc = {
+                    addr = ":3000";
+                  };
+                };
+              };
+            };
             nodes.server = {
               imports = [ self.nixosModules.server ];
               environment.etc."server.cert" = {
-                source = "${testCerts}/192.168.1.3/cert.pem";
+                source = "${testCerts}/192.168.1.2/cert.pem";
               };
               environment.etc."server.key" = {
-                source = "${testCerts}/192.168.1.3/key.pem";
+                source = "${testCerts}/192.168.1.2/key.pem";
               };
               environment.etc."tokens" = {
                 text = "abcba";
@@ -77,54 +98,11 @@
                 };
               };
             };
-            nodes.clientDst = {
-              imports = [ self.nixosModules.default ];
-              environment.etc."server.cert" = {
-                source = "${testCerts}/192.168.1.3/cert.pem";
-              };
-              environment.etc."tokens" = {
-                text = "abcba";
-              };
-              services.connet-client = {
-                enable = true;
-                openFirewall = true;
-                settings.client = {
-                  token-file = "/etc/tokens";
-                  server-addr = "192.168.1.3:19190";
-                  server-cas = "/etc/server.cert";
-                  destinations.abc = {
-                    addr = ":3000";
-                  };
-                };
-              };
-            };
-            nodes.clientSrc = {
-              imports = [ self.nixosModules.default ];
-              environment.etc."server.cert" = {
-                source = "${testCerts}/192.168.1.3/cert.pem";
-              };
-              environment.etc."tokens" = {
-                text = "abcba";
-              };
-              services.connet-client = {
-                enable = true;
-                openFirewall = true;
-                settings.client = {
-                  token-file = "/etc/tokens";
-                  server-addr = "192.168.1.3:19190";
-                  server-cas = "/etc/server.cert";
-                  sources.abc = {
-                    addr = ":3000";
-                  };
-                };
-              };
-            };
 
             testScript = ''
               start_all()
               server.wait_for_unit("connet-server.service")
-              clientDst.wait_for_unit("connet-client.service")
-              clientSrc.wait_for_unit("connet-client.service")
+              client.wait_for_unit("connet-client.service")
             '';
           };
         };
