@@ -83,6 +83,12 @@ func NewServer(opts ...ServerOption) (*Server, error) {
 		return nil, err
 	}
 
+	controlHost := "localhost"
+	if len(cfg.cert.Leaf.IPAddresses) > 0 {
+		controlHost = cfg.cert.Leaf.IPAddresses[0].String()
+	} else if len(cfg.cert.Leaf.DNSNames) > 0 {
+		controlHost = cfg.cert.Leaf.DNSNames[0]
+	}
 	controlCAs := x509.NewCertPool()
 	controlCAs.AddCert(cfg.cert.Leaf)
 	relay, err := relay.NewServer(relay.Config{
@@ -92,7 +98,7 @@ func NewServer(opts ...ServerOption) (*Server, error) {
 		Stores:   relay.NewFileStores(filepath.Join(cfg.dir, "relay")),
 
 		ControlAddr:  relaysAddr,
-		ControlHost:  "localhost",
+		ControlHost:  controlHost,
 		ControlToken: relayAuth.Token,
 		ControlCAs:   controlCAs,
 	})
