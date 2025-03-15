@@ -36,6 +36,10 @@ func NewServer(opts ...ServerOption) (*Server, error) {
 		}
 	}
 
+	if cfg.cert.Leaf == nil {
+		return nil, fmt.Errorf("server missing certificate")
+	}
+
 	if cfg.clientsAddr == nil {
 		if err := ServerClientsAddress(":19190")(cfg); err != nil {
 			return nil, fmt.Errorf("server default clients address: %w", err)

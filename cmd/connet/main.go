@@ -136,10 +136,22 @@ func main() {
 		if cerr := context.Cause(ctx); errors.Is(cerr, context.Canceled) {
 			return
 		}
-		for li, lerr := range strings.Split(err.Error(), ": ") {
-			fmt.Fprintf(os.Stderr, "%s%s\n", strings.Repeat(" ", li*2), lerr)
-		}
+		printError(err, 0)
 		os.Exit(1)
+	}
+}
+
+func printError(err error, level int) {
+	errStr := err.Error()
+
+	nextErr := errors.Unwrap(err)
+	if nextErr != nil {
+		errStr = strings.TrimSuffix(errStr, nextErr.Error())
+	}
+
+	fmt.Fprintf(os.Stderr, "%s%s\n", strings.Repeat(" ", level*2), errStr)
+	if nextErr != nil {
+		printError(nextErr, level+2)
 	}
 }
 
