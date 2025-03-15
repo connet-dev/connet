@@ -1,6 +1,6 @@
 package statusc
 
-import "github.com/klev-dev/kleverr"
+import "fmt"
 
 type Status struct{ string }
 
@@ -27,7 +27,7 @@ func (s *Status) UnmarshalText(b []byte) error {
 	case Disconnected.string:
 		*s = Disconnected
 	default:
-		return kleverr.Newf("unknown status: %s", s)
+		return fmt.Errorf("unknown status: %s", s)
 	}
 	return nil
 }

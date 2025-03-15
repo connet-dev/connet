@@ -11,6 +11,7 @@ import (
 	"net"
 	"os"
 	"os/signal"
+	"strings"
 	"syscall"
 
 	"github.com/connet-dev/connet"
@@ -21,7 +22,6 @@ import (
 	"github.com/connet-dev/connet/relay"
 	"github.com/connet-dev/connet/restr"
 	"github.com/connet-dev/connet/selfhosted"
-	"github.com/klev-dev/kleverr"
 	"github.com/pelletier/go-toml/v2"
 	"github.com/spf13/cobra"
 	"golang.org/x/sync/errgroup"
@@ -136,10 +136,8 @@ func main() {
 		if cerr := context.Cause(ctx); errors.Is(cerr, context.Canceled) {
 			return
 		}
-		if kerr := kleverr.Get(err); kerr != nil {
-			fmt.Fprintln(os.Stderr, kerr.Print())
-		} else {
-			fmt.Fprintln(os.Stderr, err)
+		for li, lerr := range strings.Split(err.Error(), ": ") {
+			fmt.Fprintf(os.Stderr, "%s%s\n", strings.Repeat(" ", li*2), lerr)
 		}
 		os.Exit(1)
 	}
@@ -203,7 +201,7 @@ func rootCmd() *cobra.Command {
 
 		logger, err := logger(cfg)
 		if err != nil {
-			return kleverr.Ret(err)
+			return err
 		}
 
 		return clientRun(cmd.Context(), cfg.Client, logger)
@@ -249,7 +247,7 @@ func serverCmd() *cobra.Command {
 
 		logger, err := logger(cfg)
 		if err != nil {
-			return kleverr.Ret(err)
+			return err
 		}
 
 		return serverRun(cmd.Context(), cfg.Server, logger)
@@ -298,7 +296,7 @@ func controlCmd() *cobra.Command {
 
 		logger, err := logger(cfg)
 		if err != nil {
-			return kleverr.Ret(err)
+			return err
 		}
 
 		return controlRun(cmd.Context(), cfg.Control, logger)
@@ -341,7 +339,7 @@ func relayCmd() *cobra.Command {
 
 		logger, err := logger(cfg)
 		if err != nil {
-			return kleverr.Ret(err)
+			return err
 		}
 
 		return relayRun(cmd.Context(), cfg.Relay, logger)
@@ -364,7 +362,7 @@ func checkCmd() *cobra.Command {
 		}
 
 		if _, err := logger(cfg); err != nil {
-			return kleverr.Ret(err)
+			return err
 		}
 
 		return nil
@@ -409,7 +407,7 @@ func logger(cfg Config) (*slog.Logger, error) {
 	case "info", "":
 		logLevel = slog.LevelInfo
 	default:
-		return nil, kleverr.Newf("'%s' is not a valid log level (one of debug|info|warn|error)", cfg.LogLevel)
+		return nil, fmt.Errorf("'%s' is not a valid log level (one of debug|info|warn|error)", cfg.LogLevel)
 	}
 
 	switch cfg.LogFormat {
@@ -422,7 +420,7 @@ func logger(cfg Config) (*slog.Logger, error) {
 			Level: logLevel,
 		})), nil
 	default:
-		return nil, kleverr.Newf("'%s' is not a valid log format (one of json|text)", cfg.LogFormat)
+		return nil, fmt.Errorf("'%s' is not a valid log format (one of json|text)", cfg.LogFormat)
 	}
 }
 
@@ -557,7 +555,7 @@ func controlRun(ctx context.Context, cfg ControlConfig, logger *slog.Logger) err
 	if cfg.Cert != "" {
 		cert, err := tls.LoadX509KeyPair(cfg.Cert, cfg.Key)
 		if err != nil {
-			return kleverr.Newf("control cert cannot be loaded: %w", err)
+			return fmt.Errorf("control cert: %w", err)
 		}
 		controlCfg.Cert = cert
 	}
@@ -567,7 +565,7 @@ func controlRun(ctx context.Context, cfg ControlConfig, logger *slog.Logger) err
 	}
 	clientAddr, err := net.ResolveUDPAddr("udp", cfg.ClientsAddr)
 	if err != nil {
-		return kleverr.Newf("client address cannot be resolved: %w", err)
+		return fmt.Errorf("control client address: %w", err)
 	}
 	controlCfg.ClientsAddr = clientAddr
 
@@ -596,7 +594,7 @@ func controlRun(ctx context.Context, cfg ControlConfig, logger *slog.Logger) err
 	}
 	relayAddr, err := net.ResolveUDPAddr("udp", cfg.RelaysAddr)
 	if err != nil {
-		return kleverr.Newf("relay address cannot be resolved: %w", err)
+		return fmt.Errorf("control relay address: %w", err)
 	}
 	controlCfg.RelaysAddr = relayAddr
 
@@ -623,7 +621,7 @@ func controlRun(ctx context.Context, cfg ControlConfig, logger *slog.Logger) err
 	if cfg.StatusAddr != "" {
 		statusAddr, err := net.ResolveTCPAddr("tcp", cfg.StatusAddr)
 		if err != nil {
-			return kleverr.Newf("status address cannot be resolved: %w", err)
+			return fmt.Errorf("control status address: %w", err)
 		}
 		controlCfg.StatusAddr = statusAddr
 	}
@@ -668,7 +666,7 @@ func relayRun(ctx context.Context, cfg RelayConfig, logger *slog.Logger) error {
 	}
 	serverAddr, err := net.ResolveUDPAddr("udp", cfg.Addr)
 	if err != nil {
-		return kleverr.Newf("server address cannot be resolved: %w", err)
+		return fmt.Errorf("relay server address: %w", err)
 	}
 	relayCfg.Addr = serverAddr
 
@@ -679,19 +677,19 @@ func relayRun(ctx context.Context, cfg RelayConfig, logger *slog.Logger) error {
 	}
 	controlAddr, err := net.ResolveUDPAddr("udp", cfg.ControlAddr)
 	if err != nil {
-		return kleverr.Newf("control address cannot be resolved: %w", err)
+		return fmt.Errorf("relay control address: %w", err)
 	}
 	relayCfg.ControlAddr = controlAddr
 
 	if cfg.ControlCAs != "" {
 		casData, err := os.ReadFile(cfg.ControlCAs)
 		if err != nil {
-			return kleverr.Newf("cannot read certs file: %w", err)
+			return fmt.Errorf("relay control cert file: %w", err)
 		}
 
 		cas := x509.NewCertPool()
 		if !cas.AppendCertsFromPEM(casData) {
-			return kleverr.Newf("no certificates found in %s", cfg.ControlCAs)
+			return fmt.Errorf("relay no certificates found in %s", cfg.ControlCAs)
 		}
 		relayCfg.ControlCAs = cas
 	}
@@ -705,7 +703,7 @@ func relayRun(ctx context.Context, cfg RelayConfig, logger *slog.Logger) error {
 	if cfg.StatusAddr != "" {
 		statusAddr, err := net.ResolveTCPAddr("tcp", cfg.StatusAddr)
 		if err != nil {
-			return kleverr.Newf("status address cannot be resolved: %w", err)
+			return fmt.Errorf("relay status address cannot: %w", err)
 		}
 		relayCfg.StatusAddr = statusAddr
 	}
@@ -730,7 +728,7 @@ func relayRun(ctx context.Context, cfg RelayConfig, logger *slog.Logger) error {
 func loadTokens(tokensFile string) ([]string, error) {
 	f, err := os.Open(tokensFile)
 	if err != nil {
-		return nil, kleverr.Newf("cannot open tokens file: %w", err)
+		return nil, fmt.Errorf("tokens file open: %w", err)
 	}
 
 	var tokens []string
@@ -739,7 +737,7 @@ func loadTokens(tokensFile string) ([]string, error) {
 		tokens = append(tokens, scanner.Text())
 	}
 	if err := scanner.Err(); err != nil {
-		return nil, kleverr.Newf("cannot read tokens file: %w", err)
+		return nil, fmt.Errorf("tokens file read: %w", err)
 	}
 	return tokens, nil
 }
@@ -770,7 +768,7 @@ func parseClientAuth(tokens []string, restrs []TokenRestriction) (control.Client
 	case len(restrs) == 0:
 		restrs = make([]TokenRestriction, len(tokens))
 	case len(tokens) != len(restrs):
-		return nil, kleverr.Newf("expected equal number of client tokens (%d) and token restrictions (%d)", len(tokens), len(restrs))
+		return nil, fmt.Errorf("client auth mismatch number of tokens (%d) and restrictions (%d)", len(tokens), len(restrs))
 	}
 
 	auths := make([]selfhosted.ClientAuthentication, len(tokens))
@@ -802,7 +800,7 @@ func parseRelayAuth(tokens []string, restrs []IPRestriction) (control.RelayAuthe
 	case len(restrs) == 0:
 		restrs = make([]IPRestriction, len(tokens))
 	case len(tokens) != len(restrs):
-		return nil, kleverr.Newf("expected equal number of relay tokens (%d) and ip restrictions (%d)", len(tokens), len(restrs))
+		return nil, fmt.Errorf("relay auth mismatch tokens (%d) and ip restrictions (%d)", len(tokens), len(restrs))
 	}
 
 	auths := make([]selfhosted.RelayAuthentication, len(tokens))

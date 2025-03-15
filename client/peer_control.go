@@ -2,11 +2,11 @@ package client
 
 import (
 	"context"
+	"fmt"
 
 	"github.com/connet-dev/connet/model"
 	"github.com/connet-dev/connet/pb"
 	"github.com/connet-dev/connet/pbs"
-	"github.com/klev-dev/kleverr"
 	"github.com/quic-go/quic-go"
 	"golang.org/x/sync/errgroup"
 )
@@ -33,7 +33,7 @@ func (d *peerControl) run(ctx context.Context) error {
 func (d *peerControl) runAnnounce(ctx context.Context) error {
 	stream, err := d.conn.OpenStreamSync(ctx)
 	if err != nil {
-		return kleverr.Ret(err)
+		return fmt.Errorf("announce open stream: %w", err)
 	}
 	defer stream.Close()
 
@@ -70,7 +70,7 @@ func (d *peerControl) runAnnounce(ctx context.Context) error {
 				return err
 			}
 			if resp.Announce == nil {
-				return kleverr.Newf("unexpected response")
+				return fmt.Errorf("announce unexpected response")
 			}
 
 			// TODO on server restart peers is reset and client loses active peers
@@ -85,7 +85,7 @@ func (d *peerControl) runAnnounce(ctx context.Context) error {
 func (d *peerControl) runRelay(ctx context.Context) error {
 	stream, err := d.conn.OpenStreamSync(ctx)
 	if err != nil {
-		return kleverr.Ret(err)
+		return fmt.Errorf("relay open stream: %w", err)
 	}
 	defer stream.Close()
 
@@ -114,7 +114,7 @@ func (d *peerControl) runRelay(ctx context.Context) error {
 				return err
 			}
 			if resp.Relay == nil {
-				return kleverr.Newf("unexpected response")
+				return fmt.Errorf("relay unexpected response")
 			}
 
 			d.local.setRelays(resp.Relay.Relays)

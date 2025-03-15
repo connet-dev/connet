@@ -11,12 +11,11 @@ import (
 	"crypto/x509"
 	"crypto/x509/pkix"
 	"encoding/pem"
+	"fmt"
 	"io"
 	"math/big"
 	"net"
 	"time"
-
-	"github.com/klev-dev/kleverr"
 )
 
 var SharedSubject = pkix.Name{
@@ -206,17 +205,22 @@ func (c *Cert) Encode(certOut io.Writer, keyOut io.Writer) error {
 		Type:  "CERTIFICATE",
 		Bytes: c.der,
 	}); err != nil {
-		return kleverr.Ret(err)
+		return fmt.Errorf("cert encode: %w", err)
 	}
 
 	keyData, err := x509.MarshalPKCS8PrivateKey(c.pk)
 	if err != nil {
-		return kleverr.Ret(err)
+		return fmt.Errorf("key marshal: %w", err)
 	}
-	return pem.Encode(keyOut, &pem.Block{
+
+	if err := pem.Encode(keyOut, &pem.Block{
 		Type:  "PRIVATE KEY",
 		Bytes: keyData,
-	})
+	}); err != nil {
+		return fmt.Errorf("key encode: %w", err)
+	}
+
+	return nil
 }
 
 func (c *Cert) EncodeToMemory() ([]byte, []byte, error) {
@@ -227,7 +231,7 @@ func (c *Cert) EncodeToMemory() ([]byte, []byte, error) {
 
 	keyData, err := x509.MarshalPKCS8PrivateKey(c.pk)
 	if err != nil {
-		return nil, nil, kleverr.Ret(err)
+		return nil, nil, fmt.Errorf("mem key marshal: %w", err)
 	}
 	keyPEM := pem.EncodeToMemory(&pem.Block{
 		Type:  "PRIVATE KEY",
@@ -239,23 +243,23 @@ func (c *Cert) EncodeToMemory() ([]byte, []byte, error) {
 func DecodeFromMemory(cert, key []byte) (*Cert, error) {
 	certDER, _ := pem.Decode(cert)
 	if certDER == nil {
-		return nil, kleverr.New("could not find cert pem block")
+		return nil, fmt.Errorf("cert: no pem block")
 	}
 	if certDER.Type != "CERTIFICATE" {
-		return nil, kleverr.Newf("pem is not certificate: %s", certDER.Type)
+		return nil, fmt.Errorf("cert type: %s", certDER.Type)
 	}
 
 	keyDER, _ := pem.Decode(key)
 	if keyDER == nil {
-		return nil, kleverr.New("could not find key pem block")
+		return nil, fmt.Errorf("cert key: no pem block")
 	}
 	if keyDER.Type != "PRIVATE KEY" {
-		return nil, kleverr.Newf("pem is not private key: %s", keyDER.Type)
+		return nil, fmt.Errorf("cert key type: %s", keyDER.Type)
 	}
 
 	keyValue, err := x509.ParsePKCS8PrivateKey(keyDER.Bytes)
 	if err != nil {
-		return nil, kleverr.Newf("cannot parse pk: %w", err)
+		return nil, fmt.Errorf("cert parse key: %w", err)
 	}
 
 	return &Cert{der: certDER.Bytes, pk: keyValue}, nil

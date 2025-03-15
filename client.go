@@ -22,7 +22,6 @@ import (
 	"github.com/connet-dev/connet/pbs"
 	"github.com/connet-dev/connet/quicc"
 	"github.com/connet-dev/connet/statusc"
-	"github.com/klev-dev/kleverr"
 	"github.com/quic-go/quic-go"
 	"golang.org/x/sync/errgroup"
 )
@@ -43,29 +42,30 @@ func NewClient(opts ...ClientOption) (*Client, error) {
 	}
 	for _, opt := range opts {
 		if err := opt(cfg); err != nil {
-			return nil, kleverr.Ret(err)
+			return nil, fmt.Errorf("client option: %w", err)
 		}
 	}
 
 	if cfg.controlAddr == nil {
 		if err := ClientControlAddress("127.0.0.1:19190")(cfg); err != nil {
-			return nil, kleverr.Ret(err)
+			return nil, fmt.Errorf("client default control address: %w", err)
 		}
 	}
 
 	if cfg.directAddr == nil {
 		if err := ClientDirectAddress(":19192")(cfg); err != nil {
-			return nil, kleverr.Ret(err)
+			return nil, fmt.Errorf("client default direct address: %w", err)
 		}
 	}
 
 	if len(cfg.destinations) == 0 && len(cfg.sources) == 0 {
-		return nil, kleverr.New("missing at least on destination or source")
+		// TODO fix this
+		return nil, fmt.Errorf("client missing destination or source")
 	}
 
 	rootCert, err := certc.NewRoot()
 	if err != nil {
-		return nil, kleverr.Ret(err)
+		return nil, fmt.Errorf("client root cert: %w", err)
 	}
 	cfg.logger.Debug("generated root cert")
 
@@ -83,7 +83,7 @@ func (c *Client) Run(ctx context.Context) error {
 	c.logger.Debug("start udp listener")
 	udpConn, err := net.ListenUDP("udp", c.directAddr)
 	if err != nil {
-		return kleverr.Ret(err)
+		return fmt.Errorf("client listen: %w", err)
 	}
 	defer udpConn.Close()
 
@@ -93,14 +93,14 @@ func (c *Client) Run(ctx context.Context) error {
 
 	ds, err := client.NewDirectServer(transport, c.logger)
 	if err != nil {
-		return kleverr.Ret(err)
+		return fmt.Errorf("client direct server: %w", err)
 	}
 
 	c.dsts = map[model.Forward]*client.Destination{}
 	for fwd, cfg := range c.destinations {
 		c.dsts[fwd], err = client.NewDestination(cfg, ds, c.rootCert, c.logger)
 		if err != nil {
-			return kleverr.Ret(err)
+			return fmt.Errorf("client destination: %w", err)
 		}
 	}
 
@@ -108,7 +108,7 @@ func (c *Client) Run(ctx context.Context) error {
 	for fwd, cfg := range c.sources {
 		c.srcs[fwd], err = client.NewSource(cfg, ds, c.rootCert, c.logger)
 		if err != nil {
-			return kleverr.Ret(err)
+			return fmt.Errorf("client source: %w", err)
 		}
 	}
 
@@ -155,8 +155,6 @@ func (c *Client) run(ctx context.Context, transport *quic.Transport) error {
 	}
 }
 
-var retConnect = kleverr.Ret2[quic.Connection, []byte]
-
 func (c *Client) connect(ctx context.Context, transport *quic.Transport, retoken []byte) (quic.Connection, []byte, error) {
 	c.logger.Debug("dialing target", "addr", c.controlAddr)
 	// TODO dial timeout if server is not accessible?
@@ -166,14 +164,14 @@ func (c *Client) connect(ctx context.Context, transport *quic.Transport, retoken
 		NextProtos: []string{"connet"},
 	}, quicc.StdConfig)
 	if err != nil {
-		return retConnect(err)
+		return nil, nil, fmt.Errorf("dial server: %w", err)
 	}
 
 	c.logger.Debug("authenticating", "addr", c.controlAddr)
 
 	authStream, err := conn.OpenStreamSync(ctx)
 	if err != nil {
-		return retConnect(err)
+		return nil, nil, fmt.Errorf("open auth stream: %w", err)
 	}
 	defer authStream.Close()
 
@@ -181,20 +179,20 @@ func (c *Client) connect(ctx context.Context, transport *quic.Transport, retoken
 		Token:          c.token,
 		ReconnectToken: retoken,
 	}); err != nil {
-		return retConnect(err)
+		return nil, nil, fmt.Errorf("write auth: %w", err)
 	}
 
 	resp := &pbs.AuthenticateResp{}
 	if err := pb.Read(authStream, resp); err != nil {
-		return retConnect(err)
+		return nil, nil, fmt.Errorf("read auth: %w", err)
 	}
 	if resp.Error != nil {
-		return retConnect(resp.Error)
+		return nil, nil, fmt.Errorf("auth: %w", resp.Error)
 	}
 
 	localAddrs, err := netc.LocalAddrs()
 	if err != nil {
-		return retConnect(err)
+		return nil, nil, fmt.Errorf("local addrs: %w", err)
 	}
 	localAddrPorts := make([]netip.AddrPort, len(localAddrs))
 	for i, addr := range localAddrs {
@@ -348,12 +346,12 @@ func ClientControlCAs(certFile string) ClientOption {
 	return func(cfg *clientConfig) error {
 		casData, err := os.ReadFile(certFile)
 		if err != nil {
-			return kleverr.Newf("cannot read certs file: %w", err)
+			return fmt.Errorf("client control certs file: %w", err)
 		}
 
 		cas := x509.NewCertPool()
 		if !cas.AppendCertsFromPEM(casData) {
-			return kleverr.Newf("no certificates found in %s", certFile)
+			return fmt.Errorf("client control certs missing in %s", certFile)
 		}
 
 		cfg.controlCAs = cas
@@ -374,7 +372,7 @@ func ClientDirectAddress(address string) ClientOption {
 	return func(cfg *clientConfig) error {
 		addr, err := net.ResolveUDPAddr("udp", address)
 		if err != nil {
-			return kleverr.Newf("direct address cannot be resolved: %w", err)
+			return fmt.Errorf("client direct address: %w", err)
 		}
 
 		cfg.directAddr = addr
@@ -387,7 +385,7 @@ func ClientStatusAddress(address string) ClientOption {
 	return func(cfg *clientConfig) error {
 		addr, err := net.ResolveTCPAddr("tcp", address)
 		if err != nil {
-			return kleverr.Newf("status address cannot be resolved: %w", err)
+			return fmt.Errorf("client status address: %w", err)
 		}
 
 		cfg.statusAddr = addr

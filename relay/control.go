@@ -5,6 +5,7 @@ import (
 	"crypto/tls"
 	"crypto/x509"
 	"errors"
+	"fmt"
 	"log/slog"
 	"net"
 	"sync"
@@ -20,7 +21,6 @@ import (
 	"github.com/connet-dev/connet/quicc"
 	"github.com/connet-dev/connet/statusc"
 	"github.com/klev-dev/klevdb"
-	"github.com/klev-dev/kleverr"
 	"github.com/quic-go/quic-go"
 	"golang.org/x/sync/errgroup"
 )
@@ -188,22 +188,20 @@ func (s *controlClient) run(ctx context.Context, transport *quic.Transport) erro
 	}
 }
 
-var retConnect = kleverr.Ret1[quic.Connection]
-
 func (s *controlClient) connect(ctx context.Context, transport *quic.Transport) (quic.Connection, error) {
 	reconnConfig, err := s.config.GetOrDefault(configControlReconnect, ConfigValue{})
 	if err != nil {
-		return retConnect(err)
+		return nil, fmt.Errorf("server reconnect get: %w", err)
 	}
 
 	conn, err := transport.Dial(quicc.RTTContext(ctx), s.controlAddr, s.controlTLSConf, quicc.StdConfig)
 	if err != nil {
-		return retConnect(err)
+		return nil, fmt.Errorf("server dial: %w", err)
 	}
 
 	authStream, err := conn.OpenStreamSync(ctx)
 	if err != nil {
-		return retConnect(err)
+		return nil, fmt.Errorf("server stream: %w", err)
 	}
 	defer authStream.Close()
 
@@ -212,32 +210,32 @@ func (s *controlClient) connect(ctx context.Context, transport *quic.Transport) 
 		Addr:           s.hostport.PB(),
 		ReconnectToken: reconnConfig.Bytes,
 	}); err != nil {
-		return retConnect(err)
+		return nil, fmt.Errorf("server write auth: %w", err)
 	}
 
 	resp := &pbr.AuthenticateResp{}
 	if err := pb.Read(authStream, resp); err != nil {
-		return retConnect(err)
+		return nil, fmt.Errorf("server read auth: %w", err)
 	}
 	if resp.Error != nil {
-		return retConnect(resp.Error)
+		return nil, resp.Error
 	}
 
 	controlIDConfig, err := s.config.GetOrDefault(configControlID, ConfigValue{})
 	if err != nil {
-		return retConnect(err)
+		return nil, fmt.Errorf("server control id get: %w", err)
 	}
 	if controlIDConfig.String != "" && controlIDConfig.String != resp.ControlId {
-		return nil, kleverr.Newf("unexpected server id, has: %s, resp: %s", controlIDConfig.String, resp.ControlId)
+		return nil, fmt.Errorf("unexpected server id, has: %s, resp: %s", controlIDConfig.String, resp.ControlId)
 	}
 	controlIDConfig.String = resp.ControlId
 	if err := s.config.Put(configControlID, controlIDConfig); err != nil {
-		return retConnect(err)
+		return nil, fmt.Errorf("server control id set: %w", err)
 	}
 
 	reconnConfig.Bytes = resp.ReconnectToken
 	if err := s.config.Put(configControlReconnect, reconnConfig); err != nil {
-		return retConnect(err)
+		return nil, fmt.Errorf("server reconnect set: %w", err)
 	}
 
 	return conn, nil
@@ -332,7 +330,7 @@ func (s *controlClient) runClientsStream(ctx context.Context, conn quic.Connecti
 						return err
 					}
 				default:
-					return kleverr.New("unknown change")
+					return fmt.Errorf("unknown change: %v", change.Change)
 				}
 			}
 

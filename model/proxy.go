@@ -1,11 +1,11 @@
 package model
 
 import (
+	"fmt"
 	"io"
 	"net"
 
 	"github.com/connet-dev/connet/pbc"
-	"github.com/klev-dev/kleverr"
 	"github.com/pires/go-proxyproto"
 )
 
@@ -35,7 +35,7 @@ func ParseProxyVersion(s string) (ProxyVersion, error) {
 	case ProxyV2.string:
 		return ProxyV2, nil
 	}
-	return ProxyNone, kleverr.Newf("unknown proxy proto version: %s", s)
+	return ProxyNone, fmt.Errorf("unknown proxy proto version: %s", s)
 }
 
 func (v ProxyVersion) PB() pbc.ProxyProtoVersion {

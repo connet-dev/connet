@@ -5,6 +5,8 @@ import (
 	"context"
 	"crypto/tls"
 	"crypto/x509"
+	"errors"
+	"fmt"
 	"log/slog"
 	"maps"
 	"math"
@@ -18,7 +20,6 @@ import (
 	"github.com/connet-dev/connet/pb"
 	"github.com/connet-dev/connet/pbc"
 	"github.com/connet-dev/connet/quicc"
-	"github.com/klev-dev/kleverr"
 	"github.com/quic-go/quic-go"
 	"golang.org/x/sync/errgroup"
 )
@@ -182,7 +183,7 @@ func (s *clientsServer) removeSource(fcs *forwardClients, conn *clientConn) {
 func (s *clientsServer) run(ctx context.Context, transport *quic.Transport) error {
 	l, err := transport.Listen(s.tlsConf, quicc.StdConfig)
 	if err != nil {
-		return kleverr.Ret(err)
+		return fmt.Errorf("client server udp listen: %w", err)
 	}
 	defer l.Close()
 
@@ -191,7 +192,7 @@ func (s *clientsServer) run(ctx context.Context, transport *quic.Transport) erro
 		conn, err := l.Accept(ctx)
 		if err != nil {
 			s.logger.Debug("accept error", "err", err)
-			return kleverr.Ret(err)
+			return fmt.Errorf("client server quic accept: %w", err)
 		}
 		s.logger.Info("new client connected", "remote", conn.RemoteAddr())
 
@@ -216,9 +217,11 @@ func (c *clientConn) run(ctx context.Context) {
 	defer c.conn.CloseWithError(quic.ApplicationErrorCode(pb.Error_Unknown), "connection closed")
 
 	if err := c.runErr(ctx); err != nil {
-		c.logger.Debug("error while running", "err", err)
+		c.logger.Debug("error while running client conn", "err", err)
 	}
 }
+
+var errNotRecognizedClient = errors.New("client not recognized as a destination or a source")
 
 func (c *clientConn) runErr(ctx context.Context) error {
 	serverName := c.conn.ConnectionState().TLS.ServerName
@@ -240,21 +243,21 @@ func (c *clientConn) runErr(ctx context.Context) error {
 	case model.Source:
 		return c.runSource(ctx)
 	default:
-		return kleverr.Newf("not a destination or a source")
+		return errNotRecognizedClient
 	}
 }
 
 func (c *clientConn) check(ctx context.Context) error {
 	stream, err := c.conn.AcceptStream(ctx)
 	if err != nil {
-		return err
+		return fmt.Errorf("accept client stream: %w", err)
 	}
 	defer stream.Close()
 
 	if _, err := pbc.ReadRequest(stream); err != nil {
-		return err
+		return fmt.Errorf("read client stream: %w", err)
 	} else if err := pb.Write(stream, &pbc.Response{}); err != nil {
-		return err
+		return fmt.Errorf("write client stream: %w", err)
 	}
 
 	return nil
@@ -301,7 +304,7 @@ func (c *clientConn) runSource(ctx context.Context) error {
 		for {
 			stream, err := c.conn.AcceptStream(ctx)
 			if err != nil {
-				return err
+				return fmt.Errorf("accept source stream: %w", err)
 			}
 			go c.runSourceStream(ctx, stream, fcs)
 		}
@@ -314,14 +317,14 @@ func (c *clientConn) runSourceStream(ctx context.Context, stream quic.Stream, fc
 	defer stream.Close()
 
 	if err := c.runSourceStreamErr(ctx, stream, fcs); err != nil {
-		c.logger.Debug("error while running destination", "err", err)
+		c.logger.Debug("error while running source", "err", err)
 	}
 }
 
 func (c *clientConn) runSourceStreamErr(ctx context.Context, stream quic.Stream, fcs *forwardClients) error {
 	req, err := pbc.ReadRequest(stream)
 	if err != nil {
-		return err
+		return fmt.Errorf("source stream read: %w", err)
 	}
 
 	switch {
@@ -350,22 +353,22 @@ func (c *clientConn) connect(ctx context.Context, stream quic.Stream, fcs *forwa
 func (c *clientConn) connectDestination(ctx context.Context, srcStream quic.Stream, dest *clientConn) error {
 	dstStream, err := dest.conn.OpenStreamSync(ctx)
 	if err != nil {
-		return kleverr.Newf("could not open stream: %w", err)
+		return fmt.Errorf("destination open stream: %w", err)
 	}
 
 	if err := pb.Write(dstStream, &pbc.Request{
 		Connect: &pbc.Request_Connect{},
 	}); err != nil {
-		return kleverr.Newf("could not write request: %w", err)
+		return fmt.Errorf("destination write request: %w", err)
 	}
 
 	resp, err := pbc.ReadResponse(dstStream)
 	if err != nil {
-		return kleverr.Newf("could not read response: %w", err)
+		return fmt.Errorf("destination read response: %w", err)
 	}
 
 	if err := pb.Write(srcStream, resp); err != nil {
-		return kleverr.Newf("could not write response: %w", err)
+		return fmt.Errorf("source write response: %w", err)
 	}
 
 	c.logger.Debug("joining conns")

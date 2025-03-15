@@ -1,8 +1,9 @@
 package model
 
 import (
+	"fmt"
+
 	"github.com/connet-dev/connet/pb"
-	"github.com/klev-dev/kleverr"
 )
 
 type Role struct{ string }
@@ -31,7 +32,7 @@ func ParseRole(s string) (Role, error) {
 	case Source.string:
 		return Source, nil
 	}
-	return UnknownRole, kleverr.Newf("unknown role: %s", s)
+	return UnknownRole, fmt.Errorf("unknown role: %s", s)
 }
 
 func (r Role) PB() pb.Role {
@@ -71,7 +72,7 @@ func (r *Role) UnmarshalText(b []byte) error {
 	case Source.string:
 		*r = Source
 	default:
-		return kleverr.Newf("unknown role: %s", s)
+		return fmt.Errorf("unknown role: %s", s)
 	}
 	return nil
 }

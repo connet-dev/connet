@@ -4,11 +4,11 @@ import (
 	"cmp"
 	"context"
 	"errors"
+	"fmt"
 	"maps"
 	"slices"
 
 	"github.com/klev-dev/klevdb"
-	"github.com/klev-dev/kleverr"
 )
 
 const (
@@ -48,7 +48,7 @@ func NewKV[K comparable, V any](dir string) (KV[K, V], error) {
 		Check:      true,
 	}, klevdb.JsonCodec[K]{}, klevdb.JsonCodec[V]{})
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("log open: %w", err)
 	}
 	return &kv[K, V]{log}, nil
 }
@@ -81,7 +81,7 @@ func (l *kv[K, V]) Get(k K) (V, error) {
 	}
 	if msg.ValueEmpty {
 		var v V
-		return v, kleverr.Newf("key not found: %w", ErrNotFound)
+		return v, fmt.Errorf("key not found: %w", ErrNotFound)
 	}
 	return msg.Value, nil
 }

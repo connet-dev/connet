@@ -193,7 +193,7 @@ func (p *directPeerIncoming) connect(ctx context.Context) (quic.Connection, erro
 	case <-ctx.Done():
 		cancel()
 		return nil, ctx.Err()
-	case conn := <-ch:
+	case conn := <-ch: // TODO panic on closing channel?
 		stream, err := conn.AcceptStream(ctx)
 		if err != nil {
 			return nil, err

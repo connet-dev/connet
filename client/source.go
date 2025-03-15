@@ -3,6 +3,8 @@ package client
 import (
 	"cmp"
 	"context"
+	"errors"
+	"fmt"
 	"log/slog"
 	"math"
 	"net"
@@ -17,7 +19,6 @@ import (
 	"github.com/connet-dev/connet/pb"
 	"github.com/connet-dev/connet/pbc"
 	"github.com/connet-dev/connet/quicc"
-	"github.com/klev-dev/kleverr"
 	"github.com/quic-go/quic-go"
 	"golang.org/x/sync/errgroup"
 )
@@ -122,10 +123,12 @@ func connCompare(l, r sourceConn) int {
 	return cmp.Compare(ld, rd)
 }
 
+var errNoActiveConns = errors.New("no active conns")
+
 func (s *Source) findActive() ([]sourceConn, error) {
 	conns := s.conns.Load()
 	if conns == nil || len(*conns) == 0 {
-		return nil, kleverr.New("no active conns")
+		return nil, errNoActiveConns
 	}
 
 	return slices.SortedFunc(slices.Values(*conns), connCompare), nil
@@ -135,7 +138,7 @@ func (s *Source) runServer(ctx context.Context) error {
 	s.logger.Debug("starting server", "addr", s.cfg.Address)
 	l, err := net.Listen("tcp", s.cfg.Address)
 	if err != nil {
-		return kleverr.Ret(err)
+		return fmt.Errorf("server listen: %w", err)
 	}
 	defer l.Close()
 
@@ -148,7 +151,7 @@ func (s *Source) runServer(ctx context.Context) error {
 	for {
 		conn, err := l.Accept()
 		if err != nil {
-			return kleverr.Ret(err)
+			return fmt.Errorf("server accept: %w", err)
 		}
 
 		go s.runConn(ctx, conn)
@@ -164,10 +167,12 @@ func (s *Source) runConn(ctx context.Context, conn net.Conn) {
 	}
 }
 
+var errNoDesinationRoute = errors.New("no route to destination")
+
 func (s *Source) runConnErr(ctx context.Context, conn net.Conn) error {
 	conns, err := s.findActive()
 	if err != nil {
-		return kleverr.Newf("could not get active conns: %w", err)
+		return fmt.Errorf("get active conns: %w", err)
 	}
 
 	for _, dest := range conns {
@@ -179,30 +184,30 @@ func (s *Source) runConnErr(ctx context.Context, conn net.Conn) error {
 		}
 	}
 
-	return kleverr.New("could not find route to destination")
+	return errNoDesinationRoute
 }
 
 func (s *Source) connectDestination(ctx context.Context, conn net.Conn, dest sourceConn) error {
 	stream, err := dest.conn.OpenStreamSync(ctx)
 	if err != nil {
-		return kleverr.Newf("could not find route: %w", err)
+		return fmt.Errorf("destination open stream: %w", err)
 	}
 	defer stream.Close()
 
 	if err := pb.Write(stream, &pbc.Request{
 		Connect: &pbc.Request_Connect{},
 	}); err != nil {
-		return kleverr.Newf("could not write request: %w", err)
+		return fmt.Errorf("destination write request: %w", err)
 	}
 
 	resp, err := pbc.ReadResponse(stream)
 	if err != nil {
-		return kleverr.Newf("could not read response: %w", err)
+		return fmt.Errorf("destination read response: %w", err)
 	}
 
 	proxy := model.ProxyVersionFromPB(resp.GetConnect().GetProxyProto())
 	if err := proxy.Write(stream, conn); err != nil {
-		return kleverr.Newf("could not write proxy proto: %w", err)
+		return fmt.Errorf("destination write proxy header: %w", err)
 	}
 
 	s.logger.Debug("joining conns", "style", dest.peer.style)

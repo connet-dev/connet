@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/tls"
 	"crypto/x509"
+	"fmt"
 	"log/slog"
 	"net"
 	"os"
@@ -15,7 +16,6 @@ import (
 	"github.com/connet-dev/connet/restr"
 	"github.com/connet-dev/connet/selfhosted"
 	"github.com/connet-dev/connet/statusc"
-	"github.com/klev-dev/kleverr"
 	"golang.org/x/sync/errgroup"
 )
 
@@ -32,38 +32,38 @@ func NewServer(opts ...ServerOption) (*Server, error) {
 	}
 	for _, opt := range opts {
 		if err := opt(cfg); err != nil {
-			return nil, err
+			return nil, fmt.Errorf("server option: %w", err)
 		}
 	}
 
 	if cfg.clientsAddr == nil {
 		if err := ServerClientsAddress(":19190")(cfg); err != nil {
-			return nil, err
+			return nil, fmt.Errorf("server default clients address: %w", err)
 		}
 	}
 
 	if cfg.relayAddr == nil {
 		if err := ServerRelayAddress(":19191")(cfg); err != nil {
-			return nil, err
+			return nil, fmt.Errorf("server default relay address: %w", err)
 		}
 	}
 
 	if cfg.relayHostname == "" {
 		if err := ServerRelayHostname("localhost")(cfg); err != nil {
-			return nil, err
+			return nil, fmt.Errorf("server default relay hostname: %w", err)
 		}
 	}
 
 	if cfg.dir == "" {
 		if err := serverStoreDirTemp()(cfg); err != nil {
-			return nil, err
+			return nil, fmt.Errorf("server default store dir: %w", err)
 		}
 		cfg.logger.Info("using temporary store directory", "dir", cfg.dir)
 	}
 
 	relaysAddr, err := net.ResolveUDPAddr("udp", "127.0.0.1:19189")
 	if err != nil {
-		return nil, kleverr.Newf("control address cannot be resolved: %w", err)
+		return nil, fmt.Errorf("server relay address: %w", err)
 	}
 	relayAuth := selfhosted.RelayAuthentication{
 		Token: model.GenServerName("relay"),
@@ -80,7 +80,7 @@ func NewServer(opts ...ServerOption) (*Server, error) {
 		Stores:       control.NewFileStores(filepath.Join(cfg.dir, "control")),
 	})
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("server control server: %w", err)
 	}
 
 	controlHost := "localhost"
@@ -103,7 +103,7 @@ func NewServer(opts ...ServerOption) (*Server, error) {
 		ControlCAs:   controlCAs,
 	})
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("server relay server: %w", err)
 	}
 
 	return &Server{
@@ -172,7 +172,7 @@ func ServerCertificate(certFile, keyFile string) ServerOption {
 	return func(cfg *serverConfig) error {
 		cert, err := tls.LoadX509KeyPair(certFile, keyFile)
 		if err != nil {
-			return kleverr.Newf("control cert cannot be loaded: %w", err)
+			return fmt.Errorf("server control cert: %w", err)
 		}
 
 		cfg.cert = cert
@@ -185,7 +185,7 @@ func ServerClientsAddress(address string) ServerOption {
 	return func(cfg *serverConfig) error {
 		addr, err := net.ResolveUDPAddr("udp", address)
 		if err != nil {
-			return kleverr.Newf("control address cannot be resolved: %w", err)
+			return fmt.Errorf("server control address: %w", err)
 		}
 
 		cfg.clientsAddr = addr
@@ -232,7 +232,7 @@ func ServerRelayAddress(address string) ServerOption {
 	return func(cfg *serverConfig) error {
 		addr, err := net.ResolveUDPAddr("udp", address)
 		if err != nil {
-			return kleverr.Newf("relay address cannot be resolved: %w", err)
+			return fmt.Errorf("server relay address: %w", err)
 		}
 
 		cfg.relayAddr = addr
@@ -252,7 +252,7 @@ func ServerStatusAddress(address string) ServerOption {
 	return func(cfg *serverConfig) error {
 		addr, err := net.ResolveTCPAddr("tcp", address)
 		if err != nil {
-			return kleverr.Newf("status address cannot be resolved: %w", err)
+			return fmt.Errorf("server status address: %w", err)
 		}
 
 		cfg.statusAddr = addr
@@ -272,7 +272,7 @@ func serverStoreDirTemp() ServerOption {
 	return func(cfg *serverConfig) error {
 		tmpDir, err := os.MkdirTemp("", "connet-server-")
 		if err != nil {
-			return err
+			return fmt.Errorf("server create tmp dir: %w", err)
 		}
 		cfg.dir = tmpDir
 		return nil

@@ -2,6 +2,7 @@ package client
 
 import (
 	"context"
+	"fmt"
 	"log/slog"
 	"net"
 	"net/netip"
@@ -11,7 +12,6 @@ import (
 	"github.com/connet-dev/connet/netc"
 	"github.com/connet-dev/connet/pb"
 	"github.com/connet-dev/connet/pbc"
-	"github.com/klev-dev/kleverr"
 	"github.com/quic-go/quic-go"
 	"golang.org/x/sync/errgroup"
 )
@@ -172,7 +172,7 @@ func (d *Destination) runDestinationErr(ctx context.Context, stream quic.Stream)
 	default:
 		err := pb.NewError(pb.Error_RequestUnknown, "unknown request: %v", req)
 		if err := pb.Write(stream, &pbc.Response{Error: err}); err != nil {
-			return kleverr.Newf("cannot write error response: %w", err)
+			return fmt.Errorf("destination write err response: %w", err)
 		}
 		return err
 	}
@@ -185,7 +185,7 @@ func (d *Destination) runConnect(ctx context.Context, stream quic.Stream) error 
 	if err != nil {
 		err := pb.NewError(pb.Error_DestinationDialFailed, "%s could not be dialed: %v", d.cfg.Forward, err)
 		if err := pb.Write(stream, &pbc.Response{Error: err}); err != nil {
-			return kleverr.Newf("could not write error response: %w", err)
+			return fmt.Errorf("connect write err response: %w", err)
 		}
 		return err
 	}
@@ -196,7 +196,7 @@ func (d *Destination) runConnect(ctx context.Context, stream quic.Stream) error 
 			ProxyProto: d.cfg.Proxy.PB(),
 		},
 	}); err != nil {
-		return kleverr.Newf("could not write response: %w", err)
+		return fmt.Errorf("connect write response: %w", err)
 	}
 
 	d.logger.Debug("joining conns")

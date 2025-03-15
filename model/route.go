@@ -1,6 +1,6 @@
 package model
 
-import "github.com/klev-dev/kleverr"
+import "fmt"
 
 type RouteOption struct{ string }
 
@@ -19,7 +19,7 @@ func ParseRouteOption(s string) (RouteOption, error) {
 	case RouteRelay.string:
 		return RouteRelay, nil
 	}
-	return RouteOption{}, kleverr.Newf("unknown route option: %s", s)
+	return RouteOption{}, fmt.Errorf("unknown route option: %s", s)
 }
 
 func (r RouteOption) AllowFrom(from RouteOption) bool {

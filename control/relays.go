@@ -7,6 +7,7 @@ import (
 	"crypto/x509"
 	"encoding"
 	"errors"
+	"fmt"
 	"io"
 	"log/slog"
 	"maps"
@@ -20,7 +21,6 @@ import (
 	"github.com/connet-dev/connet/pbr"
 	"github.com/connet-dev/connet/quicc"
 	"github.com/connet-dev/connet/restr"
-	"github.com/klev-dev/kleverr"
 	"github.com/quic-go/quic-go"
 	"github.com/segmentio/ksuid"
 	"golang.org/x/sync/errgroup"
@@ -47,27 +47,27 @@ func newRelayServer(
 ) (*relayServer, error) {
 	conns, err := stores.RelayConns()
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("relay conns store open: %w", err)
 	}
 
 	clients, err := stores.RelayClients()
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("relay clients store open: %w", err)
 	}
 
 	servers, err := stores.RelayServers()
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("relay servers store open: %w", err)
 	}
 
 	serverOffsets, err := stores.RelayServerOffsets()
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("relay server offsets store open: %w", err)
 	}
 
 	forwardsMsgs, forwardsOffset, err := servers.Snapshot()
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("relay servers snapshot: %w", err)
 	}
 
 	forwardsCache := map[model.Forward]map[ksuid.KSUID]relayCacheValue{}
@@ -84,29 +84,29 @@ func newRelayServer(
 		return ConfigValue{String: model.GenServerName("connet")}, nil
 	})
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("relay server id: %w", err)
 	}
 
 	serverSecret, err := config.GetOrInit(configServerRelaySecret, func(_ ConfigKey) (ConfigValue, error) {
 		privateKey := [32]byte{}
 		if _, err := io.ReadFull(rand.Reader, privateKey[:]); err != nil {
-			return ConfigValue{}, err
+			return ConfigValue{}, fmt.Errorf("generate rand: %w", err)
 		}
 		return ConfigValue{Bytes: privateKey[:]}, nil
 	})
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("relay server secret: %w", err)
 	}
 
 	statelessResetVal, err := config.GetOrInit(configRelayStatelessReset, func(ck ConfigKey) (ConfigValue, error) {
 		var key quic.StatelessResetKey
 		if _, err := io.ReadFull(rand.Reader, key[:]); err != nil {
-			return ConfigValue{}, kleverr.Newf("could not read rand: %w", err)
+			return ConfigValue{}, fmt.Errorf("generate rand: %w", err)
 		}
 		return ConfigValue{Bytes: key[:]}, nil
 	})
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("relay server stateless reset key: %w", err)
 	}
 	var statelessResetKey quic.StatelessResetKey
 	copy(statelessResetKey[:], statelessResetVal.Bytes)
@@ -236,11 +236,13 @@ func (s *relayServer) run(ctx context.Context) error {
 	return g.Wait()
 }
 
+var errRelayConnectNotAllowed = errors.New("relay not allowed")
+
 func (s *relayServer) runListener(ctx context.Context) error {
 	s.logger.Debug("start udp listener")
 	udpConn, err := net.ListenUDP("udp", s.addr)
 	if err != nil {
-		return kleverr.Ret(err)
+		return fmt.Errorf("relay server udp listen: %w", err)
 	}
 	defer udpConn.Close()
 
@@ -255,13 +257,13 @@ func (s *relayServer) runListener(ctx context.Context) error {
 			if s.iprestr.IsAllowedAddr(info.RemoteAddr) {
 				return quicConf, nil
 			}
-			return nil, kleverr.New("not allowed")
+			return nil, errRelayConnectNotAllowed
 		}
 	}
 
 	l, err := transport.Listen(s.tlsConf, quicConf)
 	if err != nil {
-		return kleverr.Ret(err)
+		return fmt.Errorf("relay server quic listen: %w", err)
 	}
 	defer l.Close()
 
@@ -270,7 +272,7 @@ func (s *relayServer) runListener(ctx context.Context) error {
 		conn, err := l.Accept(ctx)
 		if err != nil {
 			s.logger.Debug("accept error", "err", err)
-			return kleverr.Ret(err)
+			return fmt.Errorf("relay server quic accept: %w", err)
 		}
 
 		rc := &relayConn{
@@ -283,7 +285,7 @@ func (s *relayServer) runListener(ctx context.Context) error {
 }
 
 func (s *relayServer) runForwardsCache(ctx context.Context) error {
-	update := func(msg logc.Message[RelayServerKey, RelayServerValue]) error {
+	update := func(msg logc.Message[RelayServerKey, RelayServerValue]) {
 		s.forwardsMu.Lock()
 		defer s.forwardsMu.Unlock()
 
@@ -302,7 +304,6 @@ func (s *relayServer) runForwardsCache(ctx context.Context) error {
 		}
 
 		s.forwardsOffset = msg.Offset + 1
-		return nil
 	}
 
 	for {
@@ -312,13 +313,11 @@ func (s *relayServer) runForwardsCache(ctx context.Context) error {
 
 		msgs, nextOffset, err := s.servers.Consume(ctx, offset)
 		if err != nil {
-			return err
+			return fmt.Errorf("relay servers consume: %w", err)
 		}
 
 		for _, msg := range msgs {
-			if err := update(msg); err != nil {
-				return err
-			}
+			update(msg)
 		}
 
 		s.forwardsMu.Lock()
@@ -354,27 +353,33 @@ type relayConn struct {
 	hostport model.HostPort
 }
 
+type relayConnAuth struct {
+	id       ksuid.KSUID
+	auth     RelayAuthentication
+	hostport model.HostPort
+}
+
 func (c *relayConn) run(ctx context.Context) {
 	defer c.conn.CloseWithError(quic.ApplicationErrorCode(pb.Error_Unknown), "connection closed")
 
 	if err := c.runErr(ctx); err != nil {
-		c.logger.Debug("error while running", "err", err)
+		c.logger.Debug("error while running zzz", "err", err)
 	}
 }
 
 func (c *relayConn) runErr(ctx context.Context) error {
-	if auth, id, hp, err := c.authenticate(ctx); err != nil {
+	if rauth, err := c.authenticate(ctx); err != nil {
 		if perr := pb.GetError(err); perr != nil {
 			c.conn.CloseWithError(quic.ApplicationErrorCode(perr.Code), perr.Message)
 		} else {
 			c.conn.CloseWithError(quic.ApplicationErrorCode(pb.Error_AuthenticationFailed), "Error while authenticating")
 		}
-		return kleverr.Ret(err)
+		return err
 	} else {
-		c.id = id
-		c.auth = auth
-		c.hostport = hp
-		c.logger = c.logger.With("relay", hp)
+		c.id = rauth.id
+		c.auth = rauth.auth
+		c.hostport = rauth.hostport
+		c.logger = c.logger.With("relay", c.hostport)
 	}
 
 	forwards, err := c.server.stores.RelayForwards(c.id)
@@ -408,19 +413,17 @@ func (c *relayConn) runErr(ctx context.Context) error {
 	return g.Wait()
 }
 
-var retRelayAuth = kleverr.Ret3[RelayAuthentication, ksuid.KSUID, model.HostPort]
-
-func (c *relayConn) authenticate(ctx context.Context) (RelayAuthentication, ksuid.KSUID, model.HostPort, error) {
+func (c *relayConn) authenticate(ctx context.Context) (*relayConnAuth, error) {
 	c.logger.Debug("waiting for authentication")
 	authStream, err := c.conn.AcceptStream(ctx)
 	if err != nil {
-		return retRelayAuth(err)
+		return nil, fmt.Errorf("auth accept stream: %w", err)
 	}
 	defer authStream.Close()
 
 	req := &pbr.AuthenticateReq{}
 	if err := pb.Read(authStream, req); err != nil {
-		return retRelayAuth(err)
+		return nil, fmt.Errorf("auth read request: %w", err)
 	}
 
 	auth, err := c.server.auth.Authenticate(req.Token, c.conn.RemoteAddr())
@@ -430,9 +433,9 @@ func (c *relayConn) authenticate(ctx context.Context) (RelayAuthentication, ksui
 			perr = pb.NewError(pb.Error_AuthenticationFailed, "authentication failed: %v", err)
 		}
 		if err := pb.Write(authStream, &pbr.AuthenticateResp{Error: perr}); err != nil {
-			return retRelayAuth(err)
+			return nil, fmt.Errorf("auth write err response: %w", err)
 		}
-		return retRelayAuth(perr)
+		return nil, fmt.Errorf("auth failed: %w", perr)
 	}
 
 	var id ksuid.KSUID
@@ -452,11 +455,11 @@ func (c *relayConn) authenticate(ctx context.Context) (RelayAuthentication, ksui
 		ControlId:      c.server.id,
 		ReconnectToken: retoken,
 	}); err != nil {
-		return retRelayAuth(err)
+		return nil, fmt.Errorf("auth write response: %w", err)
 	}
 
 	c.logger.Debug("authentication completed", "local", c.conn.LocalAddr(), "remote", c.conn.RemoteAddr())
-	return auth, id, model.HostPortFromPB(req.Addr), nil
+	return &relayConnAuth{id, auth, model.HostPortFromPB(req.Addr)}, nil
 }
 
 func (c *relayConn) runRelayClients(ctx context.Context) error {
@@ -561,7 +564,7 @@ func (c *relayConn) runRelayServers(ctx context.Context) error {
 					return err
 				}
 			default:
-				return kleverr.New("unknown change")
+				return fmt.Errorf("unknown change: %v", change.Change)
 			}
 		}
 

@@ -2,10 +2,12 @@ package notify
 
 import (
 	"context"
+	"errors"
 	"sync/atomic"
-
-	"github.com/klev-dev/kleverr"
 )
+
+var errNotifyClosed = errors.New("notify already closed")
+var errNotifyEmpty = errors.New("no value")
 
 type V[T any] struct {
 	value   atomic.Pointer[value[T]]
@@ -48,7 +50,7 @@ func (v *V[T]) Get(ctx context.Context, version uint64) (T, uint64, error) {
 	next, ok := <-v.barrier
 	if !ok {
 		var t T
-		return t, 0, kleverr.New("already closed")
+		return t, 0, errNotifyClosed
 	}
 
 	current := v.value.Load()
@@ -64,7 +66,7 @@ func (v *V[T]) Get(ctx context.Context, version uint64) (T, uint64, error) {
 		return next.value, next.version, nil
 	case <-ctx.Done():
 		var t T
-		return t, 0, kleverr.Newf("context closed: %w", ctx.Err())
+		return t, 0, ctx.Err()
 	}
 }
 
@@ -76,7 +78,7 @@ func (v *V[T]) GetAny(ctx context.Context) (T, uint64, error) {
 	next, ok := <-v.barrier
 	if !ok {
 		var t T
-		return t, 0, kleverr.New("already closed")
+		return t, 0, errNotifyClosed
 	}
 
 	current := v.value.Load()
@@ -92,7 +94,7 @@ func (v *V[T]) GetAny(ctx context.Context) (T, uint64, error) {
 		return next.value, next.version, nil
 	case <-ctx.Done():
 		var t T
-		return t, 0, kleverr.Newf("context closed: %w", ctx.Err())
+		return t, 0, ctx.Err()
 	}
 }
 
@@ -101,7 +103,7 @@ func (v *V[T]) Peek() (T, error) {
 		return current.value, nil
 	}
 	var t T
-	return t, kleverr.New("empty")
+	return t, errNotifyEmpty
 }
 
 func (v *V[T]) Sync(f func()) {

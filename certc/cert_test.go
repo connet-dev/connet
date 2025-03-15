@@ -5,11 +5,11 @@ import (
 	"context"
 	"crypto/tls"
 	"crypto/x509"
+	"fmt"
 	"io"
 	"net"
 	"testing"
 
-	"github.com/klev-dev/kleverr"
 	"github.com/quic-go/quic-go"
 	"github.com/stretchr/testify/require"
 	"golang.org/x/sync/errgroup"
@@ -228,29 +228,29 @@ func testConnectivityTLS(t *testing.T, serverConf *tls.Config, clientConf *tls.C
 	g.Go(func() error {
 		c, err := l.Accept(ctx)
 		if err != nil {
-			return kleverr.Ret(err)
+			return fmt.Errorf("server accept conn: %w", err)
 		}
 
 		peerCerts := c.ConnectionState().TLS.PeerCertificates
 		if len(peerCerts) != 1 {
-			return kleverr.Newf("expected 1 client certificate, but found: %d", len(peerCerts))
+			return fmt.Errorf("expected 1 client certificate, but found: %d", len(peerCerts))
 		}
 		if !bytes.Equal(peerCerts[0].Raw, clientConf.Certificates[0].Leaf.Raw) {
-			return kleverr.Newf("expected matching certs")
+			return fmt.Errorf("expected matching certs")
 		}
 
 		s, err := c.AcceptStream(ctx)
 		if err != nil {
-			return kleverr.Ret(err)
+			return fmt.Errorf("server accept stream: %w", err)
 		}
 		defer s.Close()
 
 		buf := make([]byte, 1)
 		if _, err := io.ReadFull(s, buf); err != nil {
-			return kleverr.Ret(err)
+			return fmt.Errorf("server read: %w", err)
 		}
 		if _, err := s.Write(buf); err != nil {
-			return kleverr.Ret(err)
+			return fmt.Errorf("server write: %w", err)
 		}
 		return nil
 	})
@@ -262,18 +262,18 @@ func testConnectivityTLS(t *testing.T, serverConf *tls.Config, clientConf *tls.C
 	g.Go(func() error {
 		s, err := c.OpenStreamSync(context.Background())
 		if err != nil {
-			return kleverr.Ret(err)
+			return fmt.Errorf("client stream: %w", err)
 		}
 		defer s.Close()
 
 		buf := make([]byte, 1)
 		buf[0] = 33
 		if _, err := s.Write(buf); err != nil {
-			return kleverr.Ret(err)
+			return fmt.Errorf("client write: %w", err)
 		}
 		buf[0] = 0
 		if _, err := io.ReadFull(s, buf); err != nil {
-			return kleverr.Ret(err)
+			return fmt.Errorf("client read: %w", err)
 		}
 		return nil
 	})

@@ -1,16 +1,15 @@
 package netc
 
 import (
+	"fmt"
 	"net"
 	"net/netip"
-
-	"github.com/klev-dev/kleverr"
 )
 
 func LocalAddrs() ([]netip.Addr, error) {
 	ifaces, err := net.Interfaces()
 	if err != nil {
-		return nil, kleverr.Ret(err)
+		return nil, fmt.Errorf("net interfaces: %w", err)
 	}
 
 	var localAddrs []netip.Addr

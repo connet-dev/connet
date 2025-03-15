@@ -417,11 +417,15 @@ by adding account management and it is one of the easiest way to start.
  - [x] proxy proto support
  - [x] update nix modules with new config options
 
+### v0.6.0
+ - [x] nixos testing
+ - [ ] error wrapping
+
 ## Future
 
- - [ ] error wrapping
- - [ ] zip and name windows executable .exe
  - [ ] UDP support
+ - [ ] zip and name windows executable .exe
+ - [ ] notarize mac app
  - [ ] Gen config
  - [ ] http source
  - [ ] client stateless reset key
@@ -431,6 +435,4 @@ by adding account management and it is one of the easiest way to start.
  - [ ] Docs section for building the project
  - [ ] Docs section for embedding into golang programs
  - [ ] mininet testing
- - [ ] nixos testing
- - [ ] notarize mac app
  - [ ] websocket tcp converter

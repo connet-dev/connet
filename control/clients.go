@@ -6,6 +6,8 @@ import (
 	"crypto/tls"
 	"crypto/x509"
 	"encoding"
+	"errors"
+	"fmt"
 	"io"
 	"log/slog"
 	"net"
@@ -19,7 +21,6 @@ import (
 	"github.com/connet-dev/connet/pbs"
 	"github.com/connet-dev/connet/quicc"
 	"github.com/connet-dev/connet/restr"
-	"github.com/klev-dev/kleverr"
 	"github.com/quic-go/quic-go"
 	"github.com/segmentio/ksuid"
 	"golang.org/x/sync/errgroup"
@@ -52,17 +53,17 @@ func newClientServer(
 ) (*clientServer, error) {
 	conns, err := stores.ClientConns()
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("client conns store open: %w", err)
 	}
 
 	peers, err := stores.ClientPeers()
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("client peers store open: %w", err)
 	}
 
 	clientsMsgs, clientsOffset, err := peers.Snapshot()
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("client peers snapshot: %w", err)
 	}
 
 	peersCache := map[cacheKey][]*pbs.ServerPeer{}
@@ -78,23 +79,23 @@ func newClientServer(
 	serverSecret, err := config.GetOrInit(configServerClientSecret, func(_ ConfigKey) (ConfigValue, error) {
 		privateKey := [32]byte{}
 		if _, err := io.ReadFull(rand.Reader, privateKey[:]); err != nil {
-			return ConfigValue{}, err
+			return ConfigValue{}, fmt.Errorf("generate rand: %w", err)
 		}
 		return ConfigValue{Bytes: privateKey[:]}, nil
 	})
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("client server secret: %w", err)
 	}
 
 	statelessResetVal, err := config.GetOrInit(configClientStatelessReset, func(ck ConfigKey) (ConfigValue, error) {
 		var key quic.StatelessResetKey
 		if _, err := io.ReadFull(rand.Reader, key[:]); err != nil {
-			return ConfigValue{}, kleverr.Newf("could not read rand: %w", err)
+			return ConfigValue{}, fmt.Errorf("generate rand: %w", err)
 		}
 		return ConfigValue{Bytes: key[:]}, nil
 	})
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("client server stateless reset key: %w", err)
 	}
 	var statelessResetKey quic.StatelessResetKey
 	copy(statelessResetKey[:], statelessResetVal.Bytes)
@@ -228,11 +229,13 @@ func (s *clientServer) run(ctx context.Context) error {
 	return g.Wait()
 }
 
+var errClientConnectNotAllowed = errors.New("client not allowed")
+
 func (s *clientServer) runListener(ctx context.Context) error {
 	s.logger.Debug("start udp listener")
 	udpConn, err := net.ListenUDP("udp", s.addr)
 	if err != nil {
-		return kleverr.Ret(err)
+		return fmt.Errorf("client server udp listen: %w", err)
 	}
 	defer udpConn.Close()
 
@@ -247,13 +250,13 @@ func (s *clientServer) runListener(ctx context.Context) error {
 			if s.iprestr.IsAllowedAddr(info.RemoteAddr) {
 				return quicConf, nil
 			}
-			return nil, kleverr.New("not allowed")
+			return nil, errClientConnectNotAllowed
 		}
 	}
 
 	l, err := transport.Listen(s.tlsConf, quicConf)
 	if err != nil {
-		return kleverr.Ret(err)
+		return fmt.Errorf("client server quic listen: %w", err)
 	}
 	defer l.Close()
 
@@ -262,7 +265,7 @@ func (s *clientServer) runListener(ctx context.Context) error {
 		conn, err := l.Accept(ctx)
 		if err != nil {
 			s.logger.Debug("accept error", "err", err)
-			return kleverr.Ret(err)
+			return fmt.Errorf("client server quic accept: %w", err)
 		}
 
 		cc := &clientConn{
@@ -344,18 +347,20 @@ func (c *clientConn) run(ctx context.Context) {
 	defer c.conn.CloseWithError(quic.ApplicationErrorCode(pb.Error_Unknown), "connection closed")
 
 	if err := c.runErr(ctx); err != nil {
-		c.logger.Debug("error while running", "err", err)
+		c.logger.Debug("error while running client conn", "err", err)
 	}
 }
 
 func (c *clientConn) runErr(ctx context.Context) error {
 	if auth, id, err := c.authenticate(ctx); err != nil {
 		if perr := pb.GetError(err); perr != nil {
+			// TODO handle err
 			c.conn.CloseWithError(quic.ApplicationErrorCode(perr.Code), perr.Message)
 		} else {
+			// TODO handle err
 			c.conn.CloseWithError(quic.ApplicationErrorCode(pb.Error_AuthenticationFailed), "Error while authenticating")
 		}
-		return kleverr.Ret(err)
+		return err
 	} else {
 		c.auth = auth
 		c.id = id
@@ -385,19 +390,17 @@ func (c *clientConn) runErr(ctx context.Context) error {
 	}
 }
 
-var retClientAuth = kleverr.Ret2[ClientAuthentication, ksuid.KSUID]
-
 func (c *clientConn) authenticate(ctx context.Context) (ClientAuthentication, ksuid.KSUID, error) {
 	c.logger.Debug("waiting for authentication")
 	authStream, err := c.conn.AcceptStream(ctx)
 	if err != nil {
-		return retClientAuth(err)
+		return nil, ksuid.Nil, fmt.Errorf("client auth stream: %w", err)
 	}
 	defer authStream.Close()
 
 	req := &pbs.Authenticate{}
 	if err := pb.Read(authStream, req); err != nil {
-		return retClientAuth(err)
+		return nil, ksuid.Nil, fmt.Errorf("client auth read: %w", err)
 	}
 
 	auth, err := c.server.auth.Authenticate(req.Token, c.conn.RemoteAddr())
@@ -407,9 +410,9 @@ func (c *clientConn) authenticate(ctx context.Context) (ClientAuthentication, ks
 			perr = pb.NewError(pb.Error_AuthenticationFailed, "authentication failed: %v", err)
 		}
 		if err := pb.Write(authStream, &pbs.AuthenticateResp{Error: perr}); err != nil {
-			return retClientAuth(err)
+			return nil, ksuid.Nil, fmt.Errorf("client auth err write: %w", err)
 		}
-		return retClientAuth(perr)
+		return nil, ksuid.Nil, perr
 	}
 
 	var id ksuid.KSUID
@@ -424,9 +427,9 @@ func (c *clientConn) authenticate(ctx context.Context) (ClientAuthentication, ks
 	if err != nil {
 		err := pb.NewError(pb.Error_AuthenticationFailed, "cannot resolve origin: %v", err)
 		if err := pb.Write(authStream, &pbs.AuthenticateResp{Error: err}); err != nil {
-			return retClientAuth(err)
+			return nil, ksuid.Nil, fmt.Errorf("client auth err write: %w", err)
 		}
-		return retClientAuth(err)
+		return nil, ksuid.Nil, err
 	}
 
 	retoken, err := c.server.reconnect.sealID(id)
@@ -438,7 +441,7 @@ func (c *clientConn) authenticate(ctx context.Context) (ClientAuthentication, ks
 		Public:         origin,
 		ReconnectToken: retoken,
 	}); err != nil {
-		return retClientAuth(err)
+		return nil, ksuid.Nil, fmt.Errorf("client auth write: %w", err)
 	}
 
 	c.logger.Debug("authentication completed", "local", c.conn.LocalAddr(), "remote", c.conn.RemoteAddr())
@@ -454,7 +457,7 @@ func (s *clientStream) run(ctx context.Context) {
 	defer s.stream.Close()
 
 	if err := s.runErr(ctx); err != nil {
-		s.conn.logger.Debug("error while running", "err", err)
+		s.conn.logger.Debug("error while running client stream", "err", err)
 	}
 }
 
@@ -496,7 +499,7 @@ func (s *clientStream) announce(ctx context.Context, req *pbs.Request_Announce) 
 			perr = pb.NewError(pb.Error_AnnounceValidationFailed, "failed to validate forward '%s': %v", fwd, err)
 		}
 		if err := pb.Write(s.stream, &pbs.Response{Error: perr}); err != nil {
-			return kleverr.Newf("could not write error response: %w", err)
+			return fmt.Errorf("client write auth err: %w", err)
 		}
 		return perr
 	} else {
@@ -505,7 +508,7 @@ func (s *clientStream) announce(ctx context.Context, req *pbs.Request_Announce) 
 
 	if err := validatePeerCert(fwd, req.Peer); err != nil {
 		if err := pb.Write(s.stream, &pbs.Response{Error: err}); err != nil {
-			return kleverr.Newf("could not write error response: %w", err)
+			return fmt.Errorf("client write cert err: %w", err)
 		}
 		return err
 	}
@@ -530,14 +533,14 @@ func (s *clientStream) announce(ctx context.Context, req *pbs.Request_Announce) 
 			if req.Announce == nil {
 				respErr := pb.NewError(pb.Error_RequestUnknown, "unexpected request")
 				if err := pb.Write(s.stream, &pbs.Response{Error: respErr}); err != nil {
-					return kleverr.Ret(err)
+					return fmt.Errorf("client write protocol err: %w", err)
 				}
-				return respErr
+				return err
 			}
 
 			if err := validatePeerCert(fwd, req.Announce.Peer); err != nil {
 				if err := pb.Write(s.stream, &pbs.Response{Error: err}); err != nil {
-					return kleverr.Newf("could not write error response: %w", err)
+					return fmt.Errorf("client write cert err: %w", err)
 				}
 				return err
 			}
@@ -558,7 +561,7 @@ func (s *clientStream) announce(ctx context.Context, req *pbs.Request_Announce) 
 					Peers: peers,
 				},
 			}); err != nil {
-				return kleverr.Ret(err)
+				return fmt.Errorf("client announce write: %w", err)
 			}
 
 			return nil
@@ -577,7 +580,7 @@ func (s *clientStream) relay(ctx context.Context, req *pbs.Request_Relay) error 
 			perr = pb.NewError(pb.Error_RelayValidationFailed, "failed to validate desination '%s': %v", fwd, err)
 		}
 		if err := pb.Write(s.stream, &pbs.Response{Error: perr}); err != nil {
-			return kleverr.Newf("could not write error response: %w", err)
+			return fmt.Errorf("client relay auth err response: %w", err)
 		}
 		return perr
 	} else {
@@ -588,7 +591,7 @@ func (s *clientStream) relay(ctx context.Context, req *pbs.Request_Relay) error 
 	if err != nil {
 		err := pb.NewError(pb.Error_RelayInvalidCertificate, "invalid certificate: %v", err)
 		if err := pb.Write(s.stream, &pbs.Response{Error: err}); err != nil {
-			return kleverr.Newf("could not write error response: %w", err)
+			return fmt.Errorf("client relay cert err response: %w", err)
 		}
 		return err
 	}
@@ -619,7 +622,7 @@ func (s *clientStream) relay(ctx context.Context, req *pbs.Request_Relay) error 
 					Relays: addrs,
 				},
 			}); err != nil {
-				return kleverr.Ret(err)
+				return fmt.Errorf("client relay response: %w", err)
 			}
 			return nil
 		})

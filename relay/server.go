@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/rand"
 	"crypto/x509"
+	"fmt"
 	"io"
 	"log/slog"
 	"maps"
@@ -13,7 +14,6 @@ import (
 	"github.com/connet-dev/connet/model"
 	"github.com/connet-dev/connet/quicc"
 	"github.com/connet-dev/connet/statusc"
-	"github.com/klev-dev/kleverr"
 	"github.com/quic-go/quic-go"
 	"golang.org/x/sync/errgroup"
 )
@@ -36,25 +36,25 @@ type Config struct {
 func NewServer(cfg Config) (*Server, error) {
 	configStore, err := cfg.Stores.Config()
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("relay stores: %w", err)
 	}
 
 	statelessResetVal, err := configStore.GetOrInit(configStatelessReset, func(ck ConfigKey) (ConfigValue, error) {
 		var key quic.StatelessResetKey
 		if _, err := io.ReadFull(rand.Reader, key[:]); err != nil {
-			return ConfigValue{}, kleverr.Newf("could not read rand: %w", err)
+			return ConfigValue{}, fmt.Errorf("generate rand: %w", err)
 		}
 		return ConfigValue{Bytes: key[:]}, nil
 	})
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("relay stateless reset key: %w", err)
 	}
 	var statelessResetKey quic.StatelessResetKey
 	copy(statelessResetKey[:], statelessResetVal.Bytes)
 
 	control, err := newControlClient(cfg, configStore)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("relay control client: %w", err)
 	}
 
 	clients := newClientsServer(cfg, control.tlsAuthenticate, control.authenticate)
@@ -86,7 +86,7 @@ func (s *Server) Run(ctx context.Context) error {
 	s.logger.Debug("start udp listener")
 	udpConn, err := net.ListenUDP("udp", s.addr)
 	if err != nil {
-		return kleverr.Ret(err)
+		return fmt.Errorf("relay server listen: %w", err)
 	}
 	defer udpConn.Close()
 

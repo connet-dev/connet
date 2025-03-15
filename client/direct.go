@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/tls"
 	"crypto/x509"
+	"fmt"
 	"log/slog"
 	"sync"
 	"sync/atomic"
@@ -11,7 +12,6 @@ import (
 	"github.com/connet-dev/connet/certc"
 	"github.com/connet-dev/connet/pb"
 	"github.com/connet-dev/connet/quicc"
-	"github.com/klev-dev/kleverr"
 	"github.com/quic-go/quic-go"
 	"golang.org/x/sync/errgroup"
 )
@@ -130,7 +130,7 @@ func (s *DirectServer) runServer(ctx context.Context) error {
 	tlsConf.GetConfigForClient = func(chi *tls.ClientHelloInfo) (*tls.Config, error) {
 		srv := s.getServer(chi.ServerName)
 		if srv == nil {
-			return nil, kleverr.Newf("server not found: %s", chi.ServerName)
+			return nil, fmt.Errorf("server not found: %s", chi.ServerName)
 		}
 		conf := tlsConf.Clone()
 		conf.Certificates = []tls.Certificate{srv.serverCert}
@@ -148,7 +148,7 @@ func (s *DirectServer) runServer(ctx context.Context) error {
 		conn, err := l.Accept(ctx)
 		if err != nil {
 			s.logger.Debug("accept error", "err", err)
-			return kleverr.Ret(err)
+			return fmt.Errorf("accept: %w", err)
 		}
 		go s.runConn(conn)
 	}
