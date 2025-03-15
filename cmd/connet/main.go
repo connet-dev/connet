@@ -147,11 +147,23 @@ func printError(err error, level int) {
 	nextErr := errors.Unwrap(err)
 	if nextErr != nil {
 		errStr = strings.TrimSuffix(errStr, nextErr.Error())
+		errStr = strings.TrimSuffix(errStr, ": ")
 	}
 
-	fmt.Fprintf(os.Stderr, "%s%s\n", strings.Repeat(" ", level*2), errStr)
+	fmt.Fprintf(os.Stderr, "error: %s%s\n", strings.Repeat(" ", level*2), errStr)
 	if nextErr != nil {
-		printError(nextErr, level+2)
+		printError(nextErr, level+1)
+	}
+}
+
+type cobraRunE = func(cmd *cobra.Command, args []string) error
+
+func wrapErr(ws string, runErr cobraRunE) cobraRunE {
+	return func(cmd *cobra.Command, args []string) error {
+		if err := runErr(cmd, args); err != nil {
+			return fmt.Errorf("%s: %w", ws, err)
+		}
+		return nil
 	}
 }
 
@@ -196,10 +208,10 @@ func rootCmd() *cobra.Command {
 	cmd.Flags().StringVar(&srcCfg.Addr, "src-addr", "", "source address")
 	cmd.Flags().StringVar(&srcCfg.Route, "src-route", "", "source route")
 
-	cmd.RunE = func(cmd *cobra.Command, _ []string) error {
+	cmd.RunE = wrapErr("run connet client", func(cmd *cobra.Command, _ []string) error {
 		cfg, err := loadConfig(*filename)
 		if err != nil {
-			return err
+			return fmt.Errorf("load config: %w", err)
 		}
 
 		if dstName != "" {
@@ -213,11 +225,11 @@ func rootCmd() *cobra.Command {
 
 		logger, err := logger(cfg)
 		if err != nil {
-			return err
+			return fmt.Errorf("configure logger: %w", err)
 		}
 
 		return clientRun(cmd.Context(), cfg.Client, logger)
-	}
+	})
 
 	return cmd
 }
@@ -249,21 +261,21 @@ func serverCmd() *cobra.Command {
 	cmd.Flags().StringVar(&flagsConfig.Server.StatusAddr, "status-addr", "", "status server address to listen")
 	cmd.Flags().StringVar(&flagsConfig.Server.StoreDir, "store-dir", "", "storage dir, /tmp subdirectory if empty")
 
-	cmd.RunE = func(cmd *cobra.Command, _ []string) error {
+	cmd.RunE = wrapErr("run connet server", func(cmd *cobra.Command, _ []string) error {
 		cfg, err := loadConfig(*filename)
 		if err != nil {
-			return err
+			return fmt.Errorf("load config: %w", err)
 		}
 
 		cfg.merge(flagsConfig)
 
 		logger, err := logger(cfg)
 		if err != nil {
-			return err
+			return fmt.Errorf("configure logger: %w", err)
 		}
 
 		return serverRun(cmd.Context(), cfg.Server, logger)
-	}
+	})
 
 	return cmd
 }
@@ -298,21 +310,21 @@ func controlCmd() *cobra.Command {
 	cmd.Flags().StringVar(&flagsConfig.Control.StatusAddr, "status-addr", "", "status server address to listen")
 	cmd.Flags().StringVar(&flagsConfig.Control.StoreDir, "store-dir", "", "storage dir, /tmp subdirectory if empty")
 
-	cmd.RunE = func(cmd *cobra.Command, _ []string) error {
+	cmd.RunE = wrapErr("run connet control server", func(cmd *cobra.Command, _ []string) error {
 		cfg, err := loadConfig(*filename)
 		if err != nil {
-			return err
+			return fmt.Errorf("load config: %w", err)
 		}
 
 		cfg.merge(flagsConfig)
 
 		logger, err := logger(cfg)
 		if err != nil {
-			return err
+			return fmt.Errorf("configure logger: %w", err)
 		}
 
 		return controlRun(cmd.Context(), cfg.Control, logger)
-	}
+	})
 
 	return cmd
 }
@@ -341,21 +353,21 @@ func relayCmd() *cobra.Command {
 	cmd.Flags().StringVar(&flagsConfig.Relay.StatusAddr, "status-addr", "", "status server address to listen")
 	cmd.Flags().StringVar(&flagsConfig.Relay.StoreDir, "store-dir", "", "storage dir, /tmp subdirectory if empty")
 
-	cmd.RunE = func(cmd *cobra.Command, _ []string) error {
+	cmd.RunE = wrapErr("run connet relay server", func(cmd *cobra.Command, _ []string) error {
 		cfg, err := loadConfig(*filename)
 		if err != nil {
-			return err
+			return fmt.Errorf("load config: %w", err)
 		}
 
 		cfg.merge(flagsConfig)
 
 		logger, err := logger(cfg)
 		if err != nil {
-			return err
+			return fmt.Errorf("configure logger: %w", err)
 		}
 
 		return relayRun(cmd.Context(), cfg.Relay, logger)
-	}
+	})
 
 	return cmd
 }
@@ -392,6 +404,7 @@ func loadConfig(file string) (Config, error) {
 	if err != nil {
 		return cfg, err
 	}
+
 	dec := toml.NewDecoder(f)
 	dec = dec.DisallowUnknownFields()
 	err = dec.Decode(&cfg)
@@ -419,7 +432,7 @@ func logger(cfg Config) (*slog.Logger, error) {
 	case "info", "":
 		logLevel = slog.LevelInfo
 	default:
-		return nil, fmt.Errorf("'%s' is not a valid log level (one of debug|info|warn|error)", cfg.LogLevel)
+		return nil, fmt.Errorf("invalid level '%s' (debug|info|warn|error)", cfg.LogLevel)
 	}
 
 	switch cfg.LogFormat {
@@ -432,7 +445,7 @@ func logger(cfg Config) (*slog.Logger, error) {
 			Level: logLevel,
 		})), nil
 	default:
-		return nil, fmt.Errorf("'%s' is not a valid log format (one of json|text)", cfg.LogFormat)
+		return nil, fmt.Errorf("invalid format '%s' (json|text)", cfg.LogFormat)
 	}
 }
 
@@ -494,7 +507,7 @@ func clientRun(ctx context.Context, cfg ClientConfig, logger *slog.Logger) error
 
 	cl, err := connet.NewClient(opts...)
 	if err != nil {
-		return err
+		return fmt.Errorf("client create: %w", err)
 	}
 	if len(srvs) > 0 {
 		g, ctx := errgroup.WithContext(ctx)
@@ -554,7 +567,7 @@ func serverRun(ctx context.Context, cfg ServerConfig, logger *slog.Logger) error
 
 	srv, err := connet.NewServer(opts...)
 	if err != nil {
-		return err
+		return fmt.Errorf("cannot create server: %w", err)
 	}
 	return srv.Run(ctx)
 }
@@ -650,7 +663,7 @@ func controlRun(ctx context.Context, cfg ControlConfig, logger *slog.Logger) err
 
 	srv, err := control.NewServer(controlCfg)
 	if err != nil {
-		return err
+		return fmt.Errorf("control server create: %w", err)
 	}
 	return srv.Run(ctx)
 }
@@ -732,7 +745,7 @@ func relayRun(ctx context.Context, cfg RelayConfig, logger *slog.Logger) error {
 
 	srv, err := relay.NewServer(relayCfg)
 	if err != nil {
-		return err
+		return fmt.Errorf("relay server create: %w", err)
 	}
 	return srv.Run(ctx)
 }
@@ -740,7 +753,7 @@ func relayRun(ctx context.Context, cfg RelayConfig, logger *slog.Logger) error {
 func loadTokens(tokensFile string) ([]string, error) {
 	f, err := os.Open(tokensFile)
 	if err != nil {
-		return nil, fmt.Errorf("tokens file open: %w", err)
+		return nil, fmt.Errorf("open tokens file: %w", err)
 	}
 
 	var tokens []string
@@ -749,7 +762,7 @@ func loadTokens(tokensFile string) ([]string, error) {
 		tokens = append(tokens, scanner.Text())
 	}
 	if err := scanner.Err(); err != nil {
-		return nil, fmt.Errorf("tokens file read: %w", err)
+		return nil, fmt.Errorf("read tokens file: %w", err)
 	}
 	return tokens, nil
 }
@@ -780,22 +793,22 @@ func parseClientAuth(tokens []string, restrs []TokenRestriction) (control.Client
 	case len(restrs) == 0:
 		restrs = make([]TokenRestriction, len(tokens))
 	case len(tokens) != len(restrs):
-		return nil, fmt.Errorf("client auth mismatch number of tokens (%d) and restrictions (%d)", len(tokens), len(restrs))
+		return nil, fmt.Errorf("client auth tokens (%d) does not match the number of restrictions (%d)", len(tokens), len(restrs))
 	}
 
 	auths := make([]selfhosted.ClientAuthentication, len(tokens))
 	for i, r := range restrs {
 		ips, err := restr.ParseIP(r.AllowCIDRs, r.DenyCIDRs)
 		if err != nil {
-			return nil, err
+			return nil, fmt.Errorf("client auth at %d ip restriction: %w", i, err)
 		}
 		names, err := restr.ParseName(r.NameMatches)
 		if err != nil {
-			return nil, err
+			return nil, fmt.Errorf("client auth at %d name restriction: %w", i, err)
 		}
 		role, err := parseRole(r.RoleMatches)
 		if err != nil {
-			return nil, err
+			return nil, fmt.Errorf("client auth at %d role restriction: %w", i, err)
 		}
 		auths[i] = selfhosted.ClientAuthentication{
 			Token: tokens[i],
@@ -812,14 +825,14 @@ func parseRelayAuth(tokens []string, restrs []IPRestriction) (control.RelayAuthe
 	case len(restrs) == 0:
 		restrs = make([]IPRestriction, len(tokens))
 	case len(tokens) != len(restrs):
-		return nil, fmt.Errorf("relay auth mismatch tokens (%d) and ip restrictions (%d)", len(tokens), len(restrs))
+		return nil, fmt.Errorf("relay auth tokens (%d) does not match the number of ip restrictions (%d)", len(tokens), len(restrs))
 	}
 
 	auths := make([]selfhosted.RelayAuthentication, len(tokens))
 	for i, r := range restrs {
 		ips, err := restr.ParseIP(r.AllowCIDRs, r.DenyCIDRs)
 		if err != nil {
-			return nil, err
+			return nil, fmt.Errorf("relay auth at %d ip restriction: %w", i, err)
 		}
 		auths[i] = selfhosted.RelayAuthentication{
 			Token: tokens[i],

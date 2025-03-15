@@ -32,7 +32,7 @@ func NewServer(opts ...ServerOption) (*Server, error) {
 	}
 	for _, opt := range opts {
 		if err := opt(cfg); err != nil {
-			return nil, fmt.Errorf("server option: %w", err)
+			return nil, fmt.Errorf("apply configuration option: %w", err)
 		}
 	}
 
@@ -176,7 +176,7 @@ func ServerCertificate(certFile, keyFile string) ServerOption {
 	return func(cfg *serverConfig) error {
 		cert, err := tls.LoadX509KeyPair(certFile, keyFile)
 		if err != nil {
-			return fmt.Errorf("server control cert: %w", err)
+			return fmt.Errorf("cannot load server certificate: %w", err)
 		}
 
 		cfg.cert = cert
@@ -189,7 +189,7 @@ func ServerClientsAddress(address string) ServerOption {
 	return func(cfg *serverConfig) error {
 		addr, err := net.ResolveUDPAddr("udp", address)
 		if err != nil {
-			return fmt.Errorf("server control address: %w", err)
+			return fmt.Errorf("cannot resolve client address: %w", err)
 		}
 
 		cfg.clientsAddr = addr
@@ -202,7 +202,7 @@ func ServerClientRestrictions(allow []string, deny []string) ServerOption {
 	return func(cfg *serverConfig) error {
 		iprestr, err := restr.ParseIP(allow, deny)
 		if err != nil {
-			return err
+			return fmt.Errorf("cannot parse client restrictions: %w", err)
 		}
 
 		cfg.clientsRestr = iprestr
@@ -236,7 +236,7 @@ func ServerRelayAddress(address string) ServerOption {
 	return func(cfg *serverConfig) error {
 		addr, err := net.ResolveUDPAddr("udp", address)
 		if err != nil {
-			return fmt.Errorf("server relay address: %w", err)
+			return fmt.Errorf("cannot resolve relay address: %w", err)
 		}
 
 		cfg.relayAddr = addr
@@ -256,7 +256,7 @@ func ServerStatusAddress(address string) ServerOption {
 	return func(cfg *serverConfig) error {
 		addr, err := net.ResolveTCPAddr("tcp", address)
 		if err != nil {
-			return fmt.Errorf("server status address: %w", err)
+			return fmt.Errorf("cannot resolve status address: %w", err)
 		}
 
 		cfg.statusAddr = addr
@@ -276,7 +276,7 @@ func serverStoreDirTemp() ServerOption {
 	return func(cfg *serverConfig) error {
 		tmpDir, err := os.MkdirTemp("", "connet-server-")
 		if err != nil {
-			return fmt.Errorf("server create tmp dir: %w", err)
+			return fmt.Errorf("server create /tmp dir: %w", err)
 		}
 		cfg.dir = tmpDir
 		return nil

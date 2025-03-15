@@ -1,6 +1,7 @@
 package restr
 
 import (
+	"fmt"
 	"net"
 	"net/netip"
 
@@ -16,12 +17,12 @@ type IP struct {
 func ParseIP(allowsStr []string, deniesStr []string) (IP, error) {
 	allows, err := netc.ParseCIDRs(allowsStr)
 	if err != nil {
-		return IP{}, err
+		return IP{}, fmt.Errorf("parse allow cidrs %v: %w", allowsStr, err)
 	}
 
 	denies, err := netc.ParseCIDRs(deniesStr)
 	if err != nil {
-		return IP{}, err
+		return IP{}, fmt.Errorf("parse deny cidrs: %w", err)
 	}
 
 	return IP{allows, denies}, nil
