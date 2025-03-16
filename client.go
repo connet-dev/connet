@@ -42,30 +42,30 @@ func NewClient(opts ...ClientOption) (*Client, error) {
 	}
 	for _, opt := range opts {
 		if err := opt(cfg); err != nil {
-			return nil, fmt.Errorf("client option: %w", err)
+			return nil, err
 		}
 	}
 
 	if cfg.controlAddr == nil {
 		if err := ClientControlAddress("127.0.0.1:19190")(cfg); err != nil {
-			return nil, fmt.Errorf("client default control address: %w", err)
+			return nil, fmt.Errorf("default control address: %w", err)
 		}
 	}
 
 	if cfg.directAddr == nil {
 		if err := ClientDirectAddress(":19192")(cfg); err != nil {
-			return nil, fmt.Errorf("client default direct address: %w", err)
+			return nil, fmt.Errorf("default direct address: %w", err)
 		}
 	}
 
 	if len(cfg.destinations) == 0 && len(cfg.sources) == 0 {
 		// TODO fix this
-		return nil, fmt.Errorf("client missing destination or source")
+		return nil, fmt.Errorf("missing destination or source")
 	}
 
 	rootCert, err := certc.NewRoot()
 	if err != nil {
-		return nil, fmt.Errorf("client root cert: %w", err)
+		return nil, fmt.Errorf("create root cert: %w", err)
 	}
 	cfg.logger.Debug("generated root cert")
 
@@ -83,7 +83,7 @@ func (c *Client) Run(ctx context.Context) error {
 	c.logger.Debug("start udp listener")
 	udpConn, err := net.ListenUDP("udp", c.directAddr)
 	if err != nil {
-		return fmt.Errorf("client listen: %w", err)
+		return fmt.Errorf("listen direct address: %w", err)
 	}
 	defer udpConn.Close()
 
@@ -93,14 +93,14 @@ func (c *Client) Run(ctx context.Context) error {
 
 	ds, err := client.NewDirectServer(transport, c.logger)
 	if err != nil {
-		return fmt.Errorf("client direct server: %w", err)
+		return fmt.Errorf("create direct server: %w", err)
 	}
 
 	c.dsts = map[model.Forward]*client.Destination{}
 	for fwd, cfg := range c.destinations {
 		c.dsts[fwd], err = client.NewDestination(cfg, ds, c.rootCert, c.logger)
 		if err != nil {
-			return fmt.Errorf("client destination: %w", err)
+			return fmt.Errorf("create destination %s: %w", fwd, err)
 		}
 	}
 
@@ -108,7 +108,7 @@ func (c *Client) Run(ctx context.Context) error {
 	for fwd, cfg := range c.sources {
 		c.srcs[fwd], err = client.NewSource(cfg, ds, c.rootCert, c.logger)
 		if err != nil {
-			return fmt.Errorf("client source: %w", err)
+			return fmt.Errorf("client source %s: %w", fwd, err)
 		}
 	}
 
@@ -346,12 +346,12 @@ func ClientControlCAs(certFile string) ClientOption {
 	return func(cfg *clientConfig) error {
 		casData, err := os.ReadFile(certFile)
 		if err != nil {
-			return fmt.Errorf("client control certs file: %w", err)
+			return fmt.Errorf("read server CAs: %w", err)
 		}
 
 		cas := x509.NewCertPool()
 		if !cas.AppendCertsFromPEM(casData) {
-			return fmt.Errorf("client control certs missing in %s", certFile)
+			return fmt.Errorf("missing client CA certificate")
 		}
 
 		cfg.controlCAs = cas
@@ -372,7 +372,7 @@ func ClientDirectAddress(address string) ClientOption {
 	return func(cfg *clientConfig) error {
 		addr, err := net.ResolveUDPAddr("udp", address)
 		if err != nil {
-			return fmt.Errorf("client direct address: %w", err)
+			return fmt.Errorf("resolve direct address: %w", err)
 		}
 
 		cfg.directAddr = addr
@@ -385,7 +385,7 @@ func ClientStatusAddress(address string) ClientOption {
 	return func(cfg *clientConfig) error {
 		addr, err := net.ResolveTCPAddr("tcp", address)
 		if err != nil {
-			return fmt.Errorf("client status address: %w", err)
+			return fmt.Errorf("resolve status address: %w", err)
 		}
 
 		cfg.statusAddr = addr

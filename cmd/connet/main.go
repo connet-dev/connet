@@ -379,7 +379,7 @@ func checkCmd() *cobra.Command {
 		Args:  cobra.ExactArgs(1),
 	}
 
-	cmd.RunE = func(_ *cobra.Command, args []string) error {
+	cmd.RunE = wrapErr("run configuration check", func(_ *cobra.Command, args []string) error {
 		cfg, err := loadConfig(args[0])
 		if err != nil {
 			return err
@@ -390,7 +390,7 @@ func checkCmd() *cobra.Command {
 		}
 
 		return nil
-	}
+	})
 
 	return cmd
 }
@@ -481,11 +481,11 @@ func clientRun(ctx context.Context, cfg ClientConfig, logger *slog.Logger) error
 	for name, fc := range cfg.Destinations {
 		route, err := parseRouteOption(fc.Route)
 		if err != nil {
-			return err
+			return fmt.Errorf("parse route option for destination '%s': %w", name, err)
 		}
 		proxy, err := parseProxyVersion(fc.ProxyProtoVersion)
 		if err != nil {
-			return err
+			return fmt.Errorf("parse proxy proto version for destination '%s': %w", name, err)
 		}
 		if fc.FileServerRoot != "" {
 			srvs = append(srvs, &netc.FileServer{Addr: fc.Addr, Root: fc.FileServerRoot})
@@ -497,7 +497,7 @@ func clientRun(ctx context.Context, cfg ClientConfig, logger *slog.Logger) error
 	for name, fc := range cfg.Sources {
 		route, err := parseRouteOption(fc.Route)
 		if err != nil {
-			return err
+			return fmt.Errorf("parse route option for source '%s': %w", name, err)
 		}
 		opts = append(opts, connet.ClientSource(
 			client.NewSourceConfig(name, fc.Addr).WithRoute(route)))
@@ -507,7 +507,7 @@ func clientRun(ctx context.Context, cfg ClientConfig, logger *slog.Logger) error
 
 	cl, err := connet.NewClient(opts...)
 	if err != nil {
-		return fmt.Errorf("client create: %w", err)
+		return fmt.Errorf("create client: %w", err)
 	}
 	if len(srvs) > 0 {
 		g, ctx := errgroup.WithContext(ctx)
@@ -567,7 +567,7 @@ func serverRun(ctx context.Context, cfg ServerConfig, logger *slog.Logger) error
 
 	srv, err := connet.NewServer(opts...)
 	if err != nil {
-		return fmt.Errorf("cannot create server: %w", err)
+		return fmt.Errorf("create server: %w", err)
 	}
 	return srv.Run(ctx)
 }
@@ -663,7 +663,7 @@ func controlRun(ctx context.Context, cfg ControlConfig, logger *slog.Logger) err
 
 	srv, err := control.NewServer(controlCfg)
 	if err != nil {
-		return fmt.Errorf("control server create: %w", err)
+		return fmt.Errorf("create control server: %w", err)
 	}
 	return srv.Run(ctx)
 }
@@ -745,7 +745,7 @@ func relayRun(ctx context.Context, cfg RelayConfig, logger *slog.Logger) error {
 
 	srv, err := relay.NewServer(relayCfg)
 	if err != nil {
-		return fmt.Errorf("relay server create: %w", err)
+		return fmt.Errorf("create relay server: %w", err)
 	}
 	return srv.Run(ctx)
 }
