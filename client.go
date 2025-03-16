@@ -171,7 +171,7 @@ func (c *Client) connect(ctx context.Context, transport *quic.Transport, retoken
 
 	authStream, err := conn.OpenStreamSync(ctx)
 	if err != nil {
-		return nil, nil, fmt.Errorf("open auth stream: %w", err)
+		return nil, nil, fmt.Errorf("open authentication stream: %w", err)
 	}
 	defer authStream.Close()
 
@@ -179,15 +179,15 @@ func (c *Client) connect(ctx context.Context, transport *quic.Transport, retoken
 		Token:          c.token,
 		ReconnectToken: retoken,
 	}); err != nil {
-		return nil, nil, fmt.Errorf("write auth: %w", err)
+		return nil, nil, fmt.Errorf("write authentication: %w", err)
 	}
 
 	resp := &pbs.AuthenticateResp{}
 	if err := pb.Read(authStream, resp); err != nil {
-		return nil, nil, fmt.Errorf("read auth: %w", err)
+		return nil, nil, fmt.Errorf("authentication read failed: %w", err)
 	}
 	if resp.Error != nil {
-		return nil, nil, fmt.Errorf("auth: %w", resp.Error)
+		return nil, nil, fmt.Errorf("authentication failed: %w", resp.Error)
 	}
 
 	localAddrs, err := netc.LocalAddrs()

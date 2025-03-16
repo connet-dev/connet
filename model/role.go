@@ -32,7 +32,7 @@ func ParseRole(s string) (Role, error) {
 	case Source.string:
 		return Source, nil
 	}
-	return UnknownRole, fmt.Errorf("unknown role: %s", s)
+	return UnknownRole, fmt.Errorf("invalid role '%s'", s)
 }
 
 func (r Role) PB() pb.Role {
@@ -72,7 +72,7 @@ func (r *Role) UnmarshalText(b []byte) error {
 	case Source.string:
 		*r = Source
 	default:
-		return fmt.Errorf("unknown role: %s", s)
+		return fmt.Errorf("invalid role '%s'", s)
 	}
 	return nil
 }

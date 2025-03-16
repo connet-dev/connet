@@ -53,7 +53,7 @@ func (s peerStyle) String() string {
 	case peerRelay:
 		return "relay"
 	default:
-		panic("unknown style")
+		panic("invalid style")
 	}
 }
 

@@ -35,7 +35,7 @@ func ParseProxyVersion(s string) (ProxyVersion, error) {
 	case ProxyV2.string:
 		return ProxyV2, nil
 	}
-	return ProxyNone, fmt.Errorf("unknown proxy proto version: %s", s)
+	return ProxyNone, fmt.Errorf("invalid proxy proto version: %s", s)
 }
 
 func (v ProxyVersion) PB() pbc.ProxyProtoVersion {

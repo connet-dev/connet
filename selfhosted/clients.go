@@ -24,7 +24,7 @@ type clientsAuthenticator struct {
 func (s *clientsAuthenticator) Authenticate(token string, addr net.Addr) (control.ClientAuthentication, error) {
 	r, ok := s.tokens[token]
 	if !ok {
-		return nil, pb.NewError(pb.Error_AuthenticationFailed, "unknown token")
+		return nil, pb.NewError(pb.Error_AuthenticationFailed, "token not found")
 	}
 	if !r.IPs.IsAllowedAddr(addr) {
 		return nil, pb.NewError(pb.Error_AuthenticationFailed, "address not allowed: %s", addr)

@@ -19,7 +19,7 @@ func ParseRouteOption(s string) (RouteOption, error) {
 	case RouteRelay.string:
 		return RouteRelay, nil
 	}
-	return RouteOption{}, fmt.Errorf("unknown route option: %s", s)
+	return RouteOption{}, fmt.Errorf("invalid route option '%s'", s)
 }
 
 func (r RouteOption) AllowFrom(from RouteOption) bool {
