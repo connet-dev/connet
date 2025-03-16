@@ -419,7 +419,7 @@ by adding account management and it is one of the easiest way to start.
 
 ### v0.6.0
  - [x] nixos testing
- - [ ] error wrapping
+ - [x] error wrapping
  - [ ] client stateless reset key (home dir by default, remove /tmp)
  - [ ] token passed from cmd should override tokenfile from config
 
