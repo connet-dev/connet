@@ -420,8 +420,9 @@ by adding account management and it is one of the easiest way to start.
 ### v0.6.0
  - [x] nixos testing
  - [x] error wrapping
- - [ ] client stateless reset key (XDG cache/data dir by default, remove /tmp)
+ - [ ] support for multiple config files
  - [ ] token passed from cmd should override tokenfile from config
+ - [ ] client stateless reset key (XDG cache/data dir by default, remove /tmp)
  - [ ] client versioning support
  - [ ] untrusted relay encryption
 

@@ -180,7 +180,7 @@ func rootCmd() *cobra.Command {
 	cmd.AddCommand(relayCmd())
 	cmd.AddCommand(checkCmd())
 
-	filename := cmd.Flags().String("config", "", "config file to load")
+	filenames := cmd.Flags().StringArray("config", nil, "config file to load")
 
 	var flagsConfig Config
 	cmd.Flags().StringVar(&flagsConfig.LogLevel, "log-level", "", "log level to use")
@@ -209,7 +209,7 @@ func rootCmd() *cobra.Command {
 	cmd.Flags().StringVar(&srcCfg.Route, "src-route", "", "source route")
 
 	cmd.RunE = wrapErr("run connet client", func(cmd *cobra.Command, _ []string) error {
-		cfg, err := loadConfig(*filename)
+		cfg, err := loadConfigs(*filenames)
 		if err != nil {
 			return fmt.Errorf("load config: %w", err)
 		}
@@ -240,7 +240,7 @@ func serverCmd() *cobra.Command {
 		Short: "run connet server",
 	}
 
-	filename := cmd.Flags().String("config", "", "config file to load")
+	filenames := cmd.Flags().StringArray("config", nil, "config file to load")
 
 	var flagsConfig Config
 	cmd.Flags().StringVar(&flagsConfig.LogLevel, "log-level", "", "log level to use")
@@ -262,7 +262,7 @@ func serverCmd() *cobra.Command {
 	cmd.Flags().StringVar(&flagsConfig.Server.StoreDir, "store-dir", "", "storage dir, /tmp subdirectory if empty")
 
 	cmd.RunE = wrapErr("run connet server", func(cmd *cobra.Command, _ []string) error {
-		cfg, err := loadConfig(*filename)
+		cfg, err := loadConfigs(*filenames)
 		if err != nil {
 			return fmt.Errorf("load config: %w", err)
 		}
@@ -286,7 +286,7 @@ func controlCmd() *cobra.Command {
 		Short: "run connet control server",
 	}
 
-	filename := cmd.Flags().String("config", "", "config file to load")
+	filenames := cmd.Flags().StringArray("config", nil, "config file to load")
 
 	var flagsConfig Config
 	cmd.Flags().StringVar(&flagsConfig.LogLevel, "log-level", "", "log level to use")
@@ -311,7 +311,7 @@ func controlCmd() *cobra.Command {
 	cmd.Flags().StringVar(&flagsConfig.Control.StoreDir, "store-dir", "", "storage dir, /tmp subdirectory if empty")
 
 	cmd.RunE = wrapErr("run connet control server", func(cmd *cobra.Command, _ []string) error {
-		cfg, err := loadConfig(*filename)
+		cfg, err := loadConfigs(*filenames)
 		if err != nil {
 			return fmt.Errorf("load config: %w", err)
 		}
@@ -335,7 +335,7 @@ func relayCmd() *cobra.Command {
 		Short: "run connet relay server",
 	}
 
-	filename := cmd.Flags().String("config", "", "config file to load")
+	filenames := cmd.Flags().StringArray("config", nil, "config file to load")
 
 	var flagsConfig Config
 	cmd.Flags().StringVar(&flagsConfig.LogLevel, "log-level", "", "log level to use")
@@ -354,7 +354,7 @@ func relayCmd() *cobra.Command {
 	cmd.Flags().StringVar(&flagsConfig.Relay.StoreDir, "store-dir", "", "storage dir, /tmp subdirectory if empty")
 
 	cmd.RunE = wrapErr("run connet relay server", func(cmd *cobra.Command, _ []string) error {
-		cfg, err := loadConfig(*filename)
+		cfg, err := loadConfigs(*filenames)
 		if err != nil {
 			return fmt.Errorf("load config: %w", err)
 		}
@@ -380,7 +380,7 @@ func checkCmd() *cobra.Command {
 	}
 
 	cmd.RunE = wrapErr("run configuration check", func(_ *cobra.Command, args []string) error {
-		cfg, err := loadConfig(args[0])
+		cfg, err := loadConfigFrom(args[0])
 		if err != nil {
 			return err
 		}
@@ -395,11 +395,23 @@ func checkCmd() *cobra.Command {
 	return cmd
 }
 
-func loadConfig(file string) (Config, error) {
-	var cfg Config
-	if file == "" {
-		return cfg, nil
+func loadConfigs(files []string) (Config, error) {
+	var merged Config
+
+	for _, f := range files {
+		cfg, err := loadConfigFrom(f)
+		if err != nil {
+			return Config{}, fmt.Errorf("load config %s: %w", f, err)
+		}
+		merged.merge(cfg)
 	}
+
+	return merged, nil
+}
+
+func loadConfigFrom(file string) (Config, error) {
+	var cfg Config
+
 	f, err := os.Open(file)
 	if err != nil {
 		return cfg, err
@@ -855,8 +867,10 @@ func (c *Config) merge(o Config) {
 }
 
 func (c *ClientConfig) merge(o ClientConfig) {
-	c.Token = override(c.Token, o.Token)
-	c.TokenFile = override(c.TokenFile, o.TokenFile)
+	if o.Token != "" || o.TokenFile != "" { // new config completely overrides token
+		c.Token = o.Token
+		c.TokenFile = o.TokenFile
+	}
 
 	c.ServerAddr = override(c.ServerAddr, o.ServerAddr)
 	c.ServerCAs = override(c.ServerCAs, o.ServerCAs)
@@ -880,14 +894,23 @@ func (c *ClientConfig) merge(o ClientConfig) {
 }
 
 func (c *ServerConfig) merge(o ServerConfig) {
-	c.Addr = override(c.Addr, o.Addr)
 	c.Cert = override(c.Cert, o.Cert)
 	c.Key = override(c.Key, o.Key)
 
+	c.Addr = override(c.Addr, o.Addr)
 	c.IPRestriction.AllowCIDRs = append(c.IPRestriction.AllowCIDRs, o.IPRestriction.AllowCIDRs...)
 	c.IPRestriction.DenyCIDRs = append(c.IPRestriction.DenyCIDRs, o.IPRestriction.DenyCIDRs...)
-	c.Tokens = append(c.Tokens, o.Tokens...)
-	c.TokensFile = override(c.TokensFile, o.TokensFile)
+	if len(o.Tokens) > 0 || o.TokensFile != "" { // new config completely overrides tokens
+		c.Tokens = o.Tokens
+		c.TokensFile = o.TokensFile
+	}
+	if len(c.TokenRestrictions) == len(o.TokenRestrictions) {
+		for i := range c.TokenRestrictions {
+			c.TokenRestrictions[i] = mergeTokenRestriction(c.TokenRestrictions[i], o.TokenRestrictions[i])
+		}
+	} else if len(o.TokenRestrictions) > 0 {
+		c.TokenRestrictions = o.TokenRestrictions
+	}
 
 	c.RelayAddr = override(c.RelayAddr, o.RelayAddr)
 	c.RelayHostname = override(c.RelayHostname, o.RelayHostname)
@@ -903,22 +926,42 @@ func (c *ControlConfig) merge(o ControlConfig) {
 	c.ClientsAddr = override(c.ClientsAddr, o.ClientsAddr)
 	c.ClientsIPRestriction.AllowCIDRs = append(c.ClientsIPRestriction.AllowCIDRs, o.ClientsIPRestriction.AllowCIDRs...)
 	c.ClientsIPRestriction.DenyCIDRs = append(c.ClientsIPRestriction.DenyCIDRs, o.ClientsIPRestriction.DenyCIDRs...)
-	c.ClientsTokens = append(c.ClientsTokens, o.ClientsTokens...)
-	c.ClientsTokensFile = override(c.ClientsTokensFile, o.ClientsTokensFile)
+	if len(o.ClientsTokens) > 0 || o.ClientsTokensFile != "" { // new config completely overrides tokens
+		c.ClientsTokens = o.ClientsTokens
+		c.ClientsTokensFile = o.ClientsTokensFile
+	}
+	if len(c.ClientsTokenRestrictions) == len(o.ClientsTokenRestrictions) {
+		for i := range c.ClientsTokenRestrictions {
+			c.ClientsTokenRestrictions[i] = mergeTokenRestriction(c.ClientsTokenRestrictions[i], o.ClientsTokenRestrictions[i])
+		}
+	} else if len(o.ClientsTokenRestrictions) > 0 {
+		c.ClientsTokenRestrictions = o.ClientsTokenRestrictions
+	}
 
 	c.RelaysAddr = override(c.RelaysAddr, o.RelaysAddr)
 	c.RelaysIPRestriction.AllowCIDRs = append(c.RelaysIPRestriction.AllowCIDRs, o.RelaysIPRestriction.AllowCIDRs...)
 	c.RelaysIPRestriction.DenyCIDRs = append(c.RelaysIPRestriction.DenyCIDRs, o.RelaysIPRestriction.DenyCIDRs...)
-	c.RelaysTokens = append(c.RelaysTokens, o.RelaysTokens...)
-	c.RelaysTokensFile = override(c.RelaysTokensFile, o.RelaysTokensFile)
+	if len(o.RelaysTokens) > 0 || o.RelaysTokensFile != "" { // new config completely overrides tokens
+		c.RelaysTokens = o.RelaysTokens
+		c.RelaysTokensFile = o.RelaysTokensFile
+	}
+	if len(c.RelaysTokenIPRestrictions) == len(o.RelaysTokenIPRestrictions) {
+		for i := range c.RelaysTokenIPRestrictions {
+			c.RelaysTokenIPRestrictions[i] = mergeIPRestriction(c.RelaysTokenIPRestrictions[i], o.RelaysTokenIPRestrictions[i])
+		}
+	} else if len(o.RelaysTokenIPRestrictions) > 0 {
+		c.RelaysTokenIPRestrictions = o.RelaysTokenIPRestrictions
+	}
 
 	c.StatusAddr = override(c.StatusAddr, o.StatusAddr)
 	c.StoreDir = override(c.StoreDir, o.StoreDir)
 }
 
 func (c *RelayConfig) merge(o RelayConfig) {
-	c.Token = override(c.Token, o.Token)
-	c.TokenFile = override(c.TokenFile, o.TokenFile)
+	if o.Token != "" && o.TokenFile != "" { // new config completely overrides token
+		c.Token = o.Token
+		c.TokenFile = o.TokenFile
+	}
 
 	c.Addr = override(c.Addr, o.Addr)
 	c.Hostname = override(c.Hostname, o.Hostname)
@@ -932,9 +975,10 @@ func (c *RelayConfig) merge(o RelayConfig) {
 
 func mergeDestinationConfig(c, o DestinationConfig) DestinationConfig {
 	return DestinationConfig{
-		Addr:           override(c.Addr, o.Addr),
-		FileServerRoot: override(c.FileServerRoot, o.FileServerRoot),
-		Route:          override(c.Route, o.Route),
+		Addr:              override(c.Addr, o.Addr),
+		Route:             override(c.Route, o.Route),
+		ProxyProtoVersion: override(c.ProxyProtoVersion, o.ProxyProtoVersion),
+		FileServerRoot:    override(c.FileServerRoot, o.FileServerRoot),
 	}
 }
 
@@ -942,6 +986,22 @@ func mergeSourceConfig(c, o SourceConfig) SourceConfig {
 	return SourceConfig{
 		Addr:  override(c.Addr, o.Addr),
 		Route: override(c.Route, o.Route),
+	}
+}
+
+func mergeTokenRestriction(c, o TokenRestriction) TokenRestriction {
+	return TokenRestriction{
+		AllowCIDRs:  append(c.AllowCIDRs, o.AllowCIDRs...),
+		DenyCIDRs:   append(c.DenyCIDRs, o.DenyCIDRs...),
+		NameMatches: override(c.NameMatches, o.NameMatches),
+		RoleMatches: override(c.RoleMatches, o.RoleMatches),
+	}
+}
+
+func mergeIPRestriction(c, o IPRestriction) IPRestriction {
+	return IPRestriction{
+		AllowCIDRs: append(c.AllowCIDRs, o.AllowCIDRs...),
+		DenyCIDRs:  append(c.DenyCIDRs, o.DenyCIDRs...),
 	}
 }
 
