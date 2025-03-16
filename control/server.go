@@ -3,6 +3,7 @@ package control
 import (
 	"context"
 	"crypto/tls"
+	"fmt"
 	"log/slog"
 	"net"
 
@@ -33,17 +34,17 @@ type Config struct {
 func NewServer(cfg Config) (*Server, error) {
 	configStore, err := cfg.Stores.Config()
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("config store open: %w", err)
 	}
 
 	relays, err := newRelayServer(cfg.RelaysAddr, cfg.Cert, cfg.RelaysAuth, cfg.RelaysRestr, configStore, cfg.Stores, cfg.Logger)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("create relay server: %w", err)
 	}
 
 	clients, err := newClientServer(cfg.ClientsAddr, cfg.Cert, cfg.ClientsAuth, cfg.ClientsRestr, relays, configStore, cfg.Stores, cfg.Logger)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("create client server: %w", err)
 	}
 
 	return &Server{

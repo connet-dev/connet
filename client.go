@@ -351,7 +351,7 @@ func ClientControlCAs(certFile string) ClientOption {
 
 		cas := x509.NewCertPool()
 		if !cas.AppendCertsFromPEM(casData) {
-			return fmt.Errorf("missing client CA certificate")
+			return fmt.Errorf("missing server CA certificate in %s", certFile)
 		}
 
 		cfg.controlCAs = cas

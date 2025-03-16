@@ -580,7 +580,7 @@ func controlRun(ctx context.Context, cfg ControlConfig, logger *slog.Logger) err
 	if cfg.Cert != "" {
 		cert, err := tls.LoadX509KeyPair(cfg.Cert, cfg.Key)
 		if err != nil {
-			return fmt.Errorf("control cert: %w", err)
+			return fmt.Errorf("load server certificate: %w", err)
 		}
 		controlCfg.Cert = cert
 	}
@@ -590,14 +590,14 @@ func controlRun(ctx context.Context, cfg ControlConfig, logger *slog.Logger) err
 	}
 	clientAddr, err := net.ResolveUDPAddr("udp", cfg.ClientsAddr)
 	if err != nil {
-		return fmt.Errorf("control client address: %w", err)
+		return fmt.Errorf("resolve clients address: %w", err)
 	}
 	controlCfg.ClientsAddr = clientAddr
 
 	if len(cfg.ClientsIPRestriction.AllowCIDRs) > 0 || len(cfg.ClientsIPRestriction.DenyCIDRs) > 0 {
 		iprestr, err := restr.ParseIP(cfg.ClientsIPRestriction.AllowCIDRs, cfg.ClientsIPRestriction.DenyCIDRs)
 		if err != nil {
-			return err
+			return fmt.Errorf("parse client restrictions: %w", err)
 		}
 		controlCfg.ClientsRestr = iprestr
 	}
@@ -606,7 +606,7 @@ func controlRun(ctx context.Context, cfg ControlConfig, logger *slog.Logger) err
 	if cfg.ClientsTokensFile != "" {
 		clientTokens, err = loadTokens(cfg.ClientsTokensFile)
 		if err != nil {
-			return err
+			return fmt.Errorf("load clients tokens: %w", err)
 		}
 	}
 	controlCfg.ClientsAuth, err = parseClientAuth(clientTokens, cfg.ClientsTokenRestrictions)
@@ -619,14 +619,14 @@ func controlRun(ctx context.Context, cfg ControlConfig, logger *slog.Logger) err
 	}
 	relayAddr, err := net.ResolveUDPAddr("udp", cfg.RelaysAddr)
 	if err != nil {
-		return fmt.Errorf("control relay address: %w", err)
+		return fmt.Errorf("resolve relays address: %w", err)
 	}
 	controlCfg.RelaysAddr = relayAddr
 
 	if len(cfg.RelaysIPRestriction.AllowCIDRs) > 0 || len(cfg.RelaysIPRestriction.DenyCIDRs) > 0 {
 		iprestr, err := restr.ParseIP(cfg.RelaysIPRestriction.AllowCIDRs, cfg.RelaysIPRestriction.DenyCIDRs)
 		if err != nil {
-			return err
+			return fmt.Errorf("parse relays ip restriction: %w", err)
 		}
 		controlCfg.RelaysRestr = iprestr
 	}
@@ -635,7 +635,7 @@ func controlRun(ctx context.Context, cfg ControlConfig, logger *slog.Logger) err
 	if cfg.RelaysTokensFile != "" {
 		relayTokens, err = loadTokens(cfg.RelaysTokensFile)
 		if err != nil {
-			return err
+			return fmt.Errorf("load relays tokens: %w", err)
 		}
 	}
 	controlCfg.RelaysAuth, err = parseRelayAuth(relayTokens, cfg.RelaysTokenIPRestrictions)
@@ -646,7 +646,7 @@ func controlRun(ctx context.Context, cfg ControlConfig, logger *slog.Logger) err
 	if cfg.StatusAddr != "" {
 		statusAddr, err := net.ResolveTCPAddr("tcp", cfg.StatusAddr)
 		if err != nil {
-			return fmt.Errorf("control status address: %w", err)
+			return fmt.Errorf("resolve status address: %w", err)
 		}
 		controlCfg.StatusAddr = statusAddr
 	}
@@ -654,7 +654,7 @@ func controlRun(ctx context.Context, cfg ControlConfig, logger *slog.Logger) err
 	if cfg.StoreDir == "" {
 		dir, err := os.MkdirTemp("", "connet-control-")
 		if err != nil {
-			return err
+			return fmt.Errorf("create /tmp dir: %w", err)
 		}
 		logger.Info("using temporary store directory", "dir", dir)
 		cfg.StoreDir = dir
@@ -691,7 +691,7 @@ func relayRun(ctx context.Context, cfg RelayConfig, logger *slog.Logger) error {
 	}
 	serverAddr, err := net.ResolveUDPAddr("udp", cfg.Addr)
 	if err != nil {
-		return fmt.Errorf("relay server address: %w", err)
+		return fmt.Errorf("resolve server address: %w", err)
 	}
 	relayCfg.Addr = serverAddr
 
@@ -702,33 +702,33 @@ func relayRun(ctx context.Context, cfg RelayConfig, logger *slog.Logger) error {
 	}
 	controlAddr, err := net.ResolveUDPAddr("udp", cfg.ControlAddr)
 	if err != nil {
-		return fmt.Errorf("relay control address: %w", err)
+		return fmt.Errorf("resolve control address: %w", err)
 	}
 	relayCfg.ControlAddr = controlAddr
 
 	if cfg.ControlCAs != "" {
 		casData, err := os.ReadFile(cfg.ControlCAs)
 		if err != nil {
-			return fmt.Errorf("relay control cert file: %w", err)
+			return fmt.Errorf("read server CAs: %w", err)
 		}
 
 		cas := x509.NewCertPool()
 		if !cas.AppendCertsFromPEM(casData) {
-			return fmt.Errorf("relay no certificates found in %s", cfg.ControlCAs)
+			return fmt.Errorf("missing server CA certificate in %s", cfg.ControlCAs)
 		}
 		relayCfg.ControlCAs = cas
 	}
 
 	controlHost, _, err := net.SplitHostPort(cfg.ControlAddr)
 	if err != nil {
-		return err
+		return fmt.Errorf("split control address: %w", err)
 	}
 	relayCfg.ControlHost = controlHost
 
 	if cfg.StatusAddr != "" {
 		statusAddr, err := net.ResolveTCPAddr("tcp", cfg.StatusAddr)
 		if err != nil {
-			return fmt.Errorf("relay status address cannot: %w", err)
+			return fmt.Errorf("resolve status address: %w", err)
 		}
 		relayCfg.StatusAddr = statusAddr
 	}
@@ -736,7 +736,7 @@ func relayRun(ctx context.Context, cfg RelayConfig, logger *slog.Logger) error {
 	if cfg.StoreDir == "" {
 		dir, err := os.MkdirTemp("", "connet-relay-")
 		if err != nil {
-			return err
+			return fmt.Errorf("create /tmp dir: %w", err)
 		}
 		logger.Info("using temporary store directory", "dir", dir)
 		cfg.StoreDir = dir

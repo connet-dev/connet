@@ -420,17 +420,18 @@ by adding account management and it is one of the easiest way to start.
 ### v0.6.0
  - [x] nixos testing
  - [ ] error wrapping
+ - [ ] client stateless reset key (home dir by default, remove /tmp)
+ - [ ] token passed from cmd should override tokenfile from config
 
 ## Future
 
  - [ ] UDP support
+ - [ ] client versioning support
  - [ ] zip and name windows executable .exe
  - [ ] notarize mac app
  - [ ] Gen config
  - [ ] http source
- - [ ] client stateless reset key
  - [ ] systemd dynamic user in nixos
- - [ ] client versioning support
  - [ ] UPnP and other methods for hole-punching
  - [ ] Docs section for building the project
  - [ ] Docs section for embedding into golang programs
