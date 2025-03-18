@@ -420,24 +420,25 @@ func ClientDirectStatelessResetKeyFile(path string) ClientOption {
 
 func clientDirectStatelessResetKey() ClientOption {
 	return func(cfg *clientConfig) error {
-		var path string
+		var name = fmt.Sprintf("%d-stateless-reset.key", cfg.directAddr.Port)
 
+		var path string
 		if cacheDir := os.Getenv("CACHE_DIRECTORY"); cacheDir != "" {
-			path = filepath.Join(cacheDir, "client-stateless-reset.key")
+			path = filepath.Join(cacheDir, name)
 		} else if userCacheDir, err := os.UserCacheDir(); err == nil {
 			dir := filepath.Join(userCacheDir, "connet")
 			switch _, err := os.Stat(dir); {
 			case err == nil:
 				// the directory is already there, nothing to do
 			case errors.Is(err, os.ErrNotExist):
-				if err := os.Mkdir(dir, 0600); err != nil {
+				if err := os.Mkdir(dir, 0700); err != nil {
 					return fmt.Errorf("mkdir cache dir: %w", err)
 				}
 			default:
 				return fmt.Errorf("stat cache dir: %w", err)
 			}
 
-			path = filepath.Join(dir, "client-stateless-reset.key")
+			path = filepath.Join(dir, name)
 		} else {
 			return nil
 		}
