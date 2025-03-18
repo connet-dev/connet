@@ -135,6 +135,8 @@ in
         Group = cfg.group;
         ExecStart = "${cfg.package}/bin/connet ${if role == "client" then "" else "${role} "} --config /etc/connet-${role}.toml";
         Restart = "on-failure";
+        CacheDirectory = "connet-${role}";
+        CacheDirectoryMode = "0700";
       } // lib.optionalAttrs noStorageSpec {
         StateDirectory = "connet-${role}";
         StateDirectoryMode = "0700";

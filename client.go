@@ -17,7 +17,6 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/adrg/xdg"
 	"github.com/connet-dev/connet/certc"
 	"github.com/connet-dev/connet/client"
 	"github.com/connet-dev/connet/model"
@@ -65,6 +64,9 @@ func NewClient(opts ...ClientOption) (*Client, error) {
 	if cfg.directResetKey == nil {
 		if err := clientDirectStatelessResetKey()(cfg); err != nil {
 			return nil, fmt.Errorf("default stateless reset key: %w", err)
+		}
+		if cfg.directResetKey == nil {
+			cfg.logger.Warn("running without a stateless reset key")
 		}
 	}
 
@@ -401,6 +403,46 @@ func ClientDirectStatelessResetKey(key *quic.StatelessResetKey) ClientOption {
 
 func ClientDirectStatelessResetKeyFile(path string) ClientOption {
 	return func(cfg *clientConfig) error {
+		keyBytes, err := os.ReadFile(path)
+		if err != nil {
+			return fmt.Errorf("read stateless reset key: %w", err)
+		}
+		if len(keyBytes) < 32 {
+			return fmt.Errorf("stateless reset key len %d", len(keyBytes))
+		}
+
+		key := quic.StatelessResetKey(keyBytes)
+		cfg.directResetKey = &key
+
+		return nil
+	}
+}
+
+func clientDirectStatelessResetKey() ClientOption {
+	return func(cfg *clientConfig) error {
+		var path string
+
+		if cacheDir := os.Getenv("CACHE_DIRECTORY"); cacheDir != "" {
+			path = filepath.Join(cacheDir, "client-stateless-reset.key")
+		} else if userCacheDir, err := os.UserCacheDir(); err == nil {
+			// TODO create connet first
+			path = filepath.Join(userCacheDir, "connet", "client-stateless-reset.key")
+		} else {
+			return nil
+		}
+
+		dir := filepath.Dir(path)
+		switch _, err := os.Stat(dir); {
+		case err == nil:
+			// the directory is already there, nothing to do
+		case errors.Is(err, os.ErrNotExist):
+			if err := os.Mkdir(dir, 0600); err != nil {
+				return fmt.Errorf("mkdir cache dir: %w", err)
+			}
+		default:
+			return fmt.Errorf("stat cache dir: %w", err)
+		}
+
 		switch _, err := os.Stat(path); {
 		case err == nil:
 			keyBytes, err := os.ReadFile(path)
@@ -426,29 +468,6 @@ func ClientDirectStatelessResetKeyFile(path string) ClientOption {
 		}
 
 		return nil
-	}
-}
-
-func clientDirectStatelessResetKey() ClientOption {
-	return func(cfg *clientConfig) error {
-		path, err := xdg.CacheFile("connet/client-stateless-reset.key")
-		if err != nil {
-			return fmt.Errorf("get stateless reset key file: %w", err)
-		}
-
-		dir := filepath.Dir(path)
-		switch _, err := os.Stat(dir); {
-		case err == nil:
-			// the directory is already there, nothing to do
-		case errors.Is(err, os.ErrNotExist):
-			if err := os.Mkdir(dir, 0600); err != nil {
-				return fmt.Errorf("mkdir cache dir: %w", err)
-			}
-		default:
-			return fmt.Errorf("stat cache dir: %w", err)
-		}
-
-		return ClientDirectStatelessResetKeyFile(path)(cfg)
 	}
 }
 
