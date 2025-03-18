@@ -425,22 +425,21 @@ func clientDirectStatelessResetKey() ClientOption {
 		if cacheDir := os.Getenv("CACHE_DIRECTORY"); cacheDir != "" {
 			path = filepath.Join(cacheDir, "client-stateless-reset.key")
 		} else if userCacheDir, err := os.UserCacheDir(); err == nil {
-			// TODO create connet first
-			path = filepath.Join(userCacheDir, "connet", "client-stateless-reset.key")
+			dir := filepath.Join(userCacheDir, "connet")
+			switch _, err := os.Stat(dir); {
+			case err == nil:
+				// the directory is already there, nothing to do
+			case errors.Is(err, os.ErrNotExist):
+				if err := os.Mkdir(dir, 0600); err != nil {
+					return fmt.Errorf("mkdir cache dir: %w", err)
+				}
+			default:
+				return fmt.Errorf("stat cache dir: %w", err)
+			}
+
+			path = filepath.Join(dir, "client-stateless-reset.key")
 		} else {
 			return nil
-		}
-
-		dir := filepath.Dir(path)
-		switch _, err := os.Stat(dir); {
-		case err == nil:
-			// the directory is already there, nothing to do
-		case errors.Is(err, os.ErrNotExist):
-			if err := os.Mkdir(dir, 0600); err != nil {
-				return fmt.Errorf("mkdir cache dir: %w", err)
-			}
-		default:
-			return fmt.Errorf("stat cache dir: %w", err)
 		}
 
 		switch _, err := os.Stat(path); {
