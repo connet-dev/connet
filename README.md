@@ -422,7 +422,7 @@ by adding account management and it is one of the easiest way to start.
  - [x] error wrapping
  - [x] support for multiple config files
  - [x] token passed from cmd should override tokenfile from config
- - [ ] client stateless reset key (XDG cache/data dir by default, remove /tmp)
+ - [ ] client stateless reset key (XDG cache dir by default)
  - [ ] client versioning support
  - [ ] untrusted relay encryption
 

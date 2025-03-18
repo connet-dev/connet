@@ -2,18 +2,22 @@ package connet
 
 import (
 	"context"
+	"crypto/rand"
 	"crypto/tls"
 	"crypto/x509"
 	"errors"
 	"fmt"
+	"io"
 	"log/slog"
 	"net"
 	"net/netip"
 	"os"
+	"path/filepath"
 	"strings"
 	"sync/atomic"
 	"time"
 
+	"github.com/adrg/xdg"
 	"github.com/connet-dev/connet/certc"
 	"github.com/connet-dev/connet/client"
 	"github.com/connet-dev/connet/model"
@@ -58,6 +62,12 @@ func NewClient(opts ...ClientOption) (*Client, error) {
 		}
 	}
 
+	if cfg.directResetKey == nil {
+		if err := clientDirectStatelessResetKey()(cfg); err != nil {
+			return nil, fmt.Errorf("default stateless reset key: %w", err)
+		}
+	}
+
 	if len(cfg.destinations) == 0 && len(cfg.sources) == 0 {
 		// TODO fix this
 		return nil, fmt.Errorf("missing destination or source")
@@ -88,7 +98,7 @@ func (c *Client) Run(ctx context.Context) error {
 	defer udpConn.Close()
 
 	c.logger.Debug("start quic listener")
-	transport := quicc.ClientTransport(udpConn)
+	transport := quicc.ClientTransport(udpConn, c.directResetKey)
 	defer transport.Close()
 
 	ds, err := client.NewDirectServer(transport, c.logger)
@@ -302,8 +312,9 @@ type clientConfig struct {
 	controlHost string
 	controlCAs  *x509.CertPool
 
-	directAddr *net.UDPAddr
-	statusAddr *net.TCPAddr
+	directAddr     *net.UDPAddr
+	directResetKey *quic.StatelessResetKey
+	statusAddr     *net.TCPAddr
 
 	destinations map[model.Forward]client.DestinationConfig
 	sources      map[model.Forward]client.SourceConfig
@@ -328,11 +339,11 @@ func ClientControlAddress(address string) ClientOption {
 		}
 		addr, err := net.ResolveUDPAddr("udp", address)
 		if err != nil {
-			return err
+			return fmt.Errorf("resolve control address: %w", err)
 		}
 		host, _, err := net.SplitHostPort(address)
 		if err != nil {
-			return err
+			return fmt.Errorf("split control address: %w", err)
 		}
 
 		cfg.controlAddr = addr
@@ -378,6 +389,66 @@ func ClientDirectAddress(address string) ClientOption {
 		cfg.directAddr = addr
 
 		return nil
+	}
+}
+
+func ClientDirectStatelessResetKey(key *quic.StatelessResetKey) ClientOption {
+	return func(cfg *clientConfig) error {
+		cfg.directResetKey = key
+		return nil
+	}
+}
+
+func ClientDirectStatelessResetKeyFile(path string) ClientOption {
+	return func(cfg *clientConfig) error {
+		switch _, err := os.Stat(path); {
+		case err == nil:
+			keyBytes, err := os.ReadFile(path)
+			if err != nil {
+				return fmt.Errorf("read stateless reset key: %w", err)
+			}
+			if len(keyBytes) < 32 {
+				return fmt.Errorf("stateless reset key len %d", len(keyBytes))
+			}
+			key := quic.StatelessResetKey(keyBytes)
+			cfg.directResetKey = &key
+		case errors.Is(err, os.ErrNotExist):
+			var key quic.StatelessResetKey
+			if _, err := io.ReadFull(rand.Reader, key[:]); err != nil {
+				return fmt.Errorf("generate stateless reset key: %w", err)
+			}
+			if err := os.WriteFile(path, key[:], 0600); err != nil {
+				return fmt.Errorf("write stateless reset key: %w", err)
+			}
+			cfg.directResetKey = &key
+		default:
+			return fmt.Errorf("stat stateless reset key file: %w", err)
+		}
+
+		return nil
+	}
+}
+
+func clientDirectStatelessResetKey() ClientOption {
+	return func(cfg *clientConfig) error {
+		path, err := xdg.CacheFile("connet/client-stateless-reset.key")
+		if err != nil {
+			return fmt.Errorf("get stateless reset key file: %w", err)
+		}
+
+		dir := filepath.Dir(path)
+		switch _, err := os.Stat(dir); {
+		case err == nil:
+			// the directory is already there, nothing to do
+		case errors.Is(err, os.ErrNotExist):
+			if err := os.Mkdir(dir, 0600); err != nil {
+				return fmt.Errorf("mkdir cache dir: %w", err)
+			}
+		default:
+			return fmt.Errorf("stat cache dir: %w", err)
+		}
+
+		return ClientDirectStatelessResetKeyFile(path)(cfg)
 	}
 }
 

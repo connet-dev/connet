@@ -22,7 +22,9 @@ import (
 	"github.com/connet-dev/connet/relay"
 	"github.com/connet-dev/connet/restr"
 	"github.com/connet-dev/connet/selfhosted"
+	"github.com/mr-tron/base58"
 	"github.com/pelletier/go-toml/v2"
+	"github.com/quic-go/quic-go"
 	"github.com/spf13/cobra"
 	"golang.org/x/sync/errgroup"
 )
@@ -45,8 +47,10 @@ type ClientConfig struct {
 	ServerAddr string `toml:"server-addr"`
 	ServerCAs  string `toml:"server-cas"`
 
-	DirectAddr string `toml:"direct-addr"`
-	StatusAddr string `toml:"status-addr"`
+	DirectAddr         string `toml:"direct-addr"`
+	DirectResetKey     string `toml:"direct-stateless-reset-key"`
+	DirectResetKeyFile string `toml:"direct-stateless-reset-key-file"`
+	StatusAddr         string `toml:"status-addr"`
 
 	Destinations map[string]DestinationConfig `toml:"destinations"`
 	Sources      map[string]SourceConfig      `toml:"sources"`
@@ -483,6 +487,20 @@ func clientRun(ctx context.Context, cfg ClientConfig, logger *slog.Logger) error
 
 	if cfg.DirectAddr != "" {
 		opts = append(opts, connet.ClientDirectAddress(cfg.DirectAddr))
+	}
+
+	if cfg.DirectResetKeyFile != "" {
+		opts = append(opts, connet.ClientDirectStatelessResetKeyFile(cfg.DirectResetKeyFile))
+	} else if cfg.DirectResetKey != "" {
+		keyBytes, err := base58.Decode(cfg.DirectResetKey)
+		if err != nil {
+			return fmt.Errorf("decode stateless reset key: %w", err)
+		}
+		if len(keyBytes) < 32 {
+			return fmt.Errorf("stateless reset key len %d", len(keyBytes))
+		}
+		key := quic.StatelessResetKey(keyBytes)
+		opts = append(opts, connet.ClientDirectStatelessResetKey(&key))
 	}
 
 	if cfg.StatusAddr != "" {

@@ -7,10 +7,11 @@ import (
 	"github.com/quic-go/quic-go"
 )
 
-func ClientTransport(conn net.PacketConn) *quic.Transport {
+func ClientTransport(conn net.PacketConn, statelessResetKey *quic.StatelessResetKey) *quic.Transport {
 	return &quic.Transport{
-		Conn:        conn,
-		ConnContext: RTTContext,
+		Conn:              conn,
+		StatelessResetKey: statelessResetKey,
+		ConnContext:       RTTContext,
 		// TODO review other options
 	}
 }
