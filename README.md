@@ -134,6 +134,8 @@ server-addr = "localhost:19190" # the control server address to connect to
 server-cas = "path/to/cert.pem" # the control server certificate
 
 direct-addr = ":19192" # at what address this client listens for direct connections, defaults to :19192
+direct-stateless-reset-key = "" # the quic stateless reset key as a literal 32 byte value in bas58 format
+direct-stateless-reset-key-file = "/path/to/reset/key" # the quic stateless reset key read from a file
 status-addr = "127.0.0.1:19182" # at what address this client listens for status connections, disabled unless set
 
 [client.destinations.serviceX]
@@ -154,6 +156,9 @@ route = "relay" # the kind of route to use
 addr = ":8001" # again, mulitple sources can be defined
 route = "direct" # force only direct communication between clients, even if other end allows any
 ```
+
+If neither `direct-stateless-reset-key` nor `direct-stateless-reset-key-file` has been set, a new key file will be created
+under the user cache dir (`$XDG_CACHE_DIR` or `$HOME/.cache` on linux), prefixed with the direct address. 
 
 ### Server
 
@@ -422,7 +427,7 @@ by adding account management and it is one of the easiest way to start.
  - [x] error wrapping
  - [x] support for multiple config files
  - [x] token passed from cmd should override tokenfile from config
- - [ ] client stateless reset key (XDG cache dir by default)
+ - [x] client stateless reset key (XDG cache dir by default)
  - [ ] client versioning support
  - [ ] untrusted relay encryption
 

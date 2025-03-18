@@ -894,6 +894,10 @@ func (c *ClientConfig) merge(o ClientConfig) {
 	c.ServerCAs = override(c.ServerCAs, o.ServerCAs)
 
 	c.DirectAddr = override(c.DirectAddr, o.DirectAddr)
+	if o.DirectResetKey != "" || o.DirectResetKeyFile != "" {
+		c.DirectResetKey = o.DirectResetKey
+		c.DirectResetKeyFile = o.DirectResetKeyFile
+	}
 	c.StatusAddr = override(c.StatusAddr, o.StatusAddr)
 
 	for k, v := range o.Destinations {
