@@ -2,6 +2,7 @@ package client
 
 import (
 	"context"
+	"crypto/rand"
 	"fmt"
 	"io"
 	"log/slog"
@@ -15,6 +16,7 @@ import (
 	"github.com/connet-dev/connet/pbc"
 	es "github.com/nknorg/encrypted-stream"
 	"github.com/quic-go/quic-go"
+	"golang.org/x/crypto/nacl/box"
 	"golang.org/x/sync/errgroup"
 )
 
@@ -170,7 +172,7 @@ func (d *Destination) runDestinationErr(ctx context.Context, stream quic.Stream,
 
 	switch {
 	case req.Connect != nil:
-		return d.runConnect(ctx, stream, peer)
+		return d.runConnect(ctx, stream, peer, req.Connect)
 	default:
 		err := pb.NewError(pb.Error_RequestUnknown, "unknown request: %v", req)
 		if err := pb.Write(stream, &pbc.Response{Error: err}); err != nil {
@@ -180,7 +182,7 @@ func (d *Destination) runDestinationErr(ctx context.Context, stream quic.Stream,
 	}
 }
 
-func (d *Destination) runConnect(ctx context.Context, stream quic.Stream, peer peerConnKey) error {
+func (d *Destination) runConnect(ctx context.Context, stream quic.Stream, peer peerConnKey, req *pbc.Request_Connect) error {
 	// TODO check allow from?
 
 	conn, err := net.Dial("tcp", d.cfg.Address)
@@ -193,9 +195,19 @@ func (d *Destination) runConnect(ctx context.Context, stream quic.Stream, peer p
 	}
 	defer conn.Close()
 
+	var pubKey, privKey []byte
+	if peer.style == peerRelay {
+		puk, prk, err := box.GenerateKey(rand.Reader)
+		if err != nil {
+			return fmt.Errorf("generate key: %w", err)
+		}
+		pubKey, privKey = puk[:], prk[:]
+	}
+
 	if err := pb.Write(stream, &pbc.Response{
 		Connect: &pbc.Response_Connect{
-			ProxyProto: d.cfg.Proxy.PB(),
+			ProxyProto:           d.cfg.Proxy.PB(),
+			DestinationPublicKey: pubKey,
 		},
 	}); err != nil {
 		return fmt.Errorf("connect write response: %w", err)
@@ -203,7 +215,12 @@ func (d *Destination) runConnect(ctx context.Context, stream quic.Stream, peer p
 
 	var srcStream io.ReadWriteCloser = stream
 	if peer.style == peerRelay {
-		c, err := es.NewXChaCha20Poly1305Cipher(sampleKey)
+		var sharedKey, peerPubKey, prk [32]byte
+		copy(peerPubKey[:], req.SourcePublicKey)
+		copy(prk[:], privKey)
+		box.Precompute(&sharedKey, &peerPubKey, &prk)
+
+		c, err := es.NewXChaCha20Poly1305Cipher(sharedKey[:])
 		if err != nil {
 			return fmt.Errorf("create chachapoly cipher: %w", err)
 		}

@@ -23,6 +23,7 @@ import (
 	"github.com/connet-dev/connet/quicc"
 	es "github.com/nknorg/encrypted-stream"
 	"github.com/quic-go/quic-go"
+	"golang.org/x/crypto/nacl/box"
 	"golang.org/x/sync/errgroup"
 )
 
@@ -190,14 +191,6 @@ func (s *Source) runConnErr(ctx context.Context, conn net.Conn) error {
 	return errNoDesinationRoute
 }
 
-var sampleKey = make([]byte, 32)
-
-func init() {
-	if _, err := rand.Read(sampleKey); err != nil {
-		panic(err)
-	}
-}
-
 func (s *Source) connectDestination(ctx context.Context, conn net.Conn, dest sourceConn) error {
 	stream, err := dest.conn.OpenStreamSync(ctx)
 	if err != nil {
@@ -205,8 +198,19 @@ func (s *Source) connectDestination(ctx context.Context, conn net.Conn, dest sou
 	}
 	defer stream.Close()
 
+	var pubKey, privKey []byte
+	if dest.peer.style == peerRelay {
+		puk, prk, err := box.GenerateKey(rand.Reader)
+		if err != nil {
+			return fmt.Errorf("generate key: %w", err)
+		}
+		pubKey, privKey = puk[:], prk[:]
+	}
+
 	if err := pb.Write(stream, &pbc.Request{
-		Connect: &pbc.Request_Connect{},
+		Connect: &pbc.Request_Connect{
+			SourcePublicKey: pubKey,
+		},
 	}); err != nil {
 		return fmt.Errorf("destination write request: %w", err)
 	}
@@ -218,7 +222,12 @@ func (s *Source) connectDestination(ctx context.Context, conn net.Conn, dest sou
 
 	var dstStream io.ReadWriteCloser = stream
 	if dest.peer.style == peerRelay {
-		c, err := es.NewXChaCha20Poly1305Cipher(sampleKey)
+		var sharedKey, peerPubKey, prk [32]byte
+		copy(peerPubKey[:], resp.Connect.DestinationPublicKey)
+		copy(prk[:], privKey)
+		box.Precompute(&sharedKey, &peerPubKey, &prk)
+
+		c, err := es.NewXChaCha20Poly1305Cipher(sharedKey[:])
 		if err != nil {
 			return fmt.Errorf("create chachapoly cipher: %w", err)
 		}

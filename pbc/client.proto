@@ -10,6 +10,7 @@ message Request {
   Connect connect = 1;
 
   message Connect {
+    bytes source_public_key = 1;
   }
 }
 
@@ -19,7 +20,8 @@ message Response {
   Connect connect = 2;
 
   message Connect {
-    ProxyProtoVersion ProxyProto = 1;
+    ProxyProtoVersion proxy_proto = 1;
+    bytes destination_public_key = 2;
   }
 }
 
