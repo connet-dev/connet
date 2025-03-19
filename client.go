@@ -420,7 +420,8 @@ func ClientDirectStatelessResetKeyFile(path string) ClientOption {
 
 func clientDirectStatelessResetKey() ClientOption {
 	return func(cfg *clientConfig) error {
-		var name = fmt.Sprintf("%d-stateless-reset.key", cfg.directAddr.Port)
+		var name = fmt.Sprintf("stateless-reset-%s.key",
+			strings.TrimPrefix(strings.ReplaceAll(cfg.directAddr.String(), ":", "-"), "-"))
 
 		var path string
 		if cacheDir := os.Getenv("CACHE_DIRECTORY"); cacheDir != "" {

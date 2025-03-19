@@ -157,6 +157,8 @@ addr = ":8001" # again, mulitple sources can be defined
 route = "direct" # force only direct communication between clients, even if other end allows any
 ```
 
+#### QUIC stateless reset key
+
 If neither `direct-stateless-reset-key` nor `direct-stateless-reset-key-file` has been set, a new key file will be created
 under the user cache dir (`$XDG_CACHE_DIR` or `$HOME/.cache` on linux), prefixed with the direct address. 
 
