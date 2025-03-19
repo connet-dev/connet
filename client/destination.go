@@ -3,6 +3,7 @@ package client
 import (
 	"context"
 	"fmt"
+	"io"
 	"log/slog"
 	"net"
 	"net/netip"
@@ -12,6 +13,7 @@ import (
 	"github.com/connet-dev/connet/netc"
 	"github.com/connet-dev/connet/pb"
 	"github.com/connet-dev/connet/pbc"
+	es "github.com/nknorg/encrypted-stream"
 	"github.com/quic-go/quic-go"
 	"golang.org/x/sync/errgroup"
 )
@@ -135,7 +137,7 @@ func (d *destinationConn) run(ctx context.Context) {
 				return err
 			}
 			d.dst.logger.Debug("accepted stream from", "peer", d.peer.id, "style", d.peer.style)
-			go d.dst.runDestination(ctx, stream)
+			go d.dst.runDestination(ctx, stream, d.peer)
 		}
 	})
 	g.Go(func() error {
@@ -152,15 +154,15 @@ func (d *destinationConn) close() {
 	close(d.closer)
 }
 
-func (d *Destination) runDestination(ctx context.Context, stream quic.Stream) {
+func (d *Destination) runDestination(ctx context.Context, stream quic.Stream, peer peerConnKey) {
 	defer stream.Close()
 
-	if err := d.runDestinationErr(ctx, stream); err != nil {
+	if err := d.runDestinationErr(ctx, stream, peer); err != nil {
 		d.logger.Debug("done destination")
 	}
 }
 
-func (d *Destination) runDestinationErr(ctx context.Context, stream quic.Stream) error {
+func (d *Destination) runDestinationErr(ctx context.Context, stream quic.Stream, peer peerConnKey) error {
 	req, err := pbc.ReadRequest(stream)
 	if err != nil {
 		return err
@@ -168,7 +170,7 @@ func (d *Destination) runDestinationErr(ctx context.Context, stream quic.Stream)
 
 	switch {
 	case req.Connect != nil:
-		return d.runConnect(ctx, stream)
+		return d.runConnect(ctx, stream, peer)
 	default:
 		err := pb.NewError(pb.Error_RequestUnknown, "unknown request: %v", req)
 		if err := pb.Write(stream, &pbc.Response{Error: err}); err != nil {
@@ -178,7 +180,7 @@ func (d *Destination) runDestinationErr(ctx context.Context, stream quic.Stream)
 	}
 }
 
-func (d *Destination) runConnect(ctx context.Context, stream quic.Stream) error {
+func (d *Destination) runConnect(ctx context.Context, stream quic.Stream, peer peerConnKey) error {
 	// TODO check allow from?
 
 	conn, err := net.Dial("tcp", d.cfg.Address)
@@ -199,8 +201,24 @@ func (d *Destination) runConnect(ctx context.Context, stream quic.Stream) error 
 		return fmt.Errorf("connect write response: %w", err)
 	}
 
+	var srcStream io.ReadWriteCloser = stream
+	if peer.style == peerRelay {
+		c, err := es.NewXChaCha20Poly1305Cipher(sampleKey)
+		if err != nil {
+			return fmt.Errorf("create chachapoly cipher: %w", err)
+		}
+		s, err := es.NewEncryptedStream(stream, &es.Config{
+			Cipher:    c,
+			Initiator: false,
+		})
+		if err != nil {
+			return fmt.Errorf("create encrypted stream: %w", err)
+		}
+		srcStream = s
+	}
+
 	d.logger.Debug("joining conns")
-	err = netc.Join(ctx, stream, conn)
+	err = netc.Join(ctx, srcStream, conn)
 	d.logger.Debug("disconnected conns", "err", err)
 
 	return nil

@@ -329,16 +329,16 @@ func (c *clientConn) runSourceStreamErr(ctx context.Context, stream quic.Stream,
 
 	switch {
 	case req.Connect != nil:
-		return c.connect(ctx, stream, fcs)
+		return c.connect(ctx, stream, fcs, req.Connect)
 	default:
 		return c.unknown(ctx, stream, req)
 	}
 }
 
-func (c *clientConn) connect(ctx context.Context, stream quic.Stream, fcs *forwardClients) error {
+func (c *clientConn) connect(ctx context.Context, stream quic.Stream, fcs *forwardClients, req *pbc.Request_Connect) error {
 	dests := fcs.getDestinations()
 	for _, dest := range dests {
-		if err := c.connectDestination(ctx, stream, dest); err != nil {
+		if err := c.connectDestination(ctx, stream, dest, req); err != nil {
 			c.logger.Debug("could not dial destination", "err", err)
 		} else {
 			// connect was success
@@ -350,15 +350,13 @@ func (c *clientConn) connect(ctx context.Context, stream quic.Stream, fcs *forwa
 	return pb.Write(stream, &pbc.Response{Error: err})
 }
 
-func (c *clientConn) connectDestination(ctx context.Context, srcStream quic.Stream, dest *clientConn) error {
+func (c *clientConn) connectDestination(ctx context.Context, srcStream quic.Stream, dest *clientConn, req *pbc.Request_Connect) error {
 	dstStream, err := dest.conn.OpenStreamSync(ctx)
 	if err != nil {
 		return fmt.Errorf("destination open stream: %w", err)
 	}
 
-	if err := pb.Write(dstStream, &pbc.Request{
-		Connect: &pbc.Request_Connect{},
-	}); err != nil {
+	if err := pb.Write(dstStream, &pbc.Request{Connect: req}); err != nil {
 		return fmt.Errorf("destination write request: %w", err)
 	}
 

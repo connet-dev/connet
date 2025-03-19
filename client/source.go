@@ -3,8 +3,10 @@ package client
 import (
 	"cmp"
 	"context"
+	"crypto/rand"
 	"errors"
 	"fmt"
+	"io"
 	"log/slog"
 	"math"
 	"net"
@@ -19,6 +21,7 @@ import (
 	"github.com/connet-dev/connet/pb"
 	"github.com/connet-dev/connet/pbc"
 	"github.com/connet-dev/connet/quicc"
+	es "github.com/nknorg/encrypted-stream"
 	"github.com/quic-go/quic-go"
 	"golang.org/x/sync/errgroup"
 )
@@ -187,6 +190,14 @@ func (s *Source) runConnErr(ctx context.Context, conn net.Conn) error {
 	return errNoDesinationRoute
 }
 
+var sampleKey = make([]byte, 32)
+
+func init() {
+	if _, err := rand.Read(sampleKey); err != nil {
+		panic(err)
+	}
+}
+
 func (s *Source) connectDestination(ctx context.Context, conn net.Conn, dest sourceConn) error {
 	stream, err := dest.conn.OpenStreamSync(ctx)
 	if err != nil {
@@ -205,13 +216,29 @@ func (s *Source) connectDestination(ctx context.Context, conn net.Conn, dest sou
 		return fmt.Errorf("destination read response: %w", err)
 	}
 
+	var dstStream io.ReadWriteCloser = stream
+	if dest.peer.style == peerRelay {
+		c, err := es.NewXChaCha20Poly1305Cipher(sampleKey)
+		if err != nil {
+			return fmt.Errorf("create chachapoly cipher: %w", err)
+		}
+		s, err := es.NewEncryptedStream(stream, &es.Config{
+			Cipher:    c,
+			Initiator: true,
+		})
+		if err != nil {
+			return fmt.Errorf("create encrypted stream: %w", err)
+		}
+		dstStream = s
+	}
+
 	proxy := model.ProxyVersionFromPB(resp.GetConnect().GetProxyProto())
-	if err := proxy.Write(stream, conn); err != nil {
+	if err := proxy.Write(dstStream, conn); err != nil {
 		return fmt.Errorf("destination write proxy header: %w", err)
 	}
 
 	s.logger.Debug("joining conns", "style", dest.peer.style)
-	err = netc.Join(ctx, conn, stream)
+	err = netc.Join(ctx, conn, dstStream)
 	s.logger.Debug("disconnected conns", "err", err)
 
 	return nil
