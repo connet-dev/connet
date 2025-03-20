@@ -61,11 +61,19 @@ type DestinationConfig struct {
 	Route             string `toml:"route"`
 	ProxyProtoVersion string `toml:"proxy-proto-version"`
 	FileServerRoot    string `toml:"file-server-root"`
+	RelayEncrypted    bool   `toml:"relay-encrypted"`
+	// TrustedRelays     []string `toml:"trusted-relays"`
+	// RelayPSK          string   `toml:"relay-psk"`
+	// RelayPSKFile      string   `toml:"relay-psk-file"`
 }
 
 type SourceConfig struct {
-	Addr  string `toml:"addr"`
-	Route string `toml:"route"`
+	Addr           string `toml:"addr"`
+	Route          string `toml:"route"`
+	RelayEncrypted bool   `toml:"relay-encrypted"`
+	// TrustedRelays  []string `toml:"trusted-relays"`
+	// RelayPSK       string   `toml:"relay-psk"`
+	// RelayPSKFile   string   `toml:"relay-psk-file"`
 }
 
 type ServerConfig struct {
@@ -521,7 +529,10 @@ func clientRun(ctx context.Context, cfg ClientConfig, logger *slog.Logger) error
 			srvs = append(srvs, &netc.FileServer{Addr: fc.Addr, Root: fc.FileServerRoot})
 		}
 		opts = append(opts, connet.ClientDestination(
-			client.NewDestinationConfig(name, fc.Addr).WithRoute(route).WithProxy(proxy)))
+			client.NewDestinationConfig(name, fc.Addr).
+				WithRoute(route).
+				WithProxy(proxy).
+				WithRelayEncrypted(fc.RelayEncrypted)))
 	}
 
 	for name, fc := range cfg.Sources {
@@ -530,7 +541,9 @@ func clientRun(ctx context.Context, cfg ClientConfig, logger *slog.Logger) error
 			return fmt.Errorf("parse route option for source '%s': %w", name, err)
 		}
 		opts = append(opts, connet.ClientSource(
-			client.NewSourceConfig(name, fc.Addr).WithRoute(route)))
+			client.NewSourceConfig(name, fc.Addr).
+				WithRoute(route).
+				WithRelayEncrypted(fc.RelayEncrypted)))
 	}
 
 	opts = append(opts, connet.ClientLogger(logger))
@@ -1001,13 +1014,15 @@ func mergeDestinationConfig(c, o DestinationConfig) DestinationConfig {
 		Route:             override(c.Route, o.Route),
 		ProxyProtoVersion: override(c.ProxyProtoVersion, o.ProxyProtoVersion),
 		FileServerRoot:    override(c.FileServerRoot, o.FileServerRoot),
+		RelayEncrypted:    c.RelayEncrypted || o.RelayEncrypted,
 	}
 }
 
 func mergeSourceConfig(c, o SourceConfig) SourceConfig {
 	return SourceConfig{
-		Addr:  override(c.Addr, o.Addr),
-		Route: override(c.Route, o.Route),
+		Addr:           override(c.Addr, o.Addr),
+		Route:          override(c.Route, o.Route),
+		RelayEncrypted: c.RelayEncrypted || o.RelayEncrypted,
 	}
 }
 

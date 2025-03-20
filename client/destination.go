@@ -21,10 +21,11 @@ import (
 )
 
 type DestinationConfig struct {
-	Forward model.Forward
-	Address string
-	Route   model.RouteOption
-	Proxy   model.ProxyVersion
+	Forward        model.Forward
+	Address        string
+	Route          model.RouteOption
+	Proxy          model.ProxyVersion
+	RelayEncrypted bool
 }
 
 func NewDestinationConfig(name string, addr string) DestinationConfig {
@@ -38,6 +39,11 @@ func (cfg DestinationConfig) WithRoute(route model.RouteOption) DestinationConfi
 
 func (cfg DestinationConfig) WithProxy(proxy model.ProxyVersion) DestinationConfig {
 	cfg.Proxy = proxy
+	return cfg
+}
+
+func (cfg DestinationConfig) WithRelayEncrypted(enc bool) DestinationConfig {
+	cfg.RelayEncrypted = enc
 	return cfg
 }
 
@@ -184,6 +190,13 @@ func (d *Destination) runDestinationErr(ctx context.Context, stream quic.Stream,
 
 func (d *Destination) runConnect(ctx context.Context, stream quic.Stream, peer peerConnKey, req *pbc.Request_Connect) error {
 	// TODO check allow from?
+	if peer.style == peerRelay && d.cfg.RelayEncrypted && len(req.SourcePublicKey) == 0 {
+		err := pb.NewError(pb.Error_DestinationNotEncrypted, "%s requires encrypted relay conn, no key sent", d.cfg.Forward)
+		if err := pb.Write(stream, &pbc.Response{Error: err}); err != nil {
+			return fmt.Errorf("connect write err response: %w", err)
+		}
+		return err
+	}
 
 	conn, err := net.Dial("tcp", d.cfg.Address)
 	if err != nil {
@@ -195,30 +208,30 @@ func (d *Destination) runConnect(ctx context.Context, stream quic.Stream, peer p
 	}
 	defer conn.Close()
 
-	var pubKey, privKey []byte
-	if peer.style == peerRelay {
-		puk, prk, err := box.GenerateKey(rand.Reader)
+	var sendKey []byte
+	var pubk, privk *[32]byte
+	if peer.style == peerRelay && d.cfg.RelayEncrypted {
+		pubk, privk, err = box.GenerateKey(rand.Reader)
 		if err != nil {
 			return fmt.Errorf("generate key: %w", err)
 		}
-		pubKey, privKey = puk[:], prk[:]
+		sendKey = (*pubk)[:]
 	}
 
 	if err := pb.Write(stream, &pbc.Response{
 		Connect: &pbc.Response_Connect{
 			ProxyProto:           d.cfg.Proxy.PB(),
-			DestinationPublicKey: pubKey,
+			DestinationPublicKey: sendKey,
 		},
 	}); err != nil {
 		return fmt.Errorf("connect write response: %w", err)
 	}
 
 	var srcStream io.ReadWriteCloser = stream
-	if peer.style == peerRelay {
-		var sharedKey, peerPubKey, prk [32]byte
+	if peer.style == peerRelay && d.cfg.RelayEncrypted {
+		var sharedKey, peerPubKey [32]byte
 		copy(peerPubKey[:], req.SourcePublicKey)
-		copy(prk[:], privKey)
-		box.Precompute(&sharedKey, &peerPubKey, &prk)
+		box.Precompute(&sharedKey, &peerPubKey, privk)
 
 		c, err := es.NewXChaCha20Poly1305Cipher(sharedKey[:])
 		if err != nil {

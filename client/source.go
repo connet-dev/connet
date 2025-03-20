@@ -28,9 +28,10 @@ import (
 )
 
 type SourceConfig struct {
-	Forward model.Forward
-	Address string
-	Route   model.RouteOption
+	Forward        model.Forward
+	Address        string
+	Route          model.RouteOption
+	RelayEncrypted bool
 }
 
 func NewSourceConfig(name string, addr string) SourceConfig {
@@ -39,6 +40,11 @@ func NewSourceConfig(name string, addr string) SourceConfig {
 
 func (cfg SourceConfig) WithRoute(route model.RouteOption) SourceConfig {
 	cfg.Route = route
+	return cfg
+}
+
+func (cfg SourceConfig) WithRelayEncrypted(enc bool) SourceConfig {
+	cfg.RelayEncrypted = enc
 	return cfg
 }
 
@@ -198,18 +204,19 @@ func (s *Source) connectDestination(ctx context.Context, conn net.Conn, dest sou
 	}
 	defer stream.Close()
 
-	var pubKey, privKey []byte
-	if dest.peer.style == peerRelay {
-		puk, prk, err := box.GenerateKey(rand.Reader)
+	var sendKey []byte
+	var pubk, privk *[32]byte
+	if dest.peer.style == peerRelay && s.cfg.RelayEncrypted {
+		pubk, privk, err = box.GenerateKey(rand.Reader)
 		if err != nil {
 			return fmt.Errorf("generate key: %w", err)
 		}
-		pubKey, privKey = puk[:], prk[:]
+		sendKey = (*pubk)[:]
 	}
 
 	if err := pb.Write(stream, &pbc.Request{
 		Connect: &pbc.Request_Connect{
-			SourcePublicKey: pubKey,
+			SourcePublicKey: sendKey,
 		},
 	}); err != nil {
 		return fmt.Errorf("destination write request: %w", err)
@@ -221,11 +228,14 @@ func (s *Source) connectDestination(ctx context.Context, conn net.Conn, dest sou
 	}
 
 	var dstStream io.ReadWriteCloser = stream
-	if dest.peer.style == peerRelay {
-		var sharedKey, peerPubKey, prk [32]byte
+	if dest.peer.style == peerRelay && s.cfg.RelayEncrypted {
+		if len(resp.Connect.DestinationPublicKey) == 0 {
+			return fmt.Errorf("no destination public key")
+		}
+
+		var sharedKey, peerPubKey [32]byte
 		copy(peerPubKey[:], resp.Connect.DestinationPublicKey)
-		copy(prk[:], privKey)
-		box.Precompute(&sharedKey, &peerPubKey, &prk)
+		box.Precompute(&sharedKey, &peerPubKey, privk)
 
 		c, err := es.NewXChaCha20Poly1305Cipher(sharedKey[:])
 		if err != nil {

@@ -60,5 +60,6 @@ message Error {
     // Client connect codes
     DestinationNotFound = 500;
     DestinationDialFailed = 501;
+    DestinationNotEncrypted = 502;
   }
 }
