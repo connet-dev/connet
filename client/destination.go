@@ -135,7 +135,7 @@ func (d *destinationConn) run(ctx context.Context) {
 				return err
 			}
 			d.dst.logger.Debug("accepted stream from", "peer", d.peer.id, "style", d.peer.style)
-			go d.dst.runDestination(ctx, stream)
+			go d.dst.runDestination(ctx, stream, d.peer)
 		}
 	})
 	g.Go(func() error {
@@ -152,15 +152,15 @@ func (d *destinationConn) close() {
 	close(d.closer)
 }
 
-func (d *Destination) runDestination(ctx context.Context, stream quic.Stream) {
+func (d *Destination) runDestination(ctx context.Context, stream quic.Stream, src peerConnKey) {
 	defer stream.Close()
 
-	if err := d.runDestinationErr(ctx, stream); err != nil {
+	if err := d.runDestinationErr(ctx, stream, src); err != nil {
 		d.logger.Debug("done destination")
 	}
 }
 
-func (d *Destination) runDestinationErr(ctx context.Context, stream quic.Stream) error {
+func (d *Destination) runDestinationErr(ctx context.Context, stream quic.Stream, src peerConnKey) error {
 	req, err := pbc.ReadRequest(stream)
 	if err != nil {
 		return err
@@ -168,7 +168,7 @@ func (d *Destination) runDestinationErr(ctx context.Context, stream quic.Stream)
 
 	switch {
 	case req.Connect != nil:
-		return d.runConnect(ctx, stream)
+		return d.runConnect(ctx, stream, src, req)
 	default:
 		err := pb.NewError(pb.Error_RequestUnknown, "unknown request: %v", req)
 		if err := pb.Write(stream, &pbc.Response{Error: err}); err != nil {
@@ -178,7 +178,7 @@ func (d *Destination) runDestinationErr(ctx context.Context, stream quic.Stream)
 	}
 }
 
-func (d *Destination) runConnect(ctx context.Context, stream quic.Stream) error {
+func (d *Destination) runConnect(ctx context.Context, stream quic.Stream, src peerConnKey, req *pbc.Request) error {
 	// TODO check allow from?
 
 	conn, err := net.Dial("tcp", d.cfg.Address)

@@ -70,9 +70,12 @@ func newClientServer(
 	for _, msg := range clientsMsgs {
 		key := cacheKey{msg.Key.Forward, msg.Key.Role}
 		peersCache[key] = append(peersCache[key], &pbs.ServerPeer{
-			Id:     msg.Key.ID.String(),
-			Direct: msg.Value.Peer.Direct,
-			Relays: msg.Value.Peer.Relays,
+			Id:                msg.Key.ID.String(),
+			Direct:            msg.Value.Peer.Direct,
+			Relays:            msg.Value.Peer.Relays,
+			Directs:           msg.Value.Peer.Directs,
+			ServerCertificate: msg.Value.Peer.ServerCertificate,
+			ClientCertificate: msg.Value.Peer.ClientCertificate,
 		})
 	}
 
@@ -196,9 +199,12 @@ func (s *clientServer) listen(ctx context.Context, fwd model.Forward, role model
 				})
 			} else {
 				npeer := &pbs.ServerPeer{
-					Id:     msg.Key.ID.String(),
-					Direct: msg.Value.Peer.Direct,
-					Relays: msg.Value.Peer.Relays,
+					Id:                msg.Key.ID.String(),
+					Direct:            msg.Value.Peer.Direct,
+					Relays:            msg.Value.Peer.Relays,
+					Directs:           msg.Value.Peer.Directs,
+					ServerCertificate: msg.Value.Peer.ServerCertificate,
+					ClientCertificate: msg.Value.Peer.ClientCertificate,
 				}
 				idx := slices.IndexFunc(peers, func(peer *pbs.ServerPeer) bool { return peer.Id == msg.Key.ID.String() })
 				if idx >= 0 {
@@ -295,9 +301,12 @@ func (s *clientServer) runPeerCache(ctx context.Context) error {
 			}
 		} else {
 			npeer := &pbs.ServerPeer{
-				Id:     msg.Key.ID.String(),
-				Direct: msg.Value.Peer.Direct,
-				Relays: msg.Value.Peer.Relays,
+				Id:                msg.Key.ID.String(),
+				Direct:            msg.Value.Peer.Direct,
+				Relays:            msg.Value.Peer.Relays,
+				Directs:           msg.Value.Peer.Directs,
+				ServerCertificate: msg.Value.Peer.ServerCertificate,
+				ClientCertificate: msg.Value.Peer.ClientCertificate,
 			}
 			idx := slices.IndexFunc(peers, func(peer *pbs.ServerPeer) bool { return peer.Id == msg.Key.ID.String() })
 			if idx >= 0 {
@@ -478,14 +487,30 @@ func (s *clientStream) runErr(ctx context.Context) error {
 }
 
 func validatePeerCert(fwd model.Forward, peer *pbs.ClientPeer) *pb.Error {
-	if peer.Direct == nil {
-		return nil
+	if peer.Direct != nil {
+		if _, err := x509.ParseCertificate(peer.Direct.ClientCertificate); err != nil {
+			return pb.NewError(pb.Error_AnnounceInvalidClientCertificate, "'%s' client cert is invalid", fwd)
+		}
+		if _, err := x509.ParseCertificate(peer.Direct.ServerCertificate); err != nil {
+			return pb.NewError(pb.Error_AnnounceInvalidServerCertificate, "'%s' server cert is invalid", fwd)
+		}
+		if len(peer.Directs) == 0 {
+			peer.Directs = peer.Direct.Addresses
+		}
 	}
-	if _, err := x509.ParseCertificate(peer.Direct.ClientCertificate); err != nil {
-		return pb.NewError(pb.Error_AnnounceInvalidClientCertificate, "'%s' client cert is invalid", fwd)
+	if len(peer.ClientCertificate) > 0 {
+		if _, err := x509.ParseCertificate(peer.ClientCertificate); err != nil {
+			return pb.NewError(pb.Error_AnnounceInvalidClientCertificate, "'%s' client cert is invalid", fwd)
+		}
+	} else if peer.Direct != nil {
+		peer.ClientCertificate = peer.Direct.ClientCertificate
 	}
-	if _, err := x509.ParseCertificate(peer.Direct.ServerCertificate); err != nil {
-		return pb.NewError(pb.Error_AnnounceInvalidServerCertificate, "'%s' server cert is invalid", fwd)
+	if len(peer.ServerCertificate) > 0 {
+		if _, err := x509.ParseCertificate(peer.ServerCertificate); err != nil {
+			return pb.NewError(pb.Error_AnnounceInvalidServerCertificate, "'%s' server cert is invalid", fwd)
+		}
+	} else if peer.Direct != nil {
+		peer.ServerCertificate = peer.Direct.ServerCertificate
 	}
 	return nil
 }

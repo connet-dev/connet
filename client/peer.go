@@ -78,7 +78,10 @@ func newPeer(direct *DirectServer, root *certc.Cert, logger *slog.Logger) (*peer
 	}
 
 	return &peer{
-		self:       notify.New(&pbs.ClientPeer{}),
+		self: notify.New(&pbs.ClientPeer{
+			ServerCertificate: serverTLSCert.Leaf.Raw,
+			ClientCertificate: clientTLSCert.Leaf.Raw,
+		}),
 		relays:     notify.NewEmpty[[]*pbs.Relay](),
 		relayConns: notify.New(map[model.HostPort]quic.Connection{}).Copying(maps.Clone),
 		peers:      notify.NewEmpty[[]*pbs.ServerPeer](),
@@ -107,7 +110,10 @@ func (p *peer) setDirectAddrs(addrs []netip.AddrPort) {
 				ServerCertificate: p.serverCert.Leaf.Raw,
 				ClientCertificate: p.clientCert.Leaf.Raw,
 			},
-			Relays: cp.Relays,
+			Directs:           pb.AsAddrPorts(addrs),
+			Relays:            cp.Relays,
+			ServerCertificate: cp.ServerCertificate,
+			ClientCertificate: cp.ClientCertificate,
 		}
 	})
 }
@@ -178,8 +184,11 @@ func (p *peer) runShareRelays(ctx context.Context) error {
 		}
 		p.self.Update(func(cp *pbs.ClientPeer) *pbs.ClientPeer {
 			return &pbs.ClientPeer{
-				Direct: cp.Direct,
-				Relays: hps,
+				Relays:            hps,
+				Direct:            cp.Direct,
+				Directs:           cp.Directs,
+				ServerCertificate: cp.ServerCertificate,
+				ClientCertificate: cp.ClientCertificate,
 			}
 		})
 		return nil
