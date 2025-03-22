@@ -3,8 +3,10 @@ package client
 import (
 	"cmp"
 	"context"
+	"crypto/tls"
 	"errors"
 	"fmt"
+	"io"
 	"log/slog"
 	"math"
 	"net"
@@ -194,8 +196,15 @@ func (s *Source) connectDestination(ctx context.Context, conn net.Conn, dest sou
 	}
 	defer stream.Close()
 
+	var clientName string
+	if dest.peer.style == peerRelay {
+		clientName = s.peer.serverCert.Leaf.DNSNames[0]
+	}
+
 	if err := pb.Write(stream, &pbc.Request{
-		Connect: &pbc.Request_Connect{},
+		Connect: &pbc.Request_Connect{
+			ClientName: clientName,
+		},
 	}); err != nil {
 		return fmt.Errorf("destination write request: %w", err)
 	}
@@ -205,13 +214,48 @@ func (s *Source) connectDestination(ctx context.Context, conn net.Conn, dest sou
 		return fmt.Errorf("destination read response: %w", err)
 	}
 
+	var encStream io.ReadWriteCloser = stream
+	if dest.peer.style == peerRelay {
+		peers, err := s.peer.peers.Peek()
+		if err != nil {
+			return fmt.Errorf("destination peers peer: %w", err)
+		}
+		var sconf *serverTLSConfig
+		for _, peer := range peers {
+			cfg, err := newServerTLSConfig(peer.ServerCertificate)
+			if err != nil {
+				return fmt.Errorf("destination peer server cert: %w", err)
+			}
+			if cfg.name == resp.Connect.ServerName {
+				sconf = cfg
+				break
+			}
+		}
+		if sconf == nil {
+			return fmt.Errorf("destination peer server cert not found")
+		}
+
+		tlsConn := tls.Client(&quicc.StreamConn{
+			Stream: stream,
+			// TODO addrs
+		}, &tls.Config{
+			Certificates: []tls.Certificate{s.peer.clientCert},
+			RootCAs:      sconf.cas,
+			ServerName:   sconf.name,
+		})
+		if err := tlsConn.HandshakeContext(ctx); err != nil {
+			return fmt.Errorf("destination handshake: %w", err)
+		}
+		encStream = tlsConn
+	}
+
 	proxy := model.ProxyVersionFromPB(resp.GetConnect().GetProxyProto())
-	if err := proxy.Write(stream, conn); err != nil {
+	if err := proxy.Write(encStream, conn); err != nil {
 		return fmt.Errorf("destination write proxy header: %w", err)
 	}
 
 	s.logger.Debug("joining conns", "style", dest.peer.style)
-	err = netc.Join(ctx, conn, stream)
+	err = netc.Join(ctx, conn, encStream)
 	s.logger.Debug("disconnected conns", "err", err)
 
 	return nil
