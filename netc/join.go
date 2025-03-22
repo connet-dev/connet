@@ -3,7 +3,6 @@ package netc
 import (
 	"context"
 	"io"
-	"os"
 
 	"golang.org/x/sync/errgroup"
 )
