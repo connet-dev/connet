@@ -70,8 +70,6 @@ message DirectRoute {
   repeated shared.AddrPort addresses = 1;
   bytes server_certificate = 2;
   bytes client_certificate = 3;
-  repeated shared.AddrPort directs = 4;
-  repeated shared.HostPort relays = 5;
 }
 
 message Relay {
