@@ -249,7 +249,7 @@ func (x *Response) GetRelay() *Response_Relays {
 
 type ClientPeer struct {
 	state             protoimpl.MessageState `protogen:"open.v1"`
-	Direct            *DirectRoute           `protobuf:"bytes,1,opt,name=direct,proto3" json:"direct,omitempty"`
+	Direct            *DirectRoute           `protobuf:"bytes,1,opt,name=direct,proto3" json:"direct,omitempty"` // TODO remove in 0.7.0
 	Relays            []*pb.HostPort         `protobuf:"bytes,2,rep,name=relays,proto3" json:"relays,omitempty"`
 	Directs           []*pb.AddrPort         `protobuf:"bytes,3,rep,name=directs,proto3" json:"directs,omitempty"`
 	ServerCertificate []byte                 `protobuf:"bytes,4,opt,name=server_certificate,json=serverCertificate,proto3" json:"server_certificate,omitempty"`
@@ -326,7 +326,7 @@ func (x *ClientPeer) GetClientCertificate() []byte {
 type ServerPeer struct {
 	state             protoimpl.MessageState `protogen:"open.v1"`
 	Id                string                 `protobuf:"bytes,1,opt,name=id,proto3" json:"id,omitempty"`
-	Direct            *DirectRoute           `protobuf:"bytes,2,opt,name=direct,proto3" json:"direct,omitempty"`
+	Direct            *DirectRoute           `protobuf:"bytes,2,opt,name=direct,proto3" json:"direct,omitempty"` // TODO remove in 0.7.0
 	Relays            []*pb.HostPort         `protobuf:"bytes,3,rep,name=relays,proto3" json:"relays,omitempty"`
 	Directs           []*pb.AddrPort         `protobuf:"bytes,4,rep,name=directs,proto3" json:"directs,omitempty"`
 	ServerCertificate []byte                 `protobuf:"bytes,5,opt,name=server_certificate,json=serverCertificate,proto3" json:"server_certificate,omitempty"`
