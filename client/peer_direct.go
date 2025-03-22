@@ -77,9 +77,9 @@ func (p *directPeer) stop() {
 
 func (p *directPeer) runRemote(ctx context.Context) error {
 	return p.remote.Listen(ctx, func(remote *pbs.ServerPeer) error {
-		if p.local.isDirect() && remote.Direct != nil {
+		if p.local.isDirect() && len(remote.Directs) > 0 {
 			if p.incoming == nil {
-				remoteClientCert, err := x509.ParseCertificate(remote.Direct.ClientCertificate)
+				remoteClientCert, err := x509.ParseCertificate(remote.ClientCertificate)
 				if err != nil {
 					return err
 				}
@@ -87,12 +87,12 @@ func (p *directPeer) runRemote(ctx context.Context) error {
 			}
 
 			if p.outgoing == nil {
-				remoteServerConf, err := newServerTLSConfig(remote.Direct.ServerCertificate)
+				remoteServerConf, err := newServerTLSConfig(remote.ServerCertificate)
 				if err != nil {
 					return err
 				}
 				addrs := map[netip.AddrPort]struct{}{}
-				for _, addr := range remote.Direct.Addresses {
+				for _, addr := range remote.Directs {
 					addrs[addr.AsNetip()] = struct{}{}
 				}
 				p.outgoing = newDirectPeerOutgoing(ctx, p, remoteServerConf, addrs)
