@@ -5,6 +5,7 @@ import (
 	"crypto/tls"
 	"crypto/x509"
 	"errors"
+	"fmt"
 	"log/slog"
 	"net"
 	"net/netip"
@@ -77,22 +78,35 @@ func (p *directPeer) stop() {
 
 func (p *directPeer) runRemote(ctx context.Context) error {
 	return p.remote.Listen(ctx, func(remote *pbs.ServerPeer) error {
-		if p.local.isDirect() && len(remote.Directs) > 0 {
+		if p.local.isDirect() && (remote.Direct != nil || len(remote.Directs) > 0) {
 			if p.incoming == nil {
-				remoteClientCert, err := x509.ParseCertificate(remote.ClientCertificate)
+				remoteClientCertBytes := remote.ClientCertificate
+				if len(remoteClientCertBytes) == 0 {
+					remoteClientCertBytes = remote.Direct.ClientCertificate
+				}
+				remoteClientCert, err := x509.ParseCertificate(remoteClientCertBytes)
 				if err != nil {
-					return err
+					return fmt.Errorf("parse client certificate: %w", err)
 				}
 				p.incoming = newDirectPeerIncoming(ctx, p, remoteClientCert)
 			}
 
 			if p.outgoing == nil {
-				remoteServerConf, err := newServerTLSConfig(remote.ServerCertificate)
+				remoteServerCertBytes := remote.ServerCertificate
+				if len(remoteServerCertBytes) == 0 {
+					remoteServerCertBytes = remote.Direct.ServerCertificate
+				}
+				remoteServerConf, err := newServerTLSConfig(remoteServerCertBytes)
 				if err != nil {
-					return err
+					return fmt.Errorf("parse server certificate: %w", err)
+				}
+
+				directs := remote.Directs
+				if len(directs) == 0 {
+					directs = remote.Direct.Addresses
 				}
 				addrs := map[netip.AddrPort]struct{}{}
-				for _, addr := range remote.Directs {
+				for _, addr := range directs {
 					addrs[addr.AsNetip()] = struct{}{}
 				}
 				p.outgoing = newDirectPeerOutgoing(ctx, p, remoteServerConf, addrs)

@@ -105,10 +105,15 @@ func (p *peer) isDirect() bool {
 func (p *peer) setDirectAddrs(addrs []netip.AddrPort) {
 	p.self.Update(func(cp *pbs.ClientPeer) *pbs.ClientPeer {
 		return &pbs.ClientPeer{
-			ServerCertificate: cp.ServerCertificate,
-			ClientCertificate: cp.ClientCertificate,
+			Direct: &pbs.DirectRoute{
+				Addresses:         pb.AsAddrPorts(addrs),
+				ServerCertificate: p.serverCert.Leaf.Raw,
+				ClientCertificate: p.clientCert.Leaf.Raw,
+			},
 			Directs:           pb.AsAddrPorts(addrs),
 			Relays:            cp.Relays,
+			ServerCertificate: cp.ServerCertificate,
+			ClientCertificate: cp.ClientCertificate,
 		}
 	})
 }
@@ -179,10 +184,11 @@ func (p *peer) runShareRelays(ctx context.Context) error {
 		}
 		p.self.Update(func(cp *pbs.ClientPeer) *pbs.ClientPeer {
 			return &pbs.ClientPeer{
+				Relays:            hps,
+				Direct:            cp.Direct,
+				Directs:           cp.Directs,
 				ServerCertificate: cp.ServerCertificate,
 				ClientCertificate: cp.ClientCertificate,
-				Directs:           cp.Directs,
-				Relays:            hps,
 			}
 		})
 		return nil
