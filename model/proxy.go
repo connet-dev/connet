@@ -45,7 +45,7 @@ func (v ProxyVersion) PB() pbc.ProxyProtoVersion {
 	case ProxyV2:
 		return pbc.ProxyProtoVersion_V2
 	default:
-		return pbc.ProxyProtoVersion_None
+		return pbc.ProxyProtoVersion_ProxyProtoNone
 	}
 }
 

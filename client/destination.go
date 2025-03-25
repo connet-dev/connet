@@ -9,6 +9,7 @@ import (
 	"log/slog"
 	"net"
 	"net/netip"
+	"slices"
 
 	"github.com/connet-dev/connet/certc"
 	"github.com/connet-dev/connet/model"
@@ -167,7 +168,7 @@ func (d *Destination) runDestination(ctx context.Context, stream quic.Stream, sr
 func (d *Destination) runDestinationErr(ctx context.Context, stream quic.Stream, src peerConnKey) error {
 	req, err := pbc.ReadRequest(stream)
 	if err != nil {
-		return err
+		return fmt.Errorf("destination read request: %w", err)
 	}
 
 	switch {
@@ -185,67 +186,54 @@ func (d *Destination) runDestinationErr(ctx context.Context, stream quic.Stream,
 func (d *Destination) runConnect(ctx context.Context, stream quic.Stream, src peerConnKey, req *pbc.Request) error {
 	// TODO check allow from?
 
+	connect := &pbc.Response_Connect{
+		ProxyProto: d.cfg.Proxy.PB(),
+	}
+	var srcConfig *tls.Config
+	if src.style == peerRelay {
+		connect.DestinationClientName = d.peer.serverCert.Leaf.DNSNames[0]
+
+		if slices.Contains(req.Connect.SourceEncryption, pbc.RelayEncryptionScheme_TLS) {
+			connect.DestinationEncryption = pbc.RelayEncryptionScheme_TLS
+
+			scfg, err := d.getSourceTLS(req.Connect.SourceClientName)
+			if err != nil {
+				err := pb.NewError(pb.Error_DestinationRelayTLSError, "destination tls: %v", err.Error())
+				if err := pb.Write(stream, &pbc.Response{Error: err}); err != nil {
+					return fmt.Errorf("destination connect write err response: %w", err)
+				}
+				return err
+			}
+			srcConfig = scfg
+		}
+	}
+
 	conn, err := net.Dial("tcp", d.cfg.Address)
 	if err != nil {
 		err := pb.NewError(pb.Error_DestinationDialFailed, "%s could not be dialed: %v", d.cfg.Forward, err)
 		if err := pb.Write(stream, &pbc.Response{Error: err}); err != nil {
-			return fmt.Errorf("connect write err response: %w", err)
+			return fmt.Errorf("destination connect write err response: %w", err)
 		}
 		return err
 	}
 	defer conn.Close()
 
-	var serverName string
-	if src.style == peerRelay {
-		serverName = d.peer.serverCert.Leaf.DNSNames[0]
-	}
-
 	if err := pb.Write(stream, &pbc.Response{
-		Connect: &pbc.Response_Connect{
-			ProxyProto: d.cfg.Proxy.PB(),
-			ServerName: serverName,
-		},
+		Connect: connect,
 	}); err != nil {
-		return fmt.Errorf("connect write response: %w", err)
+		return fmt.Errorf("destination connect write response: %w", err)
 	}
 
 	var encStream io.ReadWriteCloser = stream
-	if src.style == peerRelay {
-		peers, err := d.peer.peers.Peek()
-		if err != nil {
-			return fmt.Errorf("destination peers peer: %w", err)
-		}
-		var clientCAs *x509.CertPool
-		for _, peer := range peers {
-			cfg, err := newServerTLSConfig(peer.ServerCertificate)
-			if err != nil {
-				return fmt.Errorf("destination peer server cert: %w", err)
-			}
-			if cfg.name == req.Connect.ClientName {
-				clientCert, err := x509.ParseCertificate(peer.ClientCertificate)
-				if err != nil {
-					return fmt.Errorf("destination peer client cert: %w", err)
-				}
-				clientCAs = x509.NewCertPool()
-				clientCAs.AddCert(clientCert)
-				break
-			}
-		}
-		if clientCAs == nil {
-			return fmt.Errorf("destination peer server cert not found")
-		}
-
+	if src.style == peerRelay && connect.DestinationEncryption == pbc.RelayEncryptionScheme_TLS {
 		tlsConn := tls.Server(&quicc.StreamConn{
 			Stream: stream,
 			// TODO addrs
-		}, &tls.Config{
-			ClientAuth:   tls.RequireAndVerifyClientCert,
-			Certificates: []tls.Certificate{d.peer.serverCert},
-			ClientCAs:    clientCAs,
-		})
+		}, srcConfig)
 		if err := tlsConn.HandshakeContext(ctx); err != nil {
 			return fmt.Errorf("destination handshake: %w", err)
 		}
+
 		encStream = tlsConn
 	}
 
@@ -264,4 +252,34 @@ func (d *Destination) RunControl(ctx context.Context, conn quic.Connection) erro
 		opt:   d.cfg.Route,
 		conn:  conn,
 	}).run(ctx)
+}
+
+func (d *Destination) getSourceTLS(name string) (*tls.Config, error) {
+	peers, err := d.peer.peers.Peek()
+	if err != nil {
+		return nil, fmt.Errorf("source peers list: %w", err)
+	}
+
+	var clientCAs *x509.CertPool
+	for _, peer := range peers {
+		cfg, err := newServerTLSConfig(peer.ServerCertificate)
+		if err != nil {
+			return nil, fmt.Errorf("source peer server cert: %w", err)
+		}
+		if cfg.name == name {
+			clientCert, err := x509.ParseCertificate(peer.ClientCertificate)
+			if err != nil {
+				return nil, fmt.Errorf("source peer client cert: %w", err)
+			}
+			clientCAs = x509.NewCertPool()
+			clientCAs.AddCert(clientCert)
+			return &tls.Config{
+				ClientAuth:   tls.RequireAndVerifyClientCert,
+				Certificates: []tls.Certificate{d.peer.serverCert},
+				ClientCAs:    clientCAs,
+			}, nil
+		}
+	}
+
+	return nil, fmt.Errorf("source peer %s not found", name)
 }

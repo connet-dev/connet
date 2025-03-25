@@ -192,66 +192,48 @@ func (s *Source) runConnErr(ctx context.Context, conn net.Conn) error {
 func (s *Source) connectDestination(ctx context.Context, conn net.Conn, dest sourceConn) error {
 	stream, err := dest.conn.OpenStreamSync(ctx)
 	if err != nil {
-		return fmt.Errorf("destination open stream: %w", err)
+		return fmt.Errorf("source connect open stream: %w", err)
 	}
 	defer stream.Close()
 
-	var clientName string
+	connect := &pbc.Request_Connect{}
 	if dest.peer.style == peerRelay {
-		clientName = s.peer.serverCert.Leaf.DNSNames[0]
+		connect.SourceClientName = s.peer.serverCert.Leaf.DNSNames[0]
+		connect.SourceEncryption = []pbc.RelayEncryptionScheme{pbc.RelayEncryptionScheme_TLS}
 	}
 
 	if err := pb.Write(stream, &pbc.Request{
-		Connect: &pbc.Request_Connect{
-			ClientName: clientName,
-		},
+		Connect: connect,
 	}); err != nil {
-		return fmt.Errorf("destination write request: %w", err)
+		return fmt.Errorf("source connect write request: %w", err)
 	}
 
 	resp, err := pbc.ReadResponse(stream)
 	if err != nil {
-		return fmt.Errorf("destination read response: %w", err)
+		return fmt.Errorf("source connect read response: %w", err)
 	}
 
 	var encStream io.ReadWriteCloser = stream
-	if dest.peer.style == peerRelay {
-		peers, err := s.peer.peers.Peek()
+	if dest.peer.style == peerRelay && resp.Connect.DestinationEncryption == pbc.RelayEncryptionScheme_TLS {
+		dstConfig, err := s.getDestinationTLS(resp.Connect.DestinationClientName)
 		if err != nil {
-			return fmt.Errorf("destination peers peer: %w", err)
-		}
-		var sconf *serverTLSConfig
-		for _, peer := range peers {
-			cfg, err := newServerTLSConfig(peer.ServerCertificate)
-			if err != nil {
-				return fmt.Errorf("destination peer server cert: %w", err)
-			}
-			if cfg.name == resp.Connect.ServerName {
-				sconf = cfg
-				break
-			}
-		}
-		if sconf == nil {
-			return fmt.Errorf("destination peer server cert not found")
+			return fmt.Errorf("source tls: %w", err)
 		}
 
 		tlsConn := tls.Client(&quicc.StreamConn{
 			Stream: stream,
 			// TODO addrs
-		}, &tls.Config{
-			Certificates: []tls.Certificate{s.peer.clientCert},
-			RootCAs:      sconf.cas,
-			ServerName:   sconf.name,
-		})
+		}, dstConfig)
 		if err := tlsConn.HandshakeContext(ctx); err != nil {
-			return fmt.Errorf("destination handshake: %w", err)
+			return fmt.Errorf("source handshake: %w", err)
 		}
+
 		encStream = tlsConn
 	}
 
 	proxy := model.ProxyVersionFromPB(resp.GetConnect().GetProxyProto())
 	if err := proxy.Write(encStream, conn); err != nil {
-		return fmt.Errorf("destination write proxy header: %w", err)
+		return fmt.Errorf("source write proxy header: %w", err)
 	}
 
 	s.logger.Debug("joining conns", "style", dest.peer.style)
@@ -269,4 +251,27 @@ func (s *Source) RunControl(ctx context.Context, conn quic.Connection) error {
 		opt:   s.cfg.Route,
 		conn:  conn,
 	}).run(ctx)
+}
+
+func (s *Source) getDestinationTLS(name string) (*tls.Config, error) {
+	peers, err := s.peer.peers.Peek()
+	if err != nil {
+		return nil, fmt.Errorf("destination peers list: %w", err)
+	}
+
+	for _, peer := range peers {
+		cfg, err := newServerTLSConfig(peer.ServerCertificate)
+		if err != nil {
+			return nil, fmt.Errorf("destination peer server cert: %w", err)
+		}
+		if cfg.name == name {
+			return &tls.Config{
+				Certificates: []tls.Certificate{s.peer.clientCert},
+				RootCAs:      cfg.cas,
+				ServerName:   cfg.name,
+			}, nil
+		}
+	}
+
+	return nil, fmt.Errorf("destination peer %s not found", name)
 }
