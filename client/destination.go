@@ -140,7 +140,7 @@ func (d *destinationConn) run(ctx context.Context) {
 				return err
 			}
 			d.dst.logger.Debug("accepted stream from", "peer", d.peer.id, "style", d.peer.style)
-			go d.dst.runDestination(ctx, stream, d.peer)
+			go d.dst.runDestination(ctx, stream, d)
 		}
 	})
 	g.Go(func() error {
@@ -157,7 +157,7 @@ func (d *destinationConn) close() {
 	close(d.closer)
 }
 
-func (d *Destination) runDestination(ctx context.Context, stream quic.Stream, src peerConnKey) {
+func (d *Destination) runDestination(ctx context.Context, stream quic.Stream, src *destinationConn) {
 	defer stream.Close()
 
 	if err := d.runDestinationErr(ctx, stream, src); err != nil {
@@ -165,7 +165,7 @@ func (d *Destination) runDestination(ctx context.Context, stream quic.Stream, sr
 	}
 }
 
-func (d *Destination) runDestinationErr(ctx context.Context, stream quic.Stream, src peerConnKey) error {
+func (d *Destination) runDestinationErr(ctx context.Context, stream quic.Stream, src *destinationConn) error {
 	req, err := pbc.ReadRequest(stream)
 	if err != nil {
 		return fmt.Errorf("destination read request: %w", err)
@@ -183,14 +183,14 @@ func (d *Destination) runDestinationErr(ctx context.Context, stream quic.Stream,
 	}
 }
 
-func (d *Destination) runConnect(ctx context.Context, stream quic.Stream, src peerConnKey, req *pbc.Request) error {
+func (d *Destination) runConnect(ctx context.Context, stream quic.Stream, src *destinationConn, req *pbc.Request) error {
 	// TODO check allow from?
 
 	connect := &pbc.Response_Connect{
 		ProxyProto: d.cfg.Proxy.PB(),
 	}
 	var srcConfig *tls.Config
-	if src.style == peerRelay {
+	if src.peer.style == peerRelay {
 		connect.DestinationClientName = d.peer.serverCert.Leaf.DNSNames[0]
 
 		if slices.Contains(req.Connect.SourceEncryption, pbc.RelayEncryptionScheme_TLS) {
@@ -225,10 +225,11 @@ func (d *Destination) runConnect(ctx context.Context, stream quic.Stream, src pe
 	}
 
 	var encStream io.ReadWriteCloser = stream
-	if src.style == peerRelay && connect.DestinationEncryption == pbc.RelayEncryptionScheme_TLS {
+	if src.peer.style == peerRelay && connect.DestinationEncryption == pbc.RelayEncryptionScheme_TLS {
 		tlsConn := tls.Server(&quicc.StreamConn{
 			Stream: stream,
-			// TODO addrs
+			Local:  src.conn.LocalAddr(),
+			Remote: src.conn.RemoteAddr(),
 		}, srcConfig)
 		if err := tlsConn.HandshakeContext(ctx); err != nil {
 			return fmt.Errorf("destination handshake: %w", err)
