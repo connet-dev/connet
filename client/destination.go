@@ -226,11 +226,7 @@ func (d *Destination) runConnect(ctx context.Context, stream quic.Stream, src *d
 
 	var encStream io.ReadWriteCloser = stream
 	if src.peer.style == peerRelay && connect.DestinationEncryption == pbc.RelayEncryptionScheme_TLS {
-		tlsConn := tls.Server(&quicc.StreamConn{
-			Stream: stream,
-			Local:  src.conn.LocalAddr(),
-			Remote: src.conn.RemoteAddr(),
-		}, srcConfig)
+		tlsConn := tls.Server(quicc.StreamConn(stream, src.conn), srcConfig)
 		if err := tlsConn.HandshakeContext(ctx); err != nil {
 			return fmt.Errorf("destination handshake: %w", err)
 		}

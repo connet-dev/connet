@@ -6,18 +6,26 @@ import (
 	"github.com/quic-go/quic-go"
 )
 
-type StreamConn struct {
+func StreamConn(s quic.Stream, c quic.Connection) net.Conn {
+	return &streamConn{
+		Stream: s,
+		Local:  c.LocalAddr(),
+		Remote: c.RemoteAddr(),
+	}
+}
+
+type streamConn struct {
 	quic.Stream
 	Local  net.Addr
 	Remote net.Addr
 }
 
-func (s *StreamConn) LocalAddr() net.Addr {
+func (s *streamConn) LocalAddr() net.Addr {
 	return s.Local
 }
 
-func (s *StreamConn) RemoteAddr() net.Addr {
+func (s *streamConn) RemoteAddr() net.Addr {
 	return s.Remote
 }
 
-var _ net.Conn = (*StreamConn)(nil)
+var _ net.Conn = (*streamConn)(nil)

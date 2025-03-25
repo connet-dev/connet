@@ -220,11 +220,7 @@ func (s *Source) connectDestination(ctx context.Context, conn net.Conn, dest sou
 			return fmt.Errorf("source tls: %w", err)
 		}
 
-		tlsConn := tls.Client(&quicc.StreamConn{
-			Stream: stream,
-			Local:  dest.conn.LocalAddr(),
-			Remote: dest.conn.RemoteAddr(),
-		}, dstConfig)
+		tlsConn := tls.Client(quicc.StreamConn(stream, dest.conn), dstConfig)
 		if err := tlsConn.HandshakeContext(ctx); err != nil {
 			return fmt.Errorf("source handshake: %w", err)
 		}
