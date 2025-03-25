@@ -10,6 +10,9 @@ message Request {
   Connect connect = 1;
 
   message Connect {
+    string source_client_name = 1;
+    bytes source_client_key = 2;
+    bytes source_client_sign = 3;
   }
 }
 
@@ -19,7 +22,10 @@ message Response {
   Connect connect = 2;
 
   message Connect {
-    ProxyProtoVersion ProxyProto = 1;
+    ProxyProtoVersion proxy_proto = 1;
+    string destination_client_name = 2;
+    bytes destination_client_key = 3;
+    bytes destination_client_sign = 4;
   }
 }
 

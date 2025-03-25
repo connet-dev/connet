@@ -5,6 +5,7 @@ go 1.23.2
 require (
 	github.com/klev-dev/klevdb v0.8.0
 	github.com/mr-tron/base58 v1.2.0
+	github.com/nknorg/encrypted-stream v1.0.2-0.20230825233553-7dd6467c4652
 	github.com/pelletier/go-toml/v2 v2.2.3
 	github.com/pires/go-proxyproto v0.8.0
 	github.com/quic-go/quic-go v0.49.0
@@ -21,6 +22,7 @@ require (
 	github.com/go-task/slim-sprig/v3 v3.0.0 // indirect
 	github.com/gofrs/flock v0.12.1 // indirect
 	github.com/google/pprof v0.0.0-20250125003558-7fdb3d7e6fa0 // indirect
+	github.com/imdario/mergo v0.3.16 // indirect
 	github.com/inconshreveable/mousetrap v1.1.0 // indirect
 	github.com/onsi/ginkgo/v2 v2.22.2 // indirect
 	github.com/plar/go-adaptive-radix-tree/v2 v2.0.3 // indirect

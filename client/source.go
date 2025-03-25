@@ -3,8 +3,11 @@ package client
 import (
 	"cmp"
 	"context"
+	"crypto/ed25519"
+	"crypto/rand"
 	"errors"
 	"fmt"
+	"io"
 	"log/slog"
 	"math"
 	"net"
@@ -19,7 +22,9 @@ import (
 	"github.com/connet-dev/connet/pb"
 	"github.com/connet-dev/connet/pbc"
 	"github.com/connet-dev/connet/quicc"
+	es "github.com/nknorg/encrypted-stream"
 	"github.com/quic-go/quic-go"
+	"golang.org/x/crypto/nacl/box"
 	"golang.org/x/sync/errgroup"
 )
 
@@ -194,8 +199,32 @@ func (s *Source) connectDestination(ctx context.Context, conn net.Conn, dest sou
 	}
 	defer stream.Close()
 
+	var srcName string
+	var sendKey, signKey []byte
+	var pk, sk *[32]byte
+	if dest.peer.style == peerRelay {
+		srcName = s.peer.serverCert.Leaf.DNSNames[0]
+
+		pk, sk, err = box.GenerateKey(rand.Reader)
+		if err != nil {
+			return fmt.Errorf("generate key: %w", err)
+		}
+		sendKey = (*pk)[:]
+
+		pk := s.peer.serverCert.PrivateKey.(ed25519.PrivateKey)
+		sign, err := pk.Sign(nil, sendKey, &ed25519.Options{})
+		if err != nil {
+			return fmt.Errorf("sign: %w", err)
+		}
+		signKey = sign
+	}
+
 	if err := pb.Write(stream, &pbc.Request{
-		Connect: &pbc.Request_Connect{},
+		Connect: &pbc.Request_Connect{
+			SourceClientName: srcName,
+			SourceClientKey:  sendKey,
+			SourceClientSign: signKey,
+		},
 	}); err != nil {
 		return fmt.Errorf("destination write request: %w", err)
 	}
@@ -205,13 +234,46 @@ func (s *Source) connectDestination(ctx context.Context, conn net.Conn, dest sou
 		return fmt.Errorf("destination read response: %w", err)
 	}
 
+	var dstStream io.ReadWriteCloser = stream
+	if dest.peer.style == peerRelay {
+		if len(resp.Connect.DestinationClientKey) == 0 {
+			return fmt.Errorf("no destination public key")
+		}
+
+		cert, err := s.peer.findPeerByName(resp.Connect.DestinationClientName)
+		if err != nil {
+			return fmt.Errorf("find peer: %w", err)
+		}
+		peerPublicKey := cert.PublicKey.(ed25519.PublicKey)
+		if !ed25519.Verify(peerPublicKey, resp.Connect.DestinationClientKey, resp.Connect.DestinationClientSign) {
+			return fmt.Errorf("signature not verified")
+		}
+
+		var sharedKey, peerPubKey [32]byte
+		copy(peerPubKey[:], resp.Connect.DestinationClientKey)
+		box.Precompute(&sharedKey, &peerPubKey, sk)
+
+		c, err := es.NewXChaCha20Poly1305Cipher(sharedKey[:])
+		if err != nil {
+			return fmt.Errorf("create chachapoly cipher: %w", err)
+		}
+		s, err := es.NewEncryptedStream(stream, &es.Config{
+			Cipher:    c,
+			Initiator: true,
+		})
+		if err != nil {
+			return fmt.Errorf("create encrypted stream: %w", err)
+		}
+		dstStream = s
+	}
+
 	proxy := model.ProxyVersionFromPB(resp.GetConnect().GetProxyProto())
-	if err := proxy.Write(stream, conn); err != nil {
+	if err := proxy.Write(dstStream, conn); err != nil {
 		return fmt.Errorf("destination write proxy header: %w", err)
 	}
 
 	s.logger.Debug("joining conns", "style", dest.peer.style)
-	err = netc.Join(ctx, conn, stream)
+	err = netc.Join(ctx, conn, dstStream)
 	s.logger.Debug("disconnected conns", "err", err)
 
 	return nil

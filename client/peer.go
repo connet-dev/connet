@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/tls"
 	"crypto/x509"
+	"fmt"
 	"log/slog"
 	"maps"
 	"net/netip"
@@ -286,4 +287,30 @@ func newServerTLSConfig(serverCert []byte) (*serverTLSConfig, error) {
 		name: cert.DNSNames[0],
 		cas:  cas,
 	}, nil
+}
+
+func (p *peer) findPeerByName(name string) (*x509.Certificate, error) {
+	peers, err := p.peers.Peek()
+	if err != nil {
+		return nil, fmt.Errorf("destination peers peer: %w", err)
+	}
+	var candidates []*x509.Certificate
+	for _, peer := range peers {
+		cert, err := x509.ParseCertificate(peer.ServerCertificate)
+		if err != nil {
+			return nil, err
+		}
+		if cert.DNSNames[0] == name {
+			candidates = append(candidates, cert)
+		}
+	}
+
+	switch len(candidates) {
+	case 0:
+		return nil, fmt.Errorf("destination peer not found")
+	case 1:
+		return candidates[0], nil
+	default:
+		return nil, fmt.Errorf("multiple destination peers found")
+	}
 }
