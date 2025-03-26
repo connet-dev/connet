@@ -9,7 +9,6 @@ import (
 	"log/slog"
 	"net"
 	"net/netip"
-	"slices"
 
 	"github.com/connet-dev/connet/certc"
 	"github.com/connet-dev/connet/model"
@@ -22,14 +21,21 @@ import (
 )
 
 type DestinationConfig struct {
-	Forward model.Forward
-	Address string
-	Route   model.RouteOption
-	Proxy   model.ProxyVersion
+	Forward          model.Forward
+	Address          string
+	Route            model.RouteOption
+	Proxy            model.ProxyVersion
+	RelayEncryptions []model.EncryptionScheme
 }
 
 func NewDestinationConfig(name string, addr string) DestinationConfig {
-	return DestinationConfig{Forward: model.NewForward(name), Address: addr, Route: model.RouteAny, Proxy: model.ProxyNone}
+	return DestinationConfig{
+		Forward:          model.NewForward(name),
+		Address:          addr,
+		Route:            model.RouteAny,
+		Proxy:            model.ProxyNone,
+		RelayEncryptions: []model.EncryptionScheme{model.NoEncryption},
+	}
 }
 
 func (cfg DestinationConfig) WithRoute(route model.RouteOption) DestinationConfig {
@@ -39,6 +45,11 @@ func (cfg DestinationConfig) WithRoute(route model.RouteOption) DestinationConfi
 
 func (cfg DestinationConfig) WithProxy(proxy model.ProxyVersion) DestinationConfig {
 	cfg.Proxy = proxy
+	return cfg
+}
+
+func (cfg DestinationConfig) WithRelayEncryptions(schemes ...model.EncryptionScheme) DestinationConfig {
+	cfg.RelayEncryptions = schemes
 	return cfg
 }
 
@@ -161,7 +172,7 @@ func (d *Destination) runDestination(ctx context.Context, stream quic.Stream, sr
 	defer stream.Close()
 
 	if err := d.runDestinationErr(ctx, stream, src); err != nil {
-		d.logger.Debug("done destination")
+		d.logger.Debug("done destination", "err", err)
 	}
 }
 
@@ -193,18 +204,41 @@ func (d *Destination) runConnect(ctx context.Context, stream quic.Stream, src *d
 	if src.peer.style == peerRelay {
 		connect.DestinationClientName = d.peer.serverCert.Leaf.DNSNames[0]
 
-		if slices.Contains(req.Connect.SourceEncryption, pbc.RelayEncryptionScheme_TLS) {
+		srcEncryptions := model.EncryptionsFromPB(req.Connect.SourceEncryption)
+		if req.Connect.SourceClientName == "" && len(srcEncryptions) == 0 {
+			// source doesn't include encryption logic, none is the only possible choice
+			srcEncryptions = []model.EncryptionScheme{model.NoEncryption}
+		}
+
+		encryption, err := model.SelectEncryptionScheme(d.cfg.RelayEncryptions, srcEncryptions)
+		switch {
+		case err != nil:
+			// No intersection between offered source schemes and what the destinations is configured with
+			err := pb.NewError(pb.Error_DestinationRelayEncryptionError, "select encryption scheme: %s", err)
+			if err := pb.Write(stream, &pbc.Response{Error: err}); err != nil {
+				return fmt.Errorf("destination connect write err response: %w", err)
+			}
+			return err
+		case encryption == model.TLSEncryption:
 			connect.DestinationEncryption = pbc.RelayEncryptionScheme_TLS
 
 			scfg, err := d.getSourceTLS(req.Connect.SourceClientName)
 			if err != nil {
-				err := pb.NewError(pb.Error_DestinationRelayTLSError, "destination tls: %v", err.Error())
+				err := pb.NewError(pb.Error_DestinationRelayEncryptionError, "destination tls: %s", err)
 				if err := pb.Write(stream, &pbc.Response{Error: err}); err != nil {
 					return fmt.Errorf("destination connect write err response: %w", err)
 				}
 				return err
 			}
 			srcConfig = scfg
+		case encryption == model.NoEncryption:
+			// do nothing
+		default:
+			err := pb.NewError(pb.Error_DestinationRelayEncryptionError, "unknown encryption scheme: %s", encryption)
+			if err := pb.Write(stream, &pbc.Response{Error: err}); err != nil {
+				return fmt.Errorf("destination connect write err response: %w", err)
+			}
+			return err
 		}
 	}
 
@@ -226,6 +260,7 @@ func (d *Destination) runConnect(ctx context.Context, stream quic.Stream, src *d
 
 	var encStream io.ReadWriteCloser = stream
 	if src.peer.style == peerRelay && connect.DestinationEncryption == pbc.RelayEncryptionScheme_TLS {
+		d.logger.Debug("performing peer TLS")
 		tlsConn := tls.Server(quicc.StreamConn(stream, src.conn), srcConfig)
 		if err := tlsConn.HandshakeContext(ctx); err != nil {
 			return fmt.Errorf("destination handshake: %w", err)

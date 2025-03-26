@@ -52,20 +52,23 @@ type ClientConfig struct {
 	DirectResetKeyFile string `toml:"direct-stateless-reset-key-file"`
 	StatusAddr         string `toml:"status-addr"`
 
-	Destinations map[string]DestinationConfig `toml:"destinations"`
-	Sources      map[string]SourceConfig      `toml:"sources"`
+	RelayEncryptions []string                     `toml:"relay-encryptions"`
+	Destinations     map[string]DestinationConfig `toml:"destinations"`
+	Sources          map[string]SourceConfig      `toml:"sources"`
 }
 
 type DestinationConfig struct {
-	Addr              string `toml:"addr"`
-	Route             string `toml:"route"`
-	ProxyProtoVersion string `toml:"proxy-proto-version"`
-	FileServerRoot    string `toml:"file-server-root"`
+	Addr              string   `toml:"addr"`
+	Route             string   `toml:"route"`
+	ProxyProtoVersion string   `toml:"proxy-proto-version"`
+	FileServerRoot    string   `toml:"file-server-root"`
+	RelayEncryptions  []string `toml:"relay-encryptions"`
 }
 
 type SourceConfig struct {
-	Addr  string `toml:"addr"`
-	Route string `toml:"route"`
+	Addr             string   `toml:"addr"`
+	Route            string   `toml:"route"`
+	RelayEncryptions []string `toml:"relay-encryptions"`
 }
 
 type ServerConfig struct {
@@ -507,6 +510,15 @@ func clientRun(ctx context.Context, cfg ClientConfig, logger *slog.Logger) error
 		opts = append(opts, connet.ClientStatusAddress(cfg.StatusAddr))
 	}
 
+	var defaultRelayEncryptions = []model.EncryptionScheme{model.NoEncryption}
+	if len(cfg.RelayEncryptions) > 0 {
+		res, err := parseEncryptionSchemes(cfg.RelayEncryptions)
+		if err != nil {
+			return fmt.Errorf("parse relay encryptions: %w", err)
+		}
+		defaultRelayEncryptions = res
+	}
+
 	var srvs []*netc.FileServer
 	for name, fc := range cfg.Destinations {
 		route, err := parseRouteOption(fc.Route)
@@ -520,8 +532,20 @@ func clientRun(ctx context.Context, cfg ClientConfig, logger *slog.Logger) error
 		if fc.FileServerRoot != "" {
 			srvs = append(srvs, &netc.FileServer{Addr: fc.Addr, Root: fc.FileServerRoot})
 		}
+		relayEncryptions := defaultRelayEncryptions
+		if len(fc.RelayEncryptions) > 0 {
+			res, err := parseEncryptionSchemes(fc.RelayEncryptions)
+			if err != nil {
+				return fmt.Errorf("parse relay encryptions for destination '%s': %w", name, err)
+			}
+			relayEncryptions = res
+		}
 		opts = append(opts, connet.ClientDestination(
-			client.NewDestinationConfig(name, fc.Addr).WithRoute(route).WithProxy(proxy)))
+			client.NewDestinationConfig(name, fc.Addr).
+				WithRoute(route).
+				WithProxy(proxy).
+				WithRelayEncryptions(relayEncryptions...),
+		))
 	}
 
 	for name, fc := range cfg.Sources {
@@ -529,8 +553,19 @@ func clientRun(ctx context.Context, cfg ClientConfig, logger *slog.Logger) error
 		if err != nil {
 			return fmt.Errorf("parse route option for source '%s': %w", name, err)
 		}
+		relayEncryptions := defaultRelayEncryptions
+		if len(fc.RelayEncryptions) > 0 {
+			res, err := parseEncryptionSchemes(fc.RelayEncryptions)
+			if err != nil {
+				return fmt.Errorf("parse relay encryptions for destination '%s': %w", name, err)
+			}
+			relayEncryptions = res
+		}
 		opts = append(opts, connet.ClientSource(
-			client.NewSourceConfig(name, fc.Addr).WithRoute(route)))
+			client.NewSourceConfig(name, fc.Addr).
+				WithRoute(route).
+				WithRelayEncryptions(relayEncryptions...),
+		))
 	}
 
 	opts = append(opts, connet.ClientLogger(logger))
@@ -818,6 +853,18 @@ func parseRole(s string) (model.Role, error) {
 	return model.ParseRole(s)
 }
 
+func parseEncryptionSchemes(s []string) ([]model.EncryptionScheme, error) {
+	encs := make([]model.EncryptionScheme, len(s))
+	for i, si := range s {
+		enc, err := model.ParseEncryptionScheme(si)
+		if err != nil {
+			return nil, err
+		}
+		encs[i] = enc
+	}
+	return encs, nil
+}
+
 func parseClientAuth(tokens []string, restrs []TokenRestriction) (control.ClientAuthenticator, error) {
 	switch {
 	case len(restrs) == 0:
@@ -900,6 +947,8 @@ func (c *ClientConfig) merge(o ClientConfig) {
 	}
 	c.StatusAddr = override(c.StatusAddr, o.StatusAddr)
 
+	c.RelayEncryptions = overrides(c.RelayEncryptions, o.RelayEncryptions)
+
 	for k, v := range o.Destinations {
 		if c.Destinations == nil {
 			c.Destinations = map[string]DestinationConfig{}
@@ -920,8 +969,8 @@ func (c *ServerConfig) merge(o ServerConfig) {
 	c.Key = override(c.Key, o.Key)
 
 	c.Addr = override(c.Addr, o.Addr)
-	c.IPRestriction.AllowCIDRs = append(c.IPRestriction.AllowCIDRs, o.IPRestriction.AllowCIDRs...)
-	c.IPRestriction.DenyCIDRs = append(c.IPRestriction.DenyCIDRs, o.IPRestriction.DenyCIDRs...)
+	c.IPRestriction.AllowCIDRs = overrides(c.IPRestriction.AllowCIDRs, o.IPRestriction.AllowCIDRs)
+	c.IPRestriction.DenyCIDRs = overrides(c.IPRestriction.DenyCIDRs, o.IPRestriction.DenyCIDRs)
 	if len(o.Tokens) > 0 || o.TokensFile != "" { // new config completely overrides tokens
 		c.Tokens = o.Tokens
 		c.TokensFile = o.TokensFile
@@ -946,8 +995,8 @@ func (c *ControlConfig) merge(o ControlConfig) {
 	c.Key = override(c.Key, o.Key)
 
 	c.ClientsAddr = override(c.ClientsAddr, o.ClientsAddr)
-	c.ClientsIPRestriction.AllowCIDRs = append(c.ClientsIPRestriction.AllowCIDRs, o.ClientsIPRestriction.AllowCIDRs...)
-	c.ClientsIPRestriction.DenyCIDRs = append(c.ClientsIPRestriction.DenyCIDRs, o.ClientsIPRestriction.DenyCIDRs...)
+	c.ClientsIPRestriction.AllowCIDRs = overrides(c.ClientsIPRestriction.AllowCIDRs, o.ClientsIPRestriction.AllowCIDRs)
+	c.ClientsIPRestriction.DenyCIDRs = overrides(c.ClientsIPRestriction.DenyCIDRs, o.ClientsIPRestriction.DenyCIDRs)
 	if len(o.ClientsTokens) > 0 || o.ClientsTokensFile != "" { // new config completely overrides tokens
 		c.ClientsTokens = o.ClientsTokens
 		c.ClientsTokensFile = o.ClientsTokensFile
@@ -961,8 +1010,8 @@ func (c *ControlConfig) merge(o ControlConfig) {
 	}
 
 	c.RelaysAddr = override(c.RelaysAddr, o.RelaysAddr)
-	c.RelaysIPRestriction.AllowCIDRs = append(c.RelaysIPRestriction.AllowCIDRs, o.RelaysIPRestriction.AllowCIDRs...)
-	c.RelaysIPRestriction.DenyCIDRs = append(c.RelaysIPRestriction.DenyCIDRs, o.RelaysIPRestriction.DenyCIDRs...)
+	c.RelaysIPRestriction.AllowCIDRs = overrides(c.RelaysIPRestriction.AllowCIDRs, o.RelaysIPRestriction.AllowCIDRs)
+	c.RelaysIPRestriction.DenyCIDRs = overrides(c.RelaysIPRestriction.DenyCIDRs, o.RelaysIPRestriction.DenyCIDRs)
 	if len(o.RelaysTokens) > 0 || o.RelaysTokensFile != "" { // new config completely overrides tokens
 		c.RelaysTokens = o.RelaysTokens
 		c.RelaysTokensFile = o.RelaysTokensFile
@@ -1001,20 +1050,22 @@ func mergeDestinationConfig(c, o DestinationConfig) DestinationConfig {
 		Route:             override(c.Route, o.Route),
 		ProxyProtoVersion: override(c.ProxyProtoVersion, o.ProxyProtoVersion),
 		FileServerRoot:    override(c.FileServerRoot, o.FileServerRoot),
+		RelayEncryptions:  overrides(c.RelayEncryptions, o.RelayEncryptions),
 	}
 }
 
 func mergeSourceConfig(c, o SourceConfig) SourceConfig {
 	return SourceConfig{
-		Addr:  override(c.Addr, o.Addr),
-		Route: override(c.Route, o.Route),
+		Addr:             override(c.Addr, o.Addr),
+		Route:            override(c.Route, o.Route),
+		RelayEncryptions: overrides(c.RelayEncryptions, o.RelayEncryptions),
 	}
 }
 
 func mergeTokenRestriction(c, o TokenRestriction) TokenRestriction {
 	return TokenRestriction{
-		AllowCIDRs:  append(c.AllowCIDRs, o.AllowCIDRs...),
-		DenyCIDRs:   append(c.DenyCIDRs, o.DenyCIDRs...),
+		AllowCIDRs:  overrides(c.AllowCIDRs, o.AllowCIDRs),
+		DenyCIDRs:   overrides(c.DenyCIDRs, o.DenyCIDRs),
 		NameMatches: override(c.NameMatches, o.NameMatches),
 		RoleMatches: override(c.RoleMatches, o.RoleMatches),
 	}
@@ -1022,13 +1073,20 @@ func mergeTokenRestriction(c, o TokenRestriction) TokenRestriction {
 
 func mergeIPRestriction(c, o IPRestriction) IPRestriction {
 	return IPRestriction{
-		AllowCIDRs: append(c.AllowCIDRs, o.AllowCIDRs...),
-		DenyCIDRs:  append(c.DenyCIDRs, o.DenyCIDRs...),
+		AllowCIDRs: overrides(c.AllowCIDRs, o.AllowCIDRs),
+		DenyCIDRs:  overrides(c.DenyCIDRs, o.DenyCIDRs),
 	}
 }
 
 func override(s, o string) string {
 	if o != "" {
+		return o
+	}
+	return s
+}
+
+func overrides(s, o []string) []string {
+	if len(o) > 0 {
 		return o
 	}
 	return s

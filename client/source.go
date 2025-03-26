@@ -26,17 +26,28 @@ import (
 )
 
 type SourceConfig struct {
-	Forward model.Forward
-	Address string
-	Route   model.RouteOption
+	Forward          model.Forward
+	Address          string
+	Route            model.RouteOption
+	RelayEncryptions []model.EncryptionScheme
 }
 
 func NewSourceConfig(name string, addr string) SourceConfig {
-	return SourceConfig{Forward: model.NewForward(name), Address: addr, Route: model.RouteAny}
+	return SourceConfig{
+		Forward:          model.NewForward(name),
+		Address:          addr,
+		Route:            model.RouteAny,
+		RelayEncryptions: []model.EncryptionScheme{model.NoEncryption},
+	}
 }
 
 func (cfg SourceConfig) WithRoute(route model.RouteOption) SourceConfig {
 	cfg.Route = route
+	return cfg
+}
+
+func (cfg SourceConfig) WithRelayEncryptions(schemes ...model.EncryptionScheme) SourceConfig {
+	cfg.RelayEncryptions = schemes
 	return cfg
 }
 
@@ -199,7 +210,7 @@ func (s *Source) connectDestination(ctx context.Context, conn net.Conn, dest sou
 	connect := &pbc.Request_Connect{}
 	if dest.peer.style == peerRelay {
 		connect.SourceClientName = s.peer.serverCert.Leaf.DNSNames[0]
-		connect.SourceEncryption = []pbc.RelayEncryptionScheme{pbc.RelayEncryptionScheme_TLS}
+		connect.SourceEncryption = model.PBFromEncryptions(s.cfg.RelayEncryptions)
 	}
 
 	if err := pb.Write(stream, &pbc.Request{
@@ -214,18 +225,31 @@ func (s *Source) connectDestination(ctx context.Context, conn net.Conn, dest sou
 	}
 
 	var encStream io.ReadWriteCloser = stream
-	if dest.peer.style == peerRelay && resp.Connect.DestinationEncryption == pbc.RelayEncryptionScheme_TLS {
-		dstConfig, err := s.getDestinationTLS(resp.Connect.DestinationClientName)
-		if err != nil {
-			return fmt.Errorf("source tls: %w", err)
+	if dest.peer.style == peerRelay {
+		destinationEncryption := model.EncryptionFromPB(resp.Connect.DestinationEncryption)
+		if !slices.Contains(s.cfg.RelayEncryptions, destinationEncryption) {
+			return fmt.Errorf("source failed to negotiate encryption scheme: %s", destinationEncryption)
 		}
 
-		tlsConn := tls.Client(quicc.StreamConn(stream, dest.conn), dstConfig)
-		if err := tlsConn.HandshakeContext(ctx); err != nil {
-			return fmt.Errorf("source handshake: %w", err)
-		}
+		switch destinationEncryption {
+		case model.TLSEncryption:
+			s.logger.Debug("performing peer TLS")
+			dstConfig, err := s.getDestinationTLS(resp.Connect.DestinationClientName)
+			if err != nil {
+				return fmt.Errorf("source tls: %w", err)
+			}
 
-		encStream = tlsConn
+			tlsConn := tls.Client(quicc.StreamConn(stream, dest.conn), dstConfig)
+			if err := tlsConn.HandshakeContext(ctx); err != nil {
+				return fmt.Errorf("source handshake: %w", err)
+			}
+
+			encStream = tlsConn
+		case model.NoEncryption:
+			// nothing to do
+		default:
+			return fmt.Errorf("source returned unknown encryption: %s", destinationEncryption)
+		}
 	}
 
 	proxy := model.ProxyVersionFromPB(resp.GetConnect().GetProxyProto())

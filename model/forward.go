@@ -36,6 +36,7 @@ func PBFromForwards(fwds []Forward) []*pb.Forward {
 }
 
 func GenServerName(prefix string) string {
+	// TODO add time component
 	data := make([]byte, 32)
 	if _, err := io.ReadFull(rand.Reader, data); err != nil {
 		panic(err)
