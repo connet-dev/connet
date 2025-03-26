@@ -176,7 +176,7 @@ func (s *Source) runConn(ctx context.Context, conn net.Conn) {
 	s.logger.Debug("received conn", "remote", conn.RemoteAddr())
 
 	if err := s.runConnErr(ctx, conn); err != nil {
-		s.logger.Warn("error handling conn", "err", err)
+		s.logger.Warn("source conn error", "err", err)
 	}
 }
 
@@ -233,7 +233,7 @@ func (s *Source) connectDestination(ctx context.Context, conn net.Conn, dest sou
 
 		switch destinationEncryption {
 		case model.TLSEncryption:
-			s.logger.Debug("performing peer TLS")
+			s.logger.Debug("upgrading relay connection to TLS", "peer", dest.peer.id)
 			dstConfig, err := s.getDestinationTLS(resp.Connect.DestinationClientName)
 			if err != nil {
 				return fmt.Errorf("source tls: %w", err)

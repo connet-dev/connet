@@ -172,7 +172,7 @@ func (d *Destination) runDestination(ctx context.Context, stream quic.Stream, sr
 	defer stream.Close()
 
 	if err := d.runDestinationErr(ctx, stream, src); err != nil {
-		d.logger.Debug("done destination", "err", err)
+		d.logger.Debug("destination conn error", "err", err)
 	}
 }
 
@@ -260,7 +260,7 @@ func (d *Destination) runConnect(ctx context.Context, stream quic.Stream, src *d
 
 	var encStream io.ReadWriteCloser = stream
 	if src.peer.style == peerRelay && connect.DestinationEncryption == pbc.RelayEncryptionScheme_TLS {
-		d.logger.Debug("performing peer TLS")
+		d.logger.Debug("upgrading relay connection to TLS", "peer", src.peer.id)
 		tlsConn := tls.Server(quicc.StreamConn(stream, src.conn), srcConfig)
 		if err := tlsConn.HandshakeContext(ctx); err != nil {
 			return fmt.Errorf("destination handshake: %w", err)

@@ -336,12 +336,17 @@ func (c *clientConn) runSourceStreamErr(ctx context.Context, stream quic.Stream,
 }
 
 func (c *clientConn) connect(ctx context.Context, stream quic.Stream, fcs *forwardClients, req *pbc.Request) error {
-	var pberrs []*pb.Error
 	dests := fcs.getDestinations()
+	if len(dests) == 0 {
+		err := pb.NewError(pb.Error_DestinationNotFound, "could not find destination")
+		return pb.Write(stream, &pbc.Response{Error: err})
+	}
+
+	var pberrs []string
 	for _, dest := range dests {
 		if err := c.connectDestination(ctx, stream, dest, req); err != nil {
 			if pberr := pb.GetError(err); pberr != nil {
-				pberrs = append(pberrs, pberr)
+				pberrs = append(pberrs, pberr.Error())
 			}
 			c.logger.Debug("could not dial destination", "err", err)
 		} else {
@@ -350,17 +355,7 @@ func (c *clientConn) connect(ctx context.Context, stream quic.Stream, fcs *forwa
 		}
 	}
 
-	if len(dests) == 0 {
-		err := pb.NewError(pb.Error_DestinationNotFound, "could not find destination")
-		return pb.Write(stream, &pbc.Response{Error: err})
-	}
-
-	serrs := make([]string, len(pberrs))
-	for i, pberr := range pberrs {
-		serrs[i] = pberr.Error()
-	}
-	// TODO different error code?
-	err := pb.NewError(pb.Error_DestinationDialFailed, "could not dial destinations: %v", serrs)
+	err := pb.NewError(pb.Error_DestinationDialFailed, "could not dial destinations: %v", pberrs)
 	return pb.Write(stream, &pbc.Response{Error: err})
 }
 
