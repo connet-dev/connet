@@ -138,11 +138,14 @@ direct-stateless-reset-key = "" # the quic stateless reset key as a literal 32 b
 direct-stateless-reset-key-file = "/path/to/reset/key" # the quic stateless reset key read from a file
 status-addr = "127.0.0.1:19182" # at what address this client listens for status connections, disabled unless set
 
+relay-encryption = ["none"] # require encryption when using relay for all destination/sources, defaults to "none"
+
 [client.destinations.serviceX]
 addr = "localhost:3000" # where this destination connects to, required
 route = "any" # what kind of routes to use, `any` will use both `direct` and `relay`
 proxy-proto-version = "" # proxy proto version to push origin information to the server, supports `v1` and `v2`
 file-server-root = "." # when set, run a file server at current directory, on localhost:3000 address
+relay-encryption = ["tls"] # require encryption when using relay for this destination
 
 [client.destinations.serviceY]
 addr = "192.168.1.100:8000" # multiple destinations can be defined, they are matched by name at the server
@@ -151,6 +154,7 @@ route = "direct" # force only direct communication between clients
 [client.sources.serviceX] # matches destinations.serviceX
 addr = ":8000" # the address at which to listen for incoming connections to be forwarded
 route = "relay" # the kind of route to use
+relay-encryption = ["tls"] # require encryption when using relay for this source
 
 [client.sources.serviceY] # both sources and destinations can be defined in a single file
 addr = ":8001" # again, mulitple sources can be defined
@@ -273,6 +277,17 @@ the regular expression will be allowed for this token.
 
 You can restrict client role via `role-matches` options. Clients using role restricted token are only allowed to act as
 a `destination` or a `source`, depending on the value of the `role-matches` option.
+
+### Relay Encryption
+
+`connet` has the capability to encrypt a connection between a `source` and a `destination` when using a relay, therefore hiding
+the contents of what is transferred between them. The possible values for `relay-encryption` are `none` (e.g. no encryption) and
+`tls` (e.g. use the exchanged client/server certificates to establish TLS connection).
+
+By default it doesn't encrypt the connection (`relay-encryption = ["none"]`) (e.g. you are running your own trusted relay).
+When multiple values are set (e.g. `relay-encryption = ["none", "tls"]`) it will prefer `tls` (better security), but fallback to
+`none` in case the other peer is not configured to use `tls` yet. `relay-encryption = ["tls"]` is the most strict configuration,
+which will require `tls` at both clients (e.g. source and destination).  
 
 ### Storage
 
