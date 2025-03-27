@@ -209,8 +209,13 @@ func (s *Source) connectDestination(ctx context.Context, conn net.Conn, dest sou
 
 	connect := &pbc.Request_Connect{}
 	if dest.peer.style == peerRelay {
-		connect.SourceClientName = s.peer.serverCert.Leaf.DNSNames[0]
 		connect.SourceEncryption = model.PBFromEncryptions(s.cfg.RelayEncryptions)
+
+		if slices.Contains(s.cfg.RelayEncryptions, model.TLSEncryption) {
+			connect.SourceTls = &pbc.TLSConfiguration{
+				ClientName: s.peer.serverCert.Leaf.DNSNames[0],
+			}
+		}
 	}
 
 	if err := pb.Write(stream, &pbc.Request{
@@ -234,7 +239,7 @@ func (s *Source) connectDestination(ctx context.Context, conn net.Conn, dest sou
 		switch destinationEncryption {
 		case model.TLSEncryption:
 			s.logger.Debug("upgrading relay connection to TLS", "peer", dest.peer.id)
-			dstConfig, err := s.getDestinationTLS(resp.Connect.DestinationClientName)
+			dstConfig, err := s.getDestinationTLS(resp.Connect.DestinationTls.ClientName)
 			if err != nil {
 				return fmt.Errorf("source tls: %w", err)
 			}

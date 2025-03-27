@@ -202,10 +202,8 @@ func (d *Destination) runConnect(ctx context.Context, stream quic.Stream, src *d
 	}
 	var srcConfig *tls.Config
 	if src.peer.style == peerRelay {
-		connect.DestinationClientName = d.peer.serverCert.Leaf.DNSNames[0]
-
 		srcEncryptions := model.EncryptionsFromPB(req.Connect.SourceEncryption)
-		if req.Connect.SourceClientName == "" && len(srcEncryptions) == 0 {
+		if len(srcEncryptions) == 0 {
 			// source doesn't include encryption logic, none is the only possible choice
 			srcEncryptions = []model.EncryptionScheme{model.NoEncryption}
 		}
@@ -220,9 +218,7 @@ func (d *Destination) runConnect(ctx context.Context, stream quic.Stream, src *d
 			}
 			return err
 		case encryption == model.TLSEncryption:
-			connect.DestinationEncryption = pbc.RelayEncryptionScheme_TLS
-
-			scfg, err := d.getSourceTLS(req.Connect.SourceClientName)
+			scfg, err := d.getSourceTLS(req.Connect.SourceTls.ClientName)
 			if err != nil {
 				err := pb.NewError(pb.Error_DestinationRelayEncryptionError, "destination tls: %s", err)
 				if err := pb.Write(stream, &pbc.Response{Error: err}); err != nil {
@@ -231,6 +227,11 @@ func (d *Destination) runConnect(ctx context.Context, stream quic.Stream, src *d
 				return err
 			}
 			srcConfig = scfg
+
+			connect.DestinationEncryption = pbc.RelayEncryptionScheme_TLS
+			connect.DestinationTls = &pbc.TLSConfiguration{
+				ClientName: d.peer.serverCert.Leaf.DNSNames[0],
+			}
 		case encryption == model.NoEncryption:
 			// do nothing
 		default:

@@ -10,8 +10,8 @@ message Request {
   Connect connect = 1;
 
   message Connect {
-    string source_client_name = 1;
-    repeated RelayEncryptionScheme source_encryption = 2;
+    repeated RelayEncryptionScheme source_encryption = 1;
+    TLSConfiguration source_tls = 2;
   }
 }
 
@@ -22,8 +22,8 @@ message Response {
 
   message Connect {
     ProxyProtoVersion proxy_proto = 1;
-    string destination_client_name = 2;
-    RelayEncryptionScheme destination_encryption = 3;
+    RelayEncryptionScheme destination_encryption = 2;
+    TLSConfiguration destination_tls = 3;
   }
 }
 
@@ -36,4 +36,8 @@ enum ProxyProtoVersion {
 enum RelayEncryptionScheme {
   EncryptionNone = 0;
   TLS = 1;
+}
+
+message TLSConfiguration {
+  string client_name = 1;
 }
