@@ -451,8 +451,9 @@ by adding account management and it is one of the easiest way to start.
  - [x] support for multiple config files
  - [x] token passed from cmd should override tokenfile from config
  - [x] client stateless reset key (XDG cache dir by default)
- - [ ] client versioning support
  - [ ] untrusted relay encryption
+   - [x] support encryption with TLS
+ - [ ] client versioning support
 
 ## Future
 
