@@ -286,11 +286,10 @@ func (s *Source) getDestinationTLS(name string) (*tls.Config, error) {
 	}
 
 	for _, peer := range peers {
-		cfg, err := newServerTLSConfig(peer.ServerCertificate)
-		if err != nil {
+		switch cfg, err := newServerTLSConfig(peer.ServerCertificate); {
+		case err != nil:
 			return nil, fmt.Errorf("destination peer server cert: %w", err)
-		}
-		if cfg.name == name {
+		case cfg.name == name:
 			return &tls.Config{
 				Certificates: []tls.Certificate{s.peer.clientCert},
 				RootCAs:      cfg.cas,

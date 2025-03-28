@@ -32,7 +32,7 @@ func ParseEncryptionScheme(s string) (EncryptionScheme, error) {
 	case TLSEncryption.string:
 		return TLSEncryption, nil
 	default:
-		return NoEncryption, fmt.Errorf("invalid encryption scheme '%s'", s)
+		return EncryptionScheme{}, fmt.Errorf("invalid encryption scheme '%s'", s)
 	}
 }
 
@@ -70,6 +70,6 @@ func SelectEncryptionScheme(dst []EncryptionScheme, src []EncryptionScheme) (Enc
 	case slices.Contains(dst, NoEncryption) && slices.Contains(src, NoEncryption):
 		return NoEncryption, nil
 	default:
-		return NoEncryption, fmt.Errorf("no shared encryption schemes")
+		return EncryptionScheme{}, fmt.Errorf("no shared encryption schemes")
 	}
 }

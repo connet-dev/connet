@@ -293,18 +293,17 @@ func (d *Destination) getSourceTLS(name string) (*tls.Config, error) {
 		return nil, fmt.Errorf("source peers list: %w", err)
 	}
 
-	var clientCAs *x509.CertPool
 	for _, peer := range peers {
-		cfg, err := newServerTLSConfig(peer.ServerCertificate)
-		if err != nil {
+		switch cfg, err := newServerTLSConfig(peer.ServerCertificate); {
+		case err != nil:
 			return nil, fmt.Errorf("source peer server cert: %w", err)
-		}
-		if cfg.name == name {
+		case cfg.name == name:
 			clientCert, err := x509.ParseCertificate(peer.ClientCertificate)
 			if err != nil {
 				return nil, fmt.Errorf("source peer client cert: %w", err)
 			}
-			clientCAs = x509.NewCertPool()
+
+			clientCAs := x509.NewCertPool()
 			clientCAs.AddCert(clientCert)
 			return &tls.Config{
 				ClientAuth:   tls.RequireAndVerifyClientCert,

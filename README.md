@@ -453,6 +453,8 @@ by adding account management and it is one of the easiest way to start.
  - [x] client stateless reset key (XDG cache dir by default)
  - [ ] untrusted relay encryption
    - [x] support encryption with TLS
+   - [ ] direct key exchange, signed by certs
+ - [ ] relay client single connection without a per-peer conn
  - [ ] client versioning support
 
 ## Future
