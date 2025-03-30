@@ -278,7 +278,7 @@ func (d *Destination) runConnect(ctx context.Context, stream quic.Stream, src *d
 
 			encStream = tlsConn
 		case pbc.RelayEncryptionScheme_DHX25519_CHACHAPOLY:
-			d.logger.Debug("upgrading relay connection to ECDH", "peer", src.peer.id)
+			d.logger.Debug("upgrading relay connection to DHXCP", "peer", src.peer.id)
 			encStream = srcStreamer(stream)
 		case pbc.RelayEncryptionScheme_EncryptionNone:
 			// do nothing

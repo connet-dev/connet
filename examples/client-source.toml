@@ -7,4 +7,5 @@ direct-addr = ":19193"
 
 [client.sources.sws]
 addr = ":9999"
-relay-encryptions = ["ecdh"]
+route = "relay"
+relay-encryptions = ["tls"]

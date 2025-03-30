@@ -265,7 +265,7 @@ func (s *Source) connectDestination(ctx context.Context, conn net.Conn, dest sou
 
 			encStream = tlsConn
 		case model.DHXCPEncryption:
-			s.logger.Debug("upgrading relay connection to ECDH", "peer", dest.peer.id)
+			s.logger.Debug("upgrading relay connection to DHXCP", "peer", dest.peer.id)
 			dstPublic, err := s.peer.getECDHPublicKey(resp.Connect.DestinationDhX25519)
 			if err != nil {
 				return fmt.Errorf("source public key: %w", err)

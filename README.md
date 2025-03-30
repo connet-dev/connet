@@ -459,7 +459,6 @@ by adding account management and it is one of the easiest way to start.
  - [ ] untrusted relay encryption
    - [x] support encryption with TLS
    - [x] direct key exchange, signed by certs
- - [ ] relay client single connection without a per-peer conn
  - [ ] client versioning support
  - [ ] dial/accept support for src/dst
 
