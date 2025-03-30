@@ -7,7 +7,7 @@ import (
 	"slices"
 )
 
-type asyncStream struct {
+type asymStream struct {
 	stream io.ReadWriteCloser
 	reader cipher.AEAD
 	writer cipher.AEAD
@@ -28,7 +28,7 @@ type asyncStream struct {
 const maxBuff = 65535
 
 func NewStream(stream io.ReadWriteCloser, reader cipher.AEAD, writer cipher.AEAD) io.ReadWriteCloser {
-	return &asyncStream{
+	return &asymStream{
 		stream: stream,
 		reader: reader,
 		writer: writer,
@@ -47,7 +47,7 @@ func NewStream(stream io.ReadWriteCloser, reader cipher.AEAD, writer cipher.AEAD
 	}
 }
 
-func (s *asyncStream) Read(p []byte) (int, error) {
+func (s *asymStream) Read(p []byte) (int, error) {
 	var err error
 	if s.readPlainBegin >= s.readPlainEnd {
 		if _, err := io.ReadFull(s.stream, s.readBuffLen); err != nil {
@@ -79,7 +79,7 @@ func (s *asyncStream) Read(p []byte) (int, error) {
 	return n, nil
 }
 
-func (s *asyncStream) Write(p []byte) (int, error) {
+func (s *asymStream) Write(p []byte) (int, error) {
 	var written int
 	for chunk := range slices.Chunk(p, s.writePlainMax) {
 		s.writeBuff = s.writeBuff[:cap(s.writeBuff)]
@@ -102,11 +102,11 @@ func (s *asyncStream) Write(p []byte) (int, error) {
 	return written, nil
 }
 
-func (s *asyncStream) Close() error {
+func (s *asymStream) Close() error {
 	return s.stream.Close()
 }
 
-var _ io.ReadWriteCloser = (*asyncStream)(nil)
+var _ io.ReadWriteCloser = (*asymStream)(nil)
 
 func incrementNonce(nonce []byte) {
 	for i := len(nonce) - 1; i >= 0; i++ {
