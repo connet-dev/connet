@@ -145,7 +145,7 @@ addr = "localhost:3000" # where this destination connects to, required
 route = "any" # what kind of routes to use, `any` will use both `direct` and `relay`
 proxy-proto-version = "" # proxy proto version to push origin information to the server, supports `v1` and `v2`
 file-server-root = "." # when set, run a file server at current directory, on localhost:3000 address
-relay-encryption = ["tls"] # require encryption when using relay for this destination
+relay-encryption = ["tls", "dhxcp"] # require `tls` or `dhxcp` encryption when using relay for this destination
 
 [client.destinations.serviceY]
 addr = "192.168.1.100:8000" # multiple destinations can be defined, they are matched by name at the server
@@ -154,7 +154,7 @@ route = "direct" # force only direct communication between clients
 [client.sources.serviceX] # matches destinations.serviceX
 addr = ":8000" # the address at which to listen for incoming connections to be forwarded
 route = "relay" # the kind of route to use
-relay-encryption = ["tls"] # require encryption when using relay for this source
+relay-encryption = ["dhxcp"] # require `dhxcp` encryption when using relay for this source
 
 [client.sources.serviceY] # both sources and destinations can be defined in a single file
 addr = ":8001" # again, mulitple sources can be defined
@@ -281,13 +281,18 @@ a `destination` or a `source`, depending on the value of the `role-matches` opti
 ### Relay Encryption
 
 `connet` has the capability to encrypt a connection between a `source` and a `destination` when using a relay, therefore hiding
-the contents of what is transferred between them. The possible values for `relay-encryption` are `none` (e.g. no encryption) and
-`tls` (e.g. use the exchanged client/server certificates to establish TLS connection).
+the contents of what is transferred between them. The possible values for `relay-encryption` are:
+ - `none` - no encryption. Good when using trusted relays (e.g. under your control) for best performance and system load
+ - `tls` - setup TLS based on the exchanged client/server certificates. Well understood and mature option, but requires additional
+roundtrips between client and server to setup TLS within the TLS connection to the relay.
+ - `dhxcp` - new option which does ephemeral (e.g. per connection) ECDH/X25519 exchange as part of the source/destination connect
+and asymmetrically encrypts data with Chacha20Poly1305. A good comporimse between maturity, security, and performance.
 
-By default it doesn't encrypt the connection (`relay-encryption = ["none"]`) (e.g. you are running your own trusted relay).
-When multiple values are set (e.g. `relay-encryption = ["none", "tls"]`) it will prefer `tls` (better security), but fallback to
-`none` in case the other peer is not configured to use `tls` yet. `relay-encryption = ["tls"]` is the most strict configuration,
-which will require `tls` at both clients (e.g. source and destination).  
+By default `connet` doesn't encrypt relay connections (`relay-encryption = ["none"]`) (e.g. you are running your own trusted relay).
+When multiple values are set (e.g. `relay-encryption = ["none", "dhxcp", "tls"]`) it will prefer the most secure/mature option
+(`tls` in this case, then `dhxp`), but fallback to `none` in case the other peer is not configured to use encryption yet.
+Only setting one encryption option (for example `relay-encryption = ["tls"]`), is the most strict configuration, which will
+require same encryption at both clients (e.g. source and destination).  
 
 ### Storage
 
@@ -453,7 +458,7 @@ by adding account management and it is one of the easiest way to start.
  - [x] client stateless reset key (XDG cache dir by default)
  - [ ] untrusted relay encryption
    - [x] support encryption with TLS
-   - [ ] direct key exchange, signed by certs
+   - [x] direct key exchange, signed by certs
  - [ ] relay client single connection without a per-peer conn
  - [ ] client versioning support
  - [ ] dial/accept support for src/dst

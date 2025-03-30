@@ -12,7 +12,7 @@ message Request {
   message Connect {
     repeated RelayEncryptionScheme source_encryption = 1;
     TLSConfiguration source_tls = 2;
-    ECDHConfiguration source_ecdh = 3;
+    ECDHConfiguration source_dh_x25519 = 3;
   }
 }
 
@@ -25,7 +25,7 @@ message Response {
     ProxyProtoVersion proxy_proto = 1;
     RelayEncryptionScheme destination_encryption = 2;
     TLSConfiguration destination_tls = 3;
-    ECDHConfiguration destination_ecdh = 4;
+    ECDHConfiguration destination_dh_x25519 = 4;
   }
 }
 
@@ -38,7 +38,7 @@ enum ProxyProtoVersion {
 enum RelayEncryptionScheme {
   EncryptionNone = 0;
   TLS = 1;
-  ECDH = 2;
+  DHX25519_CHACHAPOLY = 2;
 }
 
 message TLSConfiguration {

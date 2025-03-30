@@ -221,13 +221,13 @@ func (s *Source) connectDestination(ctx context.Context, conn net.Conn, dest sou
 			}
 		}
 
-		if slices.Contains(s.cfg.RelayEncryptions, model.ECDHEncryption) {
+		if slices.Contains(s.cfg.RelayEncryptions, model.DHXCPEncryption) {
 			secret, cfg, err := s.peer.newECDHConfig()
 			if err != nil {
 				return fmt.Errorf("new ecdh config: %w", err)
 			}
 
-			connect.SourceEcdh = cfg
+			connect.SourceDhX25519 = cfg
 			srcSecret = secret
 		}
 	}
@@ -264,9 +264,9 @@ func (s *Source) connectDestination(ctx context.Context, conn net.Conn, dest sou
 			}
 
 			encStream = tlsConn
-		case model.ECDHEncryption:
+		case model.DHXCPEncryption:
 			s.logger.Debug("upgrading relay connection to ECDH", "peer", dest.peer.id)
-			dstPublic, err := s.peer.getECDHPublicKey(resp.Connect.DestinationEcdh)
+			dstPublic, err := s.peer.getECDHPublicKey(resp.Connect.DestinationDhX25519)
 			if err != nil {
 				return fmt.Errorf("source public key: %w", err)
 			}

@@ -227,9 +227,9 @@ func (d *Destination) runConnect(ctx context.Context, stream quic.Stream, src *d
 			connect.DestinationTls = &pbc.TLSConfiguration{
 				ClientName: d.peer.serverCert.Leaf.DNSNames[0],
 			}
-		case encryption == model.ECDHEncryption:
+		case encryption == model.DHXCPEncryption:
 			// get check peer public key
-			srcPublic, err := d.peer.getECDHPublicKey(req.Connect.SourceEcdh)
+			srcPublic, err := d.peer.getECDHPublicKey(req.Connect.SourceDhX25519)
 			if err != nil {
 				return pbc.WriteError(stream, pb.Error_DestinationRelayEncryptionError, "destination public key: %v", err)
 			}
@@ -239,8 +239,8 @@ func (d *Destination) runConnect(ctx context.Context, stream quic.Stream, src *d
 				return pbc.WriteError(stream, pb.Error_DestinationRelayEncryptionError, "new ecdh config: %v", err)
 			}
 
-			connect.DestinationEncryption = pbc.RelayEncryptionScheme_ECDH
-			connect.DestinationEcdh = ecdhCfg
+			connect.DestinationEncryption = pbc.RelayEncryptionScheme_DHX25519_CHACHAPOLY
+			connect.DestinationDhX25519 = ecdhCfg
 
 			streamer, err := cryptoc.NewStreamer(dstSecret, srcPublic, false)
 			if err != nil {
@@ -277,7 +277,7 @@ func (d *Destination) runConnect(ctx context.Context, stream quic.Stream, src *d
 			}
 
 			encStream = tlsConn
-		case pbc.RelayEncryptionScheme_ECDH:
+		case pbc.RelayEncryptionScheme_DHX25519_CHACHAPOLY:
 			d.logger.Debug("upgrading relay connection to ECDH", "peer", src.peer.id)
 			encStream = srcStreamer(stream)
 		case pbc.RelayEncryptionScheme_EncryptionNone:
