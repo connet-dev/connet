@@ -20,7 +20,6 @@ type asyncStream struct {
 	readPlainBegin int
 	readPlainEnd   int
 
-	writeBuffLen  []byte
 	writeBuff     []byte
 	writeNonce    []byte
 	writePlainMax int
@@ -42,10 +41,9 @@ func NewStream(stream io.ReadWriteCloser, reader cipher.AEAD, writer cipher.AEAD
 		readPlainBegin: 0,
 		readPlainEnd:   0,
 
-		writeBuffLen:  make([]byte, 2),
 		writeBuff:     make([]byte, maxBuff),
 		writeNonce:    make([]byte, writer.NonceSize()),
-		writePlainMax: maxBuff - writer.Overhead(),
+		writePlainMax: maxBuff - writer.Overhead() - 2,
 	}
 }
 
@@ -88,14 +86,12 @@ func (s *asyncStream) Write(p []byte) (int, error) {
 
 		// TODO check max nonce
 
-		s.writeBuff = s.writer.Seal(s.writeBuff[:0], s.writeNonce, chunk, nil)
+		out := s.writer.Seal(s.writeBuff[2:2], s.writeNonce, chunk, nil)
+		s.writeBuff = s.writeBuff[:2+len(out)]
 
 		incrementNonce(s.writeNonce)
 
-		binary.BigEndian.PutUint16(s.writeBuffLen, uint16(len(s.writeBuff)))
-		if _, err := s.stream.Write(s.writeBuffLen); err != nil {
-			return written, err
-		}
+		binary.BigEndian.PutUint16(s.writeBuff, uint16(len(out)))
 		if _, err := s.stream.Write(s.writeBuff); err != nil {
 			return written, err
 		}
