@@ -12,6 +12,7 @@ message Request {
   message Connect {
     repeated RelayEncryptionScheme source_encryption = 1;
     TLSConfiguration source_tls = 2;
+    ECDHConfiguration source_ecdh = 3;
   }
 }
 
@@ -24,6 +25,7 @@ message Response {
     ProxyProtoVersion proxy_proto = 1;
     RelayEncryptionScheme destination_encryption = 2;
     TLSConfiguration destination_tls = 3;
+    ECDHConfiguration destination_ecdh = 4;
   }
 }
 
@@ -36,8 +38,15 @@ enum ProxyProtoVersion {
 enum RelayEncryptionScheme {
   EncryptionNone = 0;
   TLS = 1;
+  ECDH = 2;
 }
 
 message TLSConfiguration {
   string client_name = 1;
+}
+
+message ECDHConfiguration {
+  string client_name = 1;
+  bytes key_time = 2;
+  bytes signature = 3;
 }

@@ -10,8 +10,9 @@ import (
 type EncryptionScheme struct{ string }
 
 var (
-	NoEncryption  = EncryptionScheme{"none"}
-	TLSEncryption = EncryptionScheme{"tls"}
+	NoEncryption   = EncryptionScheme{"none"}
+	TLSEncryption  = EncryptionScheme{"tls"}
+	ECDHEncryption = EncryptionScheme{"ecdh"}
 )
 
 func EncryptionFromPB(pb pbc.RelayEncryptionScheme) EncryptionScheme {
@@ -20,6 +21,8 @@ func EncryptionFromPB(pb pbc.RelayEncryptionScheme) EncryptionScheme {
 		return NoEncryption
 	case pbc.RelayEncryptionScheme_TLS:
 		return TLSEncryption
+	case pbc.RelayEncryptionScheme_ECDH:
+		return ECDHEncryption
 	default:
 		panic(fmt.Sprintf("invalid encryption scheme: %d", pb))
 	}
@@ -31,6 +34,8 @@ func ParseEncryptionScheme(s string) (EncryptionScheme, error) {
 		return NoEncryption, nil
 	case TLSEncryption.string:
 		return TLSEncryption, nil
+	case ECDHEncryption.string:
+		return ECDHEncryption, nil
 	default:
 		return EncryptionScheme{}, fmt.Errorf("invalid encryption scheme '%s'", s)
 	}
@@ -42,6 +47,8 @@ func (e EncryptionScheme) PB() pbc.RelayEncryptionScheme {
 		return pbc.RelayEncryptionScheme_EncryptionNone
 	case TLSEncryption:
 		return pbc.RelayEncryptionScheme_TLS
+	case ECDHEncryption:
+		return pbc.RelayEncryptionScheme_ECDH
 	default:
 		panic(fmt.Sprintf("invalid encryption scheme: %s", e.string))
 	}
@@ -67,6 +74,8 @@ func SelectEncryptionScheme(dst []EncryptionScheme, src []EncryptionScheme) (Enc
 	switch {
 	case slices.Contains(dst, TLSEncryption) && slices.Contains(src, TLSEncryption):
 		return TLSEncryption, nil
+	case slices.Contains(dst, ECDHEncryption) && slices.Contains(src, ECDHEncryption):
+		return ECDHEncryption, nil
 	case slices.Contains(dst, NoEncryption) && slices.Contains(src, NoEncryption):
 		return NoEncryption, nil
 	default:

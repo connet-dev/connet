@@ -16,6 +16,7 @@ import (
 	"github.com/connet-dev/connet/pb"
 	"github.com/connet-dev/connet/pbc"
 	"github.com/connet-dev/connet/quicc"
+	"github.com/mr-tron/base58"
 	"github.com/quic-go/quic-go"
 	"golang.org/x/sync/errgroup"
 )
@@ -197,10 +198,13 @@ func (d *Destination) runDestinationErr(ctx context.Context, stream quic.Stream,
 func (d *Destination) runConnect(ctx context.Context, stream quic.Stream, src *destinationConn, req *pbc.Request) error {
 	// TODO check allow from?
 
+	var srcConfig *tls.Config
+	var srcDstKey, dstSrcKey []byte
+
 	connect := &pbc.Response_Connect{
 		ProxyProto: d.cfg.Proxy.PB(),
 	}
-	var srcConfig *tls.Config
+
 	if src.peer.style == peerRelay {
 		srcEncryptions := model.EncryptionsFromPB(req.Connect.SourceEncryption)
 		if len(srcEncryptions) == 0 {
@@ -232,6 +236,39 @@ func (d *Destination) runConnect(ctx context.Context, stream quic.Stream, src *d
 			connect.DestinationTls = &pbc.TLSConfiguration{
 				ClientName: d.peer.serverCert.Leaf.DNSNames[0],
 			}
+		case encryption == model.ECDHEncryption:
+			// get check peer public key
+			peerPK, err := d.peer.getECDHPublicKey(req.Connect.SourceEcdh)
+			if err != nil {
+				err := pb.NewError(pb.Error_DestinationRelayEncryptionError, "destination public key: %s", err)
+				if err := pb.Write(stream, &pbc.Response{Error: err}); err != nil {
+					return fmt.Errorf("destination connect write err response: %w", err)
+				}
+				return err
+			}
+
+			sk, ecdhCfg, err := d.peer.newECDHConfig()
+			if err != nil {
+				err := pb.NewError(pb.Error_DestinationRelayEncryptionError, "new ecdh config: %s", err)
+				if err := pb.Write(stream, &pbc.Response{Error: err}); err != nil {
+					return fmt.Errorf("destination connect write err response: %w", err)
+				}
+				return err
+
+			}
+
+			connect.DestinationEncryption = pbc.RelayEncryptionScheme_ECDH
+			connect.DestinationEcdh = ecdhCfg
+
+			sdk, dsk, err := dstDeriveKeys(sk, peerPK)
+			if err != nil {
+				err := pb.NewError(pb.Error_DestinationRelayEncryptionError, "derive keys: %s", err)
+				if err := pb.Write(stream, &pbc.Response{Error: err}); err != nil {
+					return fmt.Errorf("destination connect write err response: %w", err)
+				}
+				return err
+			}
+			srcDstKey, dstSrcKey = sdk, dsk
 		case encryption == model.NoEncryption:
 			// do nothing
 		default:
@@ -260,14 +297,22 @@ func (d *Destination) runConnect(ctx context.Context, stream quic.Stream, src *d
 	}
 
 	var encStream io.ReadWriteCloser = stream
-	if src.peer.style == peerRelay && connect.DestinationEncryption == pbc.RelayEncryptionScheme_TLS {
-		d.logger.Debug("upgrading relay connection to TLS", "peer", src.peer.id)
-		tlsConn := tls.Server(quicc.StreamConn(stream, src.conn), srcConfig)
-		if err := tlsConn.HandshakeContext(ctx); err != nil {
-			return fmt.Errorf("destination handshake: %w", err)
-		}
+	if src.peer.style == peerRelay {
+		switch connect.DestinationEncryption {
+		case pbc.RelayEncryptionScheme_TLS:
+			d.logger.Debug("upgrading relay connection to TLS", "peer", src.peer.id)
+			tlsConn := tls.Server(quicc.StreamConn(stream, src.conn), srcConfig)
+			if err := tlsConn.HandshakeContext(ctx); err != nil {
+				return fmt.Errorf("destination handshake: %w", err)
+			}
 
-		encStream = tlsConn
+			encStream = tlsConn
+		case pbc.RelayEncryptionScheme_ECDH:
+			fmt.Println(" -- XXXXXXXXXXXXXXX: ", base58.Encode(srcDstKey), base58.Encode(dstSrcKey))
+		case pbc.RelayEncryptionScheme_EncryptionNone:
+			// do nothing
+		default:
+		}
 	}
 
 	d.logger.Debug("joining conns")

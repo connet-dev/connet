@@ -76,6 +76,7 @@ func TestE2E(t *testing.T) {
 		ClientDestination(client.NewDestinationConfig("dst-direct-any-src", htAddr).WithRoute(model.RouteDirect)),
 		ClientDestination(client.NewDestinationConfig("dst-relay-any-src", htAddr).WithRoute(model.RouteRelay)),
 		ClientDestination(client.NewDestinationConfig("relay-tls", htAddr).WithRoute(model.RouteRelay).WithRelayEncryptions(model.TLSEncryption)),
+		ClientDestination(client.NewDestinationConfig("relay-ecdh", htAddr).WithRoute(model.RouteRelay).WithRelayEncryptions(model.ECDHEncryption)),
 
 		ClientDestination(client.NewDestinationConfig("dst-direct-relay-src", htAddr).WithRoute(model.RouteDirect)),
 		ClientDestination(client.NewDestinationConfig("dst-relay-direct-src", htAddr).WithRoute(model.RouteRelay)),
@@ -101,6 +102,7 @@ func TestE2E(t *testing.T) {
 		ClientSource(client.NewSourceConfig("dst-direct-any-src", ":10004").WithRoute(model.RouteAny)),
 		ClientSource(client.NewSourceConfig("dst-relay-any-src", ":10005").WithRoute(model.RouteAny)),
 		ClientSource(client.NewSourceConfig("relay-tls", ":10006").WithRoute(model.RouteRelay).WithRelayEncryptions(model.TLSEncryption)),
+		ClientSource(client.NewSourceConfig("relay-ecdh", ":10007").WithRoute(model.RouteRelay).WithRelayEncryptions(model.ECDHEncryption)),
 
 		ClientSource(client.NewSourceConfig("dst-direct-relay-src", ":10100").WithRoute(model.RouteRelay)),
 		ClientSource(client.NewSourceConfig("dst-relay-direct-src", ":10101").WithRoute(model.RouteDirect)),
@@ -171,7 +173,7 @@ func TestE2E(t *testing.T) {
 	httpcl.Transport = &http.Transport{DisableKeepAlives: true}
 
 	// Positive
-	ports := slices.Repeat([]int{10000, 10001, 10002, 10003, 10004, 10005, 10006}, 3)
+	ports := slices.Repeat([]int{10000, 10001, 10002, 10003, 10004, 10005, 10006, 10007}, 3)
 	for i, port := range ports {
 		t.Run(fmt.Sprintf("success-%d:%d", i, port), func(t *testing.T) {
 			rnd := rand.Uint64()

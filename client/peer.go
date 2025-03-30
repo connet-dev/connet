@@ -2,18 +2,28 @@ package client
 
 import (
 	"context"
+	"crypto/ecdh"
+	"crypto/ed25519"
+	"crypto/hmac"
+	"crypto/rand"
 	"crypto/tls"
 	"crypto/x509"
+	"encoding/binary"
+	"fmt"
+	"hash"
 	"log/slog"
 	"maps"
 	"net/netip"
+	"time"
 
 	"github.com/connet-dev/connet/certc"
 	"github.com/connet-dev/connet/model"
 	"github.com/connet-dev/connet/notify"
 	"github.com/connet-dev/connet/pb"
+	"github.com/connet-dev/connet/pbc"
 	"github.com/connet-dev/connet/pbs"
 	"github.com/quic-go/quic-go"
+	"golang.org/x/crypto/blake2s"
 	"golang.org/x/sync/errgroup"
 )
 
@@ -286,4 +296,154 @@ func newServerTLSConfig(serverCert []byte) (*serverTLSConfig, error) {
 		name: cert.DNSNames[0],
 		cas:  cas,
 	}, nil
+}
+
+func (p *peer) newECDHConfig() (*ecdh.PrivateKey, *pbc.ECDHConfiguration, error) {
+	sk, err := ecdh.X25519().GenerateKey(rand.Reader)
+	if err != nil {
+		return nil, nil, fmt.Errorf("peer generate key: %w", err)
+	}
+
+	var keyTime []byte
+	keyTime = append(keyTime, sk.PublicKey().Bytes()...)
+	keyTime = binary.BigEndian.AppendUint64(keyTime, uint64(time.Now().Nanosecond()))
+
+	certSK := p.serverCert.PrivateKey.(ed25519.PrivateKey)
+	signature, err := certSK.Sign(rand.Reader, keyTime, &ed25519.Options{})
+	if err != nil {
+		return nil, nil, fmt.Errorf("peer sign: %w", err)
+	}
+
+	return sk, &pbc.ECDHConfiguration{
+		ClientName: p.serverCert.Leaf.DNSNames[0],
+		KeyTime:    keyTime,
+		Signature:  signature,
+	}, nil
+}
+
+func (p *peer) getECDHPublicKey(cfg *pbc.ECDHConfiguration) (*ecdh.PublicKey, error) {
+	peers, err := p.peers.Peek()
+	if err != nil {
+		return nil, fmt.Errorf("peers peer: %w", err)
+	}
+	var candidates []*x509.Certificate
+	for _, peer := range peers {
+		cert, err := x509.ParseCertificate(peer.ServerCertificate)
+		if err != nil {
+			return nil, err
+		}
+		if cert.DNSNames[0] == cfg.ClientName {
+			candidates = append(candidates, cert)
+		}
+	}
+
+	switch len(candidates) {
+	case 0:
+		return nil, fmt.Errorf("peer not found")
+	case 1:
+		// return candidates[0], nil
+	default:
+		return nil, fmt.Errorf("multiple peers found")
+	}
+
+	certPublic := candidates[0].PublicKey.(ed25519.PublicKey)
+	if !ed25519.Verify(certPublic, cfg.KeyTime, cfg.Signature) {
+		return nil, fmt.Errorf("signature verification failed")
+	}
+
+	keyBytes, timeBytes := cfg.KeyTime[0:len(cfg.KeyTime)-8], cfg.KeyTime[len(cfg.KeyTime)-8:]
+	t := time.Unix(0, int64(binary.BigEndian.Uint64(timeBytes)))
+	if time.Since(t) < 5*time.Minute {
+		return nil, fmt.Errorf("time verification failed")
+	}
+
+	pk, err := ecdh.X25519().NewPublicKey(keyBytes)
+	if err != nil {
+		return nil, fmt.Errorf("new public key: %w", err)
+	}
+	return pk, nil
+}
+
+func srcDeriveKeys(selfSecret *ecdh.PrivateKey, peerPublic *ecdh.PublicKey) ([]byte, []byte, error) {
+	ck, hk := initck()
+
+	hk = mixHash(hk, selfSecret.PublicKey().Bytes())
+	hk = mixHash(hk, peerPublic.Bytes())
+
+	dh, err := selfSecret.ECDH(peerPublic)
+	if err != nil {
+		return nil, nil, err
+	}
+	ck = hkdf1(ck, dh)
+
+	hk1, hk2 := hkdf2(ck, hk)
+	return hk1, hk2, nil
+}
+
+func dstDeriveKeys(selfSecret *ecdh.PrivateKey, peerPublic *ecdh.PublicKey) ([]byte, []byte, error) {
+	ck, hk := initck()
+
+	hk = mixHash(hk, peerPublic.Bytes())
+	hk = mixHash(hk, selfSecret.PublicKey().Bytes())
+
+	dh, err := selfSecret.ECDH(peerPublic)
+	if err != nil {
+		return nil, nil, err
+	}
+	ck = hkdf1(ck, dh)
+
+	hk1, hk2 := hkdf2(ck, hk)
+	return hk1, hk2, nil
+}
+
+func initck() ([]byte, []byte) {
+	ck := make([]byte, blake2s.Size)
+	copy(ck, "chain-connet")
+
+	hk := make([]byte, blake2s.Size)
+	copy(ck, "hash-connet")
+
+	return ck, hk
+}
+
+func newhash() hash.Hash {
+	h, err := blake2s.New256([]byte("connet"))
+	if err != nil {
+		panic(err)
+	}
+	return h
+}
+
+func mixHash(oldHash, data []byte) []byte {
+	h := newhash()
+	h.Write(oldHash)
+	h.Write(data)
+	return h.Sum(nil)
+}
+
+func hkdf1(chainingKey, inputKey []byte) []byte {
+	tempMac := hmac.New(newhash, chainingKey)
+	tempMac.Write(inputKey)
+	tempKey := tempMac.Sum(nil)
+
+	out1Mac := hmac.New(newhash, tempKey)
+	out1Mac.Write([]byte{0x01})
+	return out1Mac.Sum(nil)
+}
+
+func hkdf2(chainingKey, inputKey []byte) ([]byte, []byte) {
+	tempMac := hmac.New(newhash, chainingKey)
+	tempMac.Write(inputKey)
+	tempKey := tempMac.Sum(nil)
+
+	out1Mac := hmac.New(newhash, tempKey)
+	out1Mac.Write([]byte{0x01})
+	out1 := out1Mac.Sum(nil)
+
+	out2Mac := hmac.New(newhash, tempKey)
+	out2Mac.Write(out1)
+	out2Mac.Write([]byte{0x02})
+	out2 := out2Mac.Sum(nil)
+
+	return out1, out2
 }

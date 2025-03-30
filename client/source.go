@@ -3,6 +3,7 @@ package client
 import (
 	"cmp"
 	"context"
+	"crypto/ecdh"
 	"crypto/tls"
 	"errors"
 	"fmt"
@@ -21,6 +22,7 @@ import (
 	"github.com/connet-dev/connet/pb"
 	"github.com/connet-dev/connet/pbc"
 	"github.com/connet-dev/connet/quicc"
+	"github.com/mr-tron/base58"
 	"github.com/quic-go/quic-go"
 	"golang.org/x/sync/errgroup"
 )
@@ -207,6 +209,8 @@ func (s *Source) connectDestination(ctx context.Context, conn net.Conn, dest sou
 	}
 	defer stream.Close()
 
+	var srcSecret *ecdh.PrivateKey
+
 	connect := &pbc.Request_Connect{}
 	if dest.peer.style == peerRelay {
 		connect.SourceEncryption = model.PBFromEncryptions(s.cfg.RelayEncryptions)
@@ -215,6 +219,16 @@ func (s *Source) connectDestination(ctx context.Context, conn net.Conn, dest sou
 			connect.SourceTls = &pbc.TLSConfiguration{
 				ClientName: s.peer.serverCert.Leaf.DNSNames[0],
 			}
+		}
+
+		if slices.Contains(s.cfg.RelayEncryptions, model.ECDHEncryption) {
+			secret, cfg, err := s.peer.newECDHConfig()
+			if err != nil {
+				return fmt.Errorf("new ecdh config: %w", err)
+			}
+
+			connect.SourceEcdh = cfg
+			srcSecret = secret
 		}
 	}
 
@@ -250,6 +264,17 @@ func (s *Source) connectDestination(ctx context.Context, conn net.Conn, dest sou
 			}
 
 			encStream = tlsConn
+		case model.ECDHEncryption:
+			dstPublic, err := s.peer.getECDHPublicKey(resp.Connect.DestinationEcdh)
+			if err != nil {
+				return fmt.Errorf("source public key: %w", err)
+			}
+
+			srcDstKey, dstSrcKey, err := srcDeriveKeys(srcSecret, dstPublic)
+			if err != nil {
+				return fmt.Errorf("derive keys: %w", err)
+			}
+			fmt.Println(" -- XXXXXXXXXXXXXXX: ", base58.Encode(srcDstKey), base58.Encode(dstSrcKey))
 		case model.NoEncryption:
 			// nothing to do
 		default:
