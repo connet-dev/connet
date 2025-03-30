@@ -11,6 +11,7 @@ import (
 	"encoding/binary"
 	"fmt"
 	"hash"
+	"io"
 	"log/slog"
 	"maps"
 	"net/netip"
@@ -22,8 +23,10 @@ import (
 	"github.com/connet-dev/connet/pb"
 	"github.com/connet-dev/connet/pbc"
 	"github.com/connet-dev/connet/pbs"
+	"github.com/connet-dev/connet/quicc"
 	"github.com/quic-go/quic-go"
 	"golang.org/x/crypto/blake2s"
+	"golang.org/x/crypto/chacha20poly1305"
 	"golang.org/x/sync/errgroup"
 )
 
@@ -394,6 +397,28 @@ func dstDeriveKeys(selfSecret *ecdh.PrivateKey, peerPublic *ecdh.PublicKey) ([]b
 
 	hk1, hk2 := hkdf2(ck, hk)
 	return hk1, hk2, nil
+}
+
+func srcEncryptStream(stream io.ReadWriteCloser, srcDst, dstSrc []byte) (io.ReadWriteCloser, error) {
+	return newEncryptedStream(stream, dstSrc, srcDst)
+}
+
+func dstEncryptStream(stream io.ReadWriteCloser, srcDst, dstSrc []byte) (io.ReadWriteCloser, error) {
+	return newEncryptedStream(stream, srcDst, dstSrc)
+}
+
+func newEncryptedStream(stream io.ReadWriteCloser, readerKey, writerKey []byte) (io.ReadWriteCloser, error) {
+	readerCipher, err := chacha20poly1305.New(readerKey)
+	if err != nil {
+		return nil, err
+	}
+
+	writerCipher, err := chacha20poly1305.New(writerKey)
+	if err != nil {
+		return nil, err
+	}
+
+	return quicc.NewEncStream(stream, readerCipher, writerCipher), nil
 }
 
 func initck() ([]byte, []byte) {

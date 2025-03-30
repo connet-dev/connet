@@ -456,6 +456,7 @@ by adding account management and it is one of the easiest way to start.
    - [ ] direct key exchange, signed by certs
  - [ ] relay client single connection without a per-peer conn
  - [ ] client versioning support
+ - [ ] dial/accept support for src/dst
 
 ## Future
 

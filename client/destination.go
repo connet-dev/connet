@@ -16,7 +16,6 @@ import (
 	"github.com/connet-dev/connet/pb"
 	"github.com/connet-dev/connet/pbc"
 	"github.com/connet-dev/connet/quicc"
-	"github.com/mr-tron/base58"
 	"github.com/quic-go/quic-go"
 	"golang.org/x/sync/errgroup"
 )
@@ -308,7 +307,12 @@ func (d *Destination) runConnect(ctx context.Context, stream quic.Stream, src *d
 
 			encStream = tlsConn
 		case pbc.RelayEncryptionScheme_ECDH:
-			fmt.Println(" -- XXXXXXXXXXXXXXX: ", base58.Encode(srcDstKey), base58.Encode(dstSrcKey))
+			stream, err := dstEncryptStream(stream, srcDstKey, dstSrcKey)
+			if err != nil {
+				return fmt.Errorf("encrypted stream: %w", err)
+			}
+
+			encStream = stream
 		case pbc.RelayEncryptionScheme_EncryptionNone:
 			// do nothing
 		default:
