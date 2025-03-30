@@ -1,4 +1,4 @@
-package quicc
+package cryptoc
 
 import (
 	"crypto/cipher"
@@ -7,7 +7,7 @@ import (
 	"slices"
 )
 
-type EncStream struct {
+type asyncStream struct {
 	stream io.ReadWriteCloser
 	reader cipher.AEAD
 	writer cipher.AEAD
@@ -28,8 +28,8 @@ type EncStream struct {
 
 const maxBuff = 65535
 
-func NewEncStream(stream io.ReadWriteCloser, reader cipher.AEAD, writer cipher.AEAD) *EncStream {
-	return &EncStream{
+func NewStream(stream io.ReadWriteCloser, reader cipher.AEAD, writer cipher.AEAD) io.ReadWriteCloser {
+	return &asyncStream{
 		stream: stream,
 		reader: reader,
 		writer: writer,
@@ -49,7 +49,7 @@ func NewEncStream(stream io.ReadWriteCloser, reader cipher.AEAD, writer cipher.A
 	}
 }
 
-func (s *EncStream) Read(p []byte) (int, error) {
+func (s *asyncStream) Read(p []byte) (int, error) {
 	var err error
 	if s.readPlainBegin >= s.readPlainEnd {
 		if _, err := io.ReadFull(s.stream, s.readBuffLen); err != nil {
@@ -81,7 +81,7 @@ func (s *EncStream) Read(p []byte) (int, error) {
 	return n, nil
 }
 
-func (s *EncStream) Write(p []byte) (int, error) {
+func (s *asyncStream) Write(p []byte) (int, error) {
 	var written int
 	for chunk := range slices.Chunk(p, s.writePlainMax) {
 		s.writeBuff = s.writeBuff[:cap(s.writeBuff)]
@@ -106,11 +106,11 @@ func (s *EncStream) Write(p []byte) (int, error) {
 	return written, nil
 }
 
-func (s *EncStream) Close() error {
+func (s *asyncStream) Close() error {
 	return s.stream.Close()
 }
 
-var _ io.ReadWriteCloser = (*EncStream)(nil)
+var _ io.ReadWriteCloser = (*asyncStream)(nil)
 
 func incrementNonce(nonce []byte) {
 	for i := len(nonce) - 1; i >= 0; i++ {

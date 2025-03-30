@@ -17,6 +17,7 @@ import (
 	"time"
 
 	"github.com/connet-dev/connet/certc"
+	"github.com/connet-dev/connet/cryptoc"
 	"github.com/connet-dev/connet/model"
 	"github.com/connet-dev/connet/netc"
 	"github.com/connet-dev/connet/pb"
@@ -269,17 +270,12 @@ func (s *Source) connectDestination(ctx context.Context, conn net.Conn, dest sou
 				return fmt.Errorf("source public key: %w", err)
 			}
 
-			srcDstKey, dstSrcKey, err := srcDeriveKeys(srcSecret, dstPublic)
+			streamer, err := cryptoc.NewStreamer(srcSecret, dstPublic, true)
 			if err != nil {
-				return fmt.Errorf("derive keys: %w", err)
+				return fmt.Errorf("new streamer: %w", err)
 			}
 
-			stream, err := srcEncryptStream(stream, srcDstKey, dstSrcKey)
-			if err != nil {
-				return fmt.Errorf("encrypted stream: %w", err)
-			}
-
-			encStream = stream
+			encStream = streamer(stream)
 		case model.NoEncryption:
 			// nothing to do
 		default:

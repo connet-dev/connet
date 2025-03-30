@@ -11,6 +11,7 @@ import (
 	"net/netip"
 
 	"github.com/connet-dev/connet/certc"
+	"github.com/connet-dev/connet/cryptoc"
 	"github.com/connet-dev/connet/model"
 	"github.com/connet-dev/connet/netc"
 	"github.com/connet-dev/connet/pb"
@@ -198,7 +199,7 @@ func (d *Destination) runConnect(ctx context.Context, stream quic.Stream, src *d
 	// TODO check allow from?
 
 	var srcConfig *tls.Config
-	var srcDstKey, dstSrcKey []byte
+	var srcStreamer cryptoc.Streamer
 
 	connect := &pbc.Response_Connect{
 		ProxyProto: d.cfg.Proxy.PB(),
@@ -259,15 +260,15 @@ func (d *Destination) runConnect(ctx context.Context, stream quic.Stream, src *d
 			connect.DestinationEncryption = pbc.RelayEncryptionScheme_ECDH
 			connect.DestinationEcdh = ecdhCfg
 
-			sdk, dsk, err := dstDeriveKeys(sk, peerPK)
+			streamer, err := cryptoc.NewStreamer(sk, peerPK, false)
 			if err != nil {
-				err := pb.NewError(pb.Error_DestinationRelayEncryptionError, "derive keys: %s", err)
+				err := pb.NewError(pb.Error_DestinationRelayEncryptionError, "new streamer: %s", err)
 				if err := pb.Write(stream, &pbc.Response{Error: err}); err != nil {
 					return fmt.Errorf("destination connect write err response: %w", err)
 				}
 				return err
 			}
-			srcDstKey, dstSrcKey = sdk, dsk
+			srcStreamer = streamer
 		case encryption == model.NoEncryption:
 			// do nothing
 		default:
@@ -307,12 +308,7 @@ func (d *Destination) runConnect(ctx context.Context, stream quic.Stream, src *d
 
 			encStream = tlsConn
 		case pbc.RelayEncryptionScheme_ECDH:
-			stream, err := dstEncryptStream(stream, srcDstKey, dstSrcKey)
-			if err != nil {
-				return fmt.Errorf("encrypted stream: %w", err)
-			}
-
-			encStream = stream
+			encStream = srcStreamer(stream)
 		case pbc.RelayEncryptionScheme_EncryptionNone:
 			// do nothing
 		default:

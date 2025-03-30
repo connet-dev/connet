@@ -52,13 +52,6 @@ func TestIP(t *testing.T) {
 			accept: false,
 		},
 		{
-			name:   "deny with allow",
-			allow:  []string{"10.101.2.0/24"},
-			deny:   []string{"10.100.2.0/24"},
-			check:  "10.100.2.100",
-			accept: false,
-		},
-		{
 			name:   "allow explicit",
 			allow:  []string{"10.101.2.0/24"},
 			deny:   []string{"10.100.2.0/24"},

@@ -1,4 +1,4 @@
-package quicc
+package cryptoc
 
 import (
 	"crypto/cipher"
@@ -12,7 +12,7 @@ import (
 	"golang.org/x/crypto/chacha20poly1305"
 )
 
-func TestEnc(t *testing.T) {
+func TestStream(t *testing.T) {
 	serverReader, clientWriter := io.Pipe()
 	clientReader, serverWriter := io.Pipe()
 
@@ -22,8 +22,8 @@ func TestEnc(t *testing.T) {
 	var clientAEAD = newAEAD(t)
 	var serverAEAD = newAEAD(t)
 
-	var clientStream = NewEncStream(client, serverAEAD, clientAEAD)
-	var serverStream = NewEncStream(server, clientAEAD, serverAEAD)
+	var clientStream = NewStream(client, serverAEAD, clientAEAD)
+	var serverStream = NewStream(server, clientAEAD, serverAEAD)
 
 	go func() {
 		_, err := io.Copy(serverStream, serverStream)
