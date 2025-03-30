@@ -7,4 +7,5 @@ server-cas = ".direnv/minica.pem"
 [client.destinations.sws]
 addr = ":8081"
 file-server-root = "."
-relay-encryptions = ["tls"]
+route = "relay"
+relay-encryptions = ["ecdh"]

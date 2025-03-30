@@ -1,10 +1,8 @@
 package quicc
 
 import (
-	"bytes"
 	"crypto/cipher"
 	"encoding/binary"
-	"fmt"
 	"io"
 	"slices"
 )
@@ -40,14 +38,14 @@ func NewEncStream(stream io.ReadWriteCloser, reader cipher.AEAD, writer cipher.A
 		readBuff:    make([]byte, maxBuff),
 		readNonce:   make([]byte, reader.NonceSize()),
 
-		readPlainBuff:  make([]byte, maxBuff-reader.Overhead()-reader.NonceSize()),
+		readPlainBuff:  make([]byte, maxBuff-reader.Overhead()),
 		readPlainBegin: 0,
 		readPlainEnd:   0,
 
 		writeBuffLen:  make([]byte, 2),
 		writeBuff:     make([]byte, maxBuff),
 		writeNonce:    make([]byte, writer.NonceSize()),
-		writePlainMax: maxBuff - writer.Overhead() - writer.NonceSize(),
+		writePlainMax: maxBuff - writer.Overhead(),
 	}
 }
 
@@ -65,15 +63,12 @@ func (s *EncStream) Read(p []byte) (int, error) {
 			s.readBuff = s.readBuff[:n]
 		}
 
-		if !bytes.Equal(s.readNonce, s.readBuff[:s.reader.NonceSize()]) {
-			return 0, fmt.Errorf("invalid nonce")
-		}
-
 		s.readPlainBuff = s.readPlainBuff[:cap(s.readPlainBuff)]
-		s.readPlainBuff, err = s.reader.Open(s.readPlainBuff[:0], s.readNonce, s.readBuff[s.writer.NonceSize():], nil)
+		s.readPlainBuff, err = s.reader.Open(s.readPlainBuff[:0], s.readNonce, s.readBuff, nil)
 		if err != nil {
 			return 0, err
 		}
+
 		incrementNonce(s.readNonce)
 
 		s.readPlainBegin = 0
@@ -92,11 +87,10 @@ func (s *EncStream) Write(p []byte) (int, error) {
 		s.writeBuff = s.writeBuff[:cap(s.writeBuff)]
 
 		// TODO check max nonce
-		copy(s.writeBuff, s.writeNonce)
-		incrementNonce(s.writeNonce)
 
-		out := s.writer.Seal(s.writeBuff[s.writer.NonceSize():s.writer.NonceSize()], s.writeBuff[:s.writer.NonceSize()], chunk, nil)
-		s.writeBuff = s.writeBuff[:len(s.writeNonce)+len(out)]
+		s.writeBuff = s.writer.Seal(s.writeBuff[:0], s.writeNonce, chunk, nil)
+
+		incrementNonce(s.writeNonce)
 
 		binary.BigEndian.PutUint16(s.writeBuffLen, uint16(len(s.writeBuff)))
 		if _, err := s.stream.Write(s.writeBuffLen); err != nil {
