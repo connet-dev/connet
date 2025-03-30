@@ -265,6 +265,7 @@ func (s *Source) connectDestination(ctx context.Context, conn net.Conn, dest sou
 
 			encStream = tlsConn
 		case model.ECDHEncryption:
+			s.logger.Debug("upgrading relay connection to ECDH", "peer", dest.peer.id)
 			dstPublic, err := s.peer.getECDHPublicKey(resp.Connect.DestinationEcdh)
 			if err != nil {
 				return fmt.Errorf("source public key: %w", err)

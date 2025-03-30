@@ -215,20 +215,11 @@ func (d *Destination) runConnect(ctx context.Context, stream quic.Stream, src *d
 		encryption, err := model.SelectEncryptionScheme(d.cfg.RelayEncryptions, srcEncryptions)
 		switch {
 		case err != nil:
-			// No intersection between offered source schemes and what the destinations is configured with
-			err := pb.NewError(pb.Error_DestinationRelayEncryptionError, "select encryption scheme: %s", err)
-			if err := pb.Write(stream, &pbc.Response{Error: err}); err != nil {
-				return fmt.Errorf("destination connect write err response: %w", err)
-			}
-			return err
+			return pbc.WriteError(stream, pb.Error_DestinationRelayEncryptionError, "select encryption scheme: %v", err)
 		case encryption == model.TLSEncryption:
 			scfg, err := d.getSourceTLS(req.Connect.SourceTls.ClientName)
 			if err != nil {
-				err := pb.NewError(pb.Error_DestinationRelayEncryptionError, "destination tls: %s", err)
-				if err := pb.Write(stream, &pbc.Response{Error: err}); err != nil {
-					return fmt.Errorf("destination connect write err response: %w", err)
-				}
-				return err
+				return pbc.WriteError(stream, pb.Error_DestinationRelayEncryptionError, "destination tls: %v", err)
 			}
 			srcConfig = scfg
 
@@ -238,55 +229,34 @@ func (d *Destination) runConnect(ctx context.Context, stream quic.Stream, src *d
 			}
 		case encryption == model.ECDHEncryption:
 			// get check peer public key
-			peerPK, err := d.peer.getECDHPublicKey(req.Connect.SourceEcdh)
+			srcPublic, err := d.peer.getECDHPublicKey(req.Connect.SourceEcdh)
 			if err != nil {
-				err := pb.NewError(pb.Error_DestinationRelayEncryptionError, "destination public key: %s", err)
-				if err := pb.Write(stream, &pbc.Response{Error: err}); err != nil {
-					return fmt.Errorf("destination connect write err response: %w", err)
-				}
-				return err
+				return pbc.WriteError(stream, pb.Error_DestinationRelayEncryptionError, "destination public key: %v", err)
 			}
 
-			sk, ecdhCfg, err := d.peer.newECDHConfig()
+			dstSecret, ecdhCfg, err := d.peer.newECDHConfig()
 			if err != nil {
-				err := pb.NewError(pb.Error_DestinationRelayEncryptionError, "new ecdh config: %s", err)
-				if err := pb.Write(stream, &pbc.Response{Error: err}); err != nil {
-					return fmt.Errorf("destination connect write err response: %w", err)
-				}
-				return err
-
+				return pbc.WriteError(stream, pb.Error_DestinationRelayEncryptionError, "new ecdh config: %v", err)
 			}
 
 			connect.DestinationEncryption = pbc.RelayEncryptionScheme_ECDH
 			connect.DestinationEcdh = ecdhCfg
 
-			streamer, err := cryptoc.NewStreamer(sk, peerPK, false)
+			streamer, err := cryptoc.NewStreamer(dstSecret, srcPublic, false)
 			if err != nil {
-				err := pb.NewError(pb.Error_DestinationRelayEncryptionError, "new streamer: %s", err)
-				if err := pb.Write(stream, &pbc.Response{Error: err}); err != nil {
-					return fmt.Errorf("destination connect write err response: %w", err)
-				}
-				return err
+				return pbc.WriteError(stream, pb.Error_DestinationRelayEncryptionError, "new streamer: %v", err)
 			}
 			srcStreamer = streamer
 		case encryption == model.NoEncryption:
 			// do nothing
 		default:
-			err := pb.NewError(pb.Error_DestinationRelayEncryptionError, "unknown encryption scheme: %s", encryption)
-			if err := pb.Write(stream, &pbc.Response{Error: err}); err != nil {
-				return fmt.Errorf("destination connect write err response: %w", err)
-			}
-			return err
+			return pbc.WriteError(stream, pb.Error_DestinationRelayEncryptionError, "unknown encryption scheme: %s", encryption)
 		}
 	}
 
 	conn, err := net.Dial("tcp", d.cfg.Address)
 	if err != nil {
-		err := pb.NewError(pb.Error_DestinationDialFailed, "%s could not be dialed: %v", d.cfg.Forward, err)
-		if err := pb.Write(stream, &pbc.Response{Error: err}); err != nil {
-			return fmt.Errorf("destination connect write err response: %w", err)
-		}
-		return err
+		return pbc.WriteError(stream, pb.Error_DestinationDialFailed, "%s could not be dialed: %v", d.cfg.Forward, err)
 	}
 	defer conn.Close()
 
@@ -308,6 +278,7 @@ func (d *Destination) runConnect(ctx context.Context, stream quic.Stream, src *d
 
 			encStream = tlsConn
 		case pbc.RelayEncryptionScheme_ECDH:
+			d.logger.Debug("upgrading relay connection to ECDH", "peer", src.peer.id)
 			encStream = srcStreamer(stream)
 		case pbc.RelayEncryptionScheme_EncryptionNone:
 			// do nothing

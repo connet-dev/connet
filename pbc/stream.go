@@ -1,6 +1,7 @@
 package pbc
 
 import (
+	"fmt"
 	"io"
 
 	"github.com/connet-dev/connet/pb"
@@ -23,4 +24,12 @@ func ReadResponse(r io.Reader) (*Response, error) {
 		return nil, resp.Error
 	}
 	return resp, nil
+}
+
+func WriteError(w io.Writer, code pb.Error_Code, msg string, args ...any) error {
+	err := pb.NewError(code, msg, args...)
+	if err := pb.Write(w, &Response{Error: err}); err != nil {
+		return fmt.Errorf("write err response: %w", err)
+	}
+	return err
 }

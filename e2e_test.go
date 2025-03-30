@@ -166,7 +166,7 @@ func TestE2E(t *testing.T) {
 
 	g.Go(func() error { return clDst.Run(ctx) })
 	g.Go(func() error { return clSrc.Run(ctx) })
-	time.Sleep(300 * time.Millisecond) // time for clients to come online
+	time.Sleep(500 * time.Millisecond) // time for clients to come online
 
 	// actual test
 	httpcl := &http.Client{}
