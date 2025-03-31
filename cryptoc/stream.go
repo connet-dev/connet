@@ -29,7 +29,7 @@ type asymStream struct {
 
 const maxBuff = 65535
 
-func NewStream(stream net.Conn, reader cipher.AEAD, writer cipher.AEAD) net.Conn {
+func NewStream(stream net.Conn, reader cipher.AEAD, writer cipher.AEAD) net.Conn { // maybe <T extends io.ReadWrite> and then cast
 	return &asymStream{
 		stream: stream,
 		reader: reader,

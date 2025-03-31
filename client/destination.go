@@ -59,6 +59,8 @@ type Destination struct {
 
 	peer  *peer
 	conns map[peerConnKey]*destinationConn
+
+	acceptCh chan net.Conn
 }
 
 func NewDestination(cfg DestinationConfig, direct *DirectServer, root *certc.Cert, logger *slog.Logger) (*Destination, error) {
@@ -77,6 +79,8 @@ func NewDestination(cfg DestinationConfig, direct *DirectServer, root *certc.Cer
 
 		peer:  p,
 		conns: map[peerConnKey]*destinationConn{},
+
+		acceptCh: make(chan net.Conn, 100),
 	}, nil
 }
 
@@ -93,6 +97,7 @@ func (d *Destination) Run(ctx context.Context) error {
 
 	g.Go(func() error { return d.peer.run(ctx) })
 	g.Go(func() error { return d.runActive(ctx) })
+	g.Go(func() error { return d.runAccept(ctx) })
 
 	return g.Wait()
 }
@@ -128,6 +133,38 @@ func (d *Destination) runActive(ctx context.Context) error {
 	})
 }
 
+func (d *Destination) runAccept(ctx context.Context) error {
+	for {
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		case conn := <-d.acceptCh:
+			go d.acceptConn(ctx, conn)
+		}
+	}
+}
+
+func (d *Destination) acceptConn(ctx context.Context, remoteConn net.Conn) {
+	defer remoteConn.Close()
+
+	if err := d.acceptConnErr(ctx, remoteConn); err != nil {
+		d.logger.Debug("destination conn error", "err", err)
+	}
+}
+
+func (d *Destination) acceptConnErr(ctx context.Context, remoteConn net.Conn) error {
+	conn, err := net.Dial("tcp", d.cfg.Address)
+	if err != nil {
+		return fmt.Errorf("%s could not be dialed: %v", d.cfg.Forward, err)
+	}
+	defer conn.Close()
+
+	err = netc.Join(ctx, remoteConn, conn)
+	d.logger.Debug("disconnected conns", "err", err)
+
+	return nil
+}
+
 type destinationConn struct {
 	dst  *Destination
 	peer peerConnKey
@@ -151,7 +188,7 @@ func (d *destinationConn) run(ctx context.Context) {
 				return err
 			}
 			d.dst.logger.Debug("accepted stream from", "peer", d.peer.id, "style", d.peer.style)
-			go d.dst.runDestination(ctx, stream, d)
+			go d.runDestination(ctx, stream)
 		}
 	})
 	g.Go(func() error {
@@ -164,19 +201,15 @@ func (d *destinationConn) run(ctx context.Context) {
 	}
 }
 
-func (d *destinationConn) close() {
-	close(d.closer)
-}
+func (d *destinationConn) runDestination(ctx context.Context, stream quic.Stream) {
+	// TODO no defer close...
 
-func (d *Destination) runDestination(ctx context.Context, stream quic.Stream, src *destinationConn) {
-	defer stream.Close()
-
-	if err := d.runDestinationErr(ctx, stream, src); err != nil {
-		d.logger.Debug("destination conn error", "err", err)
+	if err := d.runDestinationErr(ctx, stream); err != nil {
+		d.dst.logger.Debug("destination conn error", "err", err)
 	}
 }
 
-func (d *Destination) runDestinationErr(ctx context.Context, stream quic.Stream, src *destinationConn) error {
+func (d *destinationConn) runDestinationErr(ctx context.Context, stream quic.Stream) error {
 	req, err := pbc.ReadRequest(stream)
 	if err != nil {
 		return fmt.Errorf("destination read request: %w", err)
@@ -184,39 +217,35 @@ func (d *Destination) runDestinationErr(ctx context.Context, stream quic.Stream,
 
 	switch {
 	case req.Connect != nil:
-		return d.runConnect(ctx, stream, src, req)
+		return d.runConnect(ctx, stream, req)
 	default:
-		err := pb.NewError(pb.Error_RequestUnknown, "unknown request: %v", req)
-		if err := pb.Write(stream, &pbc.Response{Error: err}); err != nil {
-			return fmt.Errorf("destination write err response: %w", err)
-		}
-		return err
+		return pbc.WriteError(stream, pb.Error_RequestUnknown, "unknown request: %v", req)
 	}
 }
 
-func (d *Destination) runConnect(ctx context.Context, stream quic.Stream, src *destinationConn, req *pbc.Request) error {
+func (d *destinationConn) runConnect(ctx context.Context, stream quic.Stream, req *pbc.Request) error {
 	// TODO check allow from?
 
 	var srcConfig *tls.Config
 	var srcStreamer cryptoc.Streamer
 
 	connect := &pbc.Response_Connect{
-		ProxyProto: d.cfg.Proxy.PB(),
+		ProxyProto: d.dst.cfg.Proxy.PB(),
 	}
 
-	if src.peer.style == peerRelay {
+	if d.peer.style == peerRelay {
 		srcEncryptions := model.EncryptionsFromPB(req.Connect.SourceEncryption)
 		if len(srcEncryptions) == 0 {
 			// source doesn't include encryption logic, none is the only possible choice
 			srcEncryptions = []model.EncryptionScheme{model.NoEncryption}
 		}
 
-		encryption, err := model.SelectEncryptionScheme(d.cfg.RelayEncryptions, srcEncryptions)
+		encryption, err := model.SelectEncryptionScheme(d.dst.cfg.RelayEncryptions, srcEncryptions)
 		switch {
 		case err != nil:
 			return pbc.WriteError(stream, pb.Error_DestinationRelayEncryptionError, "select encryption scheme: %v", err)
 		case encryption == model.TLSEncryption:
-			scfg, err := d.getSourceTLS(req.Connect.SourceTls.ClientName)
+			scfg, err := d.dst.getSourceTLS(req.Connect.SourceTls.ClientName)
 			if err != nil {
 				return pbc.WriteError(stream, pb.Error_DestinationRelayEncryptionError, "destination tls: %v", err)
 			}
@@ -224,16 +253,16 @@ func (d *Destination) runConnect(ctx context.Context, stream quic.Stream, src *d
 
 			connect.DestinationEncryption = pbc.RelayEncryptionScheme_TLS
 			connect.DestinationTls = &pbc.TLSConfiguration{
-				ClientName: d.peer.serverCert.Leaf.DNSNames[0],
+				ClientName: d.dst.peer.serverCert.Leaf.DNSNames[0],
 			}
 		case encryption == model.DHXCPEncryption:
 			// get check peer public key
-			srcPublic, err := d.peer.getECDHPublicKey(req.Connect.SourceDhX25519)
+			srcPublic, err := d.dst.peer.getECDHPublicKey(req.Connect.SourceDhX25519)
 			if err != nil {
 				return pbc.WriteError(stream, pb.Error_DestinationRelayEncryptionError, "destination public key: %v", err)
 			}
 
-			dstSecret, ecdhCfg, err := d.peer.newECDHConfig()
+			dstSecret, ecdhCfg, err := d.dst.peer.newECDHConfig()
 			if err != nil {
 				return pbc.WriteError(stream, pb.Error_DestinationRelayEncryptionError, "new ecdh config: %v", err)
 			}
@@ -253,31 +282,25 @@ func (d *Destination) runConnect(ctx context.Context, stream quic.Stream, src *d
 		}
 	}
 
-	conn, err := net.Dial("tcp", d.cfg.Address)
-	if err != nil {
-		return pbc.WriteError(stream, pb.Error_DestinationDialFailed, "%s could not be dialed: %v", d.cfg.Forward, err)
-	}
-	defer conn.Close()
-
 	if err := pb.Write(stream, &pbc.Response{
 		Connect: connect,
 	}); err != nil {
 		return fmt.Errorf("destination connect write response: %w", err)
 	}
 
-	var encStream net.Conn = quicc.StreamConn(stream, src.conn)
-	if src.peer.style == peerRelay {
+	var encStream net.Conn = quicc.StreamConn(stream, d.conn)
+	if d.peer.style == peerRelay {
 		switch connect.DestinationEncryption {
 		case pbc.RelayEncryptionScheme_TLS:
-			d.logger.Debug("upgrading relay connection to TLS", "peer", src.peer.id)
-			tlsConn := tls.Server(quicc.StreamConn(stream, src.conn), srcConfig)
+			d.dst.logger.Debug("upgrading relay connection to TLS", "peer", d.peer.id)
+			tlsConn := tls.Server(quicc.StreamConn(stream, d.conn), srcConfig)
 			if err := tlsConn.HandshakeContext(ctx); err != nil {
 				return fmt.Errorf("destination handshake: %w", err)
 			}
 
 			encStream = tlsConn
 		case pbc.RelayEncryptionScheme_DHX25519_CHACHAPOLY:
-			d.logger.Debug("upgrading relay connection to DHXCP", "peer", src.peer.id)
+			d.dst.logger.Debug("upgrading relay connection to DHXCP", "peer", d.peer.id)
 			encStream = srcStreamer(encStream)
 		case pbc.RelayEncryptionScheme_EncryptionNone:
 			// do nothing
@@ -285,11 +308,14 @@ func (d *Destination) runConnect(ctx context.Context, stream quic.Stream, src *d
 		}
 	}
 
-	d.logger.Debug("joining conns")
-	err = netc.Join(ctx, encStream, conn)
-	d.logger.Debug("disconnected conns", "err", err)
+	d.dst.logger.Debug("accepted conn", "style", d.peer.style)
+	d.dst.acceptCh <- encStream
 
 	return nil
+}
+
+func (d *destinationConn) close() {
+	close(d.closer)
 }
 
 func (d *Destination) RunControl(ctx context.Context, conn quic.Connection) error {

@@ -184,112 +184,19 @@ func (s *Source) runConn(ctx context.Context, conn net.Conn) {
 var errNoDesinationRoute = errors.New("no route to destination")
 
 func (s *Source) runConnErr(ctx context.Context, conn net.Conn) error {
-	conns, err := s.findActive()
+	dstConn, err := s.DialContext(ctx, "", "")
 	if err != nil {
-		return fmt.Errorf("get active conns: %w", err)
+		return fmt.Errorf("dial destination: %w", err)
 	}
+	defer dstConn.Close()
 
-	for _, dest := range conns {
-		if err := s.connectDestination(ctx, conn, dest); err != nil {
-			s.logger.Debug("could not dial destination", "err", err)
-		} else {
-			// connect was success
-			return nil
-		}
-	}
+	// TODO how to handle destination expecting proxy proto
+	// proxy := model.ProxyVersionFromPB(resp.GetConnect().GetProxyProto())
+	// if err := proxy.Write(encStream, conn); err != nil {
+	// 	return fmt.Errorf("source write proxy header: %w", err)
+	// }
 
-	return errNoDesinationRoute
-}
-
-func (s *Source) connectDestination(ctx context.Context, conn net.Conn, dest sourceConn) error {
-	stream, err := dest.conn.OpenStreamSync(ctx)
-	if err != nil {
-		return fmt.Errorf("source connect open stream: %w", err)
-	}
-	defer stream.Close()
-
-	var srcSecret *ecdh.PrivateKey
-
-	connect := &pbc.Request_Connect{}
-	if dest.peer.style == peerRelay {
-		connect.SourceEncryption = model.PBFromEncryptions(s.cfg.RelayEncryptions)
-
-		if slices.Contains(s.cfg.RelayEncryptions, model.TLSEncryption) {
-			connect.SourceTls = &pbc.TLSConfiguration{
-				ClientName: s.peer.serverCert.Leaf.DNSNames[0],
-			}
-		}
-
-		if slices.Contains(s.cfg.RelayEncryptions, model.DHXCPEncryption) {
-			secret, cfg, err := s.peer.newECDHConfig()
-			if err != nil {
-				return fmt.Errorf("new ecdh config: %w", err)
-			}
-
-			connect.SourceDhX25519 = cfg
-			srcSecret = secret
-		}
-	}
-
-	if err := pb.Write(stream, &pbc.Request{
-		Connect: connect,
-	}); err != nil {
-		return fmt.Errorf("source connect write request: %w", err)
-	}
-
-	resp, err := pbc.ReadResponse(stream)
-	if err != nil {
-		return fmt.Errorf("source connect read response: %w", err)
-	}
-
-	var encStream net.Conn = quicc.StreamConn(stream, dest.conn)
-	if dest.peer.style == peerRelay {
-		destinationEncryption := model.EncryptionFromPB(resp.Connect.DestinationEncryption)
-		if !slices.Contains(s.cfg.RelayEncryptions, destinationEncryption) {
-			return fmt.Errorf("source failed to negotiate encryption scheme: %s", destinationEncryption)
-		}
-
-		switch destinationEncryption {
-		case model.TLSEncryption:
-			s.logger.Debug("upgrading relay connection to TLS", "peer", dest.peer.id)
-			dstConfig, err := s.getDestinationTLS(resp.Connect.DestinationTls.ClientName)
-			if err != nil {
-				return fmt.Errorf("source tls: %w", err)
-			}
-
-			tlsConn := tls.Client(quicc.StreamConn(stream, dest.conn), dstConfig)
-			if err := tlsConn.HandshakeContext(ctx); err != nil {
-				return fmt.Errorf("source handshake: %w", err)
-			}
-
-			encStream = tlsConn
-		case model.DHXCPEncryption:
-			s.logger.Debug("upgrading relay connection to DHXCP", "peer", dest.peer.id)
-			dstPublic, err := s.peer.getECDHPublicKey(resp.Connect.DestinationDhX25519)
-			if err != nil {
-				return fmt.Errorf("source public key: %w", err)
-			}
-
-			streamer, err := cryptoc.NewStreamer(srcSecret, dstPublic, true)
-			if err != nil {
-				return fmt.Errorf("new streamer: %w", err)
-			}
-
-			encStream = streamer(encStream)
-		case model.NoEncryption:
-			// nothing to do
-		default:
-			return fmt.Errorf("source returned unknown encryption: %s", destinationEncryption)
-		}
-	}
-
-	proxy := model.ProxyVersionFromPB(resp.GetConnect().GetProxyProto())
-	if err := proxy.Write(encStream, conn); err != nil {
-		return fmt.Errorf("source write proxy header: %w", err)
-	}
-
-	s.logger.Debug("joining conns", "style", dest.peer.style)
-	err = netc.Join(ctx, conn, encStream)
+	err = netc.Join(ctx, conn, dstConn)
 	s.logger.Debug("disconnected conns", "err", err)
 
 	return nil
@@ -351,12 +258,13 @@ func (s *Source) DialContext(ctx context.Context, network, address string) (net.
 
 	return nil, errNoDesinationRoute
 }
+
 func (s *Source) dialDestination(ctx context.Context, dest sourceConn) (net.Conn, error) {
 	stream, err := dest.conn.OpenStreamSync(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("source connect open stream: %w", err)
 	}
-	defer stream.Close()
+	// defer stream.Close()
 
 	var srcSecret *ecdh.PrivateKey
 
@@ -433,5 +341,6 @@ func (s *Source) dialDestination(ctx context.Context, dest sourceConn) (net.Conn
 		}
 	}
 
+	s.logger.Debug("dialed conn", "style", dest.peer.style)
 	return encStream, nil
 }
