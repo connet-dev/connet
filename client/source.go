@@ -202,38 +202,6 @@ func (s *Source) runConnErr(ctx context.Context, conn net.Conn) error {
 	return nil
 }
 
-func (s *Source) RunControl(ctx context.Context, conn quic.Connection) error {
-	return (&peerControl{
-		local: s.peer,
-		fwd:   s.cfg.Forward,
-		role:  model.Source,
-		opt:   s.cfg.Route,
-		conn:  conn,
-	}).run(ctx)
-}
-
-func (s *Source) getDestinationTLS(name string) (*tls.Config, error) {
-	peers, err := s.peer.peers.Peek()
-	if err != nil {
-		return nil, fmt.Errorf("destination peers list: %w", err)
-	}
-
-	for _, peer := range peers {
-		switch cfg, err := newServerTLSConfig(peer.ServerCertificate); {
-		case err != nil:
-			return nil, fmt.Errorf("destination peer server cert: %w", err)
-		case cfg.name == name:
-			return &tls.Config{
-				Certificates: []tls.Certificate{s.peer.clientCert},
-				RootCAs:      cfg.cas,
-				ServerName:   cfg.name,
-			}, nil
-		}
-	}
-
-	return nil, fmt.Errorf("destination peer %s not found", name)
-}
-
 func (s *Source) Dial(network, address string) (net.Conn, error) {
 	return s.DialContext(context.Background(), network, address)
 }
@@ -343,4 +311,36 @@ func (s *Source) dialDestination(ctx context.Context, dest sourceConn) (net.Conn
 
 	s.logger.Debug("dialed conn", "style", dest.peer.style)
 	return encStream, nil
+}
+
+func (s *Source) RunControl(ctx context.Context, conn quic.Connection) error {
+	return (&peerControl{
+		local: s.peer,
+		fwd:   s.cfg.Forward,
+		role:  model.Source,
+		opt:   s.cfg.Route,
+		conn:  conn,
+	}).run(ctx)
+}
+
+func (s *Source) getDestinationTLS(name string) (*tls.Config, error) {
+	peers, err := s.peer.peers.Peek()
+	if err != nil {
+		return nil, fmt.Errorf("destination peers list: %w", err)
+	}
+
+	for _, peer := range peers {
+		switch cfg, err := newServerTLSConfig(peer.ServerCertificate); {
+		case err != nil:
+			return nil, fmt.Errorf("destination peer server cert: %w", err)
+		case cfg.name == name:
+			return &tls.Config{
+				Certificates: []tls.Certificate{s.peer.clientCert},
+				RootCAs:      cfg.cas,
+				ServerName:   cfg.name,
+			}, nil
+		}
+	}
+
+	return nil, fmt.Errorf("destination peer %s not found", name)
 }
