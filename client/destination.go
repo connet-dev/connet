@@ -5,7 +5,6 @@ import (
 	"crypto/tls"
 	"crypto/x509"
 	"fmt"
-	"io"
 	"log/slog"
 	"net"
 	"net/netip"
@@ -266,7 +265,7 @@ func (d *Destination) runConnect(ctx context.Context, stream quic.Stream, src *d
 		return fmt.Errorf("destination connect write response: %w", err)
 	}
 
-	var encStream io.ReadWriteCloser = stream
+	var encStream net.Conn = quicc.StreamConn(stream, src.conn)
 	if src.peer.style == peerRelay {
 		switch connect.DestinationEncryption {
 		case pbc.RelayEncryptionScheme_TLS:
@@ -279,7 +278,7 @@ func (d *Destination) runConnect(ctx context.Context, stream quic.Stream, src *d
 			encStream = tlsConn
 		case pbc.RelayEncryptionScheme_DHX25519_CHACHAPOLY:
 			d.logger.Debug("upgrading relay connection to DHXCP", "peer", src.peer.id)
-			encStream = srcStreamer(stream)
+			encStream = srcStreamer(encStream)
 		case pbc.RelayEncryptionScheme_EncryptionNone:
 			// do nothing
 		default:

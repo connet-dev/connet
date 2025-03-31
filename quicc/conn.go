@@ -16,6 +16,7 @@ func StreamConn(s quic.Stream, c quic.Connection) net.Conn {
 
 type streamConn struct {
 	quic.Stream
+	// TODO just use quic.Connection directly?
 	Local  net.Addr
 	Remote net.Addr
 }

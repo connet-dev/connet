@@ -4,11 +4,13 @@ import (
 	"crypto/cipher"
 	"encoding/binary"
 	"io"
+	"net"
 	"slices"
+	"time"
 )
 
 type asymStream struct {
-	stream io.ReadWriteCloser
+	stream net.Conn
 	reader cipher.AEAD
 	writer cipher.AEAD
 
@@ -27,7 +29,7 @@ type asymStream struct {
 
 const maxBuff = 65535
 
-func NewStream(stream io.ReadWriteCloser, reader cipher.AEAD, writer cipher.AEAD) io.ReadWriteCloser {
+func NewStream(stream net.Conn, reader cipher.AEAD, writer cipher.AEAD) net.Conn {
 	return &asymStream{
 		stream: stream,
 		reader: reader,
@@ -100,6 +102,26 @@ func (s *asymStream) Write(p []byte) (int, error) {
 	}
 
 	return written, nil
+}
+
+func (s *asymStream) LocalAddr() net.Addr {
+	return s.stream.LocalAddr()
+}
+
+func (s *asymStream) RemoteAddr() net.Addr {
+	return s.stream.RemoteAddr()
+}
+
+func (s *asymStream) SetDeadline(t time.Time) error {
+	return s.stream.SetDeadline(t)
+}
+
+func (s *asymStream) SetReadDeadline(t time.Time) error {
+	return s.stream.SetReadDeadline(t)
+}
+
+func (s *asymStream) SetWriteDeadline(t time.Time) error {
+	return s.stream.SetWriteDeadline(t)
 }
 
 func (s *asymStream) Close() error {

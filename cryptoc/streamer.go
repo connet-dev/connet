@@ -2,12 +2,12 @@ package cryptoc
 
 import (
 	"crypto/ecdh"
-	"io"
+	"net"
 
 	"golang.org/x/crypto/chacha20poly1305"
 )
 
-type Streamer func(io.ReadWriteCloser) io.ReadWriteCloser
+type Streamer func(net.Conn) net.Conn
 
 func NewStreamer(selfSecret *ecdh.PrivateKey, peerPublic *ecdh.PublicKey, initiator bool) (Streamer, error) {
 	lKey, rKey, err := DeriveKeys(selfSecret, peerPublic, initiator)
@@ -25,7 +25,7 @@ func NewStreamer(selfSecret *ecdh.PrivateKey, peerPublic *ecdh.PublicKey, initia
 		return nil, err
 	}
 
-	return func(rwc io.ReadWriteCloser) io.ReadWriteCloser {
+	return func(rwc net.Conn) net.Conn {
 		if initiator {
 			return NewStream(rwc, rCipher, lCipher)
 		}

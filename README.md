@@ -456,23 +456,23 @@ by adding account management and it is one of the easiest way to start.
  - [x] support for multiple config files
  - [x] token passed from cmd should override tokenfile from config
  - [x] client stateless reset key (XDG cache dir by default)
- - [ ] untrusted relay encryption
+ - [x] untrusted relay encryption
    - [x] support encryption with TLS
    - [x] direct key exchange, signed by certs
- - [ ] client versioning support
  - [ ] dial/accept support for src/dst
+ - [ ] http source
+ - [ ] websocket tcp converter
+ - [ ] zip and name windows executable .exe
 
 ## Future
 
  - [ ] UDP support
- - [ ] zip and name windows executable .exe
- - [ ] notarize mac app
- - [ ] Gen config
- - [ ] http source
- - [ ] systemd dynamic user in nixos
  - [ ] UPnP and other methods for hole-punching
+ - [ ] client versioning support
+ - [ ] notarize mac app
+ - [ ] systemd dynamic user in nixos
  - [ ] Docs section for building the project
  - [ ] Docs section for embedding into golang programs
  - [ ] mininet testing
- - [ ] websocket tcp converter
+ - [ ] gen config
  - [ ] swift/ios/mac and java/android client libraries

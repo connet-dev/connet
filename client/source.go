@@ -7,7 +7,6 @@ import (
 	"crypto/tls"
 	"errors"
 	"fmt"
-	"io"
 	"log/slog"
 	"math"
 	"net"
@@ -243,7 +242,7 @@ func (s *Source) connectDestination(ctx context.Context, conn net.Conn, dest sou
 		return fmt.Errorf("source connect read response: %w", err)
 	}
 
-	var encStream io.ReadWriteCloser = stream
+	var encStream net.Conn = quicc.StreamConn(stream, dest.conn)
 	if dest.peer.style == peerRelay {
 		destinationEncryption := model.EncryptionFromPB(resp.Connect.DestinationEncryption)
 		if !slices.Contains(s.cfg.RelayEncryptions, destinationEncryption) {
@@ -276,7 +275,7 @@ func (s *Source) connectDestination(ctx context.Context, conn net.Conn, dest sou
 				return fmt.Errorf("new streamer: %w", err)
 			}
 
-			encStream = streamer(stream)
+			encStream = streamer(encStream)
 		case model.NoEncryption:
 			// nothing to do
 		default:
@@ -326,4 +325,113 @@ func (s *Source) getDestinationTLS(name string) (*tls.Config, error) {
 	}
 
 	return nil, fmt.Errorf("destination peer %s not found", name)
+}
+
+func (s *Source) Dial(network, address string) (net.Conn, error) {
+	return s.DialContext(context.Background(), network, address)
+}
+
+func (s *Source) DialContext(ctx context.Context, network, address string) (net.Conn, error) {
+	// TODO network/address
+	//
+	conns, err := s.findActive()
+	if err != nil {
+		return nil, fmt.Errorf("get active conns: %w", err)
+	}
+
+	for _, dest := range conns {
+		if conn, err := s.dialDestination(ctx, dest); err != nil {
+			s.logger.Debug("could not dial destination", "err", err)
+			// TODO collect and return combined error?
+		} else {
+			// connect was success
+			return conn, nil
+		}
+	}
+
+	return nil, errNoDesinationRoute
+}
+func (s *Source) dialDestination(ctx context.Context, dest sourceConn) (net.Conn, error) {
+	stream, err := dest.conn.OpenStreamSync(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("source connect open stream: %w", err)
+	}
+	defer stream.Close()
+
+	var srcSecret *ecdh.PrivateKey
+
+	connect := &pbc.Request_Connect{}
+	if dest.peer.style == peerRelay {
+		connect.SourceEncryption = model.PBFromEncryptions(s.cfg.RelayEncryptions)
+
+		if slices.Contains(s.cfg.RelayEncryptions, model.TLSEncryption) {
+			connect.SourceTls = &pbc.TLSConfiguration{
+				ClientName: s.peer.serverCert.Leaf.DNSNames[0],
+			}
+		}
+
+		if slices.Contains(s.cfg.RelayEncryptions, model.DHXCPEncryption) {
+			secret, cfg, err := s.peer.newECDHConfig()
+			if err != nil {
+				return nil, fmt.Errorf("new ecdh config: %w", err)
+			}
+
+			connect.SourceDhX25519 = cfg
+			srcSecret = secret
+		}
+	}
+
+	if err := pb.Write(stream, &pbc.Request{
+		Connect: connect,
+	}); err != nil {
+		return nil, fmt.Errorf("source connect write request: %w", err)
+	}
+
+	resp, err := pbc.ReadResponse(stream)
+	if err != nil {
+		return nil, fmt.Errorf("source connect read response: %w", err)
+	}
+
+	var encStream net.Conn = quicc.StreamConn(stream, dest.conn)
+	if dest.peer.style == peerRelay {
+		destinationEncryption := model.EncryptionFromPB(resp.Connect.DestinationEncryption)
+		if !slices.Contains(s.cfg.RelayEncryptions, destinationEncryption) {
+			return nil, fmt.Errorf("source failed to negotiate encryption scheme: %s", destinationEncryption)
+		}
+
+		switch destinationEncryption {
+		case model.TLSEncryption:
+			s.logger.Debug("upgrading relay connection to TLS", "peer", dest.peer.id)
+			dstConfig, err := s.getDestinationTLS(resp.Connect.DestinationTls.ClientName)
+			if err != nil {
+				return nil, fmt.Errorf("source tls: %w", err)
+			}
+
+			tlsConn := tls.Client(quicc.StreamConn(stream, dest.conn), dstConfig)
+			if err := tlsConn.HandshakeContext(ctx); err != nil {
+				return nil, fmt.Errorf("source handshake: %w", err)
+			}
+
+			encStream = tlsConn
+		case model.DHXCPEncryption:
+			s.logger.Debug("upgrading relay connection to DHXCP", "peer", dest.peer.id)
+			dstPublic, err := s.peer.getECDHPublicKey(resp.Connect.DestinationDhX25519)
+			if err != nil {
+				return nil, fmt.Errorf("source public key: %w", err)
+			}
+
+			streamer, err := cryptoc.NewStreamer(srcSecret, dstPublic, true)
+			if err != nil {
+				return nil, fmt.Errorf("new streamer: %w", err)
+			}
+
+			encStream = streamer(encStream)
+		case model.NoEncryption:
+			// nothing to do
+		default:
+			return nil, fmt.Errorf("source returned unknown encryption: %s", destinationEncryption)
+		}
+	}
+
+	return encStream, nil
 }
