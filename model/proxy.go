@@ -2,7 +2,6 @@ package model
 
 import (
 	"fmt"
-	"io"
 	"net"
 
 	"github.com/connet-dev/connet/pbc"
@@ -49,15 +48,30 @@ func (v ProxyVersion) PB() pbc.ProxyProtoVersion {
 	}
 }
 
-func (v ProxyVersion) Write(w io.Writer, conn net.Conn) error {
+func (v ProxyVersion) Wrap(conn net.Conn) net.Conn {
 	if v == ProxyNone {
-		return nil
+		return conn
 	}
 	version := byte(2)
 	if v == ProxyV1 {
 		version = byte(1)
 	}
-	pp := proxyproto.HeaderProxyFromAddrs(version, conn.RemoteAddr(), conn.LocalAddr())
-	_, err := pp.WriteTo(w)
+	return &proxyProtoConn{conn, version}
+}
+
+type ProxyProtoConn interface {
+	WriteProxyHeader(sourceAddr, destAddr net.Addr) error
+}
+
+type proxyProtoConn struct {
+	net.Conn
+	proxyProtoVersion byte
+}
+
+var _ ProxyProtoConn = (*proxyProtoConn)(nil)
+
+func (c *proxyProtoConn) WriteProxyHeader(sourceAddr net.Addr, destAddr net.Addr) error {
+	pp := proxyproto.HeaderProxyFromAddrs(c.proxyProtoVersion, sourceAddr, destAddr)
+	_, err := pp.WriteTo(c.Conn)
 	return err
 }

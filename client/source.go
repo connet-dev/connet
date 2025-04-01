@@ -18,7 +18,6 @@ import (
 	"github.com/connet-dev/connet/certc"
 	"github.com/connet-dev/connet/cryptoc"
 	"github.com/connet-dev/connet/model"
-	"github.com/connet-dev/connet/netc"
 	"github.com/connet-dev/connet/pb"
 	"github.com/connet-dev/connet/pbc"
 	"github.com/connet-dev/connet/quicc"
@@ -28,15 +27,13 @@ import (
 
 type SourceConfig struct {
 	Forward          model.Forward
-	Address          string
 	Route            model.RouteOption
 	RelayEncryptions []model.EncryptionScheme
 }
 
-func NewSourceConfig(name string, addr string) SourceConfig {
+func NewSourceConfig(name string) SourceConfig {
 	return SourceConfig{
 		Forward:          model.NewForward(name),
-		Address:          addr,
 		Route:            model.RouteAny,
 		RelayEncryptions: []model.EncryptionScheme{model.NoEncryption},
 	}
@@ -94,7 +91,6 @@ func (s *Source) SetDirectAddrs(addrs []netip.AddrPort) {
 func (s *Source) Run(ctx context.Context) error {
 	g, ctx := errgroup.WithContext(ctx)
 
-	g.Go(func() error { return s.runServer(ctx) })
 	g.Go(func() error { return s.peer.run(ctx) })
 	g.Go(func() error { return s.runActive(ctx) })
 
@@ -148,63 +144,11 @@ func (s *Source) findActive() ([]sourceConn, error) {
 	return slices.SortedFunc(slices.Values(*conns), connCompare), nil
 }
 
-func (s *Source) runServer(ctx context.Context) error {
-	s.logger.Debug("starting server", "addr", s.cfg.Address)
-	l, err := net.Listen("tcp", s.cfg.Address)
-	if err != nil {
-		return fmt.Errorf("server listen: %w", err)
-	}
-	defer l.Close()
-
-	go func() {
-		<-ctx.Done()
-		l.Close()
-	}()
-
-	s.logger.Info("listening for conns")
-	for {
-		conn, err := l.Accept()
-		if err != nil {
-			return fmt.Errorf("server accept: %w", err)
-		}
-
-		go s.runConn(ctx, conn)
-	}
-}
-
-func (s *Source) runConn(ctx context.Context, conn net.Conn) {
-	defer conn.Close()
-	s.logger.Debug("received conn", "remote", conn.RemoteAddr())
-
-	if err := s.runConnErr(ctx, conn); err != nil {
-		s.logger.Warn("source conn error", "err", err)
-	}
-}
-
-var errNoDesinationRoute = errors.New("no route to destination")
-
-func (s *Source) runConnErr(ctx context.Context, conn net.Conn) error {
-	dstConn, err := s.DialContext(ctx, "", "")
-	if err != nil {
-		return fmt.Errorf("dial destination: %w", err)
-	}
-	defer dstConn.Close()
-
-	// TODO how to handle destination expecting proxy proto
-	// proxy := model.ProxyVersionFromPB(resp.GetConnect().GetProxyProto())
-	// if err := proxy.Write(encStream, conn); err != nil {
-	// 	return fmt.Errorf("source write proxy header: %w", err)
-	// }
-
-	err = netc.Join(ctx, conn, dstConn)
-	s.logger.Debug("disconnected conns", "err", err)
-
-	return nil
-}
-
 func (s *Source) Dial(network, address string) (net.Conn, error) {
 	return s.DialContext(context.Background(), network, address)
 }
+
+var errNoDesinationRoute = errors.New("no route to destination")
 
 func (s *Source) DialContext(ctx context.Context, network, address string) (net.Conn, error) {
 	// TODO network/address
@@ -310,7 +254,8 @@ func (s *Source) dialDestination(ctx context.Context, dest sourceConn) (net.Conn
 	}
 
 	s.logger.Debug("dialed conn", "style", dest.peer.style)
-	return encStream, nil
+	proxyProto := model.ProxyVersionFromPB(resp.GetConnect().GetProxyProto())
+	return proxyProto.Wrap(encStream), nil
 }
 
 func (s *Source) RunControl(ctx context.Context, conn quic.Connection) error {

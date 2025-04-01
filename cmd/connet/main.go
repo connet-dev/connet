@@ -562,10 +562,11 @@ func clientRun(ctx context.Context, cfg ClientConfig, logger *slog.Logger) error
 			relayEncryptions = res
 		}
 		opts = append(opts, connet.ClientSource(
-			client.NewSourceConfig(name, fc.Addr).
+			client.NewSourceConfig(name).
 				WithRoute(route).
-				WithRelayEncryptions(relayEncryptions...),
-		))
+				WithRelayEncryptions(relayEncryptions...)),
+			connet.ClientSourceServer(name, fc.Addr),
+		)
 	}
 
 	opts = append(opts, connet.ClientLogger(logger))

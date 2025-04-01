@@ -32,9 +32,10 @@ import (
 type Client struct {
 	clientConfig
 
-	rootCert *certc.Cert
-	dsts     map[model.Forward]*client.Destination
-	srcs     map[model.Forward]*client.Source
+	rootCert   *certc.Cert
+	dsts       map[model.Forward]*client.Destination
+	srcs       map[model.Forward]*client.Source
+	srcServers map[model.Forward]*client.SourceServer
 
 	connStatus atomic.Value
 }
@@ -124,6 +125,15 @@ func (c *Client) Run(ctx context.Context) error {
 		}
 	}
 
+	c.srcServers = map[model.Forward]*client.SourceServer{}
+	for fwd, addr := range c.sourceServers {
+		src, ok := c.srcs[fwd]
+		if !ok {
+			return fmt.Errorf("source server for client source %s not found", fwd)
+		}
+		c.srcServers[fwd] = client.NewSourceServer(src, fwd, addr, c.logger)
+	}
+
 	g, ctx := errgroup.WithContext(ctx)
 
 	g.Go(func() error { return ds.Run(ctx) })
@@ -133,6 +143,10 @@ func (c *Client) Run(ctx context.Context) error {
 	}
 
 	for _, src := range c.srcs {
+		g.Go(func() error { return src.Run(ctx) })
+	}
+
+	for _, src := range c.srcServers {
 		g.Go(func() error { return src.Run(ctx) })
 	}
 
@@ -318,8 +332,9 @@ type clientConfig struct {
 	directResetKey *quic.StatelessResetKey
 	statusAddr     *net.TCPAddr
 
-	destinations map[model.Forward]client.DestinationConfig
-	sources      map[model.Forward]client.SourceConfig
+	destinations  map[model.Forward]client.DestinationConfig
+	sources       map[model.Forward]client.SourceConfig
+	sourceServers map[model.Forward]string
 
 	logger *slog.Logger
 }
@@ -502,6 +517,17 @@ func ClientSource(scfg client.SourceConfig) ClientOption {
 			cfg.sources = map[model.Forward]client.SourceConfig{}
 		}
 		cfg.sources[scfg.Forward] = scfg
+
+		return nil
+	}
+}
+
+func ClientSourceServer(name string, addr string) ClientOption {
+	return func(cfg *clientConfig) error {
+		if cfg.sourceServers == nil {
+			cfg.sourceServers = map[model.Forward]string{}
+		}
+		cfg.sourceServers[model.NewForward(name)] = addr
 
 		return nil
 	}
