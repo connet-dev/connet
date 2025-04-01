@@ -12,7 +12,6 @@ import (
 	"github.com/connet-dev/connet/certc"
 	"github.com/connet-dev/connet/cryptoc"
 	"github.com/connet-dev/connet/model"
-	"github.com/connet-dev/connet/netc"
 	"github.com/connet-dev/connet/pb"
 	"github.com/connet-dev/connet/pbc"
 	"github.com/connet-dev/connet/quicc"
@@ -22,16 +21,14 @@ import (
 
 type DestinationConfig struct {
 	Forward          model.Forward
-	Address          string
 	Route            model.RouteOption
 	Proxy            model.ProxyVersion
 	RelayEncryptions []model.EncryptionScheme
 }
 
-func NewDestinationConfig(name string, addr string) DestinationConfig {
+func NewDestinationConfig(name string) DestinationConfig {
 	return DestinationConfig{
 		Forward:          model.NewForward(name),
-		Address:          addr,
 		Route:            model.RouteAny,
 		Proxy:            model.ProxyNone,
 		RelayEncryptions: []model.EncryptionScheme{model.NoEncryption},
@@ -93,13 +90,23 @@ func (d *Destination) SetDirectAddrs(addrs []netip.AddrPort) {
 }
 
 func (d *Destination) Run(ctx context.Context) error {
+	defer close(d.acceptCh)
+
 	g, ctx := errgroup.WithContext(ctx)
 
 	g.Go(func() error { return d.peer.run(ctx) })
 	g.Go(func() error { return d.runActive(ctx) })
-	g.Go(func() error { return d.runAccept(ctx) })
 
 	return g.Wait()
+}
+
+func (d *Destination) Accept() (net.Conn, error) {
+	// TODO support closing and all
+	conn, ok := <-d.acceptCh
+	if !ok {
+		return nil, fmt.Errorf("closed")
+	}
+	return conn, nil
 }
 
 func (d *Destination) Status() (PeerStatus, error) {
@@ -131,38 +138,6 @@ func (d *Destination) runActive(ctx context.Context) error {
 		}
 		return nil
 	})
-}
-
-func (d *Destination) runAccept(ctx context.Context) error {
-	for {
-		select {
-		case <-ctx.Done():
-			return ctx.Err()
-		case conn := <-d.acceptCh:
-			go d.acceptConn(ctx, conn)
-		}
-	}
-}
-
-func (d *Destination) acceptConn(ctx context.Context, remoteConn net.Conn) {
-	defer remoteConn.Close()
-
-	if err := d.acceptConnErr(ctx, remoteConn); err != nil {
-		d.logger.Debug("destination conn error", "err", err)
-	}
-}
-
-func (d *Destination) acceptConnErr(ctx context.Context, remoteConn net.Conn) error {
-	conn, err := net.Dial("tcp", d.cfg.Address)
-	if err != nil {
-		return fmt.Errorf("%s could not be dialed: %v", d.cfg.Forward, err)
-	}
-	defer conn.Close()
-
-	err = netc.Join(ctx, remoteConn, conn)
-	d.logger.Debug("disconnected conns", "err", err)
-
-	return nil
 }
 
 type destinationConn struct {

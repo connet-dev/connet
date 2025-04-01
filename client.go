@@ -34,6 +34,7 @@ type Client struct {
 
 	rootCert   *certc.Cert
 	dsts       map[model.Forward]*client.Destination
+	dstServers map[model.Forward]*client.DestinationServer
 	srcs       map[model.Forward]*client.Source
 	srcServers map[model.Forward]*client.SourceServer
 
@@ -125,11 +126,20 @@ func (c *Client) Run(ctx context.Context) error {
 		}
 	}
 
+	c.dstServers = map[model.Forward]*client.DestinationServer{}
+	for fwd, addr := range c.destinationServers {
+		dst, ok := c.dsts[fwd]
+		if !ok {
+			return fmt.Errorf("client destination %s for server not found", fwd)
+		}
+		c.dstServers[fwd] = client.NewDestinationServer(dst, fwd, addr, c.logger)
+	}
+
 	c.srcServers = map[model.Forward]*client.SourceServer{}
 	for fwd, addr := range c.sourceServers {
 		src, ok := c.srcs[fwd]
 		if !ok {
-			return fmt.Errorf("source server for client source %s not found", fwd)
+			return fmt.Errorf("client source %s for server not found", fwd)
 		}
 		c.srcServers[fwd] = client.NewSourceServer(src, fwd, addr, c.logger)
 	}
@@ -144,6 +154,10 @@ func (c *Client) Run(ctx context.Context) error {
 
 	for _, src := range c.srcs {
 		g.Go(func() error { return src.Run(ctx) })
+	}
+
+	for _, dst := range c.dstServers {
+		g.Go(func() error { return dst.Run(ctx) })
 	}
 
 	for _, src := range c.srcServers {
@@ -332,7 +346,9 @@ type clientConfig struct {
 	directResetKey *quic.StatelessResetKey
 	statusAddr     *net.TCPAddr
 
-	destinations  map[model.Forward]client.DestinationConfig
+	destinations       map[model.Forward]client.DestinationConfig
+	destinationServers map[model.Forward]string
+
 	sources       map[model.Forward]client.SourceConfig
 	sourceServers map[model.Forward]string
 
@@ -506,6 +522,17 @@ func ClientDestination(dcfg client.DestinationConfig) ClientOption {
 			cfg.destinations = map[model.Forward]client.DestinationConfig{}
 		}
 		cfg.destinations[dcfg.Forward] = dcfg
+
+		return nil
+	}
+}
+
+func ClientDestinationServer(name string, addr string) ClientOption {
+	return func(cfg *clientConfig) error {
+		if cfg.destinationServers == nil {
+			cfg.destinationServers = map[model.Forward]string{}
+		}
+		cfg.destinationServers[model.NewForward(name)] = addr
 
 		return nil
 	}
