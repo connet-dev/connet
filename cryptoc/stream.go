@@ -86,8 +86,6 @@ func (s *asymStream) Write(p []byte) (int, error) {
 	for chunk := range slices.Chunk(p, s.writePlainMax) {
 		s.writeBuff = s.writeBuff[:cap(s.writeBuff)]
 
-		// TODO check max nonce
-
 		out := s.writer.Seal(s.writeBuff[2:2], s.writeNonce, chunk, nil)
 		s.writeBuff = s.writeBuff[:2+len(out)]
 

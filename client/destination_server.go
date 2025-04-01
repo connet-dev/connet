@@ -38,7 +38,7 @@ func (d *DestinationServer) runConn(ctx context.Context, remoteConn net.Conn) {
 	defer remoteConn.Close()
 
 	if err := d.acceptConnErr(ctx, remoteConn); err != nil {
-		d.logger.Debug("destination conn error", "err", err)
+		d.logger.Warn("destination conn error", "err", err)
 	}
 }
 

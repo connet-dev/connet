@@ -459,7 +459,7 @@ by adding account management and it is one of the easiest way to start.
  - [x] untrusted relay encryption
    - [x] support encryption with TLS
    - [x] direct key exchange, signed by certs
- - [ ] dial/accept support for src/dst
+ - [x] dial/accept support for src/dst
  - [ ] http source
  - [ ] websocket tcp converter
  - [ ] zip and name windows executable .exe
