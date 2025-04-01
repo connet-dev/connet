@@ -6,9 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"net"
 	"testing"
-	"time"
 
 	"github.com/stretchr/testify/require"
 	"golang.org/x/crypto/chacha20poly1305"
@@ -94,24 +92,4 @@ func (r *rwc) Read(p []byte) (n int, err error) {
 
 func (r *rwc) Write(p []byte) (n int, err error) {
 	return r.writer.Write(p)
-}
-
-func (r *rwc) LocalAddr() net.Addr {
-	panic("unimplemented")
-}
-
-func (r *rwc) RemoteAddr() net.Addr {
-	panic("unimplemented")
-}
-
-func (r *rwc) SetDeadline(t time.Time) error {
-	panic("unimplemented")
-}
-
-func (r *rwc) SetReadDeadline(t time.Time) error {
-	panic("unimplemented")
-}
-
-func (r *rwc) SetWriteDeadline(t time.Time) error {
-	panic("unimplemented")
 }

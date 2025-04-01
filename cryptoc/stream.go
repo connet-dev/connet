@@ -10,7 +10,7 @@ import (
 )
 
 type asymStream struct {
-	stream net.Conn
+	stream io.ReadWriter
 	reader cipher.AEAD
 	writer cipher.AEAD
 
@@ -29,7 +29,7 @@ type asymStream struct {
 
 const maxBuff = 65535
 
-func NewStream(stream net.Conn, reader cipher.AEAD, writer cipher.AEAD) net.Conn { // maybe <T extends io.ReadWrite> and then cast
+func NewStream(stream io.ReadWriter, reader cipher.AEAD, writer cipher.AEAD) net.Conn {
 	return &asymStream{
 		stream: stream,
 		reader: reader,
@@ -104,31 +104,48 @@ func (s *asymStream) Write(p []byte) (int, error) {
 	return written, nil
 }
 
+func (s *asymStream) Close() error {
+	if stream, ok := s.stream.(io.Closer); ok {
+		return stream.Close()
+	}
+
+	return nil
+}
+
 func (s *asymStream) LocalAddr() net.Addr {
-	return s.stream.LocalAddr()
+	if stream, ok := s.stream.(interface{ LocalAddr() net.Addr }); ok {
+		return stream.LocalAddr()
+	}
+	return nil
 }
 
 func (s *asymStream) RemoteAddr() net.Addr {
-	return s.stream.RemoteAddr()
+	if stream, ok := s.stream.(interface{ RemoteAddr() net.Addr }); ok {
+		return stream.RemoteAddr()
+	}
+	return nil
 }
 
 func (s *asymStream) SetDeadline(t time.Time) error {
-	return s.stream.SetDeadline(t)
+	if stream, ok := s.stream.(interface{ SetDeadline(t time.Time) error }); ok {
+		return stream.SetDeadline(t)
+	}
+	return nil
 }
 
 func (s *asymStream) SetReadDeadline(t time.Time) error {
-	return s.stream.SetReadDeadline(t)
+	if stream, ok := s.stream.(interface{ SetReadDeadline(t time.Time) error }); ok {
+		return stream.SetReadDeadline(t)
+	}
+	return nil
 }
 
 func (s *asymStream) SetWriteDeadline(t time.Time) error {
-	return s.stream.SetWriteDeadline(t)
+	if stream, ok := s.stream.(interface{ SetWriteDeadline(t time.Time) error }); ok {
+		return stream.SetWriteDeadline(t)
+	}
+	return nil
 }
-
-func (s *asymStream) Close() error {
-	return s.stream.Close()
-}
-
-var _ io.ReadWriteCloser = (*asymStream)(nil)
 
 func incrementNonce(nonce []byte) {
 	for i := len(nonce) - 1; i >= 0; i++ {

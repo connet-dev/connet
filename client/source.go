@@ -301,7 +301,7 @@ func (s *Source) dialDestination(ctx context.Context, dest sourceConn) (net.Conn
 				return nil, fmt.Errorf("new streamer: %w", err)
 			}
 
-			encStream = streamer(encStream)
+			encStream = streamer(stream)
 		case model.NoEncryption:
 			// nothing to do
 		default:
