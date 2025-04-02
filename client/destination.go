@@ -77,7 +77,7 @@ func NewDestination(cfg DestinationConfig, direct *DirectServer, root *certc.Cer
 		peer:  p,
 		conns: map[peerConnKey]*destinationConn{},
 
-		acceptCh: make(chan net.Conn, 100),
+		acceptCh: make(chan net.Conn),
 	}, nil
 }
 
@@ -101,10 +101,9 @@ func (d *Destination) Run(ctx context.Context) error {
 }
 
 func (d *Destination) Accept() (net.Conn, error) {
-	// TODO support closing and all
 	conn, ok := <-d.acceptCh
 	if !ok {
-		return nil, fmt.Errorf("closed")
+		return nil, fmt.Errorf("destination %s is closed: %w", d.cfg.Forward, net.ErrClosed)
 	}
 	return conn, nil
 }
