@@ -39,6 +39,7 @@
             protoc-gen-go
             process-compose
             skopeo
+            zip
             (pkgs.writeShellScriptBin "gen-local-certs" ''
               set -euo pipefail
               cd .direnv
