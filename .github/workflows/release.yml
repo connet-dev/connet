@@ -67,8 +67,8 @@ jobs:
         with:
           tag_name: v${{ env.CONNET_VERSION }}
           files: |
-            "dist/archive/connet-${{ env.CONNET_VERSION }}-*.tar.gz"
-            "dist/archive/connet-${{ env.CONNET_VERSION }}-*.zip"
+            dist/archive/connet-${{ env.CONNET_VERSION }}-*.tar.gz
+            dist/archive/connet-${{ env.CONNET_VERSION }}-*.zip
 
   docker-x86:
     name: Docker x86
