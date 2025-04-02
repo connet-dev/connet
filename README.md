@@ -460,8 +460,11 @@ by adding account management and it is one of the easiest way to start.
    - [x] support encryption with TLS
    - [x] direct key exchange, signed by certs
  - [x] dial/accept support for src/dst
+ - [ ] dynamic client/destination in the client
  - [ ] http source
+ - [ ] http host rewrite
  - [ ] websocket tcp converter
+ - [ ] sni rewrite
  - [ ] zip and name windows executable .exe
 
 ## Future
