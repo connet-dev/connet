@@ -6,6 +6,8 @@ import (
 	"io"
 	"net"
 	"slices"
+	"sync"
+	"sync/atomic"
 	"time"
 )
 
@@ -14,6 +16,7 @@ type asymStream struct {
 	reader cipher.AEAD
 	writer cipher.AEAD
 
+	readMu      sync.Mutex
 	readBuffLen []byte
 	readBuff    []byte
 	readNonce   []byte
@@ -22,9 +25,12 @@ type asymStream struct {
 	readPlainBegin int
 	readPlainEnd   int
 
+	writeMu       sync.Mutex
 	writeBuff     []byte
 	writeNonce    []byte
 	writePlainMax int
+
+	closed atomic.Bool
 }
 
 const maxBuff = 65535
@@ -50,6 +56,13 @@ func NewStream(stream io.ReadWriter, reader cipher.AEAD, writer cipher.AEAD) net
 }
 
 func (s *asymStream) Read(p []byte) (int, error) {
+	if s.closed.Load() {
+		return 0, io.ErrClosedPipe
+	}
+
+	s.readMu.Lock()
+	defer s.readMu.Unlock()
+
 	var err error
 	if s.readPlainBegin >= s.readPlainEnd {
 		if _, err := io.ReadFull(s.stream, s.readBuffLen); err != nil {
@@ -82,6 +95,13 @@ func (s *asymStream) Read(p []byte) (int, error) {
 }
 
 func (s *asymStream) Write(p []byte) (int, error) {
+	if s.closed.Load() {
+		return 0, io.ErrClosedPipe
+	}
+
+	s.writeMu.Lock()
+	defer s.writeMu.Unlock()
+
 	var written int
 	for chunk := range slices.Chunk(p, s.writePlainMax) {
 		s.writeBuff = s.writeBuff[:cap(s.writeBuff)]
@@ -103,8 +123,10 @@ func (s *asymStream) Write(p []byte) (int, error) {
 }
 
 func (s *asymStream) Close() error {
-	if stream, ok := s.stream.(io.Closer); ok {
-		return stream.Close()
+	if s.closed.CompareAndSwap(false, true) {
+		if stream, ok := s.stream.(io.Closer); ok {
+			return stream.Close()
+		}
 	}
 
 	return nil
