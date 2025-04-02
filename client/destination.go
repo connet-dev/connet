@@ -125,7 +125,7 @@ func (d *Destination) runActive(ctx context.Context) error {
 				delete(d.conns, peer)
 			}
 
-			dc := newDestinationConn(d, peer, conn)
+			dc := newDestinationConn(d, peer, conn, d.logger)
 			d.conns[peer] = dc
 			go dc.run(ctx)
 		}
@@ -141,15 +141,19 @@ func (d *Destination) runActive(ctx context.Context) error {
 }
 
 type destinationConn struct {
-	dst  *Destination
-	peer peerConnKey
-	conn quic.Connection
+	dst    *Destination
+	peer   peerConnKey
+	conn   quic.Connection
+	logger *slog.Logger
 
 	closer chan struct{}
 }
 
-func newDestinationConn(dst *Destination, peer peerConnKey, conn quic.Connection) *destinationConn {
-	return &destinationConn{dst, peer, conn, make(chan struct{})}
+func newDestinationConn(dst *Destination, peer peerConnKey, conn quic.Connection, logger *slog.Logger) *destinationConn {
+	return &destinationConn{
+		dst, peer, conn,
+		logger.With("peer", peer.id, "style", peer.style),
+		make(chan struct{})}
 }
 
 func (d *destinationConn) run(ctx context.Context) {
@@ -159,10 +163,10 @@ func (d *destinationConn) run(ctx context.Context) {
 		for {
 			stream, err := d.conn.AcceptStream(ctx)
 			if err != nil {
-				d.dst.logger.Debug("accept failed", "peer", d.peer.id, "style", d.peer.style, "err", err)
+				d.logger.Debug("accept failed", "err", err)
 				return err
 			}
-			d.dst.logger.Debug("accepted stream from", "peer", d.peer.id, "style", d.peer.style)
+			d.logger.Debug("accepted stream new stream")
 			go d.runDestination(ctx, stream)
 		}
 	})
@@ -172,15 +176,16 @@ func (d *destinationConn) run(ctx context.Context) {
 	})
 
 	if err := g.Wait(); err != nil {
-		d.dst.logger.Debug("error while running destination", "err", err)
+		d.logger.Debug("error while running destination", "err", err)
 	}
 }
 
 func (d *destinationConn) runDestination(ctx context.Context, stream quic.Stream) {
-	// TODO no defer close...
-
 	if err := d.runDestinationErr(ctx, stream); err != nil {
-		d.dst.logger.Debug("destination conn error", "err", err)
+		if err := stream.Close(); err != nil {
+			d.logger.Debug("could not close stream on error", "err", err)
+		}
+		d.logger.Debug("destination conn error", "err", err)
 	}
 }
 
@@ -199,8 +204,6 @@ func (d *destinationConn) runDestinationErr(ctx context.Context, stream quic.Str
 }
 
 func (d *destinationConn) runConnect(ctx context.Context, stream quic.Stream, req *pbc.Request) error {
-	// TODO check allow from?
-
 	var srcConfig *tls.Config
 	var srcStreamer cryptoc.Streamer
 
@@ -267,7 +270,7 @@ func (d *destinationConn) runConnect(ctx context.Context, stream quic.Stream, re
 	if d.peer.style == peerRelay {
 		switch connect.DestinationEncryption {
 		case pbc.RelayEncryptionScheme_TLS:
-			d.dst.logger.Debug("upgrading relay connection to TLS", "peer", d.peer.id)
+			d.logger.Debug("upgrading relay connection to TLS")
 			tlsConn := tls.Server(quicc.StreamConn(stream, d.conn), srcConfig)
 			if err := tlsConn.HandshakeContext(ctx); err != nil {
 				return fmt.Errorf("destination handshake: %w", err)
@@ -275,7 +278,7 @@ func (d *destinationConn) runConnect(ctx context.Context, stream quic.Stream, re
 
 			encStream = tlsConn
 		case pbc.RelayEncryptionScheme_DHX25519_CHACHAPOLY:
-			d.dst.logger.Debug("upgrading relay connection to DHXCP", "peer", d.peer.id)
+			d.logger.Debug("upgrading relay connection to DHXCP")
 			encStream = srcStreamer(encStream)
 		case pbc.RelayEncryptionScheme_EncryptionNone:
 			// do nothing
@@ -283,10 +286,15 @@ func (d *destinationConn) runConnect(ctx context.Context, stream quic.Stream, re
 		}
 	}
 
-	d.dst.logger.Debug("accepted conn", "style", d.peer.style)
-	d.dst.acceptCh <- encStream
-
-	return nil
+	d.logger.Debug("accepted conn", "style", d.peer.style)
+	select {
+	case <-ctx.Done():
+		return ctx.Err()
+	case <-d.closer:
+		return errPeeringStop
+	case d.dst.acceptCh <- encStream:
+		return nil
+	}
 }
 
 func (d *destinationConn) close() {
