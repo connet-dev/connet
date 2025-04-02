@@ -151,33 +151,41 @@ func (s *Source) Dial(network, address string) (net.Conn, error) {
 var errNoDesinationRoute = errors.New("no route to destination")
 
 func (s *Source) DialContext(ctx context.Context, network, address string) (net.Conn, error) {
-	// TODO network/address
-	//
 	conns, err := s.findActive()
 	if err != nil {
 		return nil, fmt.Errorf("get active conns: %w", err)
 	}
 
+	var errs []error
 	for _, dest := range conns {
-		if conn, err := s.dialDestination(ctx, dest); err != nil {
+		if conn, err := s.dial(ctx, dest); err != nil {
 			s.logger.Debug("could not dial destination", "err", err)
-			// TODO collect and return combined error?
+			errs = append(errs, err)
 		} else {
 			// connect was success
 			return conn, nil
 		}
 	}
 
-	return nil, errNoDesinationRoute
+	return nil, fmt.Errorf("%w: %w", errNoDesinationRoute, errors.Join(errs...))
 }
 
-func (s *Source) dialDestination(ctx context.Context, dest sourceConn) (net.Conn, error) {
+func (s *Source) dial(ctx context.Context, dest sourceConn) (net.Conn, error) {
 	stream, err := dest.conn.OpenStreamSync(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("source connect open stream: %w", err)
 	}
-	// defer stream.Close()
+	conn, err := s.dialStream(ctx, dest, stream)
+	if err != nil {
+		if err := stream.Close(); err != nil {
+			s.logger.Debug("could not close stream on error", "err", err)
+		}
+		return nil, err
+	}
+	return conn, nil
+}
 
+func (s *Source) dialStream(ctx context.Context, dest sourceConn, stream quic.Stream) (net.Conn, error) {
 	var srcSecret *ecdh.PrivateKey
 
 	connect := &pbc.Request_Connect{}
