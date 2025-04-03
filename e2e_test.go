@@ -13,6 +13,7 @@ import (
 	"net/http/httptest"
 	"os"
 	"slices"
+	"strings"
 	"testing"
 	"time"
 
@@ -69,78 +70,67 @@ func TestE2E(t *testing.T) {
 		ClientControlAddress("localhost:20000"),
 		clientControlCAs(cas),
 		ClientDirectAddress(":20002"),
+		ClientLogger(logger.With("test", "cl-dst")),
+
 		ClientDestination(client.NewDestinationConfig("direct").WithRoute(model.RouteDirect)),
-		ClientDestinationServer("direct", htAddr),
 		ClientDestination(client.NewDestinationConfig("relay").WithRoute(model.RouteRelay)),
-		ClientDestinationServer("relay", htAddr),
 		ClientDestination(client.NewDestinationConfig("dst-any-direct-src")),
-		ClientDestinationServer("dst-any-direct-src", htAddr),
 		ClientDestination(client.NewDestinationConfig("dst-any-relay-src")),
-		ClientDestinationServer("dst-any-relay-src", htAddr),
 		ClientDestination(client.NewDestinationConfig("dst-direct-any-src").WithRoute(model.RouteDirect)),
-		ClientDestinationServer("dst-direct-any-src", htAddr),
 		ClientDestination(client.NewDestinationConfig("dst-relay-any-src").WithRoute(model.RouteRelay)),
-		ClientDestinationServer("dst-relay-any-src", htAddr),
 		ClientDestination(client.NewDestinationConfig("relay-tls").WithRoute(model.RouteRelay).WithRelayEncryptions(model.TLSEncryption)),
-		ClientDestinationServer("relay-tls", htAddr),
 		ClientDestination(client.NewDestinationConfig("relay-dhxcp").WithRoute(model.RouteRelay).WithRelayEncryptions(model.DHXCPEncryption)),
-		ClientDestinationServer("relay-dhxcp", htAddr),
 
 		ClientDestination(client.NewDestinationConfig("dst-direct-relay-src").WithRoute(model.RouteDirect)),
-		ClientDestinationServer("dst-direct-relay-src", htAddr),
 		ClientDestination(client.NewDestinationConfig("dst-relay-direct-src").WithRoute(model.RouteRelay)),
-		ClientDestinationServer("dst-relay-direct-src", htAddr),
 		ClientDestination(client.NewDestinationConfig("relay-dst-none-tls-src").WithRoute(model.RouteRelay).WithRelayEncryptions(model.NoEncryption)),
-		ClientDestinationServer("relay-dst-none-tls-src", htAddr),
 		ClientDestination(client.NewDestinationConfig("relay-dst-tls-none-src").WithRoute(model.RouteRelay).WithRelayEncryptions(model.TLSEncryption)),
-		ClientDestinationServer("relay-dst-tls-none-src", htAddr),
 
 		ClientDestination(client.NewDestinationConfig("dst-direct-proxy-proto").WithRoute(model.RouteDirect).WithProxy(model.ProxyV1)),
-		ClientDestinationServer("dst-direct-proxy-proto", ppAddr),
 		ClientDestination(client.NewDestinationConfig("dst-relay-proxy-proto").WithRoute(model.RouteRelay).WithProxy(model.ProxyV2)),
-		ClientDestinationServer("dst-relay-proxy-proto", ppAddr),
-
-		ClientLogger(logger.With("test", "cl-dst")),
 	)
 	require.NoError(t, err)
+
+	srcAddrs := map[string]string{
+		"direct":                 ":10000",
+		"relay":                  ":10001",
+		"dst-any-direct-src":     ":10002",
+		"dst-any-relay-src":      ":10003",
+		"dst-direct-any-src":     ":10004",
+		"dst-relay-any-src":      ":10005",
+		"relay-tls":              ":10006",
+		"relay-dhxcp":            ":10007",
+		"dst-direct-relay-src":   ":10100",
+		"dst-relay-direct-src":   ":10101",
+		"relay-dst-tls-none-src": ":10102",
+		"relay-dst-none-tls-src": ":10103",
+		"dst-direct-proxy-proto": ":10200",
+		"dst-relay-proxy-proto":  ":10201",
+	}
 
 	clSrc, err := NewClient(
 		ClientToken("test-token-src"),
 		ClientControlAddress("localhost:20000"),
 		clientControlCAs(cas),
 		ClientDirectAddress(":20003"),
+		ClientLogger(logger.With("test", "cl-src")),
+
 		ClientSource(client.NewSourceConfig("direct").WithRoute(model.RouteDirect)),
-		ClientSourceServer("direct", ":10000"),
 		ClientSource(client.NewSourceConfig("relay").WithRoute(model.RouteRelay)),
-		ClientSourceServer("relay", ":10001"),
 		ClientSource(client.NewSourceConfig("dst-any-direct-src").WithRoute(model.RouteDirect)),
-		ClientSourceServer("dst-any-direct-src", ":10002"),
 		ClientSource(client.NewSourceConfig("dst-any-relay-src").WithRoute(model.RouteRelay)),
-		ClientSourceServer("dst-any-relay-src", ":10003"),
 		ClientSource(client.NewSourceConfig("dst-direct-any-src").WithRoute(model.RouteAny)),
-		ClientSourceServer("dst-direct-any-src", ":10004"),
 		ClientSource(client.NewSourceConfig("dst-relay-any-src").WithRoute(model.RouteAny)),
-		ClientSourceServer("dst-relay-any-src", ":10005"),
 		ClientSource(client.NewSourceConfig("relay-tls").WithRoute(model.RouteRelay).WithRelayEncryptions(model.TLSEncryption)),
-		ClientSourceServer("relay-tls", ":10006"),
 		ClientSource(client.NewSourceConfig("relay-dhxcp").WithRoute(model.RouteRelay).WithRelayEncryptions(model.DHXCPEncryption)),
-		ClientSourceServer("relay-dhxcp", ":10007"),
 
 		ClientSource(client.NewSourceConfig("dst-direct-relay-src").WithRoute(model.RouteRelay)),
-		ClientSourceServer("dst-direct-relay-src", ":10100"),
 		ClientSource(client.NewSourceConfig("dst-relay-direct-src").WithRoute(model.RouteDirect)),
-		ClientSourceServer("dst-relay-direct-src", ":10101"),
 		ClientSource(client.NewSourceConfig("relay-dst-tls-none-src").WithRoute(model.RouteRelay).WithRelayEncryptions(model.NoEncryption)),
-		ClientSourceServer("relay-dst-tls-none-src", ":10102"),
 		ClientSource(client.NewSourceConfig("relay-dst-none-tls-src").WithRoute(model.RouteRelay).WithRelayEncryptions(model.TLSEncryption)),
-		ClientSourceServer("relay-dst-none-tls-src", ":10103"),
 
 		ClientSource(client.NewSourceConfig("dst-direct-proxy-proto").WithRoute(model.RouteAny)),
-		ClientSourceServer("dst-direct-proxy-proto", ":10200"),
 		ClientSource(client.NewSourceConfig("dst-relay-proxy-proto").WithRoute(model.RouteAny)),
-		ClientSourceServer("dst-relay-proxy-proto", ":10201"),
-
-		ClientLogger(logger.With("test", "cl-src")),
 	)
 	require.NoError(t, err)
 
@@ -159,7 +149,6 @@ func TestE2E(t *testing.T) {
 			clientControlCAs(cas),
 			ClientDirectAddress(":20003"),
 			ClientDestination(client.NewDestinationConfig("direct")),
-			ClientDestinationServer("direct", htAddr),
 			ClientLogger(logger.With("test", "cl-ip-deny")),
 		)
 		require.NoError(t, err)
@@ -173,7 +162,6 @@ func TestE2E(t *testing.T) {
 			clientControlCAs(cas),
 			ClientDirectAddress(":20004"),
 			ClientDestination(client.NewDestinationConfig("direct")),
-			ClientDestinationServer("direct", htAddr),
 			ClientLogger(logger.With("test", "cl-name-deny")),
 		)
 		require.NoError(t, err)
@@ -187,7 +175,6 @@ func TestE2E(t *testing.T) {
 			clientControlCAs(cas),
 			ClientDirectAddress(":20005"),
 			ClientDestination(client.NewDestinationConfig("direct")),
-			ClientDestinationServer("direct", htAddr),
 			ClientLogger(logger.With("test", "cl-role-deny")),
 		)
 		require.NoError(t, err)
@@ -196,7 +183,33 @@ func TestE2E(t *testing.T) {
 	})
 
 	g.Go(func() error { return clDst.Run(ctx) })
+	time.Sleep(time.Second) // TODO same add in advance
+	for _, dstName := range clDst.Destinations() {
+		dst, err := clDst.Destination(dstName)
+		require.NoError(t, err)
+
+		addr := htAddr
+		if strings.HasSuffix(dstName, "-proxy-proto") {
+			addr = ppAddr
+		}
+		dstSrv, err := NewTCPDestination(dst, model.NewForward(dstName), addr, logger)
+		require.NoError(t, err)
+		g.Go(func() error { return dstSrv.Run(ctx) })
+	}
+
 	g.Go(func() error { return clSrc.Run(ctx) })
+	time.Sleep(time.Second) // TODO same add in advance
+	for _, srcName := range clSrc.Sources() {
+		src, err := clSrc.Source(srcName)
+		require.NoError(t, err)
+
+		addr, ok := srcAddrs[srcName]
+		require.True(t, ok)
+
+		srcSrv, err := NewTCPSource(src, model.NewForward(srcName), addr, logger)
+		require.NoError(t, err)
+		g.Go(func() error { return srcSrv.Run(ctx) })
+	}
 
 	time.Sleep(500 * time.Millisecond) // time for clients to come online
 
@@ -222,6 +235,7 @@ func TestE2E(t *testing.T) {
 		})
 	}
 
+	// negative
 	for i, port := range []int{10100, 10101, 10102, 10103} {
 		t.Run(fmt.Sprintf("failing-%d:%d", i, port), func(t *testing.T) {
 			rnd := rand.Uint64()
@@ -232,6 +246,7 @@ func TestE2E(t *testing.T) {
 		})
 	}
 
+	// special
 	for i, port := range []int{10200, 10201} {
 		t.Run(fmt.Sprintf("proxy-proto-%d:%d", i, port), func(t *testing.T) {
 			conn, err := net.Dial("tcp", fmt.Sprintf("127.0.0.1:%d", port))

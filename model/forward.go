@@ -35,6 +35,7 @@ func PBFromForwards(fwds []Forward) []*pb.Forward {
 	return pbs
 }
 
+// TODO move this out
 func GenServerName(prefix string) string {
 	data := make([]byte, 32)
 	if _, err := io.ReadFull(rand.Reader, data); err != nil {
@@ -50,4 +51,12 @@ func (f Forward) MarshalText() ([]byte, error) {
 func (f *Forward) UnmarshalText(b []byte) error {
 	*f = Forward{string(b)}
 	return nil
+}
+
+func ForwardNames(fwds []Forward) []string {
+	var strs = make([]string, len(fwds))
+	for i, fwd := range fwds {
+		strs[i] = fwd.string
+	}
+	return strs
 }

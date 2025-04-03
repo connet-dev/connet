@@ -1,4 +1,4 @@
-package client
+package connet
 
 import (
 	"context"
@@ -10,23 +10,23 @@ import (
 	"github.com/connet-dev/connet/netc"
 )
 
-type DestinationServer struct {
-	dst    *Destination
+type TCPDestination struct {
+	dst    Destination
 	addr   string
 	logger *slog.Logger
 }
 
-func NewDestinationServer(dst *Destination, fwd model.Forward, addr string, logger *slog.Logger) *DestinationServer {
-	return &DestinationServer{
+func NewTCPDestination(dst Destination, fwd model.Forward, addr string, logger *slog.Logger) (*TCPDestination, error) {
+	return &TCPDestination{
 		dst:    dst,
 		addr:   addr,
 		logger: logger.With("destination", fwd, "addr", addr),
-	}
+	}, nil
 }
 
-func (d *DestinationServer) Run(ctx context.Context) error {
+func (d *TCPDestination) Run(ctx context.Context) error {
 	for {
-		conn, err := d.dst.Accept()
+		conn, err := d.dst.AcceptContext(ctx)
 		if err != nil {
 			return err
 		}
@@ -34,15 +34,15 @@ func (d *DestinationServer) Run(ctx context.Context) error {
 	}
 }
 
-func (d *DestinationServer) runConn(ctx context.Context, remoteConn net.Conn) {
+func (d *TCPDestination) runConn(ctx context.Context, remoteConn net.Conn) {
 	defer remoteConn.Close()
 
-	if err := d.acceptConnErr(ctx, remoteConn); err != nil {
+	if err := d.runConnErr(ctx, remoteConn); err != nil {
 		d.logger.Warn("destination conn error", "err", err)
 	}
 }
 
-func (d *DestinationServer) acceptConnErr(ctx context.Context, remoteConn net.Conn) error {
+func (d *TCPDestination) runConnErr(ctx context.Context, remoteConn net.Conn) error {
 	conn, err := net.Dial("tcp", d.addr)
 	if err != nil {
 		return fmt.Errorf("dial: %w", err)

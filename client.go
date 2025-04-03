@@ -9,10 +9,12 @@ import (
 	"fmt"
 	"io"
 	"log/slog"
+	"maps"
 	"net"
 	"net/netip"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"sync/atomic"
 	"time"
@@ -32,11 +34,11 @@ import (
 type Client struct {
 	clientConfig
 
-	rootCert   *certc.Cert
-	dsts       map[model.Forward]*client.Destination
-	dstServers map[model.Forward]*client.DestinationServer
-	srcs       map[model.Forward]*client.Source
-	srcServers map[model.Forward]*client.SourceServer
+	rootCert     *certc.Cert
+	directServer *client.DirectServer
+
+	dsts map[model.Forward]*client.Destination
+	srcs map[model.Forward]*client.Source
 
 	connStatus atomic.Value
 }
@@ -109,6 +111,7 @@ func (c *Client) Run(ctx context.Context) error {
 	if err != nil {
 		return fmt.Errorf("create direct server: %w", err)
 	}
+	c.directServer = ds
 
 	c.dsts = map[model.Forward]*client.Destination{}
 	for fwd, cfg := range c.destinations {
@@ -126,24 +129,6 @@ func (c *Client) Run(ctx context.Context) error {
 		}
 	}
 
-	c.dstServers = map[model.Forward]*client.DestinationServer{}
-	for fwd, addr := range c.destinationServers {
-		dst, ok := c.dsts[fwd]
-		if !ok {
-			return fmt.Errorf("client destination %s for server not found", fwd)
-		}
-		c.dstServers[fwd] = client.NewDestinationServer(dst, fwd, addr, c.logger)
-	}
-
-	c.srcServers = map[model.Forward]*client.SourceServer{}
-	for fwd, addr := range c.sourceServers {
-		src, ok := c.srcs[fwd]
-		if !ok {
-			return fmt.Errorf("client source %s for server not found", fwd)
-		}
-		c.srcServers[fwd] = client.NewSourceServer(src, fwd, addr, c.logger)
-	}
-
 	g, ctx := errgroup.WithContext(ctx)
 
 	g.Go(func() error { return ds.Run(ctx) })
@@ -156,18 +141,54 @@ func (c *Client) Run(ctx context.Context) error {
 		g.Go(func() error { return src.Run(ctx) })
 	}
 
-	for _, dst := range c.dstServers {
-		g.Go(func() error { return dst.Run(ctx) })
-	}
-
-	for _, src := range c.srcServers {
-		g.Go(func() error { return src.Run(ctx) })
-	}
-
 	g.Go(func() error { return c.run(ctx, transport) })
 	g.Go(func() error { return c.runStatus(ctx) })
 
 	return g.Wait()
+}
+
+func (c *Client) Destinations() []string {
+	return model.ForwardNames(slices.Collect(maps.Keys(c.dsts)))
+}
+
+func (c *Client) Destination(name string) (Destination, error) {
+	dst, ok := c.dsts[model.NewForward(name)]
+	if !ok {
+		return nil, fmt.Errorf("destination %s: not found", name)
+	}
+	return dst, nil
+}
+
+func (c *Client) AddDestination(cfg client.DestinationConfig) (Destination, error) {
+	dst, err := client.NewDestination(cfg, c.directServer, c.rootCert, c.logger)
+	if err != nil {
+		return nil, err
+	}
+	// TODO add to main run group
+	// TODO add to current run group
+	return dst, nil
+}
+
+func (c *Client) Sources() []string {
+	return model.ForwardNames(slices.Collect(maps.Keys(c.srcs)))
+}
+
+func (c *Client) Source(name string) (Source, error) {
+	src, ok := c.srcs[model.NewForward(name)]
+	if !ok {
+		return nil, fmt.Errorf("source %s: not found", name)
+	}
+	return src, nil
+}
+
+func (c *Client) AddSource(cfg client.SourceConfig) (Source, error) {
+	src, err := client.NewSource(cfg, c.directServer, c.rootCert, c.logger)
+	if err != nil {
+		return nil, err
+	}
+	// TODO add to main run group
+	// TODO add to current run group
+	return src, nil
 }
 
 func (c *Client) run(ctx context.Context, transport *quic.Transport) error {
@@ -346,11 +367,8 @@ type clientConfig struct {
 	directResetKey *quic.StatelessResetKey
 	statusAddr     *net.TCPAddr
 
-	destinations       map[model.Forward]client.DestinationConfig
-	destinationServers map[model.Forward]string
-
-	sources       map[model.Forward]client.SourceConfig
-	sourceServers map[model.Forward]string
+	destinations map[model.Forward]client.DestinationConfig
+	sources      map[model.Forward]client.SourceConfig
 
 	logger *slog.Logger
 }
@@ -527,34 +545,12 @@ func ClientDestination(dcfg client.DestinationConfig) ClientOption {
 	}
 }
 
-func ClientDestinationServer(name string, addr string) ClientOption {
-	return func(cfg *clientConfig) error {
-		if cfg.destinationServers == nil {
-			cfg.destinationServers = map[model.Forward]string{}
-		}
-		cfg.destinationServers[model.NewForward(name)] = addr
-
-		return nil
-	}
-}
-
 func ClientSource(scfg client.SourceConfig) ClientOption {
 	return func(cfg *clientConfig) error {
 		if cfg.sources == nil {
 			cfg.sources = map[model.Forward]client.SourceConfig{}
 		}
 		cfg.sources[scfg.Forward] = scfg
-
-		return nil
-	}
-}
-
-func ClientSourceServer(name string, addr string) ClientOption {
-	return func(cfg *clientConfig) error {
-		if cfg.sourceServers == nil {
-			cfg.sourceServers = map[model.Forward]string{}
-		}
-		cfg.sourceServers[model.NewForward(name)] = addr
 
 		return nil
 	}

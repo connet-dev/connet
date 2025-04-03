@@ -1,4 +1,4 @@
-package client
+package connet
 
 import (
 	"context"
@@ -10,21 +10,22 @@ import (
 	"github.com/connet-dev/connet/netc"
 )
 
-type SourceServer struct {
-	src    *Source
+type TCPSource struct {
+	src    Source
 	addr   string
 	logger *slog.Logger
 }
 
-func NewSourceServer(src *Source, fwd model.Forward, addr string, logger *slog.Logger) *SourceServer {
-	return &SourceServer{
+func NewTCPSource(src Source, fwd model.Forward, addr string, logger *slog.Logger) (*TCPSource, error) {
+	return &TCPSource{
 		src:    src,
 		addr:   addr,
 		logger: logger.With("source", fwd, "addr", addr),
-	}
+	}, nil
 }
 
-func (s *SourceServer) Run(ctx context.Context) error {
+func (s *TCPSource) Run(ctx context.Context) error {
+	fmt.Println(" --- --- --- where is")
 	s.logger.Debug("starting source server")
 	l, err := net.Listen("tcp", s.addr)
 	if err != nil {
@@ -48,7 +49,7 @@ func (s *SourceServer) Run(ctx context.Context) error {
 	}
 }
 
-func (s *SourceServer) runConn(ctx context.Context, conn net.Conn) {
+func (s *TCPSource) runConn(ctx context.Context, conn net.Conn) {
 	defer conn.Close()
 	s.logger.Debug("received conn", "remote", conn.RemoteAddr())
 
@@ -57,7 +58,7 @@ func (s *SourceServer) runConn(ctx context.Context, conn net.Conn) {
 	}
 }
 
-func (s *SourceServer) runConnErr(ctx context.Context, conn net.Conn) error {
+func (s *TCPSource) runConnErr(ctx context.Context, conn net.Conn) error {
 	dstConn, err := s.src.DialContext(ctx, "", "")
 	if err != nil {
 		return fmt.Errorf("dial destination: %w", err)

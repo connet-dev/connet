@@ -463,7 +463,7 @@ by adding account management and it is one of the easiest way to start.
  - [x] zip and name windows executable .exe
 
 ### v0.7.0
- - [ ] dynamic client/destination in the client
+ - [ ] dynamic source/destination in the client
  - [ ] http source
  - [ ] http host rewrite
  - [ ] websocket tcp converter

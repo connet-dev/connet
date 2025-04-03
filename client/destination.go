@@ -101,15 +101,33 @@ func (d *Destination) Run(ctx context.Context) error {
 }
 
 func (d *Destination) Accept() (net.Conn, error) {
-	conn, ok := <-d.acceptCh
-	if !ok {
-		return nil, fmt.Errorf("destination %s is closed: %w", d.cfg.Forward, net.ErrClosed)
+	return d.AcceptContext(context.Background())
+}
+
+func (d *Destination) AcceptContext(ctx context.Context) (net.Conn, error) {
+	select {
+	case <-ctx.Done():
+		return nil, ctx.Err()
+	case conn, ok := <-d.acceptCh:
+		if !ok {
+			return nil, fmt.Errorf("destination %s is closed: %w", d.cfg.Forward, net.ErrClosed)
+		}
+		return conn, nil
 	}
-	return conn, nil
 }
 
 func (d *Destination) Status() (PeerStatus, error) {
 	return d.peer.status()
+}
+
+func (d *Destination) Addr() net.Addr {
+	// TODO how to implement
+	return nil
+}
+
+func (d *Destination) Close() error {
+	// TODO how to implement
+	return nil
 }
 
 func (d *Destination) runActive(ctx context.Context) error {

@@ -13,12 +13,12 @@ import (
 	"os/signal"
 	"strings"
 	"syscall"
+	"time"
 
 	"github.com/connet-dev/connet"
 	"github.com/connet-dev/connet/client"
 	"github.com/connet-dev/connet/control"
 	"github.com/connet-dev/connet/model"
-	"github.com/connet-dev/connet/netc"
 	"github.com/connet-dev/connet/relay"
 	"github.com/connet-dev/connet/restr"
 	"github.com/connet-dev/connet/selfhosted"
@@ -468,6 +468,12 @@ func logger(cfg Config) (*slog.Logger, error) {
 	}
 }
 
+type runnable interface {
+	Run(ctx context.Context) error
+}
+
+type newrunnable[T any] func(t T) (runnable, error)
+
 func clientRun(ctx context.Context, cfg ClientConfig, logger *slog.Logger) error {
 	var opts []connet.ClientOption
 
@@ -519,7 +525,7 @@ func clientRun(ctx context.Context, cfg ClientConfig, logger *slog.Logger) error
 		defaultRelayEncryptions = res
 	}
 
-	var srvs []*netc.FileServer
+	destinations := map[string]newrunnable[connet.Destination]{}
 	for name, fc := range cfg.Destinations {
 		route, err := parseRouteOption(fc.Route)
 		if err != nil {
@@ -528,9 +534,6 @@ func clientRun(ctx context.Context, cfg ClientConfig, logger *slog.Logger) error
 		proxy, err := parseProxyVersion(fc.ProxyProtoVersion)
 		if err != nil {
 			return fmt.Errorf("parse proxy proto version for destination '%s': %w", name, err)
-		}
-		if fc.FileServerRoot != "" {
-			srvs = append(srvs, &netc.FileServer{Addr: fc.Addr, Root: fc.FileServerRoot})
 		}
 		relayEncryptions := defaultRelayEncryptions
 		if len(fc.RelayEncryptions) > 0 {
@@ -545,10 +548,17 @@ func clientRun(ctx context.Context, cfg ClientConfig, logger *slog.Logger) error
 				WithRoute(route).
 				WithProxy(proxy).
 				WithRelayEncryptions(relayEncryptions...)),
-			connet.ClientDestinationServer(name, fc.Addr),
 		)
+		destinations[name] = func(dst connet.Destination) (runnable, error) {
+			if fc.FileServerRoot != "" {
+				return connet.NewHTTPFileDestination(dst, fc.FileServerRoot)
+			} else {
+				return connet.NewTCPDestination(dst, model.NewForward(name), fc.Addr, logger)
+			}
+		}
 	}
 
+	sources := map[string]newrunnable[connet.Source]{}
 	for name, fc := range cfg.Sources {
 		route, err := parseRouteOption(fc.Route)
 		if err != nil {
@@ -566,8 +576,10 @@ func clientRun(ctx context.Context, cfg ClientConfig, logger *slog.Logger) error
 			client.NewSourceConfig(name).
 				WithRoute(route).
 				WithRelayEncryptions(relayEncryptions...)),
-			connet.ClientSourceServer(name, fc.Addr),
 		)
+		sources[name] = func(src connet.Source) (runnable, error) {
+			return connet.NewTCPSource(src, model.NewForward(name), fc.Addr, logger)
+		}
 	}
 
 	opts = append(opts, connet.ClientLogger(logger))
@@ -576,16 +588,36 @@ func clientRun(ctx context.Context, cfg ClientConfig, logger *slog.Logger) error
 	if err != nil {
 		return fmt.Errorf("create client: %w", err)
 	}
-	if len(srvs) > 0 {
-		g, ctx := errgroup.WithContext(ctx)
-		for _, srv := range srvs {
-			g.Go(func() error { return srv.Run(ctx) })
-		}
 
-		g.Go(func() error { return cl.Run(ctx) })
-		return g.Wait()
+	g, ctx := errgroup.WithContext(ctx)
+	g.Go(func() error { return cl.Run(ctx) })
+
+	time.Sleep(time.Millisecond) // TODO preadd instead of run
+	for name, dstrun := range destinations {
+		dst, err := cl.Destination(name)
+		if err != nil {
+			return err
+		}
+		runner, err := dstrun(dst)
+		if err != nil {
+			return err
+		}
+		g.Go(func() error { return runner.Run(ctx) })
 	}
-	return cl.Run(ctx)
+
+	for name, srcrun := range sources {
+		src, err := cl.Source(name)
+		if err != nil {
+			return err
+		}
+		runner, err := srcrun(src)
+		if err != nil {
+			return err
+		}
+		g.Go(func() error { return runner.Run(ctx) })
+	}
+
+	return g.Wait()
 }
 
 func serverRun(ctx context.Context, cfg ServerConfig, logger *slog.Logger) error {
