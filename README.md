@@ -464,6 +464,7 @@ by adding account management and it is one of the easiest way to start.
 
 ### v0.7.0
  - [ ] dynamic source/destination in the client
+ - [ ] package refactor/rename
  - [ ] http source
  - [ ] http host rewrite
  - [ ] websocket tcp converter

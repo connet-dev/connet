@@ -17,6 +17,7 @@ import (
 	"github.com/connet-dev/connet/client"
 	"github.com/connet-dev/connet/model"
 	"github.com/connet-dev/connet/netc"
+	"github.com/connet-dev/connet/notify"
 	"github.com/connet-dev/connet/pb"
 	"github.com/connet-dev/connet/pbs"
 	"github.com/connet-dev/connet/quicc"
@@ -31,10 +32,11 @@ type Client struct {
 	rootCert     *certc.Cert
 	directServer *client.DirectServer
 
-	dsts map[model.Forward]*client.Destination
-	srcs map[model.Forward]*client.Source
+	dsts map[model.Forward]*clientDestination
+	srcs map[model.Forward]*clientSource
 
 	connStatus atomic.Value
+	sess       *notify.V[*session]
 }
 
 func NewClient(opts ...ClientOption) (*Client, error) {
@@ -83,6 +85,11 @@ func NewClient(opts ...ClientOption) (*Client, error) {
 		clientConfig: *cfg,
 
 		rootCert: rootCert,
+
+		dsts: map[model.Forward]*clientDestination{},
+		srcs: map[model.Forward]*clientSource{},
+
+		sess: notify.New[*session](nil),
 	}
 	c.connStatus.Store(statusc.NotConnected)
 
@@ -107,34 +114,21 @@ func (c *Client) Run(ctx context.Context) error {
 	}
 	c.directServer = ds
 
-	c.dsts = map[model.Forward]*client.Destination{}
 	for fwd, cfg := range c.destinations {
-		c.dsts[fwd], err = client.NewDestination(cfg, ds, c.rootCert, c.logger)
-		if err != nil {
-			return fmt.Errorf("create destination %s: %w", fwd, err)
+		if _, err := c.AddDestination(ctx, cfg); err != nil {
+			return fmt.Errorf("add destination %s: %w", fwd, err)
 		}
 	}
 
-	c.srcs = map[model.Forward]*client.Source{}
 	for fwd, cfg := range c.sources {
-		c.srcs[fwd], err = client.NewSource(cfg, ds, c.rootCert, c.logger)
-		if err != nil {
-			return fmt.Errorf("client source %s: %w", fwd, err)
+		if _, err := c.AddSource(ctx, cfg); err != nil {
+			return fmt.Errorf("add source %s: %w", fwd, err)
 		}
 	}
 
 	g, ctx := errgroup.WithContext(ctx)
 
 	g.Go(func() error { return ds.Run(ctx) })
-
-	for _, dst := range c.dsts {
-		g.Go(func() error { return dst.Run(ctx) })
-	}
-
-	for _, src := range c.srcs {
-		g.Go(func() error { return src.Run(ctx) })
-	}
-
 	g.Go(func() error { return c.run(ctx, transport) })
 
 	return g.Wait()
@@ -152,14 +146,36 @@ func (c *Client) Destination(name string) (Destination, error) {
 	return dst, nil
 }
 
-func (c *Client) AddDestination(cfg client.DestinationConfig) (Destination, error) {
+func (c *Client) AddDestination(ctx context.Context, cfg client.DestinationConfig) (Destination, error) {
 	dst, err := client.NewDestination(cfg, c.directServer, c.rootCert, c.logger)
 	if err != nil {
 		return nil, err
 	}
-	// TODO add to main run group
+	clDst := &clientDestination{dst}
+	c.dsts[cfg.Forward] = clDst
+
+	// TODO add to main run group, do we keep track?
+	go func() {
+		if err := dst.Run(ctx); err != nil {
+			// TODO what happens here
+		}
+	}()
+
 	// TODO add to current run group
-	return dst, nil
+	go func() {
+		err := c.sess.Listen(ctx, func(sess *session) error {
+			if sess != nil {
+				dst.SetDirectAddrs(sess.addrs)
+				go dst.RunControl(ctx, sess.conn)
+			}
+			return nil
+		})
+		if err != nil {
+			// TODO what happens here
+		}
+	}()
+
+	return clDst, nil
 }
 
 func (c *Client) Sources() []string {
@@ -174,24 +190,46 @@ func (c *Client) Source(name string) (Source, error) {
 	return src, nil
 }
 
-func (c *Client) AddSource(cfg client.SourceConfig) (Source, error) {
+func (c *Client) AddSource(ctx context.Context, cfg client.SourceConfig) (Source, error) {
 	src, err := client.NewSource(cfg, c.directServer, c.rootCert, c.logger)
 	if err != nil {
 		return nil, err
 	}
-	// TODO add to main run group
+	clSrc := &clientSource{src}
+	c.srcs[cfg.Forward] = clSrc
+
+	// TODO add to main run group, do we keep track?
+	go func() {
+		if err := src.Run(ctx); err != nil {
+			// TODO what happens here
+		}
+	}()
+
 	// TODO add to current run group
-	return src, nil
+	go func() {
+		err := c.sess.Listen(ctx, func(sess *session) error {
+			if sess != nil {
+				src.SetDirectAddrs(sess.addrs)
+				go src.RunControl(ctx, sess.conn)
+			}
+			return nil
+		})
+		if err != nil {
+			// TODO what happens here
+		}
+	}()
+
+	return clSrc, nil
 }
 
 func (c *Client) run(ctx context.Context, transport *quic.Transport) error {
-	conn, retoken, err := c.connect(ctx, transport, nil)
+	sess, err := c.connect(ctx, transport, nil)
 	if err != nil {
 		return err
 	}
 
 	for {
-		if err := c.runConnection(ctx, conn); err != nil {
+		if err := c.runSession(ctx, sess); err != nil {
 			switch {
 			case errors.Is(err, context.Canceled):
 				return err
@@ -203,13 +241,19 @@ func (c *Client) run(ctx context.Context, transport *quic.Transport) error {
 			c.logger.Error("session ended", "err", err)
 		}
 
-		if conn, retoken, err = c.reconnect(ctx, transport, retoken); err != nil {
+		if sess, err = c.reconnect(ctx, transport, sess.retoken); err != nil {
 			return err
 		}
 	}
 }
 
-func (c *Client) connect(ctx context.Context, transport *quic.Transport, retoken []byte) (quic.Connection, []byte, error) {
+type session struct {
+	conn    quic.Connection
+	addrs   []netip.AddrPort
+	retoken []byte
+}
+
+func (c *Client) connect(ctx context.Context, transport *quic.Transport, retoken []byte) (*session, error) {
 	c.logger.Debug("dialing target", "addr", c.controlAddr)
 	// TODO dial timeout if server is not accessible?
 	conn, err := transport.Dial(quicc.RTTContext(ctx), c.controlAddr, &tls.Config{
@@ -218,14 +262,14 @@ func (c *Client) connect(ctx context.Context, transport *quic.Transport, retoken
 		NextProtos: []string{"connet"},
 	}, quicc.StdConfig)
 	if err != nil {
-		return nil, nil, fmt.Errorf("dial server: %w", err)
+		return nil, fmt.Errorf("dial server: %w", err)
 	}
 
 	c.logger.Debug("authenticating", "addr", c.controlAddr)
 
 	authStream, err := conn.OpenStreamSync(ctx)
 	if err != nil {
-		return nil, nil, fmt.Errorf("open authentication stream: %w", err)
+		return nil, fmt.Errorf("open authentication stream: %w", err)
 	}
 	defer authStream.Close()
 
@@ -233,20 +277,20 @@ func (c *Client) connect(ctx context.Context, transport *quic.Transport, retoken
 		Token:          c.token,
 		ReconnectToken: retoken,
 	}); err != nil {
-		return nil, nil, fmt.Errorf("write authentication: %w", err)
+		return nil, fmt.Errorf("write authentication: %w", err)
 	}
 
 	resp := &pbs.AuthenticateResp{}
 	if err := pb.Read(authStream, resp); err != nil {
-		return nil, nil, fmt.Errorf("authentication read failed: %w", err)
+		return nil, fmt.Errorf("authentication read failed: %w", err)
 	}
 	if resp.Error != nil {
-		return nil, nil, fmt.Errorf("authentication failed: %w", resp.Error)
+		return nil, fmt.Errorf("authentication failed: %w", resp.Error)
 	}
 
 	localAddrs, err := netc.LocalAddrs()
 	if err != nil {
-		return nil, nil, fmt.Errorf("local addrs: %w", err)
+		return nil, fmt.Errorf("local addrs: %w", err)
 	}
 	localAddrPorts := make([]netip.AddrPort, len(localAddrs))
 	for i, addr := range localAddrs {
@@ -254,18 +298,12 @@ func (c *Client) connect(ctx context.Context, transport *quic.Transport, retoken
 	}
 
 	directAddrs := append(localAddrPorts, resp.Public.AsNetip())
-	for _, d := range c.dsts {
-		d.SetDirectAddrs(directAddrs)
-	}
-	for _, s := range c.srcs {
-		s.SetDirectAddrs(directAddrs)
-	}
 
 	c.logger.Info("authenticated to server", "addr", c.controlAddr, "direct", directAddrs)
-	return conn, resp.ReconnectToken, nil
+	return &session{conn, directAddrs, resp.ReconnectToken}, nil
 }
 
-func (c *Client) reconnect(ctx context.Context, transport *quic.Transport, retoken []byte) (quic.Connection, []byte, error) {
+func (c *Client) reconnect(ctx context.Context, transport *quic.Transport, retoken []byte) (*session, error) {
 	d := netc.MinBackoff
 	t := time.NewTimer(d)
 	defer t.Stop()
@@ -273,14 +311,14 @@ func (c *Client) reconnect(ctx context.Context, transport *quic.Transport, retok
 		c.logger.Debug("backoff wait", "d", d)
 		select {
 		case <-ctx.Done():
-			return nil, nil, ctx.Err()
+			return nil, ctx.Err()
 		case <-t.C:
 		}
 
-		if sess, retoken, err := c.connect(ctx, transport, retoken); err != nil {
+		if sess, err := c.connect(ctx, transport, retoken); err != nil {
 			c.logger.Debug("reconnect failed, retrying", "err", err)
 		} else {
-			return sess, retoken, nil
+			return sess, nil
 		}
 
 		d = netc.NextBackoff(d)
@@ -288,23 +326,21 @@ func (c *Client) reconnect(ctx context.Context, transport *quic.Transport, retok
 	}
 }
 
-func (c *Client) runConnection(ctx context.Context, conn quic.Connection) error {
-	defer conn.CloseWithError(quic.ApplicationErrorCode(pb.Error_Unknown), "connection closed")
+func (c *Client) runSession(ctx context.Context, sess *session) error {
+	defer sess.conn.CloseWithError(quic.ApplicationErrorCode(pb.Error_Unknown), "connection closed")
+
+	c.sess.Set(sess)
+	defer c.sess.Set(nil)
 
 	c.connStatus.Store(statusc.Connected)
 	defer c.connStatus.Store(statusc.Disconnected)
 
-	g, ctx := errgroup.WithContext(ctx)
-
-	for _, dstServer := range c.dsts {
-		g.Go(func() error { return dstServer.RunControl(ctx, conn) })
+	select {
+	case <-ctx.Done():
+		return context.Cause(ctx)
+	case <-sess.conn.Context().Done():
+		return context.Cause(sess.conn.Context())
 	}
-
-	for _, srcServer := range c.srcs {
-		g.Go(func() error { return srcServer.RunControl(ctx, conn) })
-	}
-
-	return g.Wait()
 }
 
 type ClientStatus struct {

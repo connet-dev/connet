@@ -120,16 +120,6 @@ func (d *Destination) Status() (PeerStatus, error) {
 	return d.peer.status()
 }
 
-func (d *Destination) Addr() net.Addr {
-	// TODO how to implement
-	return nil
-}
-
-func (d *Destination) Close() error {
-	// TODO how to implement
-	return nil
-}
-
 func (d *Destination) runActive(ctx context.Context) error {
 	return d.peer.activeConnsListen(ctx, func(active map[peerConnKey]quic.Connection) error {
 		d.logger.Debug("active conns", "len", len(active))
