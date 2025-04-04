@@ -22,6 +22,7 @@ import (
 	"github.com/connet-dev/connet/relay"
 	"github.com/connet-dev/connet/restr"
 	"github.com/connet-dev/connet/selfhosted"
+	"github.com/connet-dev/connet/statusc"
 	"github.com/mr-tron/base58"
 	"github.com/pelletier/go-toml/v2"
 	"github.com/quic-go/quic-go"
@@ -512,8 +513,13 @@ func clientRun(ctx context.Context, cfg ClientConfig, logger *slog.Logger) error
 		opts = append(opts, connet.ClientDirectStatelessResetKey(&key))
 	}
 
+	var statusAddr *net.TCPAddr
 	if cfg.StatusAddr != "" {
-		opts = append(opts, connet.ClientStatusAddress(cfg.StatusAddr))
+		addr, err := net.ResolveTCPAddr("tcp", cfg.StatusAddr)
+		if err != nil {
+			return fmt.Errorf("resolve status address: %w", err)
+		}
+		statusAddr = addr
 	}
 
 	var defaultRelayEncryptions = []model.EncryptionScheme{model.NoEncryption}
@@ -590,7 +596,14 @@ func clientRun(ctx context.Context, cfg ClientConfig, logger *slog.Logger) error
 	}
 
 	g, ctx := errgroup.WithContext(ctx)
+
 	g.Go(func() error { return cl.Run(ctx) })
+	if statusAddr != nil {
+		g.Go(func() error {
+			logger.Debug("running status server", "addr", statusAddr)
+			return statusc.Run(ctx, statusAddr.String(), cl.Status)
+		})
+	}
 
 	time.Sleep(time.Millisecond) // TODO preadd instead of run
 	for name, dstrun := range destinations {

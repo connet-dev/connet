@@ -183,7 +183,9 @@ func TestE2E(t *testing.T) {
 	})
 
 	g.Go(func() error { return clDst.Run(ctx) })
-	time.Sleep(time.Second) // TODO same add in advance
+	g.Go(func() error { return clSrc.Run(ctx) })
+	time.Sleep(500 * time.Millisecond) // time for clients to come online
+
 	for _, dstName := range clDst.Destinations() {
 		dst, err := clDst.Destination(dstName)
 		require.NoError(t, err)
@@ -197,8 +199,6 @@ func TestE2E(t *testing.T) {
 		g.Go(func() error { return dstSrv.Run(ctx) })
 	}
 
-	g.Go(func() error { return clSrc.Run(ctx) })
-	time.Sleep(time.Second) // TODO same add in advance
 	for _, srcName := range clSrc.Sources() {
 		src, err := clSrc.Source(srcName)
 		require.NoError(t, err)
@@ -210,8 +210,6 @@ func TestE2E(t *testing.T) {
 		require.NoError(t, err)
 		g.Go(func() error { return srcSrv.Run(ctx) })
 	}
-
-	time.Sleep(500 * time.Millisecond) // time for clients to come online
 
 	// actual test
 	httpcl := &http.Client{}

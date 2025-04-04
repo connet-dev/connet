@@ -7,6 +7,7 @@ import (
 	"net/http"
 )
 
+// TODO pass the net.Addr in
 func Run[T any](ctx context.Context, addr string, f func(ctx context.Context) (T, error)) error {
 	srv := &http.Server{
 		Addr: addr,

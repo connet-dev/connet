@@ -25,7 +25,6 @@ func NewTCPSource(src Source, fwd model.Forward, addr string, logger *slog.Logge
 }
 
 func (s *TCPSource) Run(ctx context.Context) error {
-	fmt.Println(" --- --- --- where is")
 	s.logger.Debug("starting source server")
 	l, err := net.Listen("tcp", s.addr)
 	if err != nil {
