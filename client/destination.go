@@ -81,6 +81,10 @@ func NewDestination(cfg DestinationConfig, direct *DirectServer, root *certc.Cer
 	}, nil
 }
 
+func (d *Destination) Forward() model.Forward {
+	return d.cfg.Forward
+}
+
 func (d *Destination) Run(ctx context.Context) error {
 	defer close(d.acceptCh)
 

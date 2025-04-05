@@ -80,6 +80,10 @@ func NewSource(cfg SourceConfig, direct *DirectServer, root *certc.Cert, logger 
 	}, nil
 }
 
+func (s *Source) Forward() model.Forward {
+	return s.cfg.Forward
+}
+
 func (s *Source) Run(ctx context.Context) error {
 	g, ctx := errgroup.WithContext(ctx)
 
