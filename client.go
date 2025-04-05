@@ -40,6 +40,7 @@ type Client struct {
 	cancel     context.CancelCauseFunc
 	connStatus atomic.Value
 	sess       *notify.V[*session]
+	closer     chan struct{}
 }
 
 // Connect starts a new client and connects it to the control server
@@ -65,7 +66,8 @@ func Connect(ctx context.Context, opts ...ClientOption) (*Client, error) {
 		dsts: map[model.Forward]*clientDestination{},
 		srcs: map[model.Forward]*clientSource{},
 
-		sess: notify.New[*session](nil),
+		sess:   notify.New[*session](nil),
+		closer: make(chan struct{}),
 	}
 	c.connStatus.Store(statusc.NotConnected)
 
@@ -109,6 +111,7 @@ func (c *Client) runClient(ctx context.Context, errCh chan error) {
 
 	if err := g.Wait(); err != nil {
 		// TODO
+		close(c.closer)
 	}
 }
 
@@ -182,6 +185,7 @@ func (c *Client) Source(ctx context.Context, cfg client.SourceConfig) (Source, e
 
 func (c *Client) Close() error {
 	c.cancel(net.ErrClosed)
+	<-c.closer
 	return nil
 }
 
