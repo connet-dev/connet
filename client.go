@@ -2,18 +2,14 @@ package connet
 
 import (
 	"context"
-	"crypto/rand"
 	"crypto/tls"
-	"crypto/x509"
 	"errors"
 	"fmt"
-	"io"
-	"log/slog"
+	"maps"
 	"net"
 	"net/netip"
-	"os"
-	"path/filepath"
-	"strings"
+	"slices"
+	"sync"
 	"sync/atomic"
 	"time"
 
@@ -21,6 +17,7 @@ import (
 	"github.com/connet-dev/connet/client"
 	"github.com/connet-dev/connet/model"
 	"github.com/connet-dev/connet/netc"
+	"github.com/connet-dev/connet/notify"
 	"github.com/connet-dev/connet/pb"
 	"github.com/connet-dev/connet/pbs"
 	"github.com/connet-dev/connet/quicc"
@@ -32,49 +29,27 @@ import (
 type Client struct {
 	clientConfig
 
-	rootCert   *certc.Cert
-	dsts       map[model.Forward]*client.Destination
-	dstServers map[model.Forward]*client.DestinationServer
-	srcs       map[model.Forward]*client.Source
-	srcServers map[model.Forward]*client.SourceServer
+	rootCert     *certc.Cert
+	directServer *client.DirectServer
 
+	dsts   map[model.Forward]*clientDestination
+	dstsMu sync.RWMutex
+	srcs   map[model.Forward]*clientSource
+	srcsMu sync.RWMutex
+
+	cancel     context.CancelCauseFunc
 	connStatus atomic.Value
+	sess       *notify.V[*session]
+	closer     chan struct{}
 }
 
-func NewClient(opts ...ClientOption) (*Client, error) {
-	cfg := &clientConfig{
-		logger: slog.Default(),
-	}
-	for _, opt := range opts {
-		if err := opt(cfg); err != nil {
-			return nil, err
-		}
-	}
-
-	if cfg.controlAddr == nil {
-		if err := ClientControlAddress("127.0.0.1:19190")(cfg); err != nil {
-			return nil, fmt.Errorf("default control address: %w", err)
-		}
-	}
-
-	if cfg.directAddr == nil {
-		if err := ClientDirectAddress(":19192")(cfg); err != nil {
-			return nil, fmt.Errorf("default direct address: %w", err)
-		}
-	}
-
-	if cfg.directResetKey == nil {
-		if err := clientDirectStatelessResetKey()(cfg); err != nil {
-			return nil, fmt.Errorf("default stateless reset key: %w", err)
-		}
-		if cfg.directResetKey == nil {
-			cfg.logger.Warn("running without a stateless reset key")
-		}
-	}
-
-	if len(cfg.destinations) == 0 && len(cfg.sources) == 0 {
-		// TODO fix this
-		return nil, fmt.Errorf("missing destination or source")
+// Connect starts a new client and connects it to the control server
+// the client can be stopped either by canceling this context (TODO should it be separate option) or via calling Close
+// Either will close all active source/destinations associated with this client
+func Connect(ctx context.Context, opts ...ClientOption) (*Client, error) {
+	cfg, err := newClientConfig(opts)
+	if err != nil {
+		return nil, err
 	}
 
 	rootCert, err := certc.NewRoot()
@@ -87,17 +62,37 @@ func NewClient(opts ...ClientOption) (*Client, error) {
 		clientConfig: *cfg,
 
 		rootCert: rootCert,
+
+		dsts: map[model.Forward]*clientDestination{},
+		srcs: map[model.Forward]*clientSource{},
+
+		sess:   notify.New[*session](nil),
+		closer: make(chan struct{}),
 	}
 	c.connStatus.Store(statusc.NotConnected)
+
+	ctx, cancel := context.WithCancelCause(ctx)
+	c.cancel = cancel
+
+	errCh := make(chan error)
+	go c.runClient(ctx, errCh)
+
+	if err := <-errCh; err != nil {
+		c.Close()
+		return nil, err
+	}
 
 	return c, nil
 }
 
-func (c *Client) Run(ctx context.Context) error {
+func (c *Client) runClient(ctx context.Context, errCh chan error) {
+	defer close(c.closer)
+
 	c.logger.Debug("start udp listener")
 	udpConn, err := net.ListenUDP("udp", c.directAddr)
 	if err != nil {
-		return fmt.Errorf("listen direct address: %w", err)
+		errCh <- fmt.Errorf("listen direct address: %w", err)
+		return
 	}
 	defer udpConn.Close()
 
@@ -107,77 +102,105 @@ func (c *Client) Run(ctx context.Context) error {
 
 	ds, err := client.NewDirectServer(transport, c.logger)
 	if err != nil {
-		return fmt.Errorf("create direct server: %w", err)
+		errCh <- fmt.Errorf("create direct server: %w", err)
+		return
 	}
-
-	c.dsts = map[model.Forward]*client.Destination{}
-	for fwd, cfg := range c.destinations {
-		c.dsts[fwd], err = client.NewDestination(cfg, ds, c.rootCert, c.logger)
-		if err != nil {
-			return fmt.Errorf("create destination %s: %w", fwd, err)
-		}
-	}
-
-	c.srcs = map[model.Forward]*client.Source{}
-	for fwd, cfg := range c.sources {
-		c.srcs[fwd], err = client.NewSource(cfg, ds, c.rootCert, c.logger)
-		if err != nil {
-			return fmt.Errorf("client source %s: %w", fwd, err)
-		}
-	}
-
-	c.dstServers = map[model.Forward]*client.DestinationServer{}
-	for fwd, addr := range c.destinationServers {
-		dst, ok := c.dsts[fwd]
-		if !ok {
-			return fmt.Errorf("client destination %s for server not found", fwd)
-		}
-		c.dstServers[fwd] = client.NewDestinationServer(dst, fwd, addr, c.logger)
-	}
-
-	c.srcServers = map[model.Forward]*client.SourceServer{}
-	for fwd, addr := range c.sourceServers {
-		src, ok := c.srcs[fwd]
-		if !ok {
-			return fmt.Errorf("client source %s for server not found", fwd)
-		}
-		c.srcServers[fwd] = client.NewSourceServer(src, fwd, addr, c.logger)
-	}
+	c.directServer = ds
 
 	g, ctx := errgroup.WithContext(ctx)
 
 	g.Go(func() error { return ds.Run(ctx) })
+	g.Go(func() error { return c.run(ctx, transport, errCh) })
 
-	for _, dst := range c.dsts {
-		g.Go(func() error { return dst.Run(ctx) })
+	if err := g.Wait(); err != nil {
+		c.logger.Warn("shutting down client", "err", err)
 	}
-
-	for _, src := range c.srcs {
-		g.Go(func() error { return src.Run(ctx) })
-	}
-
-	for _, dst := range c.dstServers {
-		g.Go(func() error { return dst.Run(ctx) })
-	}
-
-	for _, src := range c.srcServers {
-		g.Go(func() error { return src.Run(ctx) })
-	}
-
-	g.Go(func() error { return c.run(ctx, transport) })
-	g.Go(func() error { return c.runStatus(ctx) })
-
-	return g.Wait()
 }
 
-func (c *Client) run(ctx context.Context, transport *quic.Transport) error {
-	conn, retoken, err := c.connect(ctx, transport, nil)
+func (c *Client) Destinations() []string {
+	c.dstsMu.RLock()
+	defer c.dstsMu.RUnlock()
+
+	return model.ForwardNames(slices.Collect(maps.Keys(c.dsts)))
+}
+
+func (c *Client) GetDestination(name string) (Destination, error) {
+	c.dstsMu.RLock()
+	defer c.dstsMu.RUnlock()
+
+	dst, ok := c.dsts[model.NewForward(name)]
+	if !ok {
+		return nil, fmt.Errorf("destination %s: not found", name)
+	}
+	return dst, nil
+}
+
+// Destination starts a new destination with a given configuration
+// Blocks until it is succesfully announced to the control server
+// The destination can be closed either via cancelling the context or calling its close func
+func (c *Client) Destination(ctx context.Context, cfg client.DestinationConfig) (Destination, error) {
+	clDst, err := newClientDestination(ctx, c, cfg)
 	if err != nil {
-		return err
+		return nil, err
 	}
 
+	c.dstsMu.Lock()
+	defer c.dstsMu.Unlock()
+
+	c.dsts[cfg.Forward] = clDst
+	return clDst, nil
+}
+
+func (c *Client) Sources() []string {
+	c.srcsMu.RLock()
+	defer c.srcsMu.RUnlock()
+
+	return model.ForwardNames(slices.Collect(maps.Keys(c.srcs)))
+}
+
+func (c *Client) GetSource(name string) (Source, error) {
+	c.srcsMu.RLock()
+	defer c.srcsMu.RUnlock()
+
+	src, ok := c.srcs[model.NewForward(name)]
+	if !ok {
+		return nil, fmt.Errorf("source %s: not found", name)
+	}
+	return src, nil
+}
+
+// Source starts a new source with a given configuration
+// Blocks until it is succesfully announced to the control server
+// The source can be closed either via cancelling the context or calling its close func
+func (c *Client) Source(ctx context.Context, cfg client.SourceConfig) (Source, error) {
+	clSrc, err := newClientSource(ctx, c, cfg)
+	if err != nil {
+		return nil, err
+	}
+
+	c.srcsMu.Lock()
+	defer c.srcsMu.Unlock()
+
+	c.srcs[cfg.Forward] = clSrc
+	return clSrc, nil
+}
+
+func (c *Client) Close() error {
+	c.cancel(net.ErrClosed)
+	<-c.closer
+	return nil
+}
+
+func (c *Client) run(ctx context.Context, transport *quic.Transport, errCh chan error) error {
+	sess, err := c.connect(ctx, transport, nil)
+	if err != nil {
+		errCh <- err
+		return err
+	}
+	close(errCh)
+
 	for {
-		if err := c.runConnection(ctx, conn); err != nil {
+		if err := c.runSession(ctx, sess); err != nil {
 			switch {
 			case errors.Is(err, context.Canceled):
 				return err
@@ -189,13 +212,19 @@ func (c *Client) run(ctx context.Context, transport *quic.Transport) error {
 			c.logger.Error("session ended", "err", err)
 		}
 
-		if conn, retoken, err = c.reconnect(ctx, transport, retoken); err != nil {
+		if sess, err = c.reconnect(ctx, transport, sess.retoken); err != nil {
 			return err
 		}
 	}
 }
 
-func (c *Client) connect(ctx context.Context, transport *quic.Transport, retoken []byte) (quic.Connection, []byte, error) {
+type session struct {
+	conn    quic.Connection
+	addrs   []netip.AddrPort
+	retoken []byte
+}
+
+func (c *Client) connect(ctx context.Context, transport *quic.Transport, retoken []byte) (*session, error) {
 	c.logger.Debug("dialing target", "addr", c.controlAddr)
 	// TODO dial timeout if server is not accessible?
 	conn, err := transport.Dial(quicc.RTTContext(ctx), c.controlAddr, &tls.Config{
@@ -204,14 +233,14 @@ func (c *Client) connect(ctx context.Context, transport *quic.Transport, retoken
 		NextProtos: []string{"connet"},
 	}, quicc.StdConfig)
 	if err != nil {
-		return nil, nil, fmt.Errorf("dial server: %w", err)
+		return nil, fmt.Errorf("dial server %s: %w", c.controlAddr, err)
 	}
 
 	c.logger.Debug("authenticating", "addr", c.controlAddr)
 
 	authStream, err := conn.OpenStreamSync(ctx)
 	if err != nil {
-		return nil, nil, fmt.Errorf("open authentication stream: %w", err)
+		return nil, fmt.Errorf("open authentication stream: %w", err)
 	}
 	defer authStream.Close()
 
@@ -219,20 +248,20 @@ func (c *Client) connect(ctx context.Context, transport *quic.Transport, retoken
 		Token:          c.token,
 		ReconnectToken: retoken,
 	}); err != nil {
-		return nil, nil, fmt.Errorf("write authentication: %w", err)
+		return nil, fmt.Errorf("write authentication: %w", err)
 	}
 
 	resp := &pbs.AuthenticateResp{}
 	if err := pb.Read(authStream, resp); err != nil {
-		return nil, nil, fmt.Errorf("authentication read failed: %w", err)
+		return nil, fmt.Errorf("authentication read failed: %w", err)
 	}
 	if resp.Error != nil {
-		return nil, nil, fmt.Errorf("authentication failed: %w", resp.Error)
+		return nil, fmt.Errorf("authentication failed: %w", resp.Error)
 	}
 
 	localAddrs, err := netc.LocalAddrs()
 	if err != nil {
-		return nil, nil, fmt.Errorf("local addrs: %w", err)
+		return nil, fmt.Errorf("local addrs: %w", err)
 	}
 	localAddrPorts := make([]netip.AddrPort, len(localAddrs))
 	for i, addr := range localAddrs {
@@ -240,18 +269,12 @@ func (c *Client) connect(ctx context.Context, transport *quic.Transport, retoken
 	}
 
 	directAddrs := append(localAddrPorts, resp.Public.AsNetip())
-	for _, d := range c.dsts {
-		d.SetDirectAddrs(directAddrs)
-	}
-	for _, s := range c.srcs {
-		s.SetDirectAddrs(directAddrs)
-	}
 
 	c.logger.Info("authenticated to server", "addr", c.controlAddr, "direct", directAddrs)
-	return conn, resp.ReconnectToken, nil
+	return &session{conn, directAddrs, resp.ReconnectToken}, nil
 }
 
-func (c *Client) reconnect(ctx context.Context, transport *quic.Transport, retoken []byte) (quic.Connection, []byte, error) {
+func (c *Client) reconnect(ctx context.Context, transport *quic.Transport, retoken []byte) (*session, error) {
 	d := netc.MinBackoff
 	t := time.NewTimer(d)
 	defer t.Stop()
@@ -259,14 +282,14 @@ func (c *Client) reconnect(ctx context.Context, transport *quic.Transport, retok
 		c.logger.Debug("backoff wait", "d", d)
 		select {
 		case <-ctx.Done():
-			return nil, nil, ctx.Err()
+			return nil, ctx.Err()
 		case <-t.C:
 		}
 
-		if sess, retoken, err := c.connect(ctx, transport, retoken); err != nil {
+		if sess, err := c.connect(ctx, transport, retoken); err != nil {
 			c.logger.Debug("reconnect failed, retrying", "err", err)
 		} else {
-			return sess, retoken, nil
+			return sess, nil
 		}
 
 		d = netc.NextBackoff(d)
@@ -274,52 +297,40 @@ func (c *Client) reconnect(ctx context.Context, transport *quic.Transport, retok
 	}
 }
 
-func (c *Client) runConnection(ctx context.Context, conn quic.Connection) error {
-	defer conn.CloseWithError(quic.ApplicationErrorCode(pb.Error_Unknown), "connection closed")
+func (c *Client) runSession(ctx context.Context, sess *session) error {
+	defer sess.conn.CloseWithError(quic.ApplicationErrorCode(pb.Error_Unknown), "connection closed")
+
+	c.sess.Set(sess)
+	defer c.sess.Set(nil)
 
 	c.connStatus.Store(statusc.Connected)
 	defer c.connStatus.Store(statusc.Disconnected)
 
-	g, ctx := errgroup.WithContext(ctx)
-
-	for _, dstServer := range c.dsts {
-		g.Go(func() error { return dstServer.RunControl(ctx, conn) })
+	select {
+	case <-ctx.Done():
+		return context.Cause(ctx)
+	case <-sess.conn.Context().Done():
+		return context.Cause(sess.conn.Context())
 	}
-
-	for _, srcServer := range c.srcs {
-		g.Go(func() error { return srcServer.RunControl(ctx, conn) })
-	}
-
-	return g.Wait()
 }
 
-func (c *Client) runStatus(ctx context.Context) error {
-	if c.statusAddr == nil {
-		return nil
-	}
-
-	c.logger.Debug("running status server", "addr", c.statusAddr)
-	return statusc.Run(ctx, c.statusAddr.String(), c.Status)
+type ClientStatus struct {
+	Status       statusc.Status                      `json:"status"`
+	Destinations map[model.Forward]client.PeerStatus `json:"destinations"`
+	Sources      map[model.Forward]client.PeerStatus `json:"sources"`
 }
 
 func (c *Client) Status(ctx context.Context) (ClientStatus, error) {
 	stat := c.connStatus.Load().(statusc.Status)
-	var err error
 
-	dsts := map[model.Forward]client.PeerStatus{}
-	for fwd, dst := range c.dsts {
-		dsts[fwd], err = dst.Status()
-		if err != nil {
-			return ClientStatus{}, err
-		}
+	dsts, err := c.destinationsStatus()
+	if err != nil {
+		return ClientStatus{}, err
 	}
 
-	srcs := map[model.Forward]client.PeerStatus{}
-	for fwd, src := range c.srcs {
-		srcs[fwd], err = src.Status()
-		if err != nil {
-			return ClientStatus{}, err
-		}
+	srcs, err := c.sourcesStatus()
+	if err != nil {
+		return ClientStatus{}, err
 	}
 
 	return ClientStatus{
@@ -329,240 +340,36 @@ func (c *Client) Status(ctx context.Context) (ClientStatus, error) {
 	}, nil
 }
 
-type ClientStatus struct {
-	Status       statusc.Status                      `json:"status"`
-	Destinations map[model.Forward]client.PeerStatus `json:"destinations"`
-	Sources      map[model.Forward]client.PeerStatus `json:"sources"`
-}
+func (c *Client) destinationsStatus() (map[model.Forward]client.PeerStatus, error) {
+	var err error
+	statuses := map[model.Forward]client.PeerStatus{}
 
-type clientConfig struct {
-	token string
+	c.dstsMu.RLock()
+	defer c.dstsMu.RUnlock()
 
-	controlAddr *net.UDPAddr
-	controlHost string
-	controlCAs  *x509.CertPool
-
-	directAddr     *net.UDPAddr
-	directResetKey *quic.StatelessResetKey
-	statusAddr     *net.TCPAddr
-
-	destinations       map[model.Forward]client.DestinationConfig
-	destinationServers map[model.Forward]string
-
-	sources       map[model.Forward]client.SourceConfig
-	sourceServers map[model.Forward]string
-
-	logger *slog.Logger
-}
-
-type ClientOption func(cfg *clientConfig) error
-
-func ClientToken(token string) ClientOption {
-	return func(cfg *clientConfig) error {
-		cfg.token = token
-		return nil
-	}
-}
-
-func ClientControlAddress(address string) ClientOption {
-	return func(cfg *clientConfig) error {
-		if i := strings.LastIndex(address, ":"); i < 0 {
-			// missing :port, lets give it the default
-			address = fmt.Sprintf("%s:%d", address, 19190)
-		}
-		addr, err := net.ResolveUDPAddr("udp", address)
+	for fwd, dst := range c.dsts {
+		statuses[fwd], err = dst.Status()
 		if err != nil {
-			return fmt.Errorf("resolve control address: %w", err)
+			return nil, err
 		}
-		host, _, err := net.SplitHostPort(address)
+	}
+
+	return statuses, nil
+}
+
+func (c *Client) sourcesStatus() (map[model.Forward]client.PeerStatus, error) {
+	var err error
+	statuses := map[model.Forward]client.PeerStatus{}
+
+	c.srcsMu.RLock()
+	defer c.srcsMu.RUnlock()
+
+	for fwd, src := range c.srcs {
+		statuses[fwd], err = src.Status()
 		if err != nil {
-			return fmt.Errorf("split control address: %w", err)
+			return nil, err
 		}
-
-		cfg.controlAddr = addr
-		cfg.controlHost = host
-
-		return nil
 	}
-}
 
-func ClientControlCAs(certFile string) ClientOption {
-	return func(cfg *clientConfig) error {
-		casData, err := os.ReadFile(certFile)
-		if err != nil {
-			return fmt.Errorf("read server CAs: %w", err)
-		}
-
-		cas := x509.NewCertPool()
-		if !cas.AppendCertsFromPEM(casData) {
-			return fmt.Errorf("missing server CA certificate in %s", certFile)
-		}
-
-		cfg.controlCAs = cas
-
-		return nil
-	}
-}
-
-func clientControlCAs(cas *x509.CertPool) ClientOption {
-	return func(cfg *clientConfig) error {
-		cfg.controlCAs = cas
-
-		return nil
-	}
-}
-
-func ClientDirectAddress(address string) ClientOption {
-	return func(cfg *clientConfig) error {
-		addr, err := net.ResolveUDPAddr("udp", address)
-		if err != nil {
-			return fmt.Errorf("resolve direct address: %w", err)
-		}
-
-		cfg.directAddr = addr
-
-		return nil
-	}
-}
-
-func ClientDirectStatelessResetKey(key *quic.StatelessResetKey) ClientOption {
-	return func(cfg *clientConfig) error {
-		cfg.directResetKey = key
-		return nil
-	}
-}
-
-func ClientDirectStatelessResetKeyFile(path string) ClientOption {
-	return func(cfg *clientConfig) error {
-		keyBytes, err := os.ReadFile(path)
-		if err != nil {
-			return fmt.Errorf("read stateless reset key: %w", err)
-		}
-		if len(keyBytes) < 32 {
-			return fmt.Errorf("stateless reset key len %d", len(keyBytes))
-		}
-
-		key := quic.StatelessResetKey(keyBytes)
-		cfg.directResetKey = &key
-
-		return nil
-	}
-}
-
-func clientDirectStatelessResetKey() ClientOption {
-	return func(cfg *clientConfig) error {
-		var name = fmt.Sprintf("stateless-reset-%s.key",
-			strings.TrimPrefix(strings.ReplaceAll(cfg.directAddr.String(), ":", "-"), "-"))
-
-		var path string
-		if cacheDir := os.Getenv("CACHE_DIRECTORY"); cacheDir != "" {
-			path = filepath.Join(cacheDir, name)
-		} else if userCacheDir, err := os.UserCacheDir(); err == nil {
-			dir := filepath.Join(userCacheDir, "connet")
-			switch _, err := os.Stat(dir); {
-			case err == nil:
-				// the directory is already there, nothing to do
-			case errors.Is(err, os.ErrNotExist):
-				if err := os.Mkdir(dir, 0700); err != nil {
-					return fmt.Errorf("mkdir cache dir: %w", err)
-				}
-			default:
-				return fmt.Errorf("stat cache dir: %w", err)
-			}
-
-			path = filepath.Join(dir, name)
-		} else {
-			return nil
-		}
-
-		switch _, err := os.Stat(path); {
-		case err == nil:
-			keyBytes, err := os.ReadFile(path)
-			if err != nil {
-				return fmt.Errorf("read stateless reset key: %w", err)
-			}
-			if len(keyBytes) < 32 {
-				return fmt.Errorf("stateless reset key len %d", len(keyBytes))
-			}
-			key := quic.StatelessResetKey(keyBytes)
-			cfg.directResetKey = &key
-		case errors.Is(err, os.ErrNotExist):
-			var key quic.StatelessResetKey
-			if _, err := io.ReadFull(rand.Reader, key[:]); err != nil {
-				return fmt.Errorf("generate stateless reset key: %w", err)
-			}
-			if err := os.WriteFile(path, key[:], 0600); err != nil {
-				return fmt.Errorf("write stateless reset key: %w", err)
-			}
-			cfg.directResetKey = &key
-		default:
-			return fmt.Errorf("stat stateless reset key file: %w", err)
-		}
-
-		return nil
-	}
-}
-
-func ClientStatusAddress(address string) ClientOption {
-	return func(cfg *clientConfig) error {
-		addr, err := net.ResolveTCPAddr("tcp", address)
-		if err != nil {
-			return fmt.Errorf("resolve status address: %w", err)
-		}
-
-		cfg.statusAddr = addr
-
-		return nil
-	}
-}
-
-func ClientDestination(dcfg client.DestinationConfig) ClientOption {
-	return func(cfg *clientConfig) error {
-		if cfg.destinations == nil {
-			cfg.destinations = map[model.Forward]client.DestinationConfig{}
-		}
-		cfg.destinations[dcfg.Forward] = dcfg
-
-		return nil
-	}
-}
-
-func ClientDestinationServer(name string, addr string) ClientOption {
-	return func(cfg *clientConfig) error {
-		if cfg.destinationServers == nil {
-			cfg.destinationServers = map[model.Forward]string{}
-		}
-		cfg.destinationServers[model.NewForward(name)] = addr
-
-		return nil
-	}
-}
-
-func ClientSource(scfg client.SourceConfig) ClientOption {
-	return func(cfg *clientConfig) error {
-		if cfg.sources == nil {
-			cfg.sources = map[model.Forward]client.SourceConfig{}
-		}
-		cfg.sources[scfg.Forward] = scfg
-
-		return nil
-	}
-}
-
-func ClientSourceServer(name string, addr string) ClientOption {
-	return func(cfg *clientConfig) error {
-		if cfg.sourceServers == nil {
-			cfg.sourceServers = map[model.Forward]string{}
-		}
-		cfg.sourceServers[model.NewForward(name)] = addr
-
-		return nil
-	}
-}
-
-func ClientLogger(logger *slog.Logger) ClientOption {
-	return func(cfg *clientConfig) error {
-		cfg.logger = logger
-		return nil
-	}
+	return statuses, nil
 }
