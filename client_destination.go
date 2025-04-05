@@ -2,6 +2,7 @@ package connet
 
 import (
 	"context"
+	"errors"
 	"net"
 	"sync"
 
@@ -49,18 +50,31 @@ func newClientDestination(ctx context.Context, cl *Client, cfg client.Destinatio
 
 	errCh := make(chan error)
 	var reportOnce sync.Once
+	var reportFn = func(err error) {
+		reportOnce.Do(func() {
+			if err != nil {
+				errCh <- err
+			}
+			close(errCh)
+		})
+	}
 
 	g.Go(func() error {
 		return cl.sess.Listen(ctx, func(sess *session) error {
 			if sess != nil {
-				go dst.RunControl(ctx, sess.conn, sess.addrs, func(err error) {
-					reportOnce.Do(func() {
-						if err != nil {
-							errCh <- err
+				go func() {
+					for {
+						err := dst.RunControl(ctx, sess.conn, sess.addrs, reportFn)
+						switch {
+						case err == nil:
+						case errors.Is(err, context.Canceled):
+							return
+						case sess.conn.Context().Err() != nil:
+							return
+						default:
 						}
-						close(errCh)
-					})
-				})
+					}
+				}()
 			}
 			return nil
 		})
