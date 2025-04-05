@@ -42,7 +42,10 @@ type Client struct {
 	sess       *notify.V[*session]
 }
 
-func NewClient(ctx context.Context, opts ...ClientOption) (*Client, error) {
+// Connect starts a new client and connects it to the control server
+// the client can be stopped either by canceling this context (TODO should it be separate option) or via calling Close
+// Either will close all active source/destinations associated with this client
+func Connect(ctx context.Context, opts ...ClientOption) (*Client, error) {
 	cfg := &clientConfig{
 		logger: slog.Default(),
 	}
@@ -149,6 +152,9 @@ func (c *Client) GetDestination(name string) (Destination, error) {
 	return dst, nil
 }
 
+// Destination starts a new destination with a given configuration
+// Blocks until it is succesfully announced to the control server
+// The destination can be closed either via cancelling the context or calling its close func
 func (c *Client) Destination(ctx context.Context, cfg client.DestinationConfig) (Destination, error) {
 	clDst, err := newClientDestination(ctx, c, cfg)
 	if err != nil {
@@ -180,6 +186,9 @@ func (c *Client) GetSource(name string) (Source, error) {
 	return src, nil
 }
 
+// Source starts a new source with a given configuration
+// Blocks until it is succesfully announced to the control server
+// The source can be closed either via cancelling the context or calling its close func
 func (c *Client) Source(ctx context.Context, cfg client.SourceConfig) (Source, error) {
 	clSrc, err := newClientSource(ctx, c, cfg)
 	if err != nil {

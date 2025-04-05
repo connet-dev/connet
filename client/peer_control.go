@@ -24,7 +24,7 @@ func (d *peerControl) run(ctx context.Context, firstReport func(error)) error {
 
 	g.Go(func() error { return d.runAnnounce(ctx, firstReport) })
 	if d.opt.AllowRelay() {
-		g.Go(func() error { return d.runRelay(ctx) })
+		g.Go(func() error { return d.runRelay(ctx, firstReport) })
 	}
 
 	return g.Wait()
@@ -62,10 +62,7 @@ func (d *peerControl) runAnnounce(ctx context.Context, firstReport func(error)) 
 	g.Go(func() error {
 		for {
 			resp, err := pbs.ReadResponse(stream)
-			if firstReport != nil {
-				firstReport(err)
-				firstReport = nil
-			}
+			firstReport(err)
 			if err != nil {
 				return err
 			}
@@ -82,7 +79,7 @@ func (d *peerControl) runAnnounce(ctx context.Context, firstReport func(error)) 
 	return g.Wait()
 }
 
-func (d *peerControl) runRelay(ctx context.Context) error {
+func (d *peerControl) runRelay(ctx context.Context, firstReport func(error)) error {
 	stream, err := d.conn.OpenStreamSync(ctx)
 	if err != nil {
 		return fmt.Errorf("relay open stream: %w", err)
@@ -110,6 +107,7 @@ func (d *peerControl) runRelay(ctx context.Context) error {
 	g.Go(func() error {
 		for {
 			resp, err := pbs.ReadResponse(stream)
+			firstReport(err)
 			if err != nil {
 				return err
 			}

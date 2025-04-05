@@ -3,21 +3,23 @@ package connet
 import (
 	"context"
 	"net"
+	"sync"
 
 	"github.com/connet-dev/connet/client"
+	"golang.org/x/sync/errgroup"
 )
 
 type Destination interface {
-	Addr() net.Addr
-
 	Accept() (net.Conn, error)
 	AcceptContext(ctx context.Context) (net.Conn, error)
 
+	Addr() net.Addr
 	Close() error
 }
 
 type clientDestination struct {
 	*client.Destination
+	cancel context.CancelCauseFunc
 }
 
 func newClientDestination(ctx context.Context, cl *Client, cfg client.DestinationConfig) (*clientDestination, error) {
@@ -26,42 +28,36 @@ func newClientDestination(ctx context.Context, cl *Client, cfg client.Destinatio
 		return nil, err
 	}
 
-	go func() {
-		if err := dst.Run(ctx); err != nil {
-			// TODO what happens here
-		}
-	}()
+	ctx, cancel := context.WithCancelCause(ctx)
+	g, ctx := errgroup.WithContext(ctx)
+
+	g.Go(func() error { return dst.Run(ctx) })
 
 	errCh := make(chan error)
-	go func() {
-		// TODO runcontrol should report error, the first time it comms with the server
-		var firstReport = func(err error) {
-			if err != nil {
-				errCh <- err
-			}
-			close(errCh)
-		}
-		err := cl.sess.Listen(ctx, func(sess *session) error {
+	var reportOnce sync.Once
+
+	g.Go(func() error {
+		return cl.sess.Listen(ctx, func(sess *session) error {
 			if sess != nil {
 				go dst.RunControl(ctx, sess.conn, sess.addrs, func(err error) {
-					if firstReport != nil {
-						firstReport(err)
-						firstReport = nil
-					}
+					reportOnce.Do(func() {
+						if err != nil {
+							errCh <- err
+						}
+						close(errCh)
+					})
 				})
 			}
 			return nil
 		})
-		if err != nil {
-			// TODO what happens here
-		}
-	}()
+	})
 
 	if err := <-errCh; err != nil { // TODO wait on context too?
+		cancel(err)
 		return nil, err
 	}
 
-	return &clientDestination{dst}, nil
+	return &clientDestination{dst, cancel}, nil
 }
 
 func (d *clientDestination) Addr() net.Addr {
@@ -70,6 +66,6 @@ func (d *clientDestination) Addr() net.Addr {
 }
 
 func (d *clientDestination) Close() error {
-	// TODO how to implement
+	d.cancel(net.ErrClosed)
 	return nil
 }

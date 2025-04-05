@@ -3,8 +3,10 @@ package connet
 import (
 	"context"
 	"net"
+	"sync"
 
 	"github.com/connet-dev/connet/client"
+	"golang.org/x/sync/errgroup"
 )
 
 type Source interface {
@@ -16,6 +18,7 @@ type Source interface {
 
 type clientSource struct {
 	*client.Source
+	cancel context.CancelCauseFunc
 }
 
 func newClientSource(ctx context.Context, cl *Client, cfg client.SourceConfig) (*clientSource, error) {
@@ -24,46 +27,39 @@ func newClientSource(ctx context.Context, cl *Client, cfg client.SourceConfig) (
 		return nil, err
 	}
 
-	// TODO add to main run group, do we keep track?
-	go func() {
-		if err := src.Run(ctx); err != nil {
-			// TODO what happens here
-		}
-	}()
+	ctx, cancel := context.WithCancelCause(ctx)
+	g, ctx := errgroup.WithContext(ctx)
 
-	// TODO add to current run group
+	g.Go(func() error { return src.Run(ctx) })
+
 	errCh := make(chan error)
-	go func() {
-		var firstReport = func(err error) {
-			if err != nil {
-				errCh <- err
-			}
-			close(errCh)
-		}
-		err := cl.sess.Listen(ctx, func(sess *session) error {
+	var reportOnce sync.Once
+
+	g.Go(func() error {
+		return cl.sess.Listen(ctx, func(sess *session) error {
 			if sess != nil {
 				go src.RunControl(ctx, sess.conn, sess.addrs, func(err error) {
-					if firstReport != nil {
-						firstReport(err)
-						firstReport = nil
-					}
+					reportOnce.Do(func() {
+						if err != nil {
+							errCh <- err
+						}
+						close(errCh)
+					})
 				})
 			}
 			return nil
 		})
-		if err != nil {
-			// TODO what happens here
-		}
-	}()
+	})
 
 	if err := <-errCh; err != nil { // TODO wait on context too?
+		cancel(err)
 		return nil, err
 	}
 
-	return &clientSource{src}, nil
+	return &clientSource{src, cancel}, nil
 }
 
 func (s *clientSource) Close() error {
-	// TODO how to implement
+	s.cancel(net.ErrClosed)
 	return nil
 }

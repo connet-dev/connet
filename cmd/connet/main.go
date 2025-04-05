@@ -587,7 +587,7 @@ func clientRun(ctx context.Context, cfg ClientConfig, logger *slog.Logger) error
 
 	opts = append(opts, connet.ClientLogger(logger))
 
-	cl, err := connet.NewClient(ctx, opts...)
+	cl, err := connet.Connect(ctx, opts...)
 	if err != nil {
 		return fmt.Errorf("create client: %w", err)
 	}
