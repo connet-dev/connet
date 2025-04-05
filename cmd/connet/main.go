@@ -174,6 +174,7 @@ func wrapErr(ws string, runErr cobraRunE) cobraRunE {
 	}
 }
 
+// TODO extract so separate files, like `client_cmd.go`
 func rootCmd() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:           "connet",

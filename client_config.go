@@ -28,6 +28,40 @@ type clientConfig struct {
 	logger *slog.Logger
 }
 
+func newClientConfig(opts []ClientOption) (*clientConfig, error) {
+	cfg := &clientConfig{
+		logger: slog.Default(),
+	}
+	for _, opt := range opts {
+		if err := opt(cfg); err != nil {
+			return nil, err
+		}
+	}
+
+	if cfg.controlAddr == nil {
+		if err := ClientControlAddress("127.0.0.1:19190")(cfg); err != nil {
+			return nil, fmt.Errorf("default control address: %w", err)
+		}
+	}
+
+	if cfg.directAddr == nil {
+		if err := ClientDirectAddress(":19192")(cfg); err != nil {
+			return nil, fmt.Errorf("default direct address: %w", err)
+		}
+	}
+
+	if cfg.directResetKey == nil {
+		if err := clientDirectStatelessResetKey()(cfg); err != nil {
+			return nil, fmt.Errorf("default stateless reset key: %w", err)
+		}
+		if cfg.directResetKey == nil {
+			cfg.logger.Warn("running without a stateless reset key")
+		}
+	}
+
+	return cfg, nil
+}
+
 type ClientOption func(cfg *clientConfig) error
 
 func ClientToken(token string) ClientOption {

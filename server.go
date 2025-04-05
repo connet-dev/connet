@@ -126,15 +126,6 @@ func (s *Server) Run(ctx context.Context) error {
 	return g.Wait()
 }
 
-func (s *Server) runStatus(ctx context.Context) error {
-	if s.statusAddr == nil {
-		return nil
-	}
-
-	s.logger.Debug("running status server", "addr", s.statusAddr)
-	return statusc.Run(ctx, s.statusAddr.String(), s.Status)
-}
-
 func (s *Server) Status(ctx context.Context) (ServerStatus, error) {
 	control, err := s.control.Status(ctx)
 	if err != nil {
@@ -147,6 +138,16 @@ func (s *Server) Status(ctx context.Context) (ServerStatus, error) {
 	}
 
 	return ServerStatus{control, relay}, nil
+}
+
+// TODO pull out to main
+func (s *Server) runStatus(ctx context.Context) error {
+	if s.statusAddr == nil {
+		return nil
+	}
+
+	s.logger.Debug("running status server", "addr", s.statusAddr)
+	return statusc.Run(ctx, s.statusAddr.String(), s.Status)
 }
 
 type ServerStatus struct {

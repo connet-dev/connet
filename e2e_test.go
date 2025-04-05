@@ -127,7 +127,7 @@ func TestE2E(t *testing.T) {
 	ppAddr := ppListen.Addr().String()
 	defer ppListen.Close()
 
-	logger := slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{Level: slog.LevelWarn}))
+	logger := slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{Level: slog.LevelError}))
 
 	localRestr, err := restr.ParseIP([]string{"192.0.2.0/24"}, nil)
 	require.NoError(t, err)
@@ -172,7 +172,7 @@ func TestE2E(t *testing.T) {
 			ClientToken("test-token-deny-name"),
 			ClientControlAddress("localhost:20000"),
 			clientControlCAs(cas),
-			ClientDirectAddress(":20005"),
+			ClientDirectAddress(":20004"),
 			ClientLogger(logger.With("test", "cl-name-deny")),
 		)
 		require.NoError(t, err)
@@ -187,7 +187,7 @@ func TestE2E(t *testing.T) {
 			ClientToken("test-token-deny-role"),
 			ClientControlAddress("localhost:20000"),
 			clientControlCAs(cas),
-			ClientDirectAddress(":20006"),
+			ClientDirectAddress(":20004"),
 			ClientLogger(logger.With("test", "cl-role-deny")),
 		)
 		require.NoError(t, err)

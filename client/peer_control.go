@@ -107,8 +107,8 @@ func (d *peerControl) runRelay(ctx context.Context, firstReport func(error)) err
 	g.Go(func() error {
 		for {
 			resp, err := pbs.ReadResponse(stream)
-			firstReport(err)
 			if err != nil {
+				firstReport(err)
 				return err
 			}
 			if resp.Relay == nil {

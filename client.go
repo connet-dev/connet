@@ -5,7 +5,6 @@ import (
 	"crypto/tls"
 	"errors"
 	"fmt"
-	"log/slog"
 	"maps"
 	"net"
 	"net/netip"
@@ -38,6 +37,7 @@ type Client struct {
 	srcs   map[model.Forward]*clientSource
 	srcsMu sync.RWMutex
 
+	cancel     context.CancelCauseFunc
 	connStatus atomic.Value
 	sess       *notify.V[*session]
 }
@@ -46,34 +46,9 @@ type Client struct {
 // the client can be stopped either by canceling this context (TODO should it be separate option) or via calling Close
 // Either will close all active source/destinations associated with this client
 func Connect(ctx context.Context, opts ...ClientOption) (*Client, error) {
-	cfg := &clientConfig{
-		logger: slog.Default(),
-	}
-	for _, opt := range opts {
-		if err := opt(cfg); err != nil {
-			return nil, err
-		}
-	}
-
-	if cfg.controlAddr == nil {
-		if err := ClientControlAddress("127.0.0.1:19190")(cfg); err != nil {
-			return nil, fmt.Errorf("default control address: %w", err)
-		}
-	}
-
-	if cfg.directAddr == nil {
-		if err := ClientDirectAddress(":19192")(cfg); err != nil {
-			return nil, fmt.Errorf("default direct address: %w", err)
-		}
-	}
-
-	if cfg.directResetKey == nil {
-		if err := clientDirectStatelessResetKey()(cfg); err != nil {
-			return nil, fmt.Errorf("default stateless reset key: %w", err)
-		}
-		if cfg.directResetKey == nil {
-			cfg.logger.Warn("running without a stateless reset key")
-		}
+	cfg, err := newClientConfig(opts)
+	if err != nil {
+		return nil, err
 	}
 
 	rootCert, err := certc.NewRoot()
@@ -94,8 +69,11 @@ func Connect(ctx context.Context, opts ...ClientOption) (*Client, error) {
 	}
 	c.connStatus.Store(statusc.NotConnected)
 
+	ctx, cancel := context.WithCancelCause(ctx)
+	c.cancel = cancel
+
 	errCh := make(chan error)
-	go c.runAll(ctx, errCh)
+	go c.runClient(ctx, errCh)
 
 	if err := <-errCh; err != nil {
 		return nil, err
@@ -104,7 +82,7 @@ func Connect(ctx context.Context, opts ...ClientOption) (*Client, error) {
 	return c, nil
 }
 
-func (c *Client) runAll(ctx context.Context, errCh chan error) {
+func (c *Client) runClient(ctx context.Context, errCh chan error) {
 	c.logger.Debug("start udp listener")
 	udpConn, err := net.ListenUDP("udp", c.directAddr)
 	if err != nil {
@@ -203,6 +181,7 @@ func (c *Client) Source(ctx context.Context, cfg client.SourceConfig) (Source, e
 }
 
 func (c *Client) Close() error {
+	c.cancel(net.ErrClosed)
 	return nil
 }
 
