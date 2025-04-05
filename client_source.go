@@ -64,9 +64,15 @@ func newClientSource(ctx context.Context, cl *Client, cfg client.SourceConfig) (
 		})
 	})
 
-	if err := <-errCh; err != nil { // TODO wait on context too?
+	select {
+	case <-ctx.Done():
 		cancel(err)
-		return nil, err
+		return nil, ctx.Err()
+	case err := <-errCh:
+		if err != nil {
+			cancel(err)
+			return nil, err
+		}
 	}
 
 	return &clientSource{src, cl, cancel, closer}, nil

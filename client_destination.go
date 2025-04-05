@@ -66,9 +66,15 @@ func newClientDestination(ctx context.Context, cl *Client, cfg client.Destinatio
 		})
 	})
 
-	if err := <-errCh; err != nil { // TODO wait on context too?
+	select {
+	case <-ctx.Done():
 		cancel(err)
-		return nil, err
+		return nil, ctx.Err()
+	case err := <-errCh:
+		if err != nil {
+			cancel(err)
+			return nil, err
+		}
 	}
 
 	return &clientDestination{dst, cl, cancel, closer}, nil
