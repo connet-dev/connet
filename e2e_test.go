@@ -197,6 +197,27 @@ func TestE2E(t *testing.T) {
 		require.ErrorContains(t, err, "role not allowed")
 		require.Nil(t, dst)
 	})
+
+	t.Run("cancel-client", func(t *testing.T) {
+		ctx, cancel := context.WithCancel(ctx)
+		cl, err := Connect(ctx,
+			ClientToken("test-token-dst"),
+			ClientControlAddress("localhost:20000"),
+			clientControlCAs(cas),
+			ClientDirectAddress(":20002"),
+			ClientLogger(logger.With("test", "cl-dst")),
+		)
+		require.NoError(t, err)
+		require.NotNil(t, cl)
+
+		dst, err := cl.Destination(ctx, client.NewDestinationConfig("closing"))
+		require.NoError(t, err)
+		defer dst.Close()
+
+		cancel()
+		time.Sleep(time.Millisecond)
+		require.Empty(t, cl.Destinations())
+	})
 	t.Run("close-dst", func(t *testing.T) {
 		cl, err := Connect(ctx,
 			ClientToken("test-token-dst"),

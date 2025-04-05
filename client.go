@@ -113,7 +113,7 @@ func (c *Client) runClient(ctx context.Context, errCh chan error) {
 	g.Go(func() error { return c.run(ctx, transport, errCh) })
 
 	if err := g.Wait(); err != nil {
-		// TODO
+		c.logger.Warn("shutting down client", "err", err)
 	}
 }
 
