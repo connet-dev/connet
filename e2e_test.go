@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"context"
 	"crypto/tls"
+	"crypto/x509"
 	"errors"
 	"fmt"
 	"io"
@@ -403,5 +404,13 @@ func proxyProtoServer(ctx context.Context, l net.Listener) error {
 		} else if _, err := conn.Write(b); err != nil {
 			return err
 		}
+	}
+}
+
+func clientControlCAs(cas *x509.CertPool) ClientOption {
+	return func(cfg *clientConfig) error {
+		cfg.controlCAs = cas
+
+		return nil
 	}
 }

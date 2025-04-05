@@ -12,25 +12,26 @@ import (
 )
 
 type peerControl struct {
-	local *peer
-	fwd   model.Forward
-	role  model.Role
-	opt   model.RouteOption
-	conn  quic.Connection
+	local  *peer
+	fwd    model.Forward
+	role   model.Role
+	opt    model.RouteOption
+	conn   quic.Connection
+	notify func(error)
 }
 
-func (d *peerControl) run(ctx context.Context, firstReport func(error)) error {
+func (d *peerControl) run(ctx context.Context) error {
 	g, ctx := errgroup.WithContext(ctx)
 
-	g.Go(func() error { return d.runAnnounce(ctx, firstReport) })
+	g.Go(func() error { return d.runAnnounce(ctx) })
 	if d.opt.AllowRelay() {
-		g.Go(func() error { return d.runRelay(ctx, firstReport) })
+		g.Go(func() error { return d.runRelay(ctx) })
 	}
 
 	return g.Wait()
 }
 
-func (d *peerControl) runAnnounce(ctx context.Context, firstReport func(error)) error {
+func (d *peerControl) runAnnounce(ctx context.Context) error {
 	stream, err := d.conn.OpenStreamSync(ctx)
 	if err != nil {
 		return fmt.Errorf("announce open stream: %w", err)
@@ -62,7 +63,7 @@ func (d *peerControl) runAnnounce(ctx context.Context, firstReport func(error)) 
 	g.Go(func() error {
 		for {
 			resp, err := pbs.ReadResponse(stream)
-			firstReport(err)
+			d.notify(err)
 			if err != nil {
 				return err
 			}
@@ -79,7 +80,7 @@ func (d *peerControl) runAnnounce(ctx context.Context, firstReport func(error)) 
 	return g.Wait()
 }
 
-func (d *peerControl) runRelay(ctx context.Context, firstReport func(error)) error {
+func (d *peerControl) runRelay(ctx context.Context) error {
 	stream, err := d.conn.OpenStreamSync(ctx)
 	if err != nil {
 		return fmt.Errorf("relay open stream: %w", err)
@@ -108,7 +109,7 @@ func (d *peerControl) runRelay(ctx context.Context, firstReport func(error)) err
 		for {
 			resp, err := pbs.ReadResponse(stream)
 			if err != nil {
-				firstReport(err)
+				d.notify(err)
 				return err
 			}
 			if resp.Relay == nil {

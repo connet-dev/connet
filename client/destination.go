@@ -96,18 +96,19 @@ func (d *Destination) Run(ctx context.Context) error {
 	return g.Wait()
 }
 
-func (d *Destination) RunControl(ctx context.Context, conn quic.Connection, directAddrs []netip.AddrPort, firstReport func(error)) error {
+func (d *Destination) RunControl(ctx context.Context, conn quic.Connection, directAddrs []netip.AddrPort, notifyResponse func(error)) error {
 	if d.cfg.Route.AllowDirect() {
 		d.peer.setDirectAddrs(directAddrs)
 	}
 
 	return (&peerControl{
-		local: d.peer,
-		fwd:   d.cfg.Forward,
-		role:  model.Destination,
-		opt:   d.cfg.Route,
-		conn:  conn,
-	}).run(ctx, firstReport)
+		local:  d.peer,
+		fwd:    d.cfg.Forward,
+		role:   model.Destination,
+		opt:    d.cfg.Route,
+		conn:   conn,
+		notify: notifyResponse,
+	}).run(ctx)
 }
 
 func (d *Destination) Accept() (net.Conn, error) {

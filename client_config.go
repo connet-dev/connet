@@ -111,15 +111,6 @@ func ClientControlCAs(certFile string) ClientOption {
 	}
 }
 
-// TODO move to e2e
-func clientControlCAs(cas *x509.CertPool) ClientOption {
-	return func(cfg *clientConfig) error {
-		cfg.controlCAs = cas
-
-		return nil
-	}
-}
-
 func ClientDirectAddress(address string) ClientOption {
 	return func(cfg *clientConfig) error {
 		addr, err := net.ResolveUDPAddr("udp", address)
