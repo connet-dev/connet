@@ -78,6 +78,7 @@ func Connect(ctx context.Context, opts ...ClientOption) (*Client, error) {
 	go c.runClient(ctx, errCh)
 
 	if err := <-errCh; err != nil {
+		c.Close()
 		return nil, err
 	}
 
