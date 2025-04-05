@@ -12,8 +12,6 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/connet-dev/connet/client"
-	"github.com/connet-dev/connet/model"
 	"github.com/quic-go/quic-go"
 )
 
@@ -26,9 +24,6 @@ type clientConfig struct {
 
 	directAddr     *net.UDPAddr
 	directResetKey *quic.StatelessResetKey
-
-	destinations map[model.Forward]client.DestinationConfig
-	sources      map[model.Forward]client.SourceConfig
 
 	logger *slog.Logger
 }
@@ -82,6 +77,7 @@ func ClientControlCAs(certFile string) ClientOption {
 	}
 }
 
+// TODO move to e2e
 func clientControlCAs(cas *x509.CertPool) ClientOption {
 	return func(cfg *clientConfig) error {
 		cfg.controlCAs = cas
@@ -176,28 +172,6 @@ func clientDirectStatelessResetKey() ClientOption {
 		default:
 			return fmt.Errorf("stat stateless reset key file: %w", err)
 		}
-
-		return nil
-	}
-}
-
-func ClientDestination(dcfg client.DestinationConfig) ClientOption {
-	return func(cfg *clientConfig) error {
-		if cfg.destinations == nil {
-			cfg.destinations = map[model.Forward]client.DestinationConfig{}
-		}
-		cfg.destinations[dcfg.Forward] = dcfg
-
-		return nil
-	}
-}
-
-func ClientSource(scfg client.SourceConfig) ClientOption {
-	return func(cfg *clientConfig) error {
-		if cfg.sources == nil {
-			cfg.sources = map[model.Forward]client.SourceConfig{}
-		}
-		cfg.sources[scfg.Forward] = scfg
 
 		return nil
 	}

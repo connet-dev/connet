@@ -81,14 +81,6 @@ func NewDestination(cfg DestinationConfig, direct *DirectServer, root *certc.Cer
 	}, nil
 }
 
-func (d *Destination) SetDirectAddrs(addrs []netip.AddrPort) {
-	if !d.cfg.Route.AllowDirect() {
-		return
-	}
-
-	d.peer.setDirectAddrs(addrs)
-}
-
 func (d *Destination) Run(ctx context.Context) error {
 	defer close(d.acceptCh)
 
@@ -98,6 +90,20 @@ func (d *Destination) Run(ctx context.Context) error {
 	g.Go(func() error { return d.runActive(ctx) })
 
 	return g.Wait()
+}
+
+func (d *Destination) RunControl(ctx context.Context, conn quic.Connection, directAddrs []netip.AddrPort, firstReport func(error)) error {
+	if d.cfg.Route.AllowDirect() {
+		d.peer.setDirectAddrs(directAddrs)
+	}
+
+	return (&peerControl{
+		local: d.peer,
+		fwd:   d.cfg.Forward,
+		role:  model.Destination,
+		opt:   d.cfg.Route,
+		conn:  conn,
+	}).run(ctx, firstReport)
 }
 
 func (d *Destination) Accept() (net.Conn, error) {
@@ -306,16 +312,6 @@ func (d *destinationConn) runConnect(ctx context.Context, stream quic.Stream, re
 
 func (d *destinationConn) close() {
 	close(d.closer)
-}
-
-func (d *Destination) RunControl(ctx context.Context, conn quic.Connection) error {
-	return (&peerControl{
-		local: d.peer,
-		fwd:   d.cfg.Forward,
-		role:  model.Destination,
-		opt:   d.cfg.Route,
-		conn:  conn,
-	}).run(ctx)
 }
 
 func (d *Destination) getSourceTLS(name string) (*tls.Config, error) {

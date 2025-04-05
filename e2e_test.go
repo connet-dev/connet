@@ -27,7 +27,74 @@ import (
 	"golang.org/x/sync/errgroup"
 )
 
+type connectedTestCase struct {
+	d client.DestinationConfig
+	s client.SourceConfig
+}
+
+var connectedTests = map[string]connectedTestCase{
+	"direct": {
+		client.NewDestinationConfig("direct").WithRoute(model.RouteDirect),
+		client.NewSourceConfig("direct").WithRoute(model.RouteDirect),
+	},
+	"relay": {
+		client.NewDestinationConfig("relay").WithRoute(model.RouteRelay),
+		client.NewSourceConfig("relay").WithRoute(model.RouteRelay),
+	},
+	"dst-any-direct-src": {
+		client.NewDestinationConfig("dst-any-direct-src"),
+		client.NewSourceConfig("dst-any-direct-src").WithRoute(model.RouteDirect),
+	},
+	"dst-any-relay-src": {
+		client.NewDestinationConfig("dst-any-relay-src"),
+		client.NewSourceConfig("dst-any-relay-src").WithRoute(model.RouteRelay),
+	},
+	"dst-direct-any-src": {
+		client.NewDestinationConfig("dst-direct-any-src").WithRoute(model.RouteDirect),
+		client.NewSourceConfig("dst-direct-any-src").WithRoute(model.RouteAny),
+	},
+	"dst-relay-any-src": {
+		client.NewDestinationConfig("dst-relay-any-src").WithRoute(model.RouteRelay),
+		client.NewSourceConfig("dst-relay-any-src").WithRoute(model.RouteAny),
+	},
+	"relay-tls": {
+		client.NewDestinationConfig("relay-tls").WithRoute(model.RouteRelay).WithRelayEncryptions(model.TLSEncryption),
+		client.NewSourceConfig("relay-tls").WithRoute(model.RouteRelay).WithRelayEncryptions(model.TLSEncryption),
+	},
+	"relay-dhxcp": {
+		client.NewDestinationConfig("relay-dhxcp").WithRoute(model.RouteRelay).WithRelayEncryptions(model.DHXCPEncryption),
+		client.NewSourceConfig("relay-dhxcp").WithRoute(model.RouteRelay).WithRelayEncryptions(model.DHXCPEncryption),
+	},
+	"dst-direct-relay-src": {
+		client.NewDestinationConfig("dst-direct-relay-src").WithRoute(model.RouteDirect),
+		client.NewSourceConfig("dst-direct-relay-src").WithRoute(model.RouteRelay),
+	},
+	"dst-relay-direct-src": {
+		client.NewDestinationConfig("dst-relay-direct-src").WithRoute(model.RouteRelay),
+		client.NewSourceConfig("dst-relay-direct-src").WithRoute(model.RouteDirect),
+	},
+	"relay-dst-none-tls-src": {
+		client.NewDestinationConfig("relay-dst-none-tls-src").WithRoute(model.RouteRelay).WithRelayEncryptions(model.NoEncryption),
+		client.NewSourceConfig("relay-dst-none-tls-src").WithRoute(model.RouteRelay).WithRelayEncryptions(model.TLSEncryption),
+	},
+	"relay-dst-tls-none-src": {
+		client.NewDestinationConfig("relay-dst-tls-none-src").WithRoute(model.RouteRelay).WithRelayEncryptions(model.TLSEncryption),
+		client.NewSourceConfig("relay-dst-tls-none-src").WithRoute(model.RouteRelay).WithRelayEncryptions(model.NoEncryption),
+	},
+	"dst-direct-proxy-proto": {
+		client.NewDestinationConfig("dst-direct-proxy-proto").WithRoute(model.RouteDirect).WithProxy(model.ProxyV1),
+		client.NewSourceConfig("dst-direct-proxy-proto").WithRoute(model.RouteAny),
+	},
+	"dst-relay-proxy-proto": {
+		client.NewDestinationConfig("dst-relay-proxy-proto").WithRoute(model.RouteRelay).WithProxy(model.ProxyV2),
+		client.NewSourceConfig("dst-relay-proxy-proto").WithRoute(model.RouteAny),
+	},
+}
+
 func TestE2E(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
 	cert, cas, err := certc.SelfSigned("localhost")
 	require.NoError(t, err)
 
@@ -65,29 +132,16 @@ func TestE2E(t *testing.T) {
 	)
 	require.NoError(t, err)
 
-	clDst, err := NewClient(
+	g, ctx := errgroup.WithContext(ctx)
+	g.Go(func() error { return proxyProtoServer(ctx, ppListen) })
+	g.Go(func() error { return srv.Run(ctx) })
+
+	clDst, err := NewClient(ctx,
 		ClientToken("test-token-dst"),
 		ClientControlAddress("localhost:20000"),
 		clientControlCAs(cas),
 		ClientDirectAddress(":20002"),
 		ClientLogger(logger.With("test", "cl-dst")),
-
-		ClientDestination(client.NewDestinationConfig("direct").WithRoute(model.RouteDirect)),
-		ClientDestination(client.NewDestinationConfig("relay").WithRoute(model.RouteRelay)),
-		ClientDestination(client.NewDestinationConfig("dst-any-direct-src")),
-		ClientDestination(client.NewDestinationConfig("dst-any-relay-src")),
-		ClientDestination(client.NewDestinationConfig("dst-direct-any-src").WithRoute(model.RouteDirect)),
-		ClientDestination(client.NewDestinationConfig("dst-relay-any-src").WithRoute(model.RouteRelay)),
-		ClientDestination(client.NewDestinationConfig("relay-tls").WithRoute(model.RouteRelay).WithRelayEncryptions(model.TLSEncryption)),
-		ClientDestination(client.NewDestinationConfig("relay-dhxcp").WithRoute(model.RouteRelay).WithRelayEncryptions(model.DHXCPEncryption)),
-
-		ClientDestination(client.NewDestinationConfig("dst-direct-relay-src").WithRoute(model.RouteDirect)),
-		ClientDestination(client.NewDestinationConfig("dst-relay-direct-src").WithRoute(model.RouteRelay)),
-		ClientDestination(client.NewDestinationConfig("relay-dst-none-tls-src").WithRoute(model.RouteRelay).WithRelayEncryptions(model.NoEncryption)),
-		ClientDestination(client.NewDestinationConfig("relay-dst-tls-none-src").WithRoute(model.RouteRelay).WithRelayEncryptions(model.TLSEncryption)),
-
-		ClientDestination(client.NewDestinationConfig("dst-direct-proxy-proto").WithRoute(model.RouteDirect).WithProxy(model.ProxyV1)),
-		ClientDestination(client.NewDestinationConfig("dst-relay-proxy-proto").WithRoute(model.RouteRelay).WithProxy(model.ProxyV2)),
 	)
 	require.NoError(t, err)
 
@@ -108,86 +162,76 @@ func TestE2E(t *testing.T) {
 		"dst-relay-proxy-proto":  ":10201",
 	}
 
-	clSrc, err := NewClient(
+	clSrc, err := NewClient(ctx,
 		ClientToken("test-token-src"),
 		ClientControlAddress("localhost:20000"),
 		clientControlCAs(cas),
 		ClientDirectAddress(":20003"),
 		ClientLogger(logger.With("test", "cl-src")),
-
-		ClientSource(client.NewSourceConfig("direct").WithRoute(model.RouteDirect)),
-		ClientSource(client.NewSourceConfig("relay").WithRoute(model.RouteRelay)),
-		ClientSource(client.NewSourceConfig("dst-any-direct-src").WithRoute(model.RouteDirect)),
-		ClientSource(client.NewSourceConfig("dst-any-relay-src").WithRoute(model.RouteRelay)),
-		ClientSource(client.NewSourceConfig("dst-direct-any-src").WithRoute(model.RouteAny)),
-		ClientSource(client.NewSourceConfig("dst-relay-any-src").WithRoute(model.RouteAny)),
-		ClientSource(client.NewSourceConfig("relay-tls").WithRoute(model.RouteRelay).WithRelayEncryptions(model.TLSEncryption)),
-		ClientSource(client.NewSourceConfig("relay-dhxcp").WithRoute(model.RouteRelay).WithRelayEncryptions(model.DHXCPEncryption)),
-
-		ClientSource(client.NewSourceConfig("dst-direct-relay-src").WithRoute(model.RouteRelay)),
-		ClientSource(client.NewSourceConfig("dst-relay-direct-src").WithRoute(model.RouteDirect)),
-		ClientSource(client.NewSourceConfig("relay-dst-tls-none-src").WithRoute(model.RouteRelay).WithRelayEncryptions(model.NoEncryption)),
-		ClientSource(client.NewSourceConfig("relay-dst-none-tls-src").WithRoute(model.RouteRelay).WithRelayEncryptions(model.TLSEncryption)),
-
-		ClientSource(client.NewSourceConfig("dst-direct-proxy-proto").WithRoute(model.RouteAny)),
-		ClientSource(client.NewSourceConfig("dst-relay-proxy-proto").WithRoute(model.RouteAny)),
 	)
 	require.NoError(t, err)
 
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
-
-	g, ctx := errgroup.WithContext(ctx)
-	g.Go(func() error { return proxyProtoServer(ctx, ppListen) })
-	g.Go(func() error { return srv.Run(ctx) })
 	time.Sleep(time.Millisecond) // time for server to come online
 
 	t.Run("deny-ip", func(t *testing.T) {
-		clIPDeny, err := NewClient(
+		clIPDeny, err := NewClient(ctx,
 			ClientToken("test-token-deny-ip"),
 			ClientControlAddress("localhost:20000"),
 			clientControlCAs(cas),
-			ClientDirectAddress(":20003"),
-			ClientDestination(client.NewDestinationConfig("direct")),
+			ClientDirectAddress(":20004"),
 			ClientLogger(logger.With("test", "cl-ip-deny")),
 		)
-		require.NoError(t, err)
-
-		require.ErrorContains(t, clIPDeny.Run(ctx), "address not allowed")
+		require.ErrorContains(t, err, "address not allowed")
+		require.Nil(t, clIPDeny)
 	})
 	t.Run("deny-name", func(t *testing.T) {
-		clNameDeny, err := NewClient(
+		clNameDeny, err := NewClient(ctx,
 			ClientToken("test-token-deny-name"),
 			ClientControlAddress("localhost:20000"),
 			clientControlCAs(cas),
-			ClientDirectAddress(":20004"),
-			ClientDestination(client.NewDestinationConfig("direct")),
+			ClientDirectAddress(":20005"),
 			ClientLogger(logger.With("test", "cl-name-deny")),
 		)
 		require.NoError(t, err)
+		defer clNameDeny.Close()
 
-		require.ErrorContains(t, clNameDeny.Run(ctx), "forward not allowed")
+		dst, err := clNameDeny.Destination(ctx, client.NewDestinationConfig("direct"))
+		require.ErrorContains(t, err, "forward not allowed")
+		require.Nil(t, dst)
 	})
 	t.Run("deny-role", func(t *testing.T) {
-		clNameDeny, err := NewClient(
+		clRoleDeny, err := NewClient(ctx,
 			ClientToken("test-token-deny-role"),
 			ClientControlAddress("localhost:20000"),
 			clientControlCAs(cas),
-			ClientDirectAddress(":20005"),
-			ClientDestination(client.NewDestinationConfig("direct")),
+			ClientDirectAddress(":20006"),
 			ClientLogger(logger.With("test", "cl-role-deny")),
 		)
 		require.NoError(t, err)
+		defer clRoleDeny.Close()
 
-		require.ErrorContains(t, clNameDeny.Run(ctx), "role not allowed")
+		dst, err := clRoleDeny.Destination(ctx, client.NewDestinationConfig("direct"))
+		require.ErrorContains(t, err, "role not allowed")
+		require.Nil(t, dst)
 	})
 
-	g.Go(func() error { return clDst.Run(ctx) })
-	g.Go(func() error { return clSrc.Run(ctx) })
+	for name, tc := range connectedTests {
+		require.Equal(t, name, tc.d.Forward.String())
+		require.Equal(t, name, tc.s.Forward.String())
+
+		_, err = clDst.Destination(ctx, tc.d)
+		require.NoError(t, err)
+		_, err = clSrc.Source(ctx, tc.s)
+		require.NoError(t, err)
+	}
+
 	time.Sleep(500 * time.Millisecond) // time for clients to come online
 
+	// g.Go(func() error { return clDst.Run(ctx) })
+	// g.Go(func() error { return clSrc.Run(ctx) })
+
 	for _, dstName := range clDst.Destinations() {
-		dst, err := clDst.Destination(dstName)
+		dst, err := clDst.GetDestination(dstName)
 		require.NoError(t, err)
 
 		addr := htAddr
@@ -200,7 +244,7 @@ func TestE2E(t *testing.T) {
 	}
 
 	for _, srcName := range clSrc.Sources() {
-		src, err := clSrc.Source(srcName)
+		src, err := clSrc.GetSource(srcName)
 		require.NoError(t, err)
 
 		addr, ok := srcAddrs[srcName]
@@ -240,7 +284,7 @@ func TestE2E(t *testing.T) {
 			url := fmt.Sprintf("http://localhost:%d?rand=%d", port, rnd)
 
 			_, err := httpcl.Get(url)
-			require.Error(t, err)
+			require.ErrorContains(t, err, "connection reset by peer")
 		})
 	}
 
@@ -268,7 +312,6 @@ func TestE2E(t *testing.T) {
 		})
 	}
 
-	fmt.Println("stopping all")
 	cancel()
 
 	// make sure everything shuts down on context cancel

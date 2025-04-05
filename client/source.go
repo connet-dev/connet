@@ -80,14 +80,6 @@ func NewSource(cfg SourceConfig, direct *DirectServer, root *certc.Cert, logger 
 	}, nil
 }
 
-func (s *Source) SetDirectAddrs(addrs []netip.AddrPort) {
-	if !s.cfg.Route.AllowDirect() {
-		return
-	}
-
-	s.peer.setDirectAddrs(addrs)
-}
-
 func (s *Source) Run(ctx context.Context) error {
 	g, ctx := errgroup.WithContext(ctx)
 
@@ -95,6 +87,20 @@ func (s *Source) Run(ctx context.Context) error {
 	g.Go(func() error { return s.runActive(ctx) })
 
 	return g.Wait()
+}
+
+func (s *Source) RunControl(ctx context.Context, conn quic.Connection, directAddrs []netip.AddrPort, firstReport func(error)) error {
+	if s.cfg.Route.AllowDirect() {
+		s.peer.setDirectAddrs(directAddrs)
+	}
+
+	return (&peerControl{
+		local: s.peer,
+		fwd:   s.cfg.Forward,
+		role:  model.Source,
+		opt:   s.cfg.Route,
+		conn:  conn,
+	}).run(ctx, firstReport)
 }
 
 func (s *Source) Status() (PeerStatus, error) {
@@ -264,16 +270,6 @@ func (s *Source) dialStream(ctx context.Context, dest sourceConn, stream quic.St
 	s.logger.Debug("dialed conn", "style", dest.peer.style)
 	proxyProto := model.ProxyVersionFromPB(resp.GetConnect().GetProxyProto())
 	return proxyProto.Wrap(encStream), nil
-}
-
-func (s *Source) RunControl(ctx context.Context, conn quic.Connection) error {
-	return (&peerControl{
-		local: s.peer,
-		fwd:   s.cfg.Forward,
-		role:  model.Source,
-		opt:   s.cfg.Route,
-		conn:  conn,
-	}).run(ctx)
 }
 
 func (s *Source) getDestinationTLS(name string) (*tls.Config, error) {
