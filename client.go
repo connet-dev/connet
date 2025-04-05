@@ -85,6 +85,8 @@ func Connect(ctx context.Context, opts ...ClientOption) (*Client, error) {
 }
 
 func (c *Client) runClient(ctx context.Context, errCh chan error) {
+	defer close(c.closer)
+
 	c.logger.Debug("start udp listener")
 	udpConn, err := net.ListenUDP("udp", c.directAddr)
 	if err != nil {
@@ -111,7 +113,6 @@ func (c *Client) runClient(ctx context.Context, errCh chan error) {
 
 	if err := g.Wait(); err != nil {
 		// TODO
-		close(c.closer)
 	}
 }
 
