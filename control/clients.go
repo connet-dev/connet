@@ -175,10 +175,8 @@ func (s *clientServer) announcements(fwd model.Forward, role model.Role) ([]*pbs
 
 func (s *clientServer) listen(ctx context.Context, fwd model.Forward, role model.Role, notify func(peers []*pbs.ServerPeer) error) error {
 	peers, offset := s.announcements(fwd, role)
-	if len(peers) > 0 {
-		if err := notify(peers); err != nil {
-			return err
-		}
+	if err := notify(peers); err != nil {
+		return err
 	}
 
 	for {
