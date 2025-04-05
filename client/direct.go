@@ -13,7 +13,6 @@ import (
 	"github.com/connet-dev/connet/pb"
 	"github.com/connet-dev/connet/quicc"
 	"github.com/quic-go/quic-go"
-	"golang.org/x/sync/errgroup"
 )
 
 type DirectServer struct {
@@ -69,14 +68,6 @@ func (s *vServer) updateClientCA() {
 	s.clientCA.Store(clientCA)
 }
 
-func (s *DirectServer) Run(ctx context.Context) error {
-	g, ctx := errgroup.WithContext(ctx)
-
-	g.Go(func() error { return s.runServer(ctx) })
-
-	return g.Wait()
-}
-
 func (s *DirectServer) addServerCert(cert tls.Certificate) {
 	serverName := cert.Leaf.DNSNames[0]
 
@@ -122,7 +113,7 @@ func (s *DirectServer) expect(serverCert tls.Certificate, cert *x509.Certificate
 	}
 }
 
-func (s *DirectServer) runServer(ctx context.Context) error {
+func (s *DirectServer) Run(ctx context.Context) error {
 	tlsConf := &tls.Config{
 		ClientAuth: tls.RequireAndVerifyClientCert,
 		NextProtos: []string{"connet-direct"},
