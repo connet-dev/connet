@@ -13,13 +13,18 @@ type Destination interface {
 	Accept() (net.Conn, error)
 	AcceptContext(ctx context.Context) (net.Conn, error)
 
+	Client() *Client
+
 	Addr() net.Addr
 	Close() error
 }
 
 type clientDestination struct {
 	*client.Destination
+
+	client *Client
 	cancel context.CancelCauseFunc
+	closer chan struct{}
 }
 
 func newClientDestination(ctx context.Context, cl *Client, cfg client.DestinationConfig) (*clientDestination, error) {
@@ -28,7 +33,16 @@ func newClientDestination(ctx context.Context, cl *Client, cfg client.Destinatio
 		return nil, err
 	}
 
+	closer := make(chan struct{})
 	ctx, cancel := context.WithCancelCause(ctx)
+	context.AfterFunc(ctx, func() {
+		defer close(closer)
+
+		cl.dstsMu.Lock()
+		defer cl.dstsMu.Unlock()
+
+		delete(cl.dsts, cfg.Forward)
+	})
 	g, ctx := errgroup.WithContext(ctx)
 
 	g.Go(func() error { return dst.Run(ctx) })
@@ -57,15 +71,19 @@ func newClientDestination(ctx context.Context, cl *Client, cfg client.Destinatio
 		return nil, err
 	}
 
-	return &clientDestination{dst, cancel}, nil
+	return &clientDestination{dst, cl, cancel, closer}, nil
+}
+
+func (d *clientDestination) Client() *Client {
+	return d.client
 }
 
 func (d *clientDestination) Addr() net.Addr {
-	// TODO how to implement
-	return nil
+	return d.client.directAddr
 }
 
 func (d *clientDestination) Close() error {
 	d.cancel(net.ErrClosed)
+	<-d.closer
 	return nil
 }
