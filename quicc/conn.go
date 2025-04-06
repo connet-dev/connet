@@ -27,3 +27,8 @@ func (s *streamConn) LocalAddr() net.Addr {
 func (s *streamConn) RemoteAddr() net.Addr {
 	return s.Remote
 }
+
+func (s *streamConn) Close() error {
+	s.Stream.CancelRead(0)
+	return s.Stream.Close()
+}
