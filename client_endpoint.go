@@ -8,9 +8,7 @@ import (
 	"sync"
 
 	"github.com/connet-dev/connet/client"
-	"github.com/connet-dev/connet/model"
 	"github.com/quic-go/quic-go"
-	"golang.org/x/sync/errgroup"
 )
 
 type Destination interface {
@@ -41,7 +39,9 @@ func newClientDestination(ctx context.Context, cl *Client, cfg client.Destinatio
 		return nil, err
 	}
 
-	ep, err := newClientEndpoint(ctx, cl, dst)
+	ep, err := newClientEndpoint(ctx, cl, dst, func() {
+		cl.removeDestination(cfg.Forward)
+	})
 	if err != nil {
 		return nil, err
 	}
@@ -60,7 +60,9 @@ func newClientSource(ctx context.Context, cl *Client, cfg client.SourceConfig) (
 		return nil, err
 	}
 
-	ep, err := newClientEndpoint(ctx, cl, src)
+	ep, err := newClientEndpoint(ctx, cl, src, func() {
+		cl.removeSource(cfg.Forward)
+	})
 	if err != nil {
 		return nil, err
 	}
@@ -68,36 +70,39 @@ func newClientSource(ctx context.Context, cl *Client, cfg client.SourceConfig) (
 	return &clientSource{src, ep}, nil
 }
 
-type clientEndpoint struct {
-	client *Client
-	cancel context.CancelCauseFunc
-	closer chan struct{}
-}
-
 type endpoint interface {
-	Forward() model.Forward
-	Run(ctx context.Context) error
-	RunControl(ctx context.Context, conn quic.Connection, directAddrs []netip.AddrPort, firstReport func(error)) error
+	RunPeer(ctx context.Context) error
+	RunAnnounce(ctx context.Context, conn quic.Connection, directAddrs []netip.AddrPort, firstReport func(error)) error
 }
 
-func newClientEndpoint(ctx context.Context, cl *Client, ep endpoint) (*clientEndpoint, error) {
-	closer := make(chan struct{})
-	ctx, cancel := context.WithCancelCause(ctx)
-	context.AfterFunc(ctx, func() {
-		defer close(closer)
+type clientEndpoint struct {
+	client        *Client
+	ep            endpoint
+	clientCleanup func()
 
-		cl.dstsMu.Lock()
-		defer cl.dstsMu.Unlock()
+	ctx       context.Context
+	ctxCancel context.CancelCauseFunc
+	closer    chan struct{}
 
-		delete(cl.dsts, ep.Forward())
-	})
-	g, ctx := errgroup.WithContext(ctx)
+	onlineReport func(err error)
+}
 
-	g.Go(func() error { return ep.Run(ctx) })
+func newClientEndpoint(ctx context.Context, cl *Client, ep endpoint, clientCleanup func()) (*clientEndpoint, error) {
+	ctx, ctxCancel := context.WithCancelCause(ctx)
+	cep := &clientEndpoint{
+		client:        cl,
+		ep:            ep,
+		clientCleanup: clientCleanup,
+
+		ctx:       ctx,
+		ctxCancel: ctxCancel,
+		closer:    make(chan struct{}),
+	}
+	context.AfterFunc(ctx, cep.cleanup)
 
 	errCh := make(chan error)
 	var reportOnce sync.Once
-	var reportFn = func(err error) {
+	cep.onlineReport = func(err error) {
 		reportOnce.Do(func() {
 			if err != nil {
 				errCh <- err
@@ -106,51 +111,70 @@ func newClientEndpoint(ctx context.Context, cl *Client, ep endpoint) (*clientEnd
 		})
 	}
 
-	g.Go(func() error {
-		return cl.sess.Listen(ctx, func(sess *session) error {
-			if sess != nil {
-				go func() {
-					for {
-						err := ep.RunControl(ctx, sess.conn, sess.addrs, reportFn)
-						switch {
-						case err == nil:
-						case errors.Is(err, context.Canceled):
-							return
-						case sess.conn.Context().Err() != nil:
-							return
-						default:
-						}
-					}
-				}()
-			}
-			return nil
-		})
-	})
+	go cep.runPeer(ctx)
+	go cep.runAnnounce(ctx)
 
 	select {
 	case <-ctx.Done():
-		cancel(ctx.Err())
+		cep.ctxCancel(ctx.Err())
 		return nil, ctx.Err()
 	case err := <-errCh:
 		if err != nil {
-			cancel(err)
+			cep.ctxCancel(err)
 			return nil, err
 		}
 	}
 
-	return &clientEndpoint{cl, cancel, closer}, nil
+	return cep, nil
 }
 
-func (d *clientEndpoint) Addr() net.Addr {
-	return d.client.directAddr
+func (e *clientEndpoint) Addr() net.Addr {
+	return e.client.directAddr
 }
 
-func (d *clientEndpoint) Client() *Client {
-	return d.client
+func (e *clientEndpoint) Client() *Client {
+	return e.client
 }
 
-func (d *clientEndpoint) Close() error {
-	d.cancel(net.ErrClosed)
-	<-d.closer
+func (e *clientEndpoint) Close() error {
+	e.ctxCancel(net.ErrClosed)
+	<-e.closer
 	return nil
+}
+
+func (e *clientEndpoint) runPeer(ctx context.Context) {
+	if err := e.ep.RunPeer(ctx); err != nil {
+		e.ctxCancel(err)
+	}
+}
+
+func (e *clientEndpoint) runAnnounce(ctx context.Context) {
+	err := e.client.currentSession.Listen(ctx, func(sess *session) error {
+		if sess != nil {
+			go e.runAnnounceSession(ctx, sess)
+		}
+		return nil
+	})
+	if err != nil {
+		e.ctxCancel(err)
+	}
+}
+
+func (e *clientEndpoint) runAnnounceSession(ctx context.Context, sess *session) {
+	for {
+		err := e.ep.RunAnnounce(ctx, sess.conn, sess.addrs, e.onlineReport)
+		switch {
+		case err == nil:
+		case errors.Is(err, context.Canceled):
+			return
+		case sess.conn.Context().Err() != nil:
+			return
+		default:
+		}
+	}
+}
+
+func (e *clientEndpoint) cleanup() {
+	defer close(e.closer)
+	e.clientCleanup()
 }

@@ -7,6 +7,7 @@ type Status struct{ string }
 var (
 	NotConnected = Status{"not_connected"}
 	Connected    = Status{"connected"}
+	Reconnecting = Status{"reconnecting"}
 	Disconnected = Status{"disconnected"}
 )
 
@@ -24,6 +25,8 @@ func (s *Status) UnmarshalText(b []byte) error {
 		*s = NotConnected
 	case Connected.string:
 		*s = Connected
+	case Reconnecting.string:
+		*s = Reconnecting
 	case Disconnected.string:
 		*s = Disconnected
 	default:

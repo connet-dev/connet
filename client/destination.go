@@ -81,11 +81,7 @@ func NewDestination(cfg DestinationConfig, direct *DirectServer, root *certc.Cer
 	}, nil
 }
 
-func (d *Destination) Forward() model.Forward {
-	return d.cfg.Forward
-}
-
-func (d *Destination) Run(ctx context.Context) error {
+func (d *Destination) RunPeer(ctx context.Context) error {
 	defer close(d.acceptCh)
 
 	g, ctx := errgroup.WithContext(ctx)
@@ -96,7 +92,7 @@ func (d *Destination) Run(ctx context.Context) error {
 	return g.Wait()
 }
 
-func (d *Destination) RunControl(ctx context.Context, conn quic.Connection, directAddrs []netip.AddrPort, notifyResponse func(error)) error {
+func (d *Destination) RunAnnounce(ctx context.Context, conn quic.Connection, directAddrs []netip.AddrPort, notifyResponse func(error)) error {
 	if d.cfg.Route.AllowDirect() {
 		d.peer.setDirectAddrs(directAddrs)
 	}

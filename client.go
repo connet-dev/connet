@@ -32,15 +32,15 @@ type Client struct {
 	rootCert     *certc.Cert
 	directServer *client.DirectServer
 
-	dsts   map[model.Forward]*clientDestination
-	dstsMu sync.RWMutex
-	srcs   map[model.Forward]*clientSource
-	srcsMu sync.RWMutex
+	destinations   map[model.Forward]*clientDestination
+	destinationsMu sync.RWMutex
+	sources        map[model.Forward]*clientSource
+	sourcesMu      sync.RWMutex
 
-	connStatus atomic.Value
-	sess       *notify.V[*session]
-	ctxCancel  context.CancelCauseFunc
-	closer     chan struct{}
+	connStatus     atomic.Value
+	currentSession *notify.V[*session]
+	ctxCancel      context.CancelCauseFunc
+	closer         chan struct{}
 }
 
 // Connect starts a new client and connects it to the control server
@@ -63,11 +63,11 @@ func Connect(ctx context.Context, opts ...ClientOption) (*Client, error) {
 
 		rootCert: rootCert,
 
-		dsts: map[model.Forward]*clientDestination{},
-		srcs: map[model.Forward]*clientSource{},
+		destinations: map[model.Forward]*clientDestination{},
+		sources:      map[model.Forward]*clientSource{},
 
-		sess:   notify.New[*session](nil),
-		closer: make(chan struct{}),
+		currentSession: notify.New[*session](nil),
+		closer:         make(chan struct{}),
 	}
 	c.connStatus.Store(statusc.NotConnected)
 
@@ -86,6 +86,7 @@ func Connect(ctx context.Context, opts ...ClientOption) (*Client, error) {
 }
 
 func (c *Client) runClient(ctx context.Context, errCh chan error) {
+	defer c.connStatus.Store(statusc.Disconnected)
 	defer close(c.closer)
 
 	c.logger.Debug("start udp listener")
@@ -118,17 +119,17 @@ func (c *Client) runClient(ctx context.Context, errCh chan error) {
 }
 
 func (c *Client) Destinations() []string {
-	c.dstsMu.RLock()
-	defer c.dstsMu.RUnlock()
+	c.destinationsMu.RLock()
+	defer c.destinationsMu.RUnlock()
 
-	return model.ForwardNames(slices.Collect(maps.Keys(c.dsts)))
+	return model.ForwardNames(slices.Collect(maps.Keys(c.destinations)))
 }
 
 func (c *Client) GetDestination(name string) (Destination, error) {
-	c.dstsMu.RLock()
-	defer c.dstsMu.RUnlock()
+	c.destinationsMu.RLock()
+	defer c.destinationsMu.RUnlock()
 
-	dst, ok := c.dsts[model.NewForward(name)]
+	dst, ok := c.destinations[model.NewForward(name)]
 	if !ok {
 		return nil, fmt.Errorf("destination %s: not found", name)
 	}
@@ -144,25 +145,32 @@ func (c *Client) Destination(ctx context.Context, cfg client.DestinationConfig) 
 		return nil, err
 	}
 
-	c.dstsMu.Lock()
-	defer c.dstsMu.Unlock()
+	c.destinationsMu.Lock()
+	defer c.destinationsMu.Unlock()
 
-	c.dsts[cfg.Forward] = clDst
+	c.destinations[cfg.Forward] = clDst
 	return clDst, nil
 }
 
-func (c *Client) Sources() []string {
-	c.srcsMu.RLock()
-	defer c.srcsMu.RUnlock()
+func (c *Client) removeDestination(fwd model.Forward) {
+	c.destinationsMu.Lock()
+	defer c.destinationsMu.Unlock()
 
-	return model.ForwardNames(slices.Collect(maps.Keys(c.srcs)))
+	delete(c.destinations, fwd)
+}
+
+func (c *Client) Sources() []string {
+	c.sourcesMu.RLock()
+	defer c.sourcesMu.RUnlock()
+
+	return model.ForwardNames(slices.Collect(maps.Keys(c.sources)))
 }
 
 func (c *Client) GetSource(name string) (Source, error) {
-	c.srcsMu.RLock()
-	defer c.srcsMu.RUnlock()
+	c.sourcesMu.RLock()
+	defer c.sourcesMu.RUnlock()
 
-	src, ok := c.srcs[model.NewForward(name)]
+	src, ok := c.sources[model.NewForward(name)]
 	if !ok {
 		return nil, fmt.Errorf("source %s: not found", name)
 	}
@@ -178,11 +186,18 @@ func (c *Client) Source(ctx context.Context, cfg client.SourceConfig) (Source, e
 		return nil, err
 	}
 
-	c.srcsMu.Lock()
-	defer c.srcsMu.Unlock()
+	c.sourcesMu.Lock()
+	defer c.sourcesMu.Unlock()
 
-	c.srcs[cfg.Forward] = clSrc
+	c.sources[cfg.Forward] = clSrc
 	return clSrc, nil
+}
+
+func (c *Client) removeSource(fwd model.Forward) {
+	c.sourcesMu.Lock()
+	defer c.sourcesMu.Unlock()
+
+	delete(c.sources, fwd)
 }
 
 func (c *Client) Close() error {
@@ -300,11 +315,11 @@ func (c *Client) reconnect(ctx context.Context, transport *quic.Transport, retok
 func (c *Client) runSession(ctx context.Context, sess *session) error {
 	defer sess.conn.CloseWithError(quic.ApplicationErrorCode(pb.Error_Unknown), "connection closed")
 
-	c.sess.Set(sess)
-	defer c.sess.Set(nil)
+	c.currentSession.Set(sess)
+	defer c.currentSession.Set(nil)
 
 	c.connStatus.Store(statusc.Connected)
-	defer c.connStatus.Store(statusc.Disconnected)
+	defer c.connStatus.Store(statusc.Reconnecting)
 
 	select {
 	case <-ctx.Done():
@@ -344,10 +359,10 @@ func (c *Client) destinationsStatus() (map[model.Forward]client.PeerStatus, erro
 	var err error
 	statuses := map[model.Forward]client.PeerStatus{}
 
-	c.dstsMu.RLock()
-	defer c.dstsMu.RUnlock()
+	c.destinationsMu.RLock()
+	defer c.destinationsMu.RUnlock()
 
-	for fwd, dst := range c.dsts {
+	for fwd, dst := range c.destinations {
 		statuses[fwd], err = dst.Status()
 		if err != nil {
 			return nil, err
@@ -361,10 +376,10 @@ func (c *Client) sourcesStatus() (map[model.Forward]client.PeerStatus, error) {
 	var err error
 	statuses := map[model.Forward]client.PeerStatus{}
 
-	c.srcsMu.RLock()
-	defer c.srcsMu.RUnlock()
+	c.sourcesMu.RLock()
+	defer c.sourcesMu.RUnlock()
 
-	for fwd, src := range c.srcs {
+	for fwd, src := range c.sources {
 		statuses[fwd], err = src.Status()
 		if err != nil {
 			return nil, err

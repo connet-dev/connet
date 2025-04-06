@@ -165,6 +165,8 @@ func (s *controlClient) authenticate(serverName string, certs []*x509.Certificat
 }
 
 func (s *controlClient) run(ctx context.Context, transport *quic.Transport) error {
+	defer s.connStatus.Store(statusc.Disconnected)
+
 	s.logger.Info("connecting to control server", "addr", s.controlAddr)
 	conn, err := s.connect(ctx, transport)
 	if err != nil {
@@ -268,7 +270,7 @@ func (s *controlClient) runConnection(ctx context.Context, conn quic.Connection)
 	defer conn.CloseWithError(quic.ApplicationErrorCode(pb.Error_Unknown), "connection closed")
 
 	s.connStatus.Store(statusc.Connected)
-	defer s.connStatus.Store(statusc.Disconnected)
+	defer s.connStatus.Store(statusc.Reconnecting)
 
 	g, ctx := errgroup.WithContext(ctx)
 
