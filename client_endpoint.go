@@ -20,6 +20,10 @@ type Destination interface {
 	Close() error
 }
 
+type DestinationConfig = client.DestinationConfig
+
+var NewDestinationConfig = client.NewDestinationConfig
+
 type Source interface {
 	Dial(network, address string) (net.Conn, error)
 	DialContext(ctx context.Context, network, address string) (net.Conn, error)
@@ -28,12 +32,16 @@ type Source interface {
 	Close() error
 }
 
+type SourceConfig = client.SourceConfig
+
+var NewSourceConfig = client.NewSourceConfig
+
 type clientDestination struct {
 	*client.Destination
 	*clientEndpoint
 }
 
-func newClientDestination(ctx context.Context, cl *Client, cfg client.DestinationConfig) (*clientDestination, error) {
+func newClientDestination(ctx context.Context, cl *Client, cfg DestinationConfig) (*clientDestination, error) {
 	dst, err := client.NewDestination(cfg, cl.directServer, cl.rootCert, cl.logger)
 	if err != nil {
 		return nil, err
@@ -54,7 +62,7 @@ type clientSource struct {
 	*clientEndpoint
 }
 
-func newClientSource(ctx context.Context, cl *Client, cfg client.SourceConfig) (*clientSource, error) {
+func newClientSource(ctx context.Context, cl *Client, cfg SourceConfig) (*clientSource, error) {
 	src, err := client.NewSource(cfg, cl.directServer, cl.rootCert, cl.logger)
 	if err != nil {
 		return nil, err

@@ -86,8 +86,8 @@ func Connect(ctx context.Context, opts ...ClientOption) (*Client, error) {
 }
 
 func (c *Client) runClient(ctx context.Context, errCh chan error) {
-	defer c.connStatus.Store(statusc.Disconnected)
 	defer close(c.closer)
+	defer c.connStatus.Store(statusc.Disconnected)
 
 	c.logger.Debug("start udp listener")
 	udpConn, err := net.ListenUDP("udp", c.directAddr)
@@ -139,14 +139,18 @@ func (c *Client) GetDestination(name string) (Destination, error) {
 // Destination starts a new destination with a given configuration
 // Blocks until it is succesfully announced to the control server
 // The destination can be closed either via cancelling the context or calling its close func
-func (c *Client) Destination(ctx context.Context, cfg client.DestinationConfig) (Destination, error) {
+func (c *Client) Destination(ctx context.Context, cfg DestinationConfig) (Destination, error) {
+	c.destinationsMu.Lock()
+	defer c.destinationsMu.Unlock()
+
+	if _, ok := c.destinations[cfg.Forward]; ok {
+		return nil, fmt.Errorf("destination %s already exists, remove old one first", cfg.Forward)
+	}
+
 	clDst, err := newClientDestination(ctx, c, cfg)
 	if err != nil {
 		return nil, err
 	}
-
-	c.destinationsMu.Lock()
-	defer c.destinationsMu.Unlock()
 
 	c.destinations[cfg.Forward] = clDst
 	return clDst, nil
@@ -180,14 +184,18 @@ func (c *Client) GetSource(name string) (Source, error) {
 // Source starts a new source with a given configuration
 // Blocks until it is succesfully announced to the control server
 // The source can be closed either via cancelling the context or calling its close func
-func (c *Client) Source(ctx context.Context, cfg client.SourceConfig) (Source, error) {
+func (c *Client) Source(ctx context.Context, cfg SourceConfig) (Source, error) {
+	c.sourcesMu.Lock()
+	defer c.sourcesMu.Unlock()
+
+	if _, ok := c.sources[cfg.Forward]; ok {
+		return nil, fmt.Errorf("source %s already exists, remove old one first", cfg.Forward)
+	}
+
 	clSrc, err := newClientSource(ctx, c, cfg)
 	if err != nil {
 		return nil, err
 	}
-
-	c.sourcesMu.Lock()
-	defer c.sourcesMu.Unlock()
 
 	c.sources[cfg.Forward] = clSrc
 	return clSrc, nil

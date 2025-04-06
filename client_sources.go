@@ -10,6 +10,19 @@ import (
 	"github.com/connet-dev/connet/netc"
 )
 
+func (c *Client) SourceTCP(ctx context.Context, cfg SourceConfig, addr string) error {
+	src, err := c.Source(ctx, cfg)
+	if err != nil {
+		return err
+	}
+	tcp, err := NewTCPSource(src, cfg.Forward, addr, c.logger)
+	if err != nil {
+		return err
+	}
+	go tcp.Run(ctx)
+	return nil
+}
+
 type TCPSource struct {
 	src    Source
 	addr   string

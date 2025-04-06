@@ -15,7 +15,6 @@ import (
 	"syscall"
 
 	"github.com/connet-dev/connet"
-	"github.com/connet-dev/connet/client"
 	"github.com/connet-dev/connet/control"
 	"github.com/connet-dev/connet/model"
 	"github.com/connet-dev/connet/relay"
@@ -531,7 +530,7 @@ func clientRun(ctx context.Context, cfg ClientConfig, logger *slog.Logger) error
 		defaultRelayEncryptions = res
 	}
 
-	destinations := map[string]client.DestinationConfig{}
+	destinations := map[string]connet.DestinationConfig{}
 	destinationHandlers := map[string]newrunnable[connet.Destination]{}
 	for name, fc := range cfg.Destinations {
 		route, err := parseRouteOption(fc.Route)
@@ -550,7 +549,7 @@ func clientRun(ctx context.Context, cfg ClientConfig, logger *slog.Logger) error
 			}
 			relayEncryptions = res
 		}
-		destinations[name] = client.NewDestinationConfig(name).
+		destinations[name] = connet.NewDestinationConfig(name).
 			WithRoute(route).
 			WithProxy(proxy).
 			WithRelayEncryptions(relayEncryptions...)
@@ -563,7 +562,7 @@ func clientRun(ctx context.Context, cfg ClientConfig, logger *slog.Logger) error
 		}
 	}
 
-	sources := map[string]client.SourceConfig{}
+	sources := map[string]connet.SourceConfig{}
 	sourceHandlers := map[string]newrunnable[connet.Source]{}
 	for name, fc := range cfg.Sources {
 		route, err := parseRouteOption(fc.Route)
@@ -578,7 +577,7 @@ func clientRun(ctx context.Context, cfg ClientConfig, logger *slog.Logger) error
 			}
 			relayEncryptions = res
 		}
-		sources[name] = client.NewSourceConfig(name).
+		sources[name] = connet.NewSourceConfig(name).
 			WithRoute(route).
 			WithRelayEncryptions(relayEncryptions...)
 		sourceHandlers[name] = func(src connet.Source) (runnable, error) {

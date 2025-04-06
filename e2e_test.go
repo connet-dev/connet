@@ -22,7 +22,6 @@ import (
 	"time"
 
 	"github.com/connet-dev/connet/certc"
-	"github.com/connet-dev/connet/client"
 	"github.com/connet-dev/connet/model"
 	"github.com/connet-dev/connet/restr"
 	"github.com/connet-dev/connet/selfhosted"
@@ -32,80 +31,80 @@ import (
 )
 
 type connectedTestCase struct {
-	d     client.DestinationConfig
-	s     client.SourceConfig
+	d     DestinationConfig
+	s     SourceConfig
 	saddr string
 }
 
 var connectedTests = map[string]connectedTestCase{
 	"direct": {
-		client.NewDestinationConfig("direct").WithRoute(model.RouteDirect),
-		client.NewSourceConfig("direct").WithRoute(model.RouteDirect),
+		NewDestinationConfig("direct").WithRoute(model.RouteDirect),
+		NewSourceConfig("direct").WithRoute(model.RouteDirect),
 		":10000",
 	},
 	"relay": {
-		client.NewDestinationConfig("relay").WithRoute(model.RouteRelay),
-		client.NewSourceConfig("relay").WithRoute(model.RouteRelay),
+		NewDestinationConfig("relay").WithRoute(model.RouteRelay),
+		NewSourceConfig("relay").WithRoute(model.RouteRelay),
 		":10001",
 	},
 	"dst-any-direct-src": {
-		client.NewDestinationConfig("dst-any-direct-src"),
-		client.NewSourceConfig("dst-any-direct-src").WithRoute(model.RouteDirect),
+		NewDestinationConfig("dst-any-direct-src"),
+		NewSourceConfig("dst-any-direct-src").WithRoute(model.RouteDirect),
 		":10002",
 	},
 	"dst-any-relay-src": {
-		client.NewDestinationConfig("dst-any-relay-src"),
-		client.NewSourceConfig("dst-any-relay-src").WithRoute(model.RouteRelay),
+		NewDestinationConfig("dst-any-relay-src"),
+		NewSourceConfig("dst-any-relay-src").WithRoute(model.RouteRelay),
 		":10003",
 	},
 	"dst-direct-any-src": {
-		client.NewDestinationConfig("dst-direct-any-src").WithRoute(model.RouteDirect),
-		client.NewSourceConfig("dst-direct-any-src").WithRoute(model.RouteAny),
+		NewDestinationConfig("dst-direct-any-src").WithRoute(model.RouteDirect),
+		NewSourceConfig("dst-direct-any-src").WithRoute(model.RouteAny),
 		":10004",
 	},
 	"dst-relay-any-src": {
-		client.NewDestinationConfig("dst-relay-any-src").WithRoute(model.RouteRelay),
-		client.NewSourceConfig("dst-relay-any-src").WithRoute(model.RouteAny),
+		NewDestinationConfig("dst-relay-any-src").WithRoute(model.RouteRelay),
+		NewSourceConfig("dst-relay-any-src").WithRoute(model.RouteAny),
 		":10005",
 	},
 	"relay-tls": {
-		client.NewDestinationConfig("relay-tls").WithRoute(model.RouteRelay).WithRelayEncryptions(model.TLSEncryption),
-		client.NewSourceConfig("relay-tls").WithRoute(model.RouteRelay).WithRelayEncryptions(model.TLSEncryption),
+		NewDestinationConfig("relay-tls").WithRoute(model.RouteRelay).WithRelayEncryptions(model.TLSEncryption),
+		NewSourceConfig("relay-tls").WithRoute(model.RouteRelay).WithRelayEncryptions(model.TLSEncryption),
 		":10006",
 	},
 	"relay-dhxcp": {
-		client.NewDestinationConfig("relay-dhxcp").WithRoute(model.RouteRelay).WithRelayEncryptions(model.DHXCPEncryption),
-		client.NewSourceConfig("relay-dhxcp").WithRoute(model.RouteRelay).WithRelayEncryptions(model.DHXCPEncryption),
+		NewDestinationConfig("relay-dhxcp").WithRoute(model.RouteRelay).WithRelayEncryptions(model.DHXCPEncryption),
+		NewSourceConfig("relay-dhxcp").WithRoute(model.RouteRelay).WithRelayEncryptions(model.DHXCPEncryption),
 		":10007",
 	},
 	"dst-direct-relay-src": {
-		client.NewDestinationConfig("dst-direct-relay-src").WithRoute(model.RouteDirect),
-		client.NewSourceConfig("dst-direct-relay-src").WithRoute(model.RouteRelay),
+		NewDestinationConfig("dst-direct-relay-src").WithRoute(model.RouteDirect),
+		NewSourceConfig("dst-direct-relay-src").WithRoute(model.RouteRelay),
 		":10100",
 	},
 	"dst-relay-direct-src": {
-		client.NewDestinationConfig("dst-relay-direct-src").WithRoute(model.RouteRelay),
-		client.NewSourceConfig("dst-relay-direct-src").WithRoute(model.RouteDirect),
+		NewDestinationConfig("dst-relay-direct-src").WithRoute(model.RouteRelay),
+		NewSourceConfig("dst-relay-direct-src").WithRoute(model.RouteDirect),
 		":10101",
 	},
 	"relay-dst-none-tls-src": {
-		client.NewDestinationConfig("relay-dst-none-tls-src").WithRoute(model.RouteRelay).WithRelayEncryptions(model.NoEncryption),
-		client.NewSourceConfig("relay-dst-none-tls-src").WithRoute(model.RouteRelay).WithRelayEncryptions(model.TLSEncryption),
+		NewDestinationConfig("relay-dst-none-tls-src").WithRoute(model.RouteRelay).WithRelayEncryptions(model.NoEncryption),
+		NewSourceConfig("relay-dst-none-tls-src").WithRoute(model.RouteRelay).WithRelayEncryptions(model.TLSEncryption),
 		":10102",
 	},
 	"relay-dst-tls-none-src": {
-		client.NewDestinationConfig("relay-dst-tls-none-src").WithRoute(model.RouteRelay).WithRelayEncryptions(model.TLSEncryption),
-		client.NewSourceConfig("relay-dst-tls-none-src").WithRoute(model.RouteRelay).WithRelayEncryptions(model.NoEncryption),
+		NewDestinationConfig("relay-dst-tls-none-src").WithRoute(model.RouteRelay).WithRelayEncryptions(model.TLSEncryption),
+		NewSourceConfig("relay-dst-tls-none-src").WithRoute(model.RouteRelay).WithRelayEncryptions(model.NoEncryption),
 		":10103",
 	},
 	"dst-direct-proxy-proto": {
-		client.NewDestinationConfig("dst-direct-proxy-proto").WithRoute(model.RouteDirect).WithProxy(model.ProxyV1),
-		client.NewSourceConfig("dst-direct-proxy-proto").WithRoute(model.RouteAny),
+		NewDestinationConfig("dst-direct-proxy-proto").WithRoute(model.RouteDirect).WithProxy(model.ProxyV1),
+		NewSourceConfig("dst-direct-proxy-proto").WithRoute(model.RouteAny),
 		":10200",
 	},
 	"dst-relay-proxy-proto": {
-		client.NewDestinationConfig("dst-relay-proxy-proto").WithRoute(model.RouteRelay).WithProxy(model.ProxyV2),
-		client.NewSourceConfig("dst-relay-proxy-proto").WithRoute(model.RouteAny),
+		NewDestinationConfig("dst-relay-proxy-proto").WithRoute(model.RouteRelay).WithProxy(model.ProxyV2),
+		NewSourceConfig("dst-relay-proxy-proto").WithRoute(model.RouteAny),
 		":10201",
 	},
 }
@@ -179,7 +178,7 @@ func TestE2E(t *testing.T) {
 		require.NoError(t, err)
 		defer clNameDeny.Close()
 
-		dst, err := clNameDeny.Destination(ctx, client.NewDestinationConfig("direct"))
+		dst, err := clNameDeny.Destination(ctx, NewDestinationConfig("direct"))
 		require.ErrorContains(t, err, "forward not allowed")
 		require.Nil(t, dst)
 	})
@@ -194,7 +193,7 @@ func TestE2E(t *testing.T) {
 		require.NoError(t, err)
 		defer clRoleDeny.Close()
 
-		dst, err := clRoleDeny.Destination(ctx, client.NewDestinationConfig("direct"))
+		dst, err := clRoleDeny.Destination(ctx, NewDestinationConfig("direct"))
 		require.ErrorContains(t, err, "role not allowed")
 		require.Nil(t, dst)
 	})
@@ -211,7 +210,7 @@ func TestE2E(t *testing.T) {
 		require.NoError(t, err)
 		require.NotNil(t, cl)
 
-		dst, err := cl.Destination(ctx, client.NewDestinationConfig("closing"))
+		dst, err := cl.Destination(ctx, NewDestinationConfig("closing"))
 		require.NoError(t, err)
 		defer dst.Close()
 
@@ -230,7 +229,7 @@ func TestE2E(t *testing.T) {
 		require.NoError(t, err)
 		defer cl.Close()
 
-		dst, err := cl.Destination(ctx, client.NewDestinationConfig("closing"))
+		dst, err := cl.Destination(ctx, NewDestinationConfig("closing"))
 		require.NoError(t, err)
 		require.NoError(t, dst.Close())
 
@@ -248,7 +247,7 @@ func TestE2E(t *testing.T) {
 		defer cl.Close()
 
 		ctx, cancel := context.WithCancel(ctx)
-		_, err = cl.Destination(ctx, client.NewDestinationConfig("closing"))
+		_, err = cl.Destination(ctx, NewDestinationConfig("closing"))
 		require.NoError(t, err)
 		cancel()
 
