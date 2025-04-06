@@ -19,7 +19,11 @@ func (c *Client) SourceTCP(ctx context.Context, cfg SourceConfig, addr string) e
 	if err != nil {
 		return err
 	}
-	go tcp.Run(ctx)
+	go func() {
+		if err := tcp.Run(ctx); err != nil {
+			c.logger.Info("shutting down source tcp", "err", err)
+		}
+	}()
 	return nil
 }
 

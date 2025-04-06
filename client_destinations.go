@@ -20,7 +20,11 @@ func (c *Client) DestinationTCP(ctx context.Context, cfg DestinationConfig, addr
 	if err != nil {
 		return err
 	}
-	go tcp.Run(ctx)
+	go func() {
+		if err := tcp.Run(ctx); err != nil {
+			c.logger.Info("shutting down destination tcp", "err", err)
+		}
+	}()
 	return nil
 }
 
@@ -33,7 +37,11 @@ func (c *Client) DestinationHTTP(ctx context.Context, cfg DestinationConfig, han
 	if err != nil {
 		return err
 	}
-	go htp.Run(ctx)
+	go func() {
+		if err := htp.Run(ctx); err != nil {
+			c.logger.Info("shutting down destination http", "err", err)
+		}
+	}()
 	return nil
 }
 
