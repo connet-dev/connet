@@ -37,9 +37,9 @@ type Client struct {
 	srcs   map[model.Forward]*clientSource
 	srcsMu sync.RWMutex
 
-	cancel     context.CancelCauseFunc
 	connStatus atomic.Value
 	sess       *notify.V[*session]
+	ctxCancel  context.CancelCauseFunc
 	closer     chan struct{}
 }
 
@@ -72,7 +72,7 @@ func Connect(ctx context.Context, opts ...ClientOption) (*Client, error) {
 	c.connStatus.Store(statusc.NotConnected)
 
 	ctx, cancel := context.WithCancelCause(ctx)
-	c.cancel = cancel
+	c.ctxCancel = cancel
 
 	errCh := make(chan error)
 	go c.runClient(ctx, errCh)
@@ -186,7 +186,7 @@ func (c *Client) Source(ctx context.Context, cfg client.SourceConfig) (Source, e
 }
 
 func (c *Client) Close() error {
-	c.cancel(net.ErrClosed)
+	c.ctxCancel(net.ErrClosed)
 	<-c.closer
 	return nil
 }

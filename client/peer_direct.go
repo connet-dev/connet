@@ -311,16 +311,23 @@ func (p *directPeerOutgoing) connect(ctx context.Context) (quic.Connection, erro
 			ServerName:   p.serverConf.name,
 			NextProtos:   []string{"connet-direct"},
 		}, quicc.StdConfig)
-		if err != nil {
+		switch {
+		case errors.Is(err, context.Canceled):
+			return nil, err
+		case err != nil:
 			errs = append(errs, err)
 			continue
 		}
 
-		if err := p.check(ctx, conn); err != nil {
+		switch err := p.check(ctx, conn); {
+		case errors.Is(err, context.Canceled):
+			return nil, err
+		case err != nil:
 			conn.CloseWithError(quic.ApplicationErrorCode(pb.Error_CheckFailed), "connection check failed")
 			errs = append(errs, err)
 			continue
 		}
+
 		return conn, nil
 	}
 	return nil, errors.Join(errs...)
