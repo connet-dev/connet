@@ -25,12 +25,14 @@ import (
 	"golang.org/x/sync/errgroup"
 )
 
+// SourceConfig structure represents source configuration.
 type SourceConfig struct {
 	Forward          model.Forward
 	Route            model.RouteOption
 	RelayEncryptions []model.EncryptionScheme
 }
 
+// NewSourceConfig creates a source config for a given name.
 func NewSourceConfig(name string) SourceConfig {
 	return SourceConfig{
 		Forward:          model.NewForward(name),
@@ -39,11 +41,13 @@ func NewSourceConfig(name string) SourceConfig {
 	}
 }
 
+// WithRoute sets the route option for this configuration.
 func (cfg SourceConfig) WithRoute(route model.RouteOption) SourceConfig {
 	cfg.Route = route
 	return cfg
 }
 
+// WithRelayEncryptions sets the relay encryptions option for this configuration.
 func (cfg SourceConfig) WithRelayEncryptions(schemes ...model.EncryptionScheme) SourceConfig {
 	cfg.RelayEncryptions = schemes
 	return cfg

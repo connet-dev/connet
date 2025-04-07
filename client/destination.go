@@ -19,6 +19,7 @@ import (
 	"golang.org/x/sync/errgroup"
 )
 
+// DestinationConfig structure represents destination configuration.
 type DestinationConfig struct {
 	Forward          model.Forward
 	Route            model.RouteOption
@@ -26,6 +27,7 @@ type DestinationConfig struct {
 	RelayEncryptions []model.EncryptionScheme
 }
 
+// NewDestinationConfig creates a destination config for a given name
 func NewDestinationConfig(name string) DestinationConfig {
 	return DestinationConfig{
 		Forward:          model.NewForward(name),
@@ -35,16 +37,19 @@ func NewDestinationConfig(name string) DestinationConfig {
 	}
 }
 
+// WithRoute sets the route option for this configuration.
 func (cfg DestinationConfig) WithRoute(route model.RouteOption) DestinationConfig {
 	cfg.Route = route
 	return cfg
 }
 
+// WithProxy sets the proxy version option for this configuration.
 func (cfg DestinationConfig) WithProxy(proxy model.ProxyVersion) DestinationConfig {
 	cfg.Proxy = proxy
 	return cfg
 }
 
+// WithRelayEncryptions sets the relay encryptions option for this configuration.
 func (cfg DestinationConfig) WithRelayEncryptions(schemes ...model.EncryptionScheme) DestinationConfig {
 	cfg.RelayEncryptions = schemes
 	return cfg

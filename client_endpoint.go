@@ -11,6 +11,8 @@ import (
 	"github.com/quic-go/quic-go"
 )
 
+// Destination is type of endpoint that can receive remote connections and traffic.
+// It implements net.Listener interface, so it
 type Destination interface {
 	Accept() (net.Conn, error)
 	AcceptContext(ctx context.Context) (net.Conn, error)
@@ -20,8 +22,10 @@ type Destination interface {
 	Close() error
 }
 
+// DestinationConfig structure represents destination configuration. See [Client.DestinationConfig]
 type DestinationConfig = client.DestinationConfig
 
+// NewDestinationConfig creates a destination config for a given name. See [client.NewDestinationConfig]
 var NewDestinationConfig = client.NewDestinationConfig
 
 type Source interface {
@@ -32,8 +36,10 @@ type Source interface {
 	Close() error
 }
 
+// SourceConfig structure represents source configuration. See [Client.SourceConfig]
 type SourceConfig = client.SourceConfig
 
+// NewSourceConfig creates a destination config for a given name. See [client.NewSourceConfig]
 var NewSourceConfig = client.NewSourceConfig
 
 type clientDestination struct {

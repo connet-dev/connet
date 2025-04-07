@@ -43,9 +43,10 @@ type Client struct {
 	closer         chan struct{}
 }
 
-// Connect starts a new client and connects it to the control server
-// the client can be stopped either by canceling this context (TODO should it be separate option) or via calling Close
-// Either will close all active source/destinations associated with this client
+// Connect starts a new client and connects it to the control server.
+// This call blocks until the server is connected or an error is detected.
+// The client can be stopped either by canceling this context or via calling Close. Stopping the client will also
+// stop all active source/destinations associated with this client
 func Connect(ctx context.Context, opts ...ClientOption) (*Client, error) {
 	cfg, err := newClientConfig(opts)
 	if err != nil {
@@ -118,6 +119,7 @@ func (c *Client) runClient(ctx context.Context, errCh chan error) {
 	}
 }
 
+// Destinations returns the set of currently active destinations
 func (c *Client) Destinations() []string {
 	c.destinationsMu.RLock()
 	defer c.destinationsMu.RUnlock()
@@ -125,6 +127,7 @@ func (c *Client) Destinations() []string {
 	return model.ForwardNames(slices.Collect(maps.Keys(c.destinations)))
 }
 
+// GetDestination returns a destination by its name. Returns an error if the destination was not found.
 func (c *Client) GetDestination(name string) (Destination, error) {
 	c.destinationsMu.RLock()
 	defer c.destinationsMu.RUnlock()
@@ -136,9 +139,9 @@ func (c *Client) GetDestination(name string) (Destination, error) {
 	return dst, nil
 }
 
-// Destination starts a new destination with a given configuration
-// Blocks until it is succesfully announced to the control server
-// The destination can be closed either via cancelling the context or calling its close func
+// Destination starts a new destination with a given configuration.
+// This call blocks until it is succesfully announced to the control server.
+// The destination can be closed either via cancelling the context or calling its close func.
 func (c *Client) Destination(ctx context.Context, cfg DestinationConfig) (Destination, error) {
 	c.destinationsMu.Lock()
 	defer c.destinationsMu.Unlock()
@@ -163,6 +166,7 @@ func (c *Client) removeDestination(fwd model.Forward) {
 	delete(c.destinations, fwd)
 }
 
+// Sources returns the set of currently active sources
 func (c *Client) Sources() []string {
 	c.sourcesMu.RLock()
 	defer c.sourcesMu.RUnlock()
@@ -170,6 +174,7 @@ func (c *Client) Sources() []string {
 	return model.ForwardNames(slices.Collect(maps.Keys(c.sources)))
 }
 
+// GetSource returns a source by its name. Returns an error if the source was not found.
 func (c *Client) GetSource(name string) (Source, error) {
 	c.sourcesMu.RLock()
 	defer c.sourcesMu.RUnlock()
@@ -181,9 +186,9 @@ func (c *Client) GetSource(name string) (Source, error) {
 	return src, nil
 }
 
-// Source starts a new source with a given configuration
-// Blocks until it is succesfully announced to the control server
-// The source can be closed either via cancelling the context or calling its close func
+// Source starts a new source with a given configuration.
+// This call blocks until it is succesfully announced to the control server.
+// The source can be closed either via cancelling the context or calling its close func.
 func (c *Client) Source(ctx context.Context, cfg SourceConfig) (Source, error) {
 	c.sourcesMu.Lock()
 	defer c.sourcesMu.Unlock()
@@ -208,6 +213,7 @@ func (c *Client) removeSource(fwd model.Forward) {
 	delete(c.sources, fwd)
 }
 
+// Close closes this client. It disconnects the client and all endpoints (destinations and sources) associated with it.
 func (c *Client) Close() error {
 	c.ctxCancel(net.ErrClosed)
 	<-c.closer

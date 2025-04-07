@@ -428,6 +428,50 @@ docker run -p 19192:19192 -p 9000:9000 \
   connet --config "/data/config.toml"
 ```
 
+## Embedding
+
+Both `connet` client and server (including control and relays) are meant to be embeddable in other programs
+(`connet` main just exposes them as CLI). 
+
+### Embedding the client
+
+To create new client use `connet.Connect` function. It will block, while trying to connect and authenticate
+to the control server. Any error that happens while connecting will be reported back. The client will continue
+reconnecting until the client is `Close`ed. Here is a minimal example of creating new client:
+
+```go
+cl, err := connect.Connect(ctx, connet.ClientToken("CLIENT_TOKEN"), connet.ClientControlAddress("connet.dev:19190"))
+if err != nil {
+  return err
+}
+defer cl.Close()
+// at this point, the client is connected and ready to add destinations/sources
+```
+
+To create a new destination or source use the `client.Destination` and `client.Source` methods on the client, for example:
+
+```go
+dst, err := cl.Destination(ctx, connet.NewDestinationConfig("example"))
+if err != nil {
+  return err
+}
+defer dst.Close()
+
+// or alternatively a source
+src, err := cl.Source(ctx, connet.NewSourceConfig("example"))
+if err != nil {
+  return err
+}
+defer dst.Close()
+```
+
+Once you have a destination or a source, you can use `Destination.Accept` to handle new remote connections for this destination
+or `Source.Dial` to connect remotely to a destination. Both return a normal `net.Conn` that you can use for comms.  
+
+### Embedding the server (control or relay)
+
+TBD
+
 ## Examples
 
 TBD
