@@ -89,6 +89,7 @@ func Connect(ctx context.Context, opts ...ClientOption) (*Client, error) {
 func (c *Client) runClient(ctx context.Context, errCh chan error) {
 	defer close(c.closer)
 	defer c.connStatus.Store(statusc.Disconnected)
+	defer c.closeEndpoints()
 
 	c.logger.Debug("start udp listener")
 	udpConn, err := net.ListenUDP("udp", c.directAddr)
@@ -218,6 +219,19 @@ func (c *Client) Close() error {
 	c.ctxCancel(net.ErrClosed)
 	<-c.closer
 	return nil
+}
+
+func (c *Client) closeEndpoints() {
+	for _, dstName := range c.Destinations() {
+		if dst, err := c.GetDestination(dstName); err == nil {
+			dst.Close()
+		}
+	}
+	for _, srcName := range c.Sources() {
+		if src, err := c.GetSource(srcName); err == nil {
+			src.Close()
+		}
+	}
 }
 
 func (c *Client) run(ctx context.Context, transport *quic.Transport, errCh chan error) error {

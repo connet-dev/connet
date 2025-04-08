@@ -197,10 +197,52 @@ func TestE2E(t *testing.T) {
 		require.ErrorContains(t, err, "role not allowed")
 		require.Nil(t, dst)
 	})
-
-	t.Run("cancel-client", func(t *testing.T) {
-		ctx, cancel := context.WithCancel(ctx)
+	t.Run("close-client", func(t *testing.T) {
 		cl, err := Connect(ctx,
+			ClientToken("test-token-dst"),
+			ClientControlAddress("localhost:20000"),
+			clientControlCAs(cas),
+			ClientDirectAddress(":20002"),
+			ClientLogger(logger.With("test", "cl-dst")),
+		)
+		require.NoError(t, err)
+		require.NotNil(t, cl)
+
+		dst, err := cl.Destination(ctx, NewDestinationConfig("closing"))
+		require.NoError(t, err)
+		defer dst.Close()
+
+		src, err := cl.Source(ctx, NewSourceConfig("closing"))
+		require.NoError(t, err)
+		defer src.Close()
+
+		require.NoError(t, cl.Close())
+		require.Empty(t, cl.Destinations())
+		require.Empty(t, cl.Sources())
+
+		var acceptConn, dialConn net.Conn
+		var acceptErr, dialErr error
+		var acceptCh, dialCh = make(chan struct{}), make(chan struct{})
+		go func() {
+			acceptConn, acceptErr = dst.Accept()
+			close(acceptCh)
+		}()
+		go func() {
+			dialConn, dialErr = src.Dial("", "")
+			close(dialCh)
+		}()
+
+		<-acceptCh
+		<-dialCh
+
+		require.Error(t, acceptErr)
+		require.Error(t, dialErr)
+		require.Nil(t, acceptConn)
+		require.Nil(t, dialConn)
+	})
+	t.Run("cancel-client", func(t *testing.T) {
+		clCtx, cancel := context.WithCancel(ctx)
+		cl, err := Connect(clCtx,
 			ClientToken("test-token-dst"),
 			ClientControlAddress("localhost:20000"),
 			clientControlCAs(cas),
