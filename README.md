@@ -513,7 +513,7 @@ by adding account management and it is one of the easiest way to start.
  - [ ] http host rewrite
  - [ ] websocket tcp converter
  - [ ] sni rewrite
- - [ ] Docs section for embedding into golang programs
+ - [ ] docs section for embedding into golang programs
 
 ## Future
  - [ ] UDP support
@@ -521,7 +521,7 @@ by adding account management and it is one of the easiest way to start.
  - [ ] client versioning support
  - [ ] notarize mac app
  - [ ] systemd dynamic user in nixos
- - [ ] Docs section for building the project
+ - [ ] docs section for building the project
  - [ ] mininet testing
  - [ ] gen config
  - [ ] swift/ios/mac and java/android client libraries

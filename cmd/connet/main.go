@@ -472,7 +472,7 @@ type runnable interface {
 	Run(ctx context.Context) error
 }
 
-type newrunnable[T any] func(t T) (runnable, error)
+type newrunnable[T any] func(t T) runnable
 
 func clientRun(ctx context.Context, cfg ClientConfig, logger *slog.Logger) error {
 	var opts []connet.ClientOption
@@ -553,11 +553,11 @@ func clientRun(ctx context.Context, cfg ClientConfig, logger *slog.Logger) error
 			WithRoute(route).
 			WithProxy(proxy).
 			WithRelayEncryptions(relayEncryptions...)
-		destinationHandlers[name] = func(dst connet.Destination) (runnable, error) {
+		destinationHandlers[name] = func(dst connet.Destination) runnable {
 			if fc.FileServerRoot != "" {
 				return connet.NewHTTPFileDestination(dst, fc.FileServerRoot)
 			} else {
-				return connet.NewTCPDestination(dst, model.NewForward(name), fc.Addr, logger)
+				return connet.NewTCPDestination(dst, fc.Addr, logger)
 			}
 		}
 	}
@@ -580,8 +580,8 @@ func clientRun(ctx context.Context, cfg ClientConfig, logger *slog.Logger) error
 		sources[name] = connet.NewSourceConfig(name).
 			WithRoute(route).
 			WithRelayEncryptions(relayEncryptions...)
-		sourceHandlers[name] = func(src connet.Source) (runnable, error) {
-			return connet.NewTCPSource(src, model.NewForward(name), fc.Addr, logger)
+		sourceHandlers[name] = func(src connet.Source) runnable {
+			return connet.NewTCPSource(src, fc.Addr, logger)
 		}
 	}
 
@@ -607,11 +607,7 @@ func clientRun(ctx context.Context, cfg ClientConfig, logger *slog.Logger) error
 			return err
 		}
 		if dstrun := destinationHandlers[name]; dstrun != nil {
-			runner, err := dstrun(dst)
-			if err != nil {
-				return err
-			}
-			g.Go(func() error { return runner.Run(ctx) })
+			g.Go(func() error { return dstrun(dst).Run(ctx) })
 		}
 	}
 
@@ -621,11 +617,7 @@ func clientRun(ctx context.Context, cfg ClientConfig, logger *slog.Logger) error
 			return err
 		}
 		if srcrun := sourceHandlers[name]; srcrun != nil {
-			runner, err := srcrun(src)
-			if err != nil {
-				return err
-			}
-			g.Go(func() error { return runner.Run(ctx) })
+			g.Go(func() error { return srcrun(src).Run(ctx) })
 		}
 	}
 

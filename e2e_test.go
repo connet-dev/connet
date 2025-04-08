@@ -284,15 +284,13 @@ func TestE2E(t *testing.T) {
 		if strings.HasSuffix(name, "-proxy-proto") {
 			addr = ppAddr
 		}
-		dstSrv, err := NewTCPDestination(dst, model.NewForward(name), addr, logger)
-		require.NoError(t, err)
+		dstSrv := NewTCPDestination(dst, addr, logger)
 		g.Go(func() error { return dstSrv.Run(ctx) })
 
 		src, err := clSrc.Source(ctx, tc.s)
 		require.NoError(t, err)
 
-		srcSrv, err := NewTCPSource(src, model.NewForward(name), tc.saddr, logger)
-		require.NoError(t, err)
+		srcSrv := NewTCPSource(src, tc.saddr, logger)
 		g.Go(func() error { return srcSrv.Run(ctx) })
 	}
 

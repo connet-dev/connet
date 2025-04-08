@@ -10,15 +10,13 @@ import (
 	"github.com/connet-dev/connet/netc"
 )
 
+// SourceTCP creates a new source which also exposes local TCP address to accept incoming traffic
 func (c *Client) SourceTCP(ctx context.Context, cfg SourceConfig, addr string) error {
 	src, err := c.Source(ctx, cfg)
 	if err != nil {
 		return err
 	}
-	tcp, err := NewTCPSource(src, cfg.Forward, addr, c.logger)
-	if err != nil {
-		return err
-	}
+	tcp := NewTCPSource(src, addr, c.logger)
 	go func() {
 		if err := tcp.Run(ctx); err != nil {
 			c.logger.Info("shutting down source tcp", "err", err)
@@ -33,12 +31,12 @@ type TCPSource struct {
 	logger *slog.Logger
 }
 
-func NewTCPSource(src Source, fwd model.Forward, addr string, logger *slog.Logger) (*TCPSource, error) {
+func NewTCPSource(src Source, addr string, logger *slog.Logger) *TCPSource {
 	return &TCPSource{
 		src:    src,
 		addr:   addr,
-		logger: logger.With("source", fwd, "addr", addr),
-	}, nil
+		logger: logger.With("source", src.Config().Forward, "addr", addr),
+	}
 }
 
 func (s *TCPSource) Run(ctx context.Context) error {
@@ -54,41 +52,28 @@ func (s *TCPSource) Run(ctx context.Context) error {
 		l.Close()
 	}()
 
-	s.logger.Info("listening for conns")
-	for {
-		conn, err := l.Accept()
-		if err != nil {
-			return fmt.Errorf("server accept: %w", err)
-		}
+	s.logger.Info("listening for conns", "local", l.Addr())
+	return (&netc.Joiner{
+		Accept: func(ctx context.Context) (net.Conn, error) {
+			conn, err := l.Accept()
+			s.logger.Debug("source accept", "err", err)
+			return conn, err
+		},
+		Dial: func(ctx context.Context) (net.Conn, error) {
+			conn, err := s.src.DialContext(ctx, "", "")
+			s.logger.Debug("source dial", "err", err)
+			return conn, err
+		},
+		Join: func(ctx context.Context, acceptConn, dialConn net.Conn) {
+			if proxyConn, ok := dialConn.(model.ProxyProtoConn); ok {
+				if err := proxyConn.WriteProxyHeader(acceptConn.RemoteAddr(), acceptConn.LocalAddr()); err != nil {
+					s.logger.Debug("source write proxy header", "err", err)
+					return
+				}
+			}
 
-		go s.runConn(ctx, conn)
-	}
-}
-
-func (s *TCPSource) runConn(ctx context.Context, conn net.Conn) {
-	defer conn.Close()
-	s.logger.Debug("received conn", "remote", conn.RemoteAddr())
-
-	if err := s.runConnErr(ctx, conn); err != nil {
-		s.logger.Warn("source conn error", "err", err)
-	}
-}
-
-func (s *TCPSource) runConnErr(ctx context.Context, conn net.Conn) error {
-	dstConn, err := s.src.DialContext(ctx, "", "")
-	if err != nil {
-		return fmt.Errorf("dial destination: %w", err)
-	}
-	defer dstConn.Close()
-
-	if proxyConn, ok := dstConn.(model.ProxyProtoConn); ok {
-		if err := proxyConn.WriteProxyHeader(conn.RemoteAddr(), conn.LocalAddr()); err != nil {
-			return fmt.Errorf("write proxy header: %w", err)
-		}
-	}
-
-	err = netc.Join(ctx, conn, dstConn)
-	s.logger.Debug("disconnected conns", "err", err)
-
-	return nil
+			err := netc.Join(ctx, acceptConn, dialConn)
+			s.logger.Debug("source disconnected", "err", err)
+		},
+	}).Run(ctx)
 }

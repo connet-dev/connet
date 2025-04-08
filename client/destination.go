@@ -86,6 +86,10 @@ func NewDestination(cfg DestinationConfig, direct *DirectServer, root *certc.Cer
 	}, nil
 }
 
+func (d *Destination) Config() DestinationConfig {
+	return d.cfg
+}
+
 func (d *Destination) RunPeer(ctx context.Context) error {
 	defer close(d.acceptCh)
 

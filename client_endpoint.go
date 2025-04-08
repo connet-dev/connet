@@ -14,6 +14,8 @@ import (
 // Destination is type of endpoint that can receive remote connections and traffic.
 // It implements net.Listener interface, so it
 type Destination interface {
+	Config() DestinationConfig
+
 	Accept() (net.Conn, error)
 	AcceptContext(ctx context.Context) (net.Conn, error)
 
@@ -29,6 +31,8 @@ type DestinationConfig = client.DestinationConfig
 var NewDestinationConfig = client.NewDestinationConfig
 
 type Source interface {
+	Config() SourceConfig
+
 	Dial(network, address string) (net.Conn, error)
 	DialContext(ctx context.Context, network, address string) (net.Conn, error)
 

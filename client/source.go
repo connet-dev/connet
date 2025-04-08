@@ -84,6 +84,10 @@ func NewSource(cfg SourceConfig, direct *DirectServer, root *certc.Cert, logger 
 	}, nil
 }
 
+func (s *Source) Config() SourceConfig {
+	return s.cfg
+}
+
 func (s *Source) RunPeer(ctx context.Context) error {
 	g, ctx := errgroup.WithContext(ctx)
 
