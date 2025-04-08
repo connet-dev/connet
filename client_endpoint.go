@@ -11,6 +11,12 @@ import (
 	"github.com/quic-go/quic-go"
 )
 
+// DestinationConfig structure represents destination configuration. See [Client.DestinationConfig]
+type DestinationConfig = client.DestinationConfig
+
+// NewDestinationConfig creates a destination config for a given name. See [client.NewDestinationConfig]
+var NewDestinationConfig = client.NewDestinationConfig
+
 // Destination is type of endpoint that can receive remote connections and traffic.
 // It implements net.Listener interface, so it
 type Destination interface {
@@ -24,11 +30,11 @@ type Destination interface {
 	Close() error
 }
 
-// DestinationConfig structure represents destination configuration. See [Client.DestinationConfig]
-type DestinationConfig = client.DestinationConfig
+// SourceConfig structure represents source configuration. See [Client.SourceConfig]
+type SourceConfig = client.SourceConfig
 
-// NewDestinationConfig creates a destination config for a given name. See [client.NewDestinationConfig]
-var NewDestinationConfig = client.NewDestinationConfig
+// NewSourceConfig creates a destination config for a given name. See [client.NewSourceConfig]
+var NewSourceConfig = client.NewSourceConfig
 
 type Source interface {
 	Config() SourceConfig
@@ -40,11 +46,10 @@ type Source interface {
 	Close() error
 }
 
-// SourceConfig structure represents source configuration. See [Client.SourceConfig]
-type SourceConfig = client.SourceConfig
-
-// NewSourceConfig creates a destination config for a given name. See [client.NewSourceConfig]
-var NewSourceConfig = client.NewSourceConfig
+var (
+	ErrNoActiveDestinations = client.ErrNoActiveDestinations
+	ErrNoDialedDestinations = client.ErrNoDialedDestinations
+)
 
 type clientDestination struct {
 	*client.Destination

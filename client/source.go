@@ -148,12 +148,12 @@ func connCompare(l, r sourceConn) int {
 	return cmp.Compare(ld, rd)
 }
 
-var errNoActiveConns = errors.New("no active conns")
+var ErrNoActiveDestinations = errors.New("no active destinations")
 
 func (s *Source) findActive() ([]sourceConn, error) {
 	conns := s.conns.Load()
 	if conns == nil || len(*conns) == 0 {
-		return nil, errNoActiveConns
+		return nil, ErrNoActiveDestinations
 	}
 
 	return slices.SortedFunc(slices.Values(*conns), connCompare), nil
@@ -163,7 +163,7 @@ func (s *Source) Dial(network, address string) (net.Conn, error) {
 	return s.DialContext(context.Background(), network, address)
 }
 
-var errNoDesinationRoute = errors.New("no route to destination")
+var ErrNoDialedDestinations = errors.New("no dialed destinations")
 
 func (s *Source) DialContext(ctx context.Context, network, address string) (net.Conn, error) {
 	conns, err := s.findActive()
@@ -182,7 +182,7 @@ func (s *Source) DialContext(ctx context.Context, network, address string) (net.
 		}
 	}
 
-	return nil, fmt.Errorf("%w: %w", errNoDesinationRoute, errors.Join(errs...))
+	return nil, fmt.Errorf("%w: %w", ErrNoDialedDestinations, errors.Join(errs...))
 }
 
 func (s *Source) dial(ctx context.Context, dest sourceConn) (net.Conn, error) {

@@ -235,13 +235,13 @@ func TestE2E(t *testing.T) {
 		<-acceptCh
 		<-dialCh
 
-		require.Error(t, acceptErr)
-		require.Error(t, dialErr)
+		require.ErrorIs(t, acceptErr, net.ErrClosed)
+		require.ErrorIs(t, dialErr, ErrNoActiveDestinations)
 		require.Nil(t, acceptConn)
 		require.Nil(t, dialConn)
 	})
 	t.Run("cancel-client", func(t *testing.T) {
-		clCtx, cancel := context.WithCancel(ctx)
+		clCtx, clCancel := context.WithCancel(ctx)
 		cl, err := Connect(clCtx,
 			ClientToken("test-token-dst"),
 			ClientControlAddress("localhost:20000"),
@@ -256,9 +256,34 @@ func TestE2E(t *testing.T) {
 		require.NoError(t, err)
 		defer dst.Close()
 
-		cancel()
+		src, err := cl.Source(ctx, NewSourceConfig("closing"))
+		require.NoError(t, err)
+		defer src.Close()
+
+		clCancel()
 		time.Sleep(time.Millisecond)
 		require.Empty(t, cl.Destinations())
+		require.Empty(t, cl.Sources())
+
+		var acceptConn, dialConn net.Conn
+		var acceptErr, dialErr error
+		var acceptCh, dialCh = make(chan struct{}), make(chan struct{})
+		go func() {
+			acceptConn, acceptErr = dst.Accept()
+			close(acceptCh)
+		}()
+		go func() {
+			dialConn, dialErr = src.Dial("", "")
+			close(dialCh)
+		}()
+
+		<-acceptCh
+		<-dialCh
+
+		require.ErrorIs(t, acceptErr, net.ErrClosed)
+		require.ErrorIs(t, dialErr, ErrNoActiveDestinations)
+		require.Nil(t, acceptConn)
+		require.Nil(t, dialConn)
 	})
 	t.Run("close-dst", func(t *testing.T) {
 		cl, err := Connect(ctx,

@@ -2,6 +2,7 @@ package connet
 
 import (
 	"context"
+	"crypto/tls"
 	"fmt"
 	"log/slog"
 	"net"
@@ -16,8 +17,8 @@ func (c *Client) SourceTCP(ctx context.Context, cfg SourceConfig, addr string) e
 	if err != nil {
 		return err
 	}
-	tcp := NewTCPSource(src, addr, c.logger)
 	go func() {
+		tcp := NewTCPSource(src, addr, c.logger)
 		if err := tcp.Run(ctx); err != nil {
 			c.logger.Info("shutting down source tcp", "err", err)
 		}
@@ -25,23 +26,51 @@ func (c *Client) SourceTCP(ctx context.Context, cfg SourceConfig, addr string) e
 	return nil
 }
 
+func (c *Client) SourceTLS(ctx context.Context, cfg SourceConfig, addr string, cert tls.Certificate) error {
+	src, err := c.Source(ctx, cfg)
+	if err != nil {
+		return err
+	}
+	go func() {
+		tcp := NewTLSSource(src, addr, &tls.Config{Certificates: []tls.Certificate{cert}}, c.logger)
+		if err := tcp.Run(ctx); err != nil {
+			c.logger.Info("shutting down source tcp", "err", err)
+		}
+	}()
+	return nil
+}
+
+type Binder func(ctx context.Context) (net.Listener, error)
+
 type TCPSource struct {
 	src    Source
-	addr   string
+	bind   Binder
 	logger *slog.Logger
 }
 
 func NewTCPSource(src Source, addr string, logger *slog.Logger) *TCPSource {
 	return &TCPSource{
-		src:    src,
-		addr:   addr,
+		src: src,
+		bind: func(ctx context.Context) (net.Listener, error) {
+			return net.Listen("tcp", addr)
+		},
+		logger: logger.With("source", src.Config().Forward, "addr", addr),
+	}
+}
+
+func NewTLSSource(src Source, addr string, cfg *tls.Config, logger *slog.Logger) *TCPSource {
+	return &TCPSource{
+		src: src,
+		bind: func(ctx context.Context) (net.Listener, error) {
+			return tls.Listen("tcp", addr, cfg)
+		},
 		logger: logger.With("source", src.Config().Forward, "addr", addr),
 	}
 }
 
 func (s *TCPSource) Run(ctx context.Context) error {
 	s.logger.Debug("starting source server")
-	l, err := net.Listen("tcp", s.addr)
+	l, err := s.bind(ctx)
 	if err != nil {
 		return fmt.Errorf("source server listen: %w", err)
 	}
