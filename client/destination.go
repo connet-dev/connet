@@ -132,7 +132,7 @@ func (d *Destination) AcceptContext(ctx context.Context) (net.Conn, error) {
 	}
 }
 
-func (d *Destination) Status() (PeerStatus, error) {
+func (d *Destination) PeerStatus() (PeerStatus, error) {
 	return d.peer.status()
 }
 

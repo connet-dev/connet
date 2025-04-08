@@ -6,8 +6,10 @@ import (
 	"net"
 	"net/netip"
 	"sync"
+	"sync/atomic"
 
 	"github.com/connet-dev/connet/client"
+	"github.com/connet-dev/connet/statusc"
 	"github.com/quic-go/quic-go"
 )
 
@@ -25,8 +27,9 @@ type Destination interface {
 	Accept() (net.Conn, error)
 	AcceptContext(ctx context.Context) (net.Conn, error)
 
-	Addr() net.Addr
 	Client() *Client
+	Status(ctx context.Context) (EndpointStatus, error)
+	Addr() net.Addr
 	Close() error
 }
 
@@ -43,7 +46,13 @@ type Source interface {
 	DialContext(ctx context.Context, network, address string) (net.Conn, error)
 
 	Client() *Client
+	Status(ctx context.Context) (EndpointStatus, error)
 	Close() error
+}
+
+type EndpointStatus struct {
+	Status statusc.Status
+	Peer   client.PeerStatus
 }
 
 var (
@@ -96,6 +105,7 @@ func newClientSource(ctx context.Context, cl *Client, cfg SourceConfig) (*client
 type endpoint interface {
 	RunPeer(ctx context.Context) error
 	RunAnnounce(ctx context.Context, conn quic.Connection, directAddrs []netip.AddrPort, firstReport func(error)) error
+	PeerStatus() (client.PeerStatus, error)
 }
 
 type clientEndpoint struct {
@@ -108,6 +118,7 @@ type clientEndpoint struct {
 	closer    chan struct{}
 
 	onlineReport func(err error)
+	connStatus   atomic.Value
 }
 
 func newClientEndpoint(ctx context.Context, cl *Client, ep endpoint, clientCleanup func()) (*clientEndpoint, error) {
@@ -121,6 +132,7 @@ func newClientEndpoint(ctx context.Context, cl *Client, ep endpoint, clientClean
 		ctxCancel: ctxCancel,
 		closer:    make(chan struct{}),
 	}
+	cep.connStatus.Store(statusc.NotConnected)
 	context.AfterFunc(ctx, cep.cleanup)
 
 	errCh := make(chan error)
@@ -151,12 +163,23 @@ func newClientEndpoint(ctx context.Context, cl *Client, ep endpoint, clientClean
 	return cep, nil
 }
 
-func (e *clientEndpoint) Addr() net.Addr {
-	return e.client.directAddr
-}
-
 func (e *clientEndpoint) Client() *Client {
 	return e.client
+}
+
+func (e *clientEndpoint) Status(ctx context.Context) (EndpointStatus, error) {
+	peerStatus, err := e.ep.PeerStatus()
+	if err != nil {
+		return EndpointStatus{}, err
+	}
+	return EndpointStatus{
+		Status: e.connStatus.Load().(statusc.Status),
+		Peer:   peerStatus,
+	}, nil
+}
+
+func (e *clientEndpoint) Addr() net.Addr {
+	return e.client.directAddr
 }
 
 func (e *clientEndpoint) Close() error {
@@ -184,6 +207,9 @@ func (e *clientEndpoint) runAnnounce(ctx context.Context) {
 }
 
 func (e *clientEndpoint) runAnnounceSession(ctx context.Context, sess *session) {
+	defer e.connStatus.CompareAndSwap(statusc.Connected, statusc.Reconnecting)
+	e.connStatus.Store(statusc.Connected)
+
 	for {
 		err := e.ep.RunAnnounce(ctx, sess.conn, sess.addrs, e.onlineReport)
 		switch {
@@ -199,5 +225,6 @@ func (e *clientEndpoint) runAnnounceSession(ctx context.Context, sess *session) 
 
 func (e *clientEndpoint) cleanup() {
 	defer close(e.closer)
+	defer e.connStatus.Store(statusc.Disconnected)
 	e.clientCleanup()
 }

@@ -358,20 +358,21 @@ func (c *Client) runSession(ctx context.Context, sess *session) error {
 }
 
 type ClientStatus struct {
-	Status       statusc.Status                      `json:"status"`
-	Destinations map[model.Forward]client.PeerStatus `json:"destinations"`
-	Sources      map[model.Forward]client.PeerStatus `json:"sources"`
+	Status       statusc.Status                   `json:"status"`
+	Destinations map[model.Forward]EndpointStatus `json:"destinations"`
+	Sources      map[model.Forward]EndpointStatus `json:"sources"`
 }
 
+// Status returns the client and all added peers statuses
 func (c *Client) Status(ctx context.Context) (ClientStatus, error) {
 	stat := c.connStatus.Load().(statusc.Status)
 
-	dsts, err := c.destinationsStatus()
+	dsts, err := c.destinationsStatus(ctx)
 	if err != nil {
 		return ClientStatus{}, err
 	}
 
-	srcs, err := c.sourcesStatus()
+	srcs, err := c.sourcesStatus(ctx)
 	if err != nil {
 		return ClientStatus{}, err
 	}
@@ -383,15 +384,15 @@ func (c *Client) Status(ctx context.Context) (ClientStatus, error) {
 	}, nil
 }
 
-func (c *Client) destinationsStatus() (map[model.Forward]client.PeerStatus, error) {
+func (c *Client) destinationsStatus(ctx context.Context) (map[model.Forward]EndpointStatus, error) {
 	var err error
-	statuses := map[model.Forward]client.PeerStatus{}
+	statuses := map[model.Forward]EndpointStatus{}
 
 	c.destinationsMu.RLock()
 	defer c.destinationsMu.RUnlock()
 
 	for fwd, dst := range c.destinations {
-		statuses[fwd], err = dst.Status()
+		statuses[fwd], err = dst.Status(ctx)
 		if err != nil {
 			return nil, err
 		}
@@ -400,15 +401,15 @@ func (c *Client) destinationsStatus() (map[model.Forward]client.PeerStatus, erro
 	return statuses, nil
 }
 
-func (c *Client) sourcesStatus() (map[model.Forward]client.PeerStatus, error) {
+func (c *Client) sourcesStatus(ctx context.Context) (map[model.Forward]EndpointStatus, error) {
 	var err error
-	statuses := map[model.Forward]client.PeerStatus{}
+	statuses := map[model.Forward]EndpointStatus{}
 
 	c.sourcesMu.RLock()
 	defer c.sourcesMu.RUnlock()
 
 	for fwd, src := range c.sources {
-		statuses[fwd], err = src.Status()
+		statuses[fwd], err = src.Status(ctx)
 		if err != nil {
 			return nil, err
 		}

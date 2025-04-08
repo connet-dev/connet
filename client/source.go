@@ -112,7 +112,7 @@ func (s *Source) RunAnnounce(ctx context.Context, conn quic.Connection, directAd
 	}).run(ctx)
 }
 
-func (s *Source) Status() (PeerStatus, error) {
+func (s *Source) PeerStatus() (PeerStatus, error) {
 	return s.peer.status()
 }
 

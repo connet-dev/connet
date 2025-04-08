@@ -25,6 +25,7 @@ import (
 	"github.com/connet-dev/connet/model"
 	"github.com/connet-dev/connet/restr"
 	"github.com/connet-dev/connet/selfhosted"
+	"github.com/connet-dev/connet/statusc"
 	"github.com/pires/go-proxyproto"
 	"github.com/stretchr/testify/require"
 	"golang.org/x/sync/errgroup"
@@ -261,7 +262,14 @@ func TestE2E(t *testing.T) {
 		defer src.Close()
 
 		clCancel()
-		time.Sleep(time.Millisecond)
+		for {
+			time.Sleep(time.Millisecond)
+			stat, err := cl.Status(ctx)
+			require.NoError(t, err)
+			if stat.Status == statusc.Disconnected {
+				break
+			}
+		}
 		require.Empty(t, cl.Destinations())
 		require.Empty(t, cl.Sources())
 
@@ -313,12 +321,19 @@ func TestE2E(t *testing.T) {
 		require.NoError(t, err)
 		defer cl.Close()
 
-		ctx, cancel := context.WithCancel(ctx)
-		_, err = cl.Destination(ctx, NewDestinationConfig("closing"))
+		dstCtx, dstCancel := context.WithCancel(ctx)
+		dst, err := cl.Destination(dstCtx, NewDestinationConfig("closing"))
 		require.NoError(t, err)
-		cancel()
+		dstCancel()
 
-		time.Sleep(time.Millisecond)
+		for {
+			time.Sleep(time.Millisecond)
+			stat, err := dst.Status(ctx)
+			require.NoError(t, err)
+			if stat.Status == statusc.Disconnected {
+				break
+			}
+		}
 		require.Empty(t, cl.Destinations())
 	})
 
