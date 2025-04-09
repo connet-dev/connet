@@ -73,7 +73,7 @@
                   server-addr = "192.168.1.2:19190";
                   server-cas = "/etc/server.cert";
                   destinations.abc = {
-                    addr = ":3000";
+                    tcp-addr = ":3000";
                   };
                 };
               };
