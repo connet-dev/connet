@@ -11,7 +11,7 @@ import (
 	"github.com/connet-dev/connet/netc"
 )
 
-// SourceTCP creates a new source which also exposes local TCP address to accept incoming traffic
+// SourceTCP creates a new source, and exposes it to a local TCP address to accept incoming traffic
 func (c *Client) SourceTCP(ctx context.Context, cfg SourceConfig, addr string) error {
 	src, err := c.Source(ctx, cfg)
 	if err != nil {
@@ -26,6 +26,7 @@ func (c *Client) SourceTCP(ctx context.Context, cfg SourceConfig, addr string) e
 	return nil
 }
 
+// SourceTLS creates a new source, and exposes it to local TCP address as a TLS server
 func (c *Client) SourceTLS(ctx context.Context, cfg SourceConfig, addr string, cert tls.Certificate) error {
 	src, err := c.Source(ctx, cfg)
 	if err != nil {

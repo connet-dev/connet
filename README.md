@@ -99,7 +99,7 @@ server-addr = "SERVER_IP:19190"
 server-cas = "cert.pem"
 
 [client.destinations.serviceA]
-addr = ":3000"
+tcp-addr = ":3000"
 ```
 
 ### Client S (aka the `source`)
@@ -112,7 +112,7 @@ server-addr = "SERVER_IP:19190"
 server-cas = "cert.pem"
 
 [client.sources.serviceA]
-addr = ":8000"
+tcp-addr = ":8000"
 ```
 
 ## Configuration
@@ -141,24 +141,29 @@ status-addr = "127.0.0.1:19182" # at what address this client listens for status
 relay-encryption = ["none"] # require encryption when using relay for all destination/sources, defaults to "none"
 
 [client.destinations.serviceX]
-addr = "localhost:3000" # where this destination connects to, required
 route = "any" # what kind of routes to use, `any` will use both `direct` and `relay`
 proxy-proto-version = "" # proxy proto version to push origin information to the server, supports `v1` and `v2`
-file-server-root = "." # when set, run a file server at current directory, on localhost:3000 address
 relay-encryption = ["tls", "dhxcp"] # require `tls` or `dhxcp` encryption when using relay for this destination
+tcp-addr = "localhost:3000" # where this destination connects to
+tls-addr = "localhost:443" # a destination is a tls server (like https), so connect via tls to it
+tls-cert-file = "/path/to/cert/file" # if server's certificate is not publicly trusted
+file-server-root = "." # when set, run a file server at current directory
 
 [client.destinations.serviceY]
-addr = "192.168.1.100:8000" # multiple destinations can be defined, they are matched by name at the server
 route = "direct" # force only direct communication between clients
+tcp-addr = "192.168.1.100:8000" # multiple destinations can be defined, they are matched by name at the server
 
 [client.sources.serviceX] # matches destinations.serviceX
-addr = ":8000" # the address at which to listen for incoming connections to be forwarded
 route = "relay" # the kind of route to use
 relay-encryption = ["dhxcp"] # require `dhxcp` encryption when using relay for this source
+tcp-addr = ":8000" # the tcp address at which to listen for incoming connections to be forwarded
+tls-addr = ":8443" # the tls address at which to listen for incoming connections
+tls-cert-file = "/path/to/cert/file" # the server certificate to use
+tls-key-file = "/path/to/key/file" # the server certificate private key to use
 
 [client.sources.serviceY] # both sources and destinations can be defined in a single file
-addr = ":8001" # again, mulitple sources can be defined
 route = "direct" # force only direct communication between clients, even if other end allows any
+tcp-addr = ":8001" # again, mulitple sources can be defined
 ```
 
 ### Server
@@ -362,7 +367,7 @@ in
     settings.client = {
       token-file = "/run/keys/connet.token";
       server-addr = "localhost:19190";
-      sources.example.addr = ":9000";
+      sources.example.tcp-addr = ":9000";
     };
   };
 }
@@ -390,7 +395,7 @@ To configure the client as a service:
             settings.client = {
               token-file = "/run/keys/connet.token";
               server-addr = "localhost:19190";
-              sources.example.addr = ":9000";
+              sources.example.tcp-addr = ":9000";
             };
           };
         }
@@ -466,7 +471,7 @@ defer dst.Close()
 ```
 
 Once you have a destination or a source, you can use `Destination.Accept` to handle new remote connections for this destination
-or `Source.Dial` to connect remotely to a destination. Both return a normal `net.Conn` that you can use for comms.  
+or `Source.Dial` to connect remotely to a destination. Both return a normal `net.Conn` that you can use for comms.
 
 ### Embedding the server (control or relay)
 
@@ -507,13 +512,14 @@ by adding account management and it is one of the easiest way to start.
  - [x] zip and name windows executable .exe
 
 ### v0.7.0
- - [ ] dynamic source/destination in the client
- - [ ] package refactor/rename
+ - [x] dynamic source/destination in the client
+ - [ ] tls source/destination
+ - [ ] docs section for embedding into golang programs
+ - [ ] sni rewrite
  - [ ] http source
  - [ ] http host rewrite
  - [ ] websocket tcp converter
- - [ ] sni rewrite
- - [ ] docs section for embedding into golang programs
+ - [ ] package refactor/rename
 
 ## Future
  - [ ] UDP support
