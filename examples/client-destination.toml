@@ -5,6 +5,5 @@ token-file = "examples/client-token.secret"
 server-cas = ".direnv/minica.pem"
 
 [client.destinations.sws]
-addr = ":8081"
-file-server-root = "."
 relay-encryptions = ["tls", "dhxcp"]
+http-serve-file = "."

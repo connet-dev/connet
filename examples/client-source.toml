@@ -6,5 +6,5 @@ server-cas = ".direnv/minica.pem"
 direct-addr = ":19193"
 
 [client.sources.sws]
-addr = ":9999"
 relay-encryptions = ["tls"]
+tcp-addr = ":9999"

@@ -10,18 +10,17 @@ token-file = "examples/client-token.secret"
 server-cas = ".direnv/minica.pem"
 
 [client.destinations.sws-direct]
-addr = ":8081"
 route = "direct"
-file-server-root = "."
+http-serve-file = "."
 
 [client.sources.sws-direct]
-addr = ":9999"
 route = "direct"
+tcp-addr = ":9999"
 
 [client.destinations.sws-relay]
-addr = ":8081"
 route = "relay"
+http-serve-file = "."
 
 [client.sources.sws-relay]
-addr = ":9998"
 route = "relay"
+tcp-addr = ":9998"

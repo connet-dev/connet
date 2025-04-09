@@ -147,7 +147,7 @@ relay-encryption = ["tls", "dhxcp"] # require `tls` or `dhxcp` encryption when u
 tcp-addr = "localhost:3000" # where this destination connects to
 tls-addr = "localhost:443" # a destination is a tls server (like https), so connect via tls to it
 tls-cert-file = "/path/to/cert/file" # if server's certificate is not publicly trusted
-file-server-root = "." # when set, run a file server at current directory
+http-serve-file = "." # when set, run a file server at current directory
 
 [client.destinations.serviceY]
 route = "direct" # force only direct communication between clients
