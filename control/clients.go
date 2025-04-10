@@ -79,17 +79,22 @@ func newClientServer(
 
 	peersCache := map[cacheKey][]*pbs.ServerPeer{}
 	for _, msg := range peersMsgs {
-		key := cacheKey{msg.Key.Forward, msg.Key.Role}
-		peersCache[key] = append(peersCache[key], &pbs.ServerPeer{
-			Id:                msg.Key.ID.String(),
-			Direct:            msg.Value.Peer.Direct,
-			Relays:            msg.Value.Peer.Relays,
-			Directs:           msg.Value.Peer.Directs,
-			ServerCertificate: msg.Value.Peer.ServerCertificate,
-			ClientCertificate: msg.Value.Peer.ClientCertificate,
-		})
 		if reactivePeers, ok := reactivate[ClientConnKey{msg.Key.ID}]; ok {
+			key := cacheKey{msg.Key.Forward, msg.Key.Role}
+			peersCache[key] = append(peersCache[key], &pbs.ServerPeer{
+				Id:                msg.Key.ID.String(),
+				Direct:            msg.Value.Peer.Direct,
+				Relays:            msg.Value.Peer.Relays,
+				Directs:           msg.Value.Peer.Directs,
+				ServerCertificate: msg.Value.Peer.ServerCertificate,
+				ClientCertificate: msg.Value.Peer.ClientCertificate,
+			})
 			reactivate[ClientConnKey{msg.Key.ID}] = append(reactivePeers, msg.Key)
+		} else {
+			logger.Warn("peer without corresponding client, deleting", "fwd", msg.Key.Forward, "role", msg.Key.Role, "id", msg.Key.ID)
+			if err := peers.Del(msg.Key); err != nil {
+				return nil, fmt.Errorf("delete unowned peer: %w", err)
+			}
 		}
 	}
 
