@@ -213,11 +213,15 @@ func (e *clientEndpoint) runAnnounce(ctx context.Context) {
 }
 
 func (e *clientEndpoint) runAnnounceSession(ctx context.Context, sess *session) {
-	defer e.connStatus.CompareAndSwap(statusc.Connected, statusc.Reconnecting)
-	e.connStatus.Store(statusc.Connected)
-
 	for {
-		err := e.ep.RunAnnounce(ctx, sess.conn, sess.addrs, e.onlineReport)
+		err := e.ep.RunAnnounce(ctx, sess.conn, sess.addrs, func(err error) {
+			if err == nil {
+				e.connStatus.Store(statusc.Connected)
+			}
+			e.onlineReport(err)
+		})
+		e.connStatus.CompareAndSwap(statusc.Connected, statusc.Reconnecting)
+
 		switch {
 		case err == nil:
 		case errors.Is(err, context.Canceled):

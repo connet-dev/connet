@@ -13,6 +13,7 @@ import (
 	"net"
 	"slices"
 	"sync"
+	"time"
 
 	"github.com/connet-dev/connet/logc"
 	"github.com/connet-dev/connet/model"
@@ -61,13 +62,23 @@ func newClientServer(
 		return nil, fmt.Errorf("client peers store open: %w", err)
 	}
 
-	clientsMsgs, clientsOffset, err := peers.Snapshot()
+	connsMsgs, _, err := conns.Snapshot()
+	if err != nil {
+		return nil, fmt.Errorf("client snapshot: %w", err)
+	}
+
+	reactivate := map[ClientConnKey][]ClientPeerKey{}
+	for _, msg := range connsMsgs {
+		reactivate[msg.Key] = []ClientPeerKey{}
+	}
+
+	peersMsgs, peersOffset, err := peers.Snapshot()
 	if err != nil {
 		return nil, fmt.Errorf("client peers snapshot: %w", err)
 	}
 
 	peersCache := map[cacheKey][]*pbs.ServerPeer{}
-	for _, msg := range clientsMsgs {
+	for _, msg := range peersMsgs {
 		key := cacheKey{msg.Key.Forward, msg.Key.Role}
 		peersCache[key] = append(peersCache[key], &pbs.ServerPeer{
 			Id:                msg.Key.ID.String(),
@@ -77,6 +88,9 @@ func newClientServer(
 			ServerCertificate: msg.Value.Peer.ServerCertificate,
 			ClientCertificate: msg.Value.Peer.ClientCertificate,
 		})
+		if reactivePeers, ok := reactivate[ClientConnKey{msg.Key.ID}]; ok {
+			reactivate[ClientConnKey{msg.Key.ID}] = append(reactivePeers, msg.Key)
+		}
 	}
 
 	serverSecret, err := config.GetOrInit(configServerClientSecret, func(_ ConfigKey) (ConfigValue, error) {
@@ -122,7 +136,9 @@ func newClientServer(
 		peers: peers,
 
 		peersCache:  peersCache,
-		peersOffset: clientsOffset,
+		peersOffset: peersOffset,
+
+		reactivate: reactivate,
 	}, nil
 }
 
@@ -144,9 +160,16 @@ type clientServer struct {
 	peersCache  map[cacheKey][]*pbs.ServerPeer
 	peersOffset int64
 	peersMu     sync.RWMutex
+
+	reactivate   map[ClientConnKey][]ClientPeerKey
+	reactivateMu sync.RWMutex
 }
 
 func (s *clientServer) connected(id ksuid.KSUID, auth ClientAuthentication, remote net.Addr) error {
+	s.reactivateMu.Lock()
+	delete(s.reactivate, ClientConnKey{id})
+	s.reactivateMu.Unlock()
+
 	authData, err := auth.MarshalBinary()
 	if err != nil {
 		return err
@@ -229,6 +252,7 @@ func (s *clientServer) run(ctx context.Context) error {
 
 	g.Go(func() error { return s.runListener(ctx) })
 	g.Go(func() error { return s.runPeerCache(ctx) })
+	g.Go(func() error { return s.runCleaner(ctx) })
 
 	return g.Wait()
 }
@@ -338,6 +362,53 @@ func (s *clientServer) runPeerCache(ctx context.Context) error {
 		s.peersMu.Lock()
 		s.peersOffset = nextOffset
 		s.peersMu.Unlock()
+	}
+}
+
+func (s *clientServer) runCleaner(ctx context.Context) error {
+	switch inactive, err := s.waitToReactivate(ctx); {
+	case err != nil:
+		return err
+	case inactive == 0:
+		s.logger.Debug("all clients reactivated")
+		return nil
+	}
+
+	s.reactivateMu.Lock()
+	defer s.reactivateMu.Unlock()
+
+	for key, peers := range s.reactivate {
+		s.logger.Warn("force disconnecting client", "id", key.ID)
+		if err := s.disconnected(key.ID); err != nil {
+			return err
+		}
+		for _, peer := range peers {
+			if err := s.revoke(peer.Forward, peer.Role, peer.ID); err != nil {
+				return err
+			}
+		}
+	}
+
+	return nil
+}
+
+func (s *clientServer) waitToReactivate(ctx context.Context) (int, error) {
+	s.reactivateMu.RLock()
+	waitToReactivate := len(s.reactivate)
+	s.reactivateMu.RUnlock()
+
+	if waitToReactivate == 0 {
+		return 0, nil
+	}
+
+	s.logger.Debug("waiting for clients to reactivate", "count", waitToReactivate)
+	select {
+	case <-ctx.Done():
+		return 0, ctx.Err()
+	case <-time.After(10 * time.Second):
+		s.reactivateMu.RLock()
+		defer s.reactivateMu.RUnlock()
+		return len(s.reactivate), nil
 	}
 }
 
