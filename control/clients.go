@@ -410,7 +410,7 @@ func (s *clientServer) waitToReactivate(ctx context.Context) (int, error) {
 	select {
 	case <-ctx.Done():
 		return 0, ctx.Err()
-	case <-time.After(10 * time.Second):
+	case <-time.After(time.Minute):
 		s.reactivateMu.RLock()
 		defer s.reactivateMu.RUnlock()
 		return len(s.reactivate), nil
