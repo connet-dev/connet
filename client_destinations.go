@@ -17,8 +17,8 @@ func (c *Client) DestinationTCP(ctx context.Context, cfg DestinationConfig, addr
 	if err != nil {
 		return err
 	}
-	tcp := NewTCPDestination(dst, addr, c.logger)
 	go func() {
+		tcp := NewTCPDestination(dst, addr, c.logger)
 		if err := tcp.Run(ctx); err != nil {
 			c.logger.Info("shutting down destination tcp", "err", err)
 		}
@@ -32,8 +32,8 @@ func (c *Client) DestinationTLS(ctx context.Context, cfg DestinationConfig, addr
 	if err != nil {
 		return err
 	}
-	tls := NewTLSDestination(dst, addr, &tls.Config{RootCAs: cas}, c.logger)
 	go func() {
+		tls := NewTLSDestination(dst, addr, &tls.Config{RootCAs: cas}, c.logger)
 		if err := tls.Run(ctx); err != nil {
 			c.logger.Info("shutting down destination tls", "err", err)
 		}
@@ -47,8 +47,8 @@ func (c *Client) DestinationHTTP(ctx context.Context, cfg DestinationConfig, han
 	if err != nil {
 		return err
 	}
-	htp := NewHTTPDestination(dst, handler)
 	go func() {
+		htp := NewHTTPDestination(dst, handler)
 		if err := htp.Run(ctx); err != nil {
 			c.logger.Info("shutting down destination http", "err", err)
 		}

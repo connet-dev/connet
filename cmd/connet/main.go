@@ -63,7 +63,7 @@ type DestinationConfig struct {
 
 	TCPAddr       string `toml:"tcp-addr"`
 	TLSAddr       string `toml:"tls-addr"`
-	TLSCertFile   string `toml:"tls-cert-file"`
+	TLSCAsFile    string `toml:"tls-cas-file"`
 	HTTPServeFile string `toml:"http-serve-file"`
 }
 
@@ -215,7 +215,7 @@ func rootCmd() *cobra.Command {
 	cmd.Flags().StringVar(&dstCfg.Route, "dst-route", "", "destination route")
 	cmd.Flags().StringVar(&dstCfg.TCPAddr, "dst-tcp-addr", "", "destination tcp address")
 	cmd.Flags().StringVar(&dstCfg.TLSAddr, "dst-tls-addr", "", "destination tls address")
-	cmd.Flags().StringVar(&dstCfg.TLSCertFile, "dst-tls-cert-file", "", "destination tls cert file")
+	cmd.Flags().StringVar(&dstCfg.TLSCAsFile, "dst-tls-cas-file", "", "destination tls certificate authorities file")
 	cmd.Flags().StringVar(&dstCfg.HTTPServeFile, "dst-http-serve-file", "", "destination http server file")
 
 	var srcName string
@@ -574,15 +574,15 @@ func clientRun(ctx context.Context, cfg ClientConfig, logger *slog.Logger) error
 		}
 
 		var destCAs *x509.CertPool
-		if fc.TLSCertFile != "" {
-			casData, err := os.ReadFile(fc.TLSCertFile)
+		if fc.TLSCAsFile != "" {
+			casData, err := os.ReadFile(fc.TLSCAsFile)
 			if err != nil {
 				return fmt.Errorf("read server CAs: %w", err)
 			}
 
 			cas := x509.NewCertPool()
 			if !cas.AppendCertsFromPEM(casData) {
-				return fmt.Errorf("missing server CA certificate in %s", fc.TLSCertFile)
+				return fmt.Errorf("missing server CA certificate in %s", fc.TLSCAsFile)
 			}
 			destCAs = cas
 		}
@@ -1152,7 +1152,7 @@ func mergeDestinationConfig(c, o DestinationConfig) DestinationConfig {
 	if o.TCPAddr != "" || o.TLSAddr != "" || o.HTTPServeFile != "" {
 		n.TCPAddr = o.TCPAddr
 		n.TLSAddr = o.TLSAddr
-		n.TLSCertFile = o.TLSCertFile
+		n.TLSCAsFile = o.TLSCAsFile
 		n.HTTPServeFile = o.HTTPServeFile
 	}
 

@@ -146,7 +146,7 @@ proxy-proto-version = "" # proxy proto version to push origin information to the
 relay-encryption = ["tls", "dhxcp"] # require `tls` or `dhxcp` encryption when using relay for this destination
 tcp-addr = "localhost:3000" # where this destination connects to
 tls-addr = "localhost:443" # a destination is a tls server (like https), so connect via tls to it
-tls-cert-file = "/path/to/cert/file" # if server's certificate is not publicly trusted
+tls-cas-file = "/path/to/cas/file" # if server's certificate is not publicly trusted
 http-serve-file = "." # when set, run a file server at current directory
 
 [client.destinations.serviceY]
@@ -513,7 +513,7 @@ by adding account management and it is one of the easiest way to start.
 
 ### v0.7.0
  - [x] dynamic source/destination in the client
- - [ ] tls source/destination
+ - [x] tls source/destination
  - [ ] docs section for embedding into golang programs
  - [ ] sni rewrite
  - [ ] http source
