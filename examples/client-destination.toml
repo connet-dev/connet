@@ -6,4 +6,4 @@ server-cas = ".direnv/minica.pem"
 
 [client.destinations.sws]
 relay-encryptions = ["tls", "dhxcp"]
-http-serve-file = "."
+http.static-server-root = "."
