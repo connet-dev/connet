@@ -127,6 +127,7 @@
                     cert-file = "/etc/server.cert";
                     key-file = "/etc/server.key";
                     tokens-file = "/etc/tokens";
+                    relay-hostname = "server";
                   };
                 };
               };
