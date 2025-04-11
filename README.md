@@ -99,7 +99,7 @@ server-addr = "SERVER_IP:19190"
 server-cas = "cert.pem"
 
 [client.destinations.serviceA]
-tcp-addr = ":3000"
+tcp.addr = ":3000"
 ```
 
 ### Client S (aka the `source`)
@@ -112,7 +112,7 @@ server-addr = "SERVER_IP:19190"
 server-cas = "cert.pem"
 
 [client.sources.serviceA]
-tcp-addr = ":8000"
+tcp.addr = ":8000"
 ```
 
 ## Configuration
@@ -142,28 +142,28 @@ relay-encryption = ["none"] # require encryption when using relay for all destin
 
 [client.destinations.serviceX]
 route = "any" # what kind of routes to use, `any` will use both `direct` and `relay`
-proxy-proto-version = "" # proxy proto version to push origin information to the server, supports `v1` and `v2`
 relay-encryption = ["tls", "dhxcp"] # require `tls` or `dhxcp` encryption when using relay for this destination
-tcp-addr = "localhost:3000" # where this destination connects to
-tls-addr = "localhost:443" # a destination is a tls server (like https), so connect via tls to it
-tls-cas-file = "/path/to/cas/file" # if server's certificate is not publicly trusted
-http-serve-file = "." # when set, run a file server at current directory
+proxy-proto-version = "" # proxy proto version to push origin information to the server, supports `v1` and `v2`
+tcp.addr = "localhost:3000" # where this destination connects to
+tls.addr = "localhost:443" # a destination is a tls server (like https), so connect via tls to it
+tls.cas-file = "/path/to/cas/file" # if server's certificate is not publicly trusted
+http.static-server-root = "." # when set, run a file server at current directory
 
 [client.destinations.serviceY]
 route = "direct" # force only direct communication between clients
-tcp-addr = "192.168.1.100:8000" # multiple destinations can be defined, they are matched by name at the server
+tcp.addr = "192.168.1.100:8000" # multiple destinations can be defined, they are matched by name at the server
 
 [client.sources.serviceX] # matches destinations.serviceX
 route = "relay" # the kind of route to use
 relay-encryption = ["dhxcp"] # require `dhxcp` encryption when using relay for this source
-tcp-addr = ":8000" # the tcp address at which to listen for incoming connections to be forwarded
-tls-addr = ":8443" # the tls address at which to listen for incoming connections
-tls-cert-file = "/path/to/cert/file" # the server certificate to use
-tls-key-file = "/path/to/key/file" # the server certificate private key to use
+tcp.addr = ":8000" # the tcp address at which to listen for incoming connections to be forwarded
+tls.addr = ":8443" # the tls address at which to listen for incoming connections
+tls.cert-file = "/path/to/cert/file" # the server certificate to use
+tls.key-file = "/path/to/key/file" # the server certificate private key to use
 
 [client.sources.serviceY] # both sources and destinations can be defined in a single file
 route = "direct" # force only direct communication between clients, even if other end allows any
-tcp-addr = ":8001" # again, mulitple sources can be defined
+tcp.addr = ":8001" # again, mulitple sources can be defined
 ```
 
 ### Server
@@ -367,7 +367,7 @@ in
     settings.client = {
       token-file = "/run/keys/connet.token";
       server-addr = "localhost:19190";
-      sources.example.tcp-addr = ":9000";
+      sources.example.tcp.addr = ":9000";
     };
   };
 }
@@ -395,7 +395,7 @@ To configure the client as a service:
             settings.client = {
               token-file = "/run/keys/connet.token";
               server-addr = "localhost:19190";
-              sources.example.tcp-addr = ":9000";
+              sources.example.tcp.addr = ":9000";
             };
           };
         }

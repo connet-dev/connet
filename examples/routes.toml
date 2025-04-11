@@ -11,16 +11,16 @@ server-cas = ".direnv/minica.pem"
 
 [client.destinations.sws-direct]
 route = "direct"
-http-serve-file = "."
+http.static-server-root = "."
 
 [client.sources.sws-direct]
 route = "direct"
-tcp-addr = ":9999"
+tcp.addr = ":9999"
 
 [client.destinations.sws-relay]
 route = "relay"
-http-serve-file = "."
+http.static-server-root = "."
 
 [client.sources.sws-relay]
 route = "relay"
-tcp-addr = ":9998"
+tcp.addr = ":9998"
