@@ -6,5 +6,6 @@ import ./module.nix {
   hasStorage = true;
   ports = [
     { path = [ "server" "addr" ]; default = ":19190"; }
+    { path = [ "server" "relay-addr" ]; default = ":19191"; }
   ];
 }
