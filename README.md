@@ -112,7 +112,7 @@ server-addr = "SERVER_IP:19190"
 server-cas = "cert.pem"
 
 [client.sources.serviceA]
-tcp.addr = ":8000"
+url = "tcp://:8000"
 ```
 
 ## Configuration
@@ -147,14 +147,14 @@ proxy-proto-version = "" # proxy proto version to push origin information to the
 url = "tcp://localhost:3000" # url to which destination connects to, over tcp
 # other options for the url field:
 url = "tls://localhost:3000" # a tls destination to connect to
-url = "http://localhost:3000" # an http destination to connect to as a reverse proxy
+url = "http://localhost:3000/path" # an http destination to connect to as a reverse proxy, path rewrite included
 url = "https://localhost:3000" # an https destination to connect to as a reverse proxy
 url = "file:///absolute/path" # an absolute file path to serve over http
 url = "file:./relative/path" # a relativefile path to serve over http
 cas-file = "/path/to/cas/file" # if connecting via tls/https, certificate authorities if not publicly trusted
                                # `insecure-skip-verify` is a special value, to not verify self-signed certificates
 cert-file = "/path/to/cert/file" # when connecting via tls/https, client certificate to present (mutual tls)
-key-file = "/path/to/key/file" # when connecting via tls/https, client cert key to present (mutual tls)
+key-file = "/path/to/key/file" # when connecting via tls/https, client certificate private key to present (mutual tls)
 
 [client.destinations.serviceY]
 route = "direct" # force only direct communication between clients
@@ -163,14 +163,17 @@ url = "tcp://192.168.1.100:8000"
 [client.sources.serviceX] # matches destinations.serviceX
 route = "relay" # the kind of route to use
 relay-encryption = ["dhxcp"] # require `dhxcp` encryption when using relay for this source
-tcp.addr = ":8000" # the tcp address at which to listen for incoming connections to be forwarded
-tls.addr = ":8443" # the tls address at which to listen for incoming connections
-tls.cert-file = "/path/to/cert/file" # the server certificate to use
-tls.key-file = "/path/to/key/file" # the server certificate private key to use
+url = "tcp://:8000" # url for the source to listen for incoming connections to be forwarded
+# other options for the url field:
+url = "tls://:8003" # runs a tls source server
+url = "http://:8080/path" # runs an http reverse proxy source server, path rewrite
+url = "https://:8443" # runs an https reverse proxy source server
+cert-file = "/path/to/cert/file" # the tls/https server certificate to use
+key-file = "/path/to/key/file" # the tls/https server certificate private key to use
 
 [client.sources.serviceY] # both sources and destinations can be defined in a single file
 route = "direct" # force only direct communication between clients, even if other end allows any
-tcp.addr = ":8001" # again, mulitple sources can be defined
+url = "tcp://:8001" # again, mulitple sources can be defined
 ```
 
 ### Server
@@ -374,7 +377,7 @@ in
     settings.client = {
       token-file = "/run/keys/connet.token";
       server-addr = "localhost:19190";
-      sources.example.tcp.addr = ":9000";
+      sources.example.url = "tcp://:9000";
     };
   };
 }
@@ -402,7 +405,7 @@ To configure the client as a service:
             settings.client = {
               token-file = "/run/keys/connet.token";
               server-addr = "localhost:19190";
-              sources.example.tcp.addr = ":9000";
+              sources.example.url = "tcp://:9000";
             };
           };
         }
@@ -430,7 +433,7 @@ To run the client you can use something like:
 ```bash
 docker run -p 19192:19192 -p 9000:9000 connet \
   --server-addr "localhost:19190" --token "CLIENT_TOKEN" \
-  --src-name "example" --src-addr ":9000"
+  --src-name "example" --src-url "tcp://:9000"
 ```
 
 Or if you are using a config file on your system:
@@ -521,10 +524,10 @@ by adding account management and it is one of the easiest way to start.
 ### v0.7.0
  - [x] dynamic source/destination in the client
  - [x] tls source/destination
- - [ ] docs section for embedding into golang programs
- - [ ] sni rewrite
- - [ ] http source
- - [ ] http host rewrite
+ - [x] docs section for embedding into golang programs
+ - [x] sni rewrite
+ - [x] http source
+ - [x] http host rewrite
  - [ ] websocket tcp converter
  - [ ] package refactor/rename
 

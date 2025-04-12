@@ -357,9 +357,9 @@ func clientRun(ctx context.Context, cfg ClientConfig, logger *slog.Logger) error
 					ClientAuth:   srcClientAuth,
 				}, logger)
 			case "http":
-				return connet.NewHTTPSource(src, targetURL.Host, nil)
+				return connet.NewHTTPSource(src, targetURL, nil)
 			case "https":
-				return connet.NewHTTPSource(src, targetURL.Host, &tls.Config{
+				return connet.NewHTTPSource(src, targetURL, &tls.Config{
 					Certificates: srcCerts,
 					ClientCAs:    srcClientCAs,
 					ClientAuth:   srcClientAuth,

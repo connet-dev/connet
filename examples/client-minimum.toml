@@ -1,0 +1,6 @@
+log-level = "debug"
+
+[client]
+token-file = "examples/client-token.secret"
+server-cas = ".direnv/minica.pem"
+direct-addr = ":"

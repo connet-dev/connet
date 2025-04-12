@@ -46,13 +46,13 @@ func (c *Client) SourceTLS(ctx context.Context, cfg SourceConfig, addr string, c
 }
 
 // SourceHTTP creates a new source, and exposes it to local TCP address as an HTTP server
-func (c *Client) SourceHTTP(ctx context.Context, cfg SourceConfig, addr string) error {
+func (c *Client) SourceHTTP(ctx context.Context, cfg SourceConfig, srcURL *url.URL) error {
 	src, err := c.Source(ctx, cfg)
 	if err != nil {
 		return err
 	}
 	go func() {
-		srcSrv := NewHTTPSource(src, addr, nil)
+		srcSrv := NewHTTPSource(src, srcURL, nil)
 		if err := srcSrv.Run(ctx); err != nil {
 			c.logger.Info("shutting down source http", "err", err)
 		}
@@ -61,13 +61,13 @@ func (c *Client) SourceHTTP(ctx context.Context, cfg SourceConfig, addr string) 
 }
 
 // SourceHTTPS creates a new source, and exposes it to local TCP address as an HTTPS server
-func (c *Client) SourceHTTPS(ctx context.Context, cfg SourceConfig, addr string, cert tls.Certificate) error {
+func (c *Client) SourceHTTPS(ctx context.Context, cfg SourceConfig, srcURL *url.URL, cert tls.Certificate) error {
 	src, err := c.Source(ctx, cfg)
 	if err != nil {
 		return err
 	}
 	go func() {
-		srcSrv := NewHTTPSource(src, addr, &tls.Config{Certificates: []tls.Certificate{cert}})
+		srcSrv := NewHTTPSource(src, srcURL, &tls.Config{Certificates: []tls.Certificate{cert}})
 		if err := srcSrv.Run(ctx); err != nil {
 			c.logger.Info("shutting down source https", "err", err)
 		}
@@ -143,28 +143,27 @@ func (s *TCPSource) Run(ctx context.Context) error {
 }
 
 type HTTPSource struct {
-	src  Source
-	addr string
-	cfg  *tls.Config
+	src    Source
+	srcURL *url.URL
+	cfg    *tls.Config
 }
 
-func NewHTTPSource(src Source, addr string, cfg *tls.Config) *HTTPSource {
-	return &HTTPSource{src, addr, cfg}
+func NewHTTPSource(src Source, srcURL *url.URL, cfg *tls.Config) *HTTPSource {
+	return &HTTPSource{src, srcURL, cfg}
 }
 
 func (s *HTTPSource) Run(ctx context.Context) error {
-	fwd := s.src.Config().Forward
-	srcURL, err := url.Parse(fmt.Sprintf("http://%s", fwd))
-	if err != nil {
-		return err
-	}
+	fwd := s.src.Config().Forward.String()
+	var targetURL url.URL = *s.srcURL
+	targetURL.Scheme = "http"
+	targetURL.Host = fwd
 
 	srv := &http.Server{
-		Addr:      s.addr,
+		Addr:      s.srcURL.Host,
 		TLSConfig: s.cfg,
 		Handler: &httputil.ReverseProxy{
 			Rewrite: func(pr *httputil.ProxyRequest) {
-				pr.SetURL(srcURL)
+				pr.SetURL(&targetURL)
 				pr.SetXForwarded()
 			},
 			Transport: &http.Transport{
