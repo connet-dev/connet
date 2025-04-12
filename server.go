@@ -2,20 +2,15 @@ package connet
 
 import (
 	"context"
-	"crypto/tls"
 	"crypto/x509"
 	"fmt"
-	"log/slog"
 	"net"
-	"os"
 	"path/filepath"
 
 	"github.com/connet-dev/connet/control"
 	"github.com/connet-dev/connet/model"
 	"github.com/connet-dev/connet/relay"
-	"github.com/connet-dev/connet/restr"
 	"github.com/connet-dev/connet/selfhosted"
-	"github.com/connet-dev/connet/statusc"
 	"golang.org/x/sync/errgroup"
 )
 
@@ -27,42 +22,9 @@ type Server struct {
 }
 
 func NewServer(opts ...ServerOption) (*Server, error) {
-	cfg := &serverConfig{
-		logger: slog.Default(),
-	}
-	for _, opt := range opts {
-		if err := opt(cfg); err != nil {
-			return nil, err
-		}
-	}
-
-	if cfg.cert.Leaf == nil {
-		return nil, fmt.Errorf("missing certificate")
-	}
-
-	if cfg.clientsAddr == nil {
-		if err := ServerClientsAddress(":19190")(cfg); err != nil {
-			return nil, fmt.Errorf("default clients address: %w", err)
-		}
-	}
-
-	if cfg.relayAddr == nil {
-		if err := ServerRelayAddress(":19191")(cfg); err != nil {
-			return nil, fmt.Errorf("default relay address: %w", err)
-		}
-	}
-
-	if cfg.relayHostname == "" {
-		if err := ServerRelayHostname("localhost")(cfg); err != nil {
-			return nil, fmt.Errorf("default relay hostname: %w", err)
-		}
-	}
-
-	if cfg.dir == "" {
-		if err := serverStoreDirTemp()(cfg); err != nil {
-			return nil, fmt.Errorf("default store dir: %w", err)
-		}
-		cfg.logger.Info("using temporary store directory", "dir", cfg.dir)
+	cfg, err := newServerConfig(opts)
+	if err != nil {
+		return nil, err
 	}
 
 	relaysAddr, err := net.ResolveUDPAddr("udp", "127.0.0.1:19189")
@@ -122,7 +84,6 @@ func (s *Server) Run(ctx context.Context) error {
 	g, ctx := errgroup.WithContext(ctx)
 	g.Go(func() error { return s.control.Run(ctx) })
 	g.Go(func() error { return s.relay.Run(ctx) })
-	g.Go(func() error { return s.runStatus(ctx) })
 	return g.Wait()
 }
 
@@ -140,153 +101,7 @@ func (s *Server) Status(ctx context.Context) (ServerStatus, error) {
 	return ServerStatus{control, relay}, nil
 }
 
-// TODO pull out to main
-func (s *Server) runStatus(ctx context.Context) error {
-	if s.statusAddr == nil {
-		return nil
-	}
-
-	s.logger.Debug("running status server", "addr", s.statusAddr)
-	return statusc.Run(ctx, s.statusAddr.String(), s.Status)
-}
-
 type ServerStatus struct {
 	Control control.Status `json:"control"`
 	Relay   relay.Status   `json:"relay"`
-}
-
-type serverConfig struct {
-	cert tls.Certificate
-
-	clientsAddr  *net.UDPAddr
-	clientsAuth  control.ClientAuthenticator
-	clientsRestr restr.IP
-
-	relayAddr     *net.UDPAddr
-	relayHostname string
-
-	statusAddr *net.TCPAddr
-
-	dir    string
-	logger *slog.Logger
-}
-
-type ServerOption func(*serverConfig) error
-
-func ServerCertificate(certFile, keyFile string) ServerOption {
-	return func(cfg *serverConfig) error {
-		cert, err := tls.LoadX509KeyPair(certFile, keyFile)
-		if err != nil {
-			return fmt.Errorf("load server certificate: %w", err)
-		}
-
-		cfg.cert = cert
-
-		return nil
-	}
-}
-
-func ServerClientsAddress(address string) ServerOption {
-	return func(cfg *serverConfig) error {
-		addr, err := net.ResolveUDPAddr("udp", address)
-		if err != nil {
-			return fmt.Errorf("resolve clients address: %w", err)
-		}
-
-		cfg.clientsAddr = addr
-
-		return nil
-	}
-}
-
-func ServerClientRestrictions(allow []string, deny []string) ServerOption {
-	return func(cfg *serverConfig) error {
-		iprestr, err := restr.ParseIP(allow, deny)
-		if err != nil {
-			return fmt.Errorf("parse client restrictions: %w", err)
-		}
-
-		cfg.clientsRestr = iprestr
-
-		return nil
-	}
-}
-
-func ServerClientTokens(tokens ...string) ServerOption {
-	return func(cfg *serverConfig) error {
-		auths := make([]selfhosted.ClientAuthentication, len(tokens))
-		for i, t := range tokens {
-			auths[i] = selfhosted.ClientAuthentication{Token: t}
-		}
-
-		cfg.clientsAuth = selfhosted.NewClientAuthenticator(auths...)
-
-		return nil
-	}
-}
-
-func ServerClientAuthenticator(clientsAuth control.ClientAuthenticator) ServerOption {
-	return func(cfg *serverConfig) error {
-		cfg.clientsAuth = clientsAuth
-
-		return nil
-	}
-}
-
-func ServerRelayAddress(address string) ServerOption {
-	return func(cfg *serverConfig) error {
-		addr, err := net.ResolveUDPAddr("udp", address)
-		if err != nil {
-			return fmt.Errorf("resolve relay address: %w", err)
-		}
-
-		cfg.relayAddr = addr
-
-		return nil
-	}
-}
-
-func ServerRelayHostname(hostname string) ServerOption {
-	return func(cfg *serverConfig) error {
-		cfg.relayHostname = hostname
-		return nil
-	}
-}
-
-func ServerStatusAddress(address string) ServerOption {
-	return func(cfg *serverConfig) error {
-		addr, err := net.ResolveTCPAddr("tcp", address)
-		if err != nil {
-			return fmt.Errorf("resolve status address: %w", err)
-		}
-
-		cfg.statusAddr = addr
-
-		return nil
-	}
-}
-
-func ServerStoreDir(dir string) ServerOption {
-	return func(cfg *serverConfig) error {
-		cfg.dir = dir
-		return nil
-	}
-}
-
-func serverStoreDirTemp() ServerOption {
-	return func(cfg *serverConfig) error {
-		tmpDir, err := os.MkdirTemp("", "connet-server-")
-		if err != nil {
-			return fmt.Errorf("create /tmp dir: %w", err)
-		}
-		cfg.dir = tmpDir
-		return nil
-	}
-}
-
-func ServerLogger(logger *slog.Logger) ServerOption {
-	return func(cfg *serverConfig) error {
-		cfg.logger = logger
-		return nil
-	}
 }
