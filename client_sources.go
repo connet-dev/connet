@@ -9,6 +9,7 @@ import (
 	"net"
 	"net/http"
 	"net/http/httputil"
+	"net/url"
 
 	"github.com/connet-dev/connet/model"
 	"github.com/connet-dev/connet/netc"
@@ -21,8 +22,8 @@ func (c *Client) SourceTCP(ctx context.Context, cfg SourceConfig, addr string) e
 		return err
 	}
 	go func() {
-		tcp := NewTCPSource(src, addr, c.logger)
-		if err := tcp.Run(ctx); err != nil {
+		srcSrv := NewTCPSource(src, addr, c.logger)
+		if err := srcSrv.Run(ctx); err != nil {
 			c.logger.Info("shutting down source tcp", "err", err)
 		}
 	}()
@@ -36,9 +37,39 @@ func (c *Client) SourceTLS(ctx context.Context, cfg SourceConfig, addr string, c
 		return err
 	}
 	go func() {
-		tcp := NewTLSSource(src, addr, &tls.Config{Certificates: []tls.Certificate{cert}}, c.logger)
-		if err := tcp.Run(ctx); err != nil {
-			c.logger.Info("shutting down source tcp", "err", err)
+		srcSrv := NewTLSSource(src, addr, &tls.Config{Certificates: []tls.Certificate{cert}}, c.logger)
+		if err := srcSrv.Run(ctx); err != nil {
+			c.logger.Info("shutting down source tls", "err", err)
+		}
+	}()
+	return nil
+}
+
+// SourceHTTP creates a new source, and exposes it to local TCP address as an HTTP server
+func (c *Client) SourceHTTP(ctx context.Context, cfg SourceConfig, addr string) error {
+	src, err := c.Source(ctx, cfg)
+	if err != nil {
+		return err
+	}
+	go func() {
+		srcSrv := NewHTTPSource(src, addr, nil)
+		if err := srcSrv.Run(ctx); err != nil {
+			c.logger.Info("shutting down source http", "err", err)
+		}
+	}()
+	return nil
+}
+
+// SourceHTTPS creates a new source, and exposes it to local TCP address as an HTTPS server
+func (c *Client) SourceHTTPS(ctx context.Context, cfg SourceConfig, addr string, cert tls.Certificate) error {
+	src, err := c.Source(ctx, cfg)
+	if err != nil {
+		return err
+	}
+	go func() {
+		srcSrv := NewHTTPSource(src, addr, &tls.Config{Certificates: []tls.Certificate{cert}})
+		if err := srcSrv.Run(ctx); err != nil {
+			c.logger.Info("shutting down source https", "err", err)
 		}
 	}()
 	return nil
@@ -112,38 +143,42 @@ func (s *TCPSource) Run(ctx context.Context) error {
 }
 
 type HTTPSource struct {
-	Source Source
-	Addr   string
+	src  Source
+	addr string
+	cfg  *tls.Config
+}
+
+func NewHTTPSource(src Source, addr string, cfg *tls.Config) *HTTPSource {
+	return &HTTPSource{src, addr, cfg}
 }
 
 func (s *HTTPSource) Run(ctx context.Context) error {
-	// target, err := url.Parse(fmt.Sprintf("http://%s/certc", s.Source.Config().Forward))
-	// if err != nil {
-	// 	return err
-	// }
+	fwd := s.src.Config().Forward
+	srcURL, err := url.Parse(fmt.Sprintf("http://%s", fwd))
+	if err != nil {
+		return err
+	}
 
 	srv := &http.Server{
-		Addr: s.Addr,
+		Addr:      s.addr,
+		TLSConfig: s.cfg,
 		Handler: &httputil.ReverseProxy{
-			// Rewrite: func(pr *httputil.ProxyRequest) {
-			// pr.SetURL(target)
-			// },
-			Director: func(r *http.Request) {
-				r.URL.Scheme = "http"
-				r.URL.Host = s.Source.Config().Forward.String()
+			Rewrite: func(pr *httputil.ProxyRequest) {
+				pr.SetURL(srcURL)
+				pr.SetXForwarded()
 			},
 			Transport: &http.Transport{
-				DialContext: s.Source.DialContext,
+				DialContext: s.src.DialContext,
 			},
 			ErrorHandler: func(w http.ResponseWriter, r *http.Request, err error) {
 				w.WriteHeader(http.StatusBadGateway)
 				switch {
 				case errors.Is(err, ErrNoActiveDestinations):
-					fmt.Fprintf(w, "no active destinations found for '%s'", s.Source.Config().Forward)
+					fmt.Fprintf(w, "[source %s] no active destinations found", fwd)
 				case errors.Is(err, ErrNoDialedDestinations):
-					fmt.Fprintf(w, "cannot dial active destinations for '%s'", s.Source.Config().Forward)
+					fmt.Fprintf(w, "[source %s] cannot dial active destinations", fwd)
 				default:
-					fmt.Fprintf(w, "ohno for '%s': %v", s.Source.Config().Forward, err)
+					fmt.Fprintf(w, "[source %s] %v", fwd, err)
 				}
 			},
 		},
@@ -154,5 +189,8 @@ func (s *HTTPSource) Run(ctx context.Context) error {
 		srv.Close()
 	}()
 
+	if s.cfg != nil {
+		return srv.ListenAndServeTLS("", "")
+	}
 	return srv.ListenAndServe()
 }

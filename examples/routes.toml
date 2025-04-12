@@ -15,7 +15,7 @@ url = "file:."
 
 [client.sources.sws-direct]
 route = "direct"
-tcp.addr = ":9999"
+url = "tcp://:9999"
 
 [client.destinations.sws-relay]
 route = "relay"
@@ -23,4 +23,4 @@ url = "file:."
 
 [client.sources.sws-relay]
 route = "relay"
-tcp.addr = ":9998"
+url = "tcp://:9998"

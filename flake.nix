@@ -100,7 +100,7 @@
                     server-addr = "192.168.1.2:19190";
                     server-cas = "/etc/server.cert";
                     sources.files = {
-                      tcp.addr = ":3000";
+                      url = "tcp://:3000";
                     };
                   };
                 };

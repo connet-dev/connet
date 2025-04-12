@@ -58,6 +58,36 @@ func (c *Client) DestinationHTTP(ctx context.Context, cfg DestinationConfig, han
 	return nil
 }
 
+// DestinationHTTPProxy creates a new destination which exposes an HTTP proxy server to another HTTP server
+func (c *Client) DestinationHTTPProxy(ctx context.Context, cfg DestinationConfig, dstUrl *url.URL) error {
+	dst, err := c.Destination(ctx, cfg)
+	if err != nil {
+		return err
+	}
+	go func() {
+		htp := NewHTTPProxyDestination(dst, dstUrl, nil)
+		if err := htp.Run(ctx); err != nil {
+			c.logger.Info("shutting down destination http", "err", err)
+		}
+	}()
+	return nil
+}
+
+// DestinationHTTPSProxy creates a new destination which exposes an HTTP proxy server to another HTTPS server
+func (c *Client) DestinationHTTPSProxy(ctx context.Context, cfg DestinationConfig, dstUrl *url.URL, cas *x509.CertPool) error {
+	dst, err := c.Destination(ctx, cfg)
+	if err != nil {
+		return err
+	}
+	go func() {
+		htp := NewHTTPProxyDestination(dst, dstUrl, &tls.Config{RootCAs: cas})
+		if err := htp.Run(ctx); err != nil {
+			c.logger.Info("shutting down destination http", "err", err)
+		}
+	}()
+	return nil
+}
+
 type dialer interface {
 	DialContext(ctx context.Context, network, address string) (net.Conn, error)
 }
@@ -120,6 +150,18 @@ func NewHTTPFileDestination(dst Destination, root string) *HTTPDestination {
 	return NewHTTPDestination(dst, mux)
 }
 
+func NewHTTPProxyDestination(dst Destination, dstURL *url.URL, cfg *tls.Config) *HTTPDestination {
+	return NewHTTPDestination(dst, &httputil.ReverseProxy{
+		Rewrite: func(pr *httputil.ProxyRequest) {
+			pr.SetURL(dstURL)
+			pr.SetXForwarded()
+		},
+		Transport: &http.Transport{
+			TLSClientConfig: cfg,
+		},
+	})
+}
+
 func (d *HTTPDestination) Run(ctx context.Context) error {
 	srv := &http.Server{
 		Handler: d.handler,
@@ -131,16 +173,4 @@ func (d *HTTPDestination) Run(ctx context.Context) error {
 	}()
 
 	return srv.Serve(d.dst)
-}
-
-func NewHTTPProxyDestination(dst Destination, dstUrl *url.URL, cfg *tls.Config) *HTTPDestination {
-	return NewHTTPDestination(dst, &httputil.ReverseProxy{
-		Rewrite: func(pr *httputil.ProxyRequest) {
-			pr.SetURL(dstUrl)
-			pr.SetXForwarded()
-		},
-		Transport: &http.Transport{
-			TLSClientConfig: cfg,
-		},
-	})
 }

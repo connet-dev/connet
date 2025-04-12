@@ -8,7 +8,7 @@ server-cas = ".direnv/minica.pem"
 url = "file:."
 
 [client.sources.sws]
-tcp.addr = ":9999"
+url = "tcp://:9999"
 
 [server]
 tokens-file = "examples/client-token.secret"

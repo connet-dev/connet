@@ -43,51 +43,19 @@ type DestinationConfig struct {
 	ProxyProtoVersion string   `toml:"proxy-proto-version"`
 
 	URL      string `toml:"url"`
-	CAsFile  string `toml:"cas-file"`  // if url is tls or https and cert is not public, literal "insecure-skip-verify" to skip
-	CertFile string `toml:"cert-file"` // mutual TLS client cert
-	KeyFile  string `toml:"key-file"`  // mutual TLS client key
+	CAsFile  string `toml:"cas-file"`  // tls/https server certificate authority, literal "insecure-skip-verify" to skip
+	CertFile string `toml:"cert-file"` // mutual tls client cert
+	KeyFile  string `toml:"key-file"`  // mutual tls client key
 }
 
 type SourceConfig struct {
 	Route            string   `toml:"route"`
 	RelayEncryptions []string `toml:"relay-encryptions"`
 
-	TCP   SourceTCPConfig   `toml:"tcp"`
-	TLS   SourceTLSConfig   `toml:"tls"`
-	HTTP  SourceHTTPConfig  `toml:"http"`
-	HTTPS SourceHTTPSConfig `toml:"https"`
-}
-
-type SourceTCPConfig struct {
-	TCPConfig
-}
-
-type SourceTLSConfig struct {
-	TCPConfig
-	TLSServerConfig
-}
-
-type SourceHTTPConfig struct {
-	TCPConfig
-	URL string `toml:"url"`
-}
-
-type SourceHTTPSConfig struct {
-	SourceHTTPConfig
-	TLSServerConfig
-}
-
-type TCPConfig struct {
-	Addr string `toml:"addr"`
-}
-
-type TLSClientConfig struct {
-	CAsFile string `toml:"cas-file"`
-}
-
-type TLSServerConfig struct {
-	CertFile string `toml:"cert-file"`
-	KeyFile  string `toml:"key-file"`
+	URL      string `toml:"url"`
+	CertFile string `toml:"cert-file"` // tls/https server cert
+	KeyFile  string `toml:"key-file"`  // tls/https server key
+	CAsFile  string `toml:"cas-file"`  // mutual tls client certificate authority
 }
 
 func clientCmd() *cobra.Command {
@@ -118,17 +86,15 @@ func clientCmd() *cobra.Command {
 	cmd.Flags().StringVar(&dstName, "dst-name", "", "destination name")
 	cmd.Flags().StringVar(&dstCfg.Route, "dst-route", "", "destination route")
 	cmd.Flags().StringVar(&dstCfg.URL, "dst-url", "", "destination url (scheme describes the destination)")
-	cmd.Flags().StringVar(&dstCfg.CAsFile, "dst-cas-file", "", "destination tls certificate authorities file")
+	cmd.Flags().StringVar(&dstCfg.CAsFile, "dst-cas-file", "", "destination client tls certificate authorities file")
 
 	var srcName string
 	var srcCfg SourceConfig
 	cmd.Flags().StringVar(&srcName, "src-name", "", "source name")
 	cmd.Flags().StringVar(&srcCfg.Route, "src-route", "", "source route")
-	cmd.Flags().StringVar(&srcCfg.TCP.Addr, "src-tcp-addr", "", "source tcp address")
-	cmd.Flags().StringVar(&srcCfg.TLS.Addr, "src-tls-addr", "", "source tls address")
-	cmd.Flags().StringVar(&srcCfg.TLS.CertFile, "src-tls-cert-file", "", "source tls cert file")
-	cmd.Flags().StringVar(&srcCfg.TLS.KeyFile, "src-tls-key-file", "", "source tls key file")
-	cmd.Flags().StringVar(&srcCfg.HTTP.Addr, "src-http-addr", "", "source http address")
+	cmd.Flags().StringVar(&srcCfg.URL, "src-url", "", "source url (scheme describes server type)")
+	cmd.Flags().StringVar(&srcCfg.CertFile, "src-cert-file", "", "source server tls cert file")
+	cmd.Flags().StringVar(&srcCfg.KeyFile, "src-key-file", "", "source server tls key file")
 
 	cmd.RunE = wrapErr("run connet client", func(cmd *cobra.Command, _ []string) error {
 		cfg, err := loadConfigs(*filenames)
@@ -313,7 +279,7 @@ func clientRun(ctx context.Context, cfg ClientConfig, logger *slog.Logger) error
 				}
 				return connet.NewHTTPFileDestination(dst, path)
 			default:
-				panic(fmt.Sprintf("unexpected scheme: %s", targetURL.Scheme))
+				panic(fmt.Sprintf("unexpected destination scheme: %s", targetURL.Scheme))
 			}
 		}
 	}
@@ -337,34 +303,70 @@ func clientRun(ctx context.Context, cfg ClientConfig, logger *slog.Logger) error
 			WithRoute(route).
 			WithRelayEncryptions(relayEncryptions...)
 
-		switch {
-		case fc.TLS.Addr != "" && fc.TCP.Addr != "": // TODO fixup
-			return fmt.Errorf("only one of 'tls.addr' or 'tcp.addr' needs to be set for source '%s'", name)
-		case fc.TLS.Addr == "" && fc.TCP.Addr == "" && fc.HTTP.Addr == "":
-			return fmt.Errorf("one of 'tls.addr', 'tcp.addr', 'http.addr' needs to be set for source '%s'", name)
-		case fc.TLS.Addr != "" && fc.TLS.CertFile == "":
-			return fmt.Errorf("'tls.cert-file' is missing for source '%s'", name)
-		case fc.TLS.Addr != "" && fc.TLS.KeyFile == "":
-			return fmt.Errorf("'tls.key-file' is missing for source '%s'", name)
+		targetURL, err := url.Parse(fc.URL)
+		if err != nil {
+			return fmt.Errorf("[source %s] parse url: %w", name, err)
 		}
 
-		var certs []tls.Certificate
-		if fc.TLS.Addr != "" {
-			cert, err := tls.LoadX509KeyPair(fc.TLS.CertFile, fc.TLS.KeyFile)
-			if err != nil {
-				return fmt.Errorf("load server cert for source '%s': %w", name, err)
+		if !slices.Contains([]string{"tcp", "tls", "http", "https"}, targetURL.Scheme) {
+			return fmt.Errorf("[source %s] unsupported scheme '%s'", name, targetURL.Scheme)
+		}
+
+		if targetURL.Scheme == "tcp" || targetURL.Scheme == "tls" {
+			if targetURL.Port() == "" {
+				return fmt.Errorf("[source %s] missing port for tcp/tls", name)
 			}
-			certs = append(certs, cert)
+			if targetURL.Path != "" {
+				return fmt.Errorf("[source %s] url path not supported for tcp/tls", name)
+			}
+		}
+
+		var srcCerts []tls.Certificate
+		var srcClientCAs *x509.CertPool
+		var srcClientAuth tls.ClientAuthType
+		if targetURL.Scheme == "tls" || targetURL.Scheme == "https" {
+			cert, err := tls.LoadX509KeyPair(fc.CertFile, fc.KeyFile)
+			if err != nil {
+				return fmt.Errorf("[source %s] load server cert: %w", name, err)
+			}
+			srcCerts = append(srcCerts, cert)
+
+			if fc.CAsFile != "" {
+				casData, err := os.ReadFile(fc.CAsFile)
+				if err != nil {
+					return fmt.Errorf("[source %s] read CAs file: %w", name, err)
+				}
+
+				cas := x509.NewCertPool()
+				if !cas.AppendCertsFromPEM(casData) {
+					return fmt.Errorf("[source %s] missing CA certificate in %s", name, fc.CAsFile)
+				}
+				srcClientCAs = cas
+				srcClientAuth = tls.RequireAndVerifyClientCert
+			}
 		}
 
 		sourceHandlers[name] = func(src connet.Source) runnable {
-			switch {
-			case fc.TLS.Addr != "":
-				return connet.NewTLSSource(src, fc.TLS.Addr, &tls.Config{Certificates: certs}, logger)
-			case fc.HTTP.Addr != "":
-				return &connet.HTTPSource{Source: src, Addr: fc.HTTP.Addr}
+			switch targetURL.Scheme {
+			case "tcp":
+				return connet.NewTCPSource(src, targetURL.Host, logger)
+			case "tls":
+				return connet.NewTLSSource(src, targetURL.Host, &tls.Config{
+					Certificates: srcCerts,
+					ClientCAs:    srcClientCAs,
+					ClientAuth:   srcClientAuth,
+				}, logger)
+			case "http":
+				return connet.NewHTTPSource(src, targetURL.Host, nil)
+			case "https":
+				return connet.NewHTTPSource(src, targetURL.Host, &tls.Config{
+					Certificates: srcCerts,
+					ClientCAs:    srcClientCAs,
+					ClientAuth:   srcClientAuth,
+				})
+			default:
+				panic(fmt.Sprintf("unexpected source scheme: %s", targetURL.Scheme))
 			}
-			return connet.NewTCPSource(src, fc.TCP.Addr, logger)
 		}
 	}
 
@@ -490,14 +492,11 @@ func mergeSourceConfig(c, o SourceConfig) SourceConfig {
 	n := SourceConfig{
 		Route:            override(c.Route, o.Route),
 		RelayEncryptions: overrides(c.RelayEncryptions, o.RelayEncryptions),
-	}
 
-	if o.TCP.Addr != "" || o.TLS.Addr != "" || o.HTTP.Addr != "" {
-		n.TCP.Addr = o.TCP.Addr
-		n.TLS.Addr = o.TLS.Addr
-		n.TLS.CertFile = o.TLS.CertFile // TODO override?
-		n.TLS.KeyFile = o.TLS.KeyFile
-		n.HTTP.Addr = o.HTTP.Addr
+		URL:      override(c.URL, o.URL),
+		CAsFile:  override(c.CAsFile, o.CAsFile),
+		CertFile: override(c.CertFile, o.CertFile),
+		KeyFile:  override(c.KeyFile, o.KeyFile),
 	}
 
 	return n
