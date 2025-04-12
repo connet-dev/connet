@@ -316,7 +316,7 @@ func clientRun(ctx context.Context, cfg ClientConfig, logger *slog.Logger) error
 	if statusAddr != nil {
 		g.Go(func() error {
 			logger.Debug("running status server", "addr", statusAddr)
-			return statusc.Run(ctx, statusAddr.String(), cl.Status)
+			return statusc.Run(ctx, statusAddr, cl.Status)
 		})
 	}
 

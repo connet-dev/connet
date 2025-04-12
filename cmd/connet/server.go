@@ -7,9 +7,7 @@ import (
 	"net"
 
 	"github.com/connet-dev/connet"
-	"github.com/connet-dev/connet/statusc"
 	"github.com/spf13/cobra"
-	"golang.org/x/sync/errgroup"
 )
 
 type ServerConfig struct {
@@ -129,19 +127,7 @@ func serverRun(ctx context.Context, cfg ServerConfig, logger *slog.Logger) error
 	if err != nil {
 		return fmt.Errorf("create server: %w", err)
 	}
-
-	g, ctx := errgroup.WithContext(ctx)
-
-	g.Go(func() error { return srv.Run(ctx) })
-
-	if statusAddr != nil {
-		g.Go(func() error {
-			logger.Debug("running status server", "addr", statusAddr)
-			return statusc.Run(ctx, statusAddr.String(), srv.Status)
-		})
-	}
-
-	return g.Wait()
+	return runWithStatus(ctx, srv, statusAddr, logger)
 }
 
 func (c *ServerConfig) merge(o ServerConfig) {

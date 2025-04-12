@@ -6,13 +6,16 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"net"
 	"os"
 	"os/signal"
 	"strings"
 	"syscall"
 
+	"github.com/connet-dev/connet/statusc"
 	"github.com/pelletier/go-toml/v2"
 	"github.com/spf13/cobra"
+	"golang.org/x/sync/errgroup"
 )
 
 type Config struct {
@@ -201,4 +204,23 @@ func overrides(s, o []string) []string {
 		return o
 	}
 	return s
+}
+
+type withStatus[T any] interface {
+	Run(context.Context) error
+	Status(context.Context) (T, error)
+}
+
+func runWithStatus[T any](ctx context.Context, srv withStatus[T], statusAddr *net.TCPAddr, logger *slog.Logger) error {
+	if statusAddr == nil {
+		return srv.Run(ctx)
+	}
+
+	g, ctx := errgroup.WithContext(ctx)
+	g.Go(func() error { return srv.Run(ctx) })
+	g.Go(func() error {
+		logger.Debug("running status server", "addr", statusAddr)
+		return statusc.Run(ctx, statusAddr, srv.Status)
+	})
+	return g.Wait()
 }

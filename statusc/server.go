@@ -4,13 +4,13 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"net"
 	"net/http"
 )
 
-// TODO pass the net.Addr in
-func Run[T any](ctx context.Context, addr string, f func(ctx context.Context) (T, error)) error {
+func Run[T any](ctx context.Context, addr *net.TCPAddr, f func(ctx context.Context) (T, error)) error {
 	srv := &http.Server{
-		Addr: addr,
+		Addr: addr.String(),
 		Handler: http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			stat, err := f(r.Context())
 			if err == nil {

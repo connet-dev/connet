@@ -127,12 +127,13 @@ func relayRun(ctx context.Context, cfg RelayConfig, logger *slog.Logger) error {
 	}
 	relayCfg.ControlHost = controlHost
 
+	var statusAddr *net.TCPAddr
 	if cfg.StatusAddr != "" {
-		statusAddr, err := net.ResolveTCPAddr("tcp", cfg.StatusAddr)
+		addr, err := net.ResolveTCPAddr("tcp", cfg.StatusAddr)
 		if err != nil {
 			return fmt.Errorf("resolve status address: %w", err)
 		}
-		relayCfg.StatusAddr = statusAddr
+		statusAddr = addr
 	}
 
 	if cfg.StoreDir == "" {
@@ -149,7 +150,7 @@ func relayRun(ctx context.Context, cfg RelayConfig, logger *slog.Logger) error {
 	if err != nil {
 		return fmt.Errorf("create relay server: %w", err)
 	}
-	return srv.Run(ctx)
+	return runWithStatus(ctx, srv, statusAddr, logger)
 }
 
 func (c *RelayConfig) merge(o RelayConfig) {

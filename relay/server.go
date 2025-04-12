@@ -29,8 +29,7 @@ type Config struct {
 	ControlToken string
 	ControlCAs   *x509.CertPool
 
-	StatusAddr *net.TCPAddr
-	Logger     *slog.Logger
+	Logger *slog.Logger
 }
 
 func NewServer(cfg Config) (*Server, error) {
@@ -66,8 +65,7 @@ func NewServer(cfg Config) (*Server, error) {
 		control: control,
 		clients: clients,
 
-		statusAddr: cfg.StatusAddr,
-		logger:     cfg.Logger.With("relay", cfg.Hostport),
+		logger: cfg.Logger.With("relay", cfg.Hostport),
 	}, nil
 }
 
@@ -78,8 +76,7 @@ type Server struct {
 	control *controlClient
 	clients *clientsServer
 
-	statusAddr *net.TCPAddr
-	logger     *slog.Logger
+	logger *slog.Logger
 }
 
 func (s *Server) Run(ctx context.Context) error {
@@ -98,18 +95,8 @@ func (s *Server) Run(ctx context.Context) error {
 
 	g.Go(func() error { return s.control.run(ctx, transport) })
 	g.Go(func() error { return s.clients.run(ctx, transport) })
-	g.Go(func() error { return s.runStatus(ctx) })
 
 	return g.Wait()
-}
-
-func (s *Server) runStatus(ctx context.Context) error {
-	if s.statusAddr == nil {
-		return nil
-	}
-
-	s.logger.Debug("running status server", "addr", s.statusAddr)
-	return statusc.Run(ctx, s.statusAddr.String(), s.Status)
 }
 
 func (s *Server) Status(ctx context.Context) (Status, error) {

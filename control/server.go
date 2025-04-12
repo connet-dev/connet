@@ -9,7 +9,6 @@ import (
 
 	"github.com/connet-dev/connet/model"
 	"github.com/connet-dev/connet/restr"
-	"github.com/connet-dev/connet/statusc"
 	"github.com/segmentio/ksuid"
 	"golang.org/x/sync/errgroup"
 )
@@ -27,8 +26,7 @@ type Config struct {
 
 	Stores Stores
 
-	StatusAddr *net.TCPAddr
-	Logger     *slog.Logger
+	Logger *slog.Logger
 }
 
 func NewServer(cfg Config) (*Server, error) {
@@ -51,8 +49,7 @@ func NewServer(cfg Config) (*Server, error) {
 		clients: clients,
 		relays:  relays,
 
-		statusAddr: cfg.StatusAddr,
-		logger:     cfg.Logger.With("control", cfg.ClientsAddr),
+		logger: cfg.Logger.With("control", cfg.ClientsAddr),
 	}, nil
 }
 
@@ -60,8 +57,7 @@ type Server struct {
 	clients *clientServer
 	relays  *relayServer
 
-	statusAddr *net.TCPAddr
-	logger     *slog.Logger
+	logger *slog.Logger
 }
 
 func (s *Server) Run(ctx context.Context) error {
@@ -69,18 +65,8 @@ func (s *Server) Run(ctx context.Context) error {
 
 	g.Go(func() error { return s.relays.run(ctx) })
 	g.Go(func() error { return s.clients.run(ctx) })
-	g.Go(func() error { return s.runStatus(ctx) })
 
 	return g.Wait()
-}
-
-func (s *Server) runStatus(ctx context.Context) error {
-	if s.statusAddr == nil {
-		return nil
-	}
-
-	s.logger.Debug("running status server", "addr", s.statusAddr)
-	return statusc.Run(ctx, s.statusAddr.String(), s.Status)
 }
 
 func (s *Server) Status(ctx context.Context) (Status, error) {

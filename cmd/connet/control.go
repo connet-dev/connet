@@ -166,12 +166,13 @@ func controlRun(ctx context.Context, cfg ControlConfig, logger *slog.Logger) err
 		return err
 	}
 
+	var statusAddr *net.TCPAddr
 	if cfg.StatusAddr != "" {
-		statusAddr, err := net.ResolveTCPAddr("tcp", cfg.StatusAddr)
+		addr, err := net.ResolveTCPAddr("tcp", cfg.StatusAddr)
 		if err != nil {
 			return fmt.Errorf("resolve status address: %w", err)
 		}
-		controlCfg.StatusAddr = statusAddr
+		statusAddr = addr
 	}
 
 	if cfg.StoreDir == "" {
@@ -188,7 +189,7 @@ func controlRun(ctx context.Context, cfg ControlConfig, logger *slog.Logger) err
 	if err != nil {
 		return fmt.Errorf("create control server: %w", err)
 	}
-	return srv.Run(ctx)
+	return runWithStatus(ctx, srv, statusAddr, logger)
 }
 
 func parseClientAuth(tokens []string, restrs []TokenRestriction) (control.ClientAuthenticator, error) {
