@@ -7,6 +7,8 @@ import (
 	"log/slog"
 	"net"
 	"net/http"
+	"net/http/httputil"
+	"net/url"
 
 	"github.com/connet-dev/connet/netc"
 )
@@ -129,4 +131,16 @@ func (d *HTTPDestination) Run(ctx context.Context) error {
 	}()
 
 	return srv.Serve(d.dst)
+}
+
+func NewHTTPProxyDestination(dst Destination, dstUrl *url.URL, cfg *tls.Config) *HTTPDestination {
+	return NewHTTPDestination(dst, &httputil.ReverseProxy{
+		Rewrite: func(pr *httputil.ProxyRequest) {
+			pr.SetURL(dstUrl)
+			pr.SetXForwarded()
+		},
+		Transport: &http.Transport{
+			TLSClientConfig: cfg,
+		},
+	})
 }

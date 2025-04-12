@@ -5,7 +5,7 @@ token-file = "examples/client-token.secret"
 server-cas = ".direnv/minica.pem"
 
 [client.destinations.sws]
-http.static-server-root = "."
+url = "file:."
 
 [client.sources.sws]
 tcp.addr = ":9999"

@@ -3,9 +3,12 @@ package connet
 import (
 	"context"
 	"crypto/tls"
+	"errors"
 	"fmt"
 	"log/slog"
 	"net"
+	"net/http"
+	"net/http/httputil"
 
 	"github.com/connet-dev/connet/model"
 	"github.com/connet-dev/connet/netc"
@@ -106,4 +109,50 @@ func (s *TCPSource) Run(ctx context.Context) error {
 			s.logger.Debug("source disconnected", "err", err)
 		},
 	}).Run(ctx)
+}
+
+type HTTPSource struct {
+	Source Source
+	Addr   string
+}
+
+func (s *HTTPSource) Run(ctx context.Context) error {
+	// target, err := url.Parse(fmt.Sprintf("http://%s/certc", s.Source.Config().Forward))
+	// if err != nil {
+	// 	return err
+	// }
+
+	srv := &http.Server{
+		Addr: s.Addr,
+		Handler: &httputil.ReverseProxy{
+			// Rewrite: func(pr *httputil.ProxyRequest) {
+			// pr.SetURL(target)
+			// },
+			Director: func(r *http.Request) {
+				r.URL.Scheme = "http"
+				r.URL.Host = s.Source.Config().Forward.String()
+			},
+			Transport: &http.Transport{
+				DialContext: s.Source.DialContext,
+			},
+			ErrorHandler: func(w http.ResponseWriter, r *http.Request, err error) {
+				w.WriteHeader(http.StatusBadGateway)
+				switch {
+				case errors.Is(err, ErrNoActiveDestinations):
+					fmt.Fprintf(w, "no active destinations found for '%s'", s.Source.Config().Forward)
+				case errors.Is(err, ErrNoDialedDestinations):
+					fmt.Fprintf(w, "cannot dial active destinations for '%s'", s.Source.Config().Forward)
+				default:
+					fmt.Fprintf(w, "ohno for '%s': %v", s.Source.Config().Forward, err)
+				}
+			},
+		},
+	}
+
+	go func() {
+		<-ctx.Done()
+		srv.Close()
+	}()
+
+	return srv.ListenAndServe()
 }

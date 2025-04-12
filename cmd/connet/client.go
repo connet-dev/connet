@@ -7,7 +7,9 @@ import (
 	"fmt"
 	"log/slog"
 	"net"
+	"net/url"
 	"os"
+	"slices"
 
 	"github.com/connet-dev/connet"
 	"github.com/connet-dev/connet/model"
@@ -40,36 +42,52 @@ type DestinationConfig struct {
 	RelayEncryptions  []string `toml:"relay-encryptions"`
 	ProxyProtoVersion string   `toml:"proxy-proto-version"`
 
-	TCP  TCPConfig             `toml:"tcp"`
-	TLS  DestinationTLSConfig  `toml:"tls"`
-	HTTP DestinationHTTPConfig `toml:"http"`
-}
-
-type DestinationTLSConfig struct {
-	TCPConfig
-	CAsFile string `toml:"cas-file"`
-}
-
-type DestinationHTTPConfig struct {
-	StaticServerRoot string `toml:"static-server-root"`
+	URL      string `toml:"url"`
+	CAsFile  string `toml:"cas-file"`  // if url is tls or https and cert is not public, literal "ignore-verify" to skip
+	CertFile string `toml:"cert-file"` // mutual TLS client cert
+	KeyFile  string `toml:"key-file"`  // mutual TLS client key
 }
 
 type SourceConfig struct {
 	Route            string   `toml:"route"`
 	RelayEncryptions []string `toml:"relay-encryptions"`
 
-	TCP TCPConfig       `toml:"tcp"`
-	TLS SourceTLSConfig `toml:"tls"`
+	TCP   SourceTCPConfig   `toml:"tcp"`
+	TLS   SourceTLSConfig   `toml:"tls"`
+	HTTP  SourceHTTPConfig  `toml:"http"`
+	HTTPS SourceHTTPSConfig `toml:"https"`
+}
+
+type SourceTCPConfig struct {
+	TCPConfig
 }
 
 type SourceTLSConfig struct {
 	TCPConfig
-	CertFile string `toml:"cert-file"`
-	KeyFile  string `toml:"key-file"`
+	TLSServerConfig
+}
+
+type SourceHTTPConfig struct {
+	TCPConfig
+	URL string `toml:"url"`
+}
+
+type SourceHTTPSConfig struct {
+	SourceHTTPConfig
+	TLSServerConfig
 }
 
 type TCPConfig struct {
 	Addr string `toml:"addr"`
+}
+
+type TLSClientConfig struct {
+	CAsFile string `toml:"cas-file"`
+}
+
+type TLSServerConfig struct {
+	CertFile string `toml:"cert-file"`
+	KeyFile  string `toml:"key-file"`
 }
 
 func clientCmd() *cobra.Command {
@@ -99,10 +117,8 @@ func clientCmd() *cobra.Command {
 	var dstCfg DestinationConfig
 	cmd.Flags().StringVar(&dstName, "dst-name", "", "destination name")
 	cmd.Flags().StringVar(&dstCfg.Route, "dst-route", "", "destination route")
-	cmd.Flags().StringVar(&dstCfg.TCP.Addr, "dst-tcp-addr", "", "destination tcp address")
-	cmd.Flags().StringVar(&dstCfg.TLS.Addr, "dst-tls-addr", "", "destination tls address")
-	cmd.Flags().StringVar(&dstCfg.TLS.CAsFile, "dst-tls-cas-file", "", "destination tls certificate authorities file")
-	cmd.Flags().StringVar(&dstCfg.HTTP.StaticServerRoot, "dst-http-static-server-root", "", "destination http static server root")
+	cmd.Flags().StringVar(&dstCfg.URL, "dst-url", "", "destination url (scheme describes the destination)")
+	cmd.Flags().StringVar(&dstCfg.CAsFile, "dst-cas-file", "", "destination tls certificate authorities file")
 
 	var srcName string
 	var srcCfg SourceConfig
@@ -112,6 +128,7 @@ func clientCmd() *cobra.Command {
 	cmd.Flags().StringVar(&srcCfg.TLS.Addr, "src-tls-addr", "", "source tls address")
 	cmd.Flags().StringVar(&srcCfg.TLS.CertFile, "src-tls-cert-file", "", "source tls cert file")
 	cmd.Flags().StringVar(&srcCfg.TLS.KeyFile, "src-tls-key-file", "", "source tls key file")
+	cmd.Flags().StringVar(&srcCfg.HTTP.Addr, "src-http-addr", "", "source http address")
 
 	cmd.RunE = wrapErr("run connet client", func(cmd *cobra.Command, _ []string) error {
 		cfg, err := loadConfigs(*filenames)
@@ -206,17 +223,17 @@ func clientRun(ctx context.Context, cfg ClientConfig, logger *slog.Logger) error
 	for name, fc := range cfg.Destinations {
 		route, err := parseRouteOption(fc.Route)
 		if err != nil {
-			return fmt.Errorf("parse route option for destination '%s': %w", name, err)
+			return fmt.Errorf("[destination %s] parse route option: %w", name, err)
 		}
 		proxy, err := parseProxyVersion(fc.ProxyProtoVersion)
 		if err != nil {
-			return fmt.Errorf("parse proxy proto version for destination '%s': %w", name, err)
+			return fmt.Errorf("[destination %s] parse proxy proto version: %w", name, err)
 		}
 		relayEncryptions := defaultRelayEncryptions
 		if len(fc.RelayEncryptions) > 0 {
 			res, err := parseEncryptionSchemes(fc.RelayEncryptions)
 			if err != nil {
-				return fmt.Errorf("parse relay encryptions for destination '%s': %w", name, err)
+				return fmt.Errorf("[destination %s] parse relay encryptions: %w", name, err)
 			}
 			relayEncryptions = res
 		}
@@ -225,35 +242,71 @@ func clientRun(ctx context.Context, cfg ClientConfig, logger *slog.Logger) error
 			WithProxy(proxy).
 			WithRelayEncryptions(relayEncryptions...)
 
-		switch {
-		case fc.TCP.Addr != "" && fc.TLS.Addr != "" && fc.HTTP.StaticServerRoot != "":
-			return fmt.Errorf("only one of 'tcp.addr', 'tls.addr' or 'http.static-server-root' needs to be set for destination '%s'", name)
-		case fc.TCP.Addr == "" && fc.TLS.Addr == "" && fc.HTTP.StaticServerRoot == "":
-			return fmt.Errorf("one of 'tcp.addr', 'tls.addr' or 'http.static-server-root' needs to be set for destination '%s'", name)
+		targetURL, err := url.Parse(fc.URL)
+		if err != nil {
+			return fmt.Errorf("[destination %s] parse url: %w", name, err)
+		}
+
+		if !slices.Contains([]string{"tcp", "tls", "http", "https", "file"}, targetURL.Scheme) {
+			return fmt.Errorf("[destination %s] unsupported scheme '%s'", name, targetURL.Scheme)
+		}
+
+		if targetURL.Scheme == "tcp" || targetURL.Scheme == "tls" {
+			if targetURL.Port() == "" {
+				return fmt.Errorf("[destination %s] missing port for tcp/tls", name)
+			}
 		}
 
 		var destCAs *x509.CertPool
-		if fc.TLS.CAsFile != "" {
-			casData, err := os.ReadFile(fc.TLS.CAsFile)
-			if err != nil {
-				return fmt.Errorf("read server CAs: %w", err)
-			}
+		var destCerts []tls.Certificate
+		if targetURL.Scheme == "tls" || targetURL.Scheme == "https" {
+			// TODO support CAsFile = "ignore-verify"
+			if fc.CAsFile != "" {
+				casData, err := os.ReadFile(fc.CAsFile)
+				if err != nil {
+					return fmt.Errorf("[destination %s] read CAs file: %w", name, err)
+				}
 
-			cas := x509.NewCertPool()
-			if !cas.AppendCertsFromPEM(casData) {
-				return fmt.Errorf("missing server CA certificate in %s", fc.TLS.CAsFile)
+				cas := x509.NewCertPool()
+				if !cas.AppendCertsFromPEM(casData) {
+					return fmt.Errorf("[destination %s] missing CA certificate in %s", name, fc.CAsFile)
+				}
+				destCAs = cas
 			}
-			destCAs = cas
+			if fc.CertFile != "" {
+				cert, err := tls.LoadX509KeyPair(fc.CertFile, fc.KeyFile)
+				if err != nil {
+					return fmt.Errorf("[destination %s] load cert/key pair: %w", name, err)
+				}
+				destCerts = append(destCerts, cert)
+			}
 		}
 
 		destinationHandlers[name] = func(dst connet.Destination) runnable {
-			switch {
-			case fc.HTTP.StaticServerRoot != "":
-				return connet.NewHTTPFileDestination(dst, fc.HTTP.StaticServerRoot)
-			case fc.TLS.Addr != "":
-				return connet.NewTLSDestination(dst, fc.TLS.Addr, &tls.Config{RootCAs: destCAs}, logger)
+			switch targetURL.Scheme {
+			case "tcp":
+				return connet.NewTCPDestination(dst, targetURL.Host, logger)
+			case "tls":
+				return connet.NewTLSDestination(dst, targetURL.Host, &tls.Config{
+					RootCAs:      destCAs,
+					Certificates: destCerts,
+				}, logger)
+			case "http":
+				return connet.NewHTTPProxyDestination(dst, targetURL, nil)
+			case "https":
+				return connet.NewHTTPProxyDestination(dst, targetURL, &tls.Config{
+					RootCAs:      destCAs,
+					Certificates: destCerts,
+				})
+			case "file":
+				path := targetURL.Path
+				if path == "" {
+					path = targetURL.Opaque
+				}
+				return connet.NewHTTPFileDestination(dst, path)
+			default:
+				panic(fmt.Sprintf("unexpected scheme: %s", targetURL.Scheme))
 			}
-			return connet.NewTCPDestination(dst, fc.TCP.Addr, logger)
 		}
 	}
 
@@ -262,13 +315,13 @@ func clientRun(ctx context.Context, cfg ClientConfig, logger *slog.Logger) error
 	for name, fc := range cfg.Sources {
 		route, err := parseRouteOption(fc.Route)
 		if err != nil {
-			return fmt.Errorf("parse route option for source '%s': %w", name, err)
+			return fmt.Errorf("[source %s] parse route option: %w", name, err)
 		}
 		relayEncryptions := defaultRelayEncryptions
 		if len(fc.RelayEncryptions) > 0 {
 			res, err := parseEncryptionSchemes(fc.RelayEncryptions)
 			if err != nil {
-				return fmt.Errorf("parse relay encryptions for source '%s': %w", name, err)
+				return fmt.Errorf("[source %s] parse relay encryptions: %w", name, err)
 			}
 			relayEncryptions = res
 		}
@@ -277,10 +330,10 @@ func clientRun(ctx context.Context, cfg ClientConfig, logger *slog.Logger) error
 			WithRelayEncryptions(relayEncryptions...)
 
 		switch {
-		case fc.TLS.Addr != "" && fc.TCP.Addr != "":
+		case fc.TLS.Addr != "" && fc.TCP.Addr != "": // TODO fixup
 			return fmt.Errorf("only one of 'tls.addr' or 'tcp.addr' needs to be set for source '%s'", name)
-		case fc.TLS.Addr == "" && fc.TCP.Addr == "":
-			return fmt.Errorf("one of 'tls.addr' or 'tcp.addr' needs to be set for source '%s'", name)
+		case fc.TLS.Addr == "" && fc.TCP.Addr == "" && fc.HTTP.Addr == "":
+			return fmt.Errorf("one of 'tls.addr', 'tcp.addr', 'http.addr' needs to be set for source '%s'", name)
 		case fc.TLS.Addr != "" && fc.TLS.CertFile == "":
 			return fmt.Errorf("'tls.cert-file' is missing for source '%s'", name)
 		case fc.TLS.Addr != "" && fc.TLS.KeyFile == "":
@@ -297,8 +350,11 @@ func clientRun(ctx context.Context, cfg ClientConfig, logger *slog.Logger) error
 		}
 
 		sourceHandlers[name] = func(src connet.Source) runnable {
-			if fc.TLS.Addr != "" {
+			switch {
+			case fc.TLS.Addr != "":
 				return connet.NewTLSSource(src, fc.TLS.Addr, &tls.Config{Certificates: certs}, logger)
+			case fc.HTTP.Addr != "":
+				return &connet.HTTPSource{Source: src, Addr: fc.HTTP.Addr}
 			}
 			return connet.NewTCPSource(src, fc.TCP.Addr, logger)
 		}
@@ -410,20 +466,16 @@ func (c *ClientConfig) merge(o ClientConfig) {
 }
 
 func mergeDestinationConfig(c, o DestinationConfig) DestinationConfig {
-	n := DestinationConfig{
+	return DestinationConfig{
 		Route:             override(c.Route, o.Route),
 		RelayEncryptions:  overrides(c.RelayEncryptions, o.RelayEncryptions),
 		ProxyProtoVersion: override(c.ProxyProtoVersion, o.ProxyProtoVersion),
-	}
 
-	if o.TCP.Addr != "" || o.TLS.Addr != "" || o.HTTP.StaticServerRoot != "" {
-		n.TCP.Addr = o.TCP.Addr
-		n.TLS.Addr = o.TLS.Addr
-		n.TLS.CAsFile = o.TLS.CAsFile // TODO override?
-		n.HTTP.StaticServerRoot = o.HTTP.StaticServerRoot
+		URL:      override(c.URL, o.URL),
+		CAsFile:  override(c.CAsFile, o.CAsFile),
+		CertFile: override(c.CertFile, o.CertFile),
+		KeyFile:  override(c.KeyFile, o.KeyFile),
 	}
-
-	return n
 }
 
 func mergeSourceConfig(c, o SourceConfig) SourceConfig {
@@ -432,11 +484,12 @@ func mergeSourceConfig(c, o SourceConfig) SourceConfig {
 		RelayEncryptions: overrides(c.RelayEncryptions, o.RelayEncryptions),
 	}
 
-	if o.TCP.Addr != "" || o.TLS.Addr != "" {
+	if o.TCP.Addr != "" || o.TLS.Addr != "" || o.HTTP.Addr != "" {
 		n.TCP.Addr = o.TCP.Addr
 		n.TLS.Addr = o.TLS.Addr
 		n.TLS.CertFile = o.TLS.CertFile // TODO override?
 		n.TLS.KeyFile = o.TLS.KeyFile
+		n.HTTP.Addr = o.HTTP.Addr
 	}
 
 	return n
