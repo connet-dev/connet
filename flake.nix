@@ -75,7 +75,7 @@
                     server-addr = "192.168.1.2:19190";
                     server-cas = "/etc/server.cert";
                     destinations.files = {
-                      http.static-server-root = ".";
+                      url = "file:.";
                     };
                   };
                 };

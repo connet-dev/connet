@@ -99,7 +99,7 @@ server-addr = "SERVER_IP:19190"
 server-cas = "cert.pem"
 
 [client.destinations.serviceA]
-tcp.addr = ":3000"
+url = "tcp://:3000"
 ```
 
 ### Client S (aka the `source`)
@@ -144,14 +144,21 @@ relay-encryption = ["none"] # require encryption when using relay for all destin
 route = "any" # what kind of routes to use, `any` will use both `direct` and `relay`
 relay-encryption = ["tls", "dhxcp"] # require `tls` or `dhxcp` encryption when using relay for this destination
 proxy-proto-version = "" # proxy proto version to push origin information to the server, supports `v1` and `v2`
-tcp.addr = "localhost:3000" # where this destination connects to
-tls.addr = "localhost:443" # a destination is a tls server (like https), so connect via tls to it
-tls.cas-file = "/path/to/cas/file" # if server's certificate is not publicly trusted
-http.static-server-root = "." # when set, run a file server at current directory
+url = "tcp://localhost:3000" # url to which destination connects to, over tcp
+# other options for the url field:
+url = "tls://localhost:3000" # a tls destination to connect to
+url = "http://localhost:3000" # an http destination to connect to as a reverse proxy
+url = "https://localhost:3000" # an https destination to connect to as a reverse proxy
+url = "file:///absolute/path" # an absolute file path to serve over http
+url = "file:./relative/path" # a relativefile path to serve over http
+cas-file = "/path/to/cas/file" # if connecting via tls/https, certificate authorities if not publicly trusted
+                               # `ignore-verify` is a special value, to not verify self-signed certificates
+cert-file = "/path/to/cert/file" # when connecting via tls/https, client certificate to present (mutual tls)
+key-file = "/path/to/key/file" # when connecting via tls/https, client cert key to present (mutual tls)
 
 [client.destinations.serviceY]
 route = "direct" # force only direct communication between clients
-tcp.addr = "192.168.1.100:8000" # multiple destinations can be defined, they are matched by name at the server
+url = "tcp://192.168.1.100:8000"
 
 [client.sources.serviceX] # matches destinations.serviceX
 route = "relay" # the kind of route to use

@@ -255,6 +255,7 @@ func clientRun(ctx context.Context, cfg ClientConfig, logger *slog.Logger) error
 			if targetURL.Port() == "" {
 				return fmt.Errorf("[destination %s] missing port for tcp/tls", name)
 			}
+			// TODO check if path is set, error/warning
 		}
 
 		var destCAs *x509.CertPool
