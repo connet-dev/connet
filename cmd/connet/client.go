@@ -43,7 +43,7 @@ type DestinationConfig struct {
 	ProxyProtoVersion string   `toml:"proxy-proto-version"`
 
 	URL      string `toml:"url"`
-	CAsFile  string `toml:"cas-file"`  // if url is tls or https and cert is not public, literal "ignore-verify" to skip
+	CAsFile  string `toml:"cas-file"`  // if url is tls or https and cert is not public, literal "insecure-skip-verify" to skip
 	CertFile string `toml:"cert-file"` // mutual TLS client cert
 	KeyFile  string `toml:"key-file"`  // mutual TLS client key
 }
@@ -255,14 +255,18 @@ func clientRun(ctx context.Context, cfg ClientConfig, logger *slog.Logger) error
 			if targetURL.Port() == "" {
 				return fmt.Errorf("[destination %s] missing port for tcp/tls", name)
 			}
-			// TODO check if path is set, error/warning
+			if targetURL.Path != "" {
+				return fmt.Errorf("[destination %s] url path not supported for tcp/tls", name)
+			}
 		}
 
 		var destCAs *x509.CertPool
+		var destInsecureSkipVerify bool
 		var destCerts []tls.Certificate
 		if targetURL.Scheme == "tls" || targetURL.Scheme == "https" {
-			// TODO support CAsFile = "ignore-verify"
-			if fc.CAsFile != "" {
+			if fc.CAsFile == "insecure-skip-verify" {
+				destInsecureSkipVerify = true
+			} else if fc.CAsFile != "" {
 				casData, err := os.ReadFile(fc.CAsFile)
 				if err != nil {
 					return fmt.Errorf("[destination %s] read CAs file: %w", name, err)
@@ -274,6 +278,7 @@ func clientRun(ctx context.Context, cfg ClientConfig, logger *slog.Logger) error
 				}
 				destCAs = cas
 			}
+
 			if fc.CertFile != "" {
 				cert, err := tls.LoadX509KeyPair(fc.CertFile, fc.KeyFile)
 				if err != nil {
@@ -289,15 +294,17 @@ func clientRun(ctx context.Context, cfg ClientConfig, logger *slog.Logger) error
 				return connet.NewTCPDestination(dst, targetURL.Host, logger)
 			case "tls":
 				return connet.NewTLSDestination(dst, targetURL.Host, &tls.Config{
-					RootCAs:      destCAs,
-					Certificates: destCerts,
+					RootCAs:            destCAs,
+					Certificates:       destCerts,
+					InsecureSkipVerify: destInsecureSkipVerify,
 				}, logger)
 			case "http":
 				return connet.NewHTTPProxyDestination(dst, targetURL, nil)
 			case "https":
 				return connet.NewHTTPProxyDestination(dst, targetURL, &tls.Config{
-					RootCAs:      destCAs,
-					Certificates: destCerts,
+					RootCAs:            destCAs,
+					Certificates:       destCerts,
+					InsecureSkipVerify: destInsecureSkipVerify,
 				})
 			case "file":
 				path := targetURL.Path

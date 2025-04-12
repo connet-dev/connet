@@ -152,7 +152,7 @@ url = "https://localhost:3000" # an https destination to connect to as a reverse
 url = "file:///absolute/path" # an absolute file path to serve over http
 url = "file:./relative/path" # a relativefile path to serve over http
 cas-file = "/path/to/cas/file" # if connecting via tls/https, certificate authorities if not publicly trusted
-                               # `ignore-verify` is a special value, to not verify self-signed certificates
+                               # `insecure-skip-verify` is a special value, to not verify self-signed certificates
 cert-file = "/path/to/cert/file" # when connecting via tls/https, client certificate to present (mutual tls)
 key-file = "/path/to/key/file" # when connecting via tls/https, client cert key to present (mutual tls)
 
