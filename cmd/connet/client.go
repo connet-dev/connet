@@ -308,7 +308,7 @@ func clientRun(ctx context.Context, cfg ClientConfig, logger *slog.Logger) error
 			return fmt.Errorf("[source %s] parse url: %w", name, err)
 		}
 
-		if !slices.Contains([]string{"tcp", "tls", "http", "https"}, targetURL.Scheme) {
+		if !slices.Contains([]string{"tcp", "tls", "http", "https", "ws", "wss"}, targetURL.Scheme) {
 			return fmt.Errorf("[source %s] unsupported scheme '%s'", name, targetURL.Scheme)
 		}
 
@@ -324,7 +324,7 @@ func clientRun(ctx context.Context, cfg ClientConfig, logger *slog.Logger) error
 		var srcCerts []tls.Certificate
 		var srcClientCAs *x509.CertPool
 		var srcClientAuth tls.ClientAuthType
-		if targetURL.Scheme == "tls" || targetURL.Scheme == "https" {
+		if targetURL.Scheme == "tls" || targetURL.Scheme == "https" || targetURL.Scheme == "wss" {
 			cert, err := tls.LoadX509KeyPair(fc.CertFile, fc.KeyFile)
 			if err != nil {
 				return fmt.Errorf("[source %s] load server cert: %w", name, err)
@@ -360,6 +360,14 @@ func clientRun(ctx context.Context, cfg ClientConfig, logger *slog.Logger) error
 				return connet.NewHTTPSource(src, targetURL, nil)
 			case "https":
 				return connet.NewHTTPSource(src, targetURL, &tls.Config{
+					Certificates: srcCerts,
+					ClientCAs:    srcClientCAs,
+					ClientAuth:   srcClientAuth,
+				})
+			case "ws":
+				return connet.NewWSSource(src, targetURL, nil)
+			case "wss":
+				return connet.NewWSSource(src, targetURL, &tls.Config{
 					Certificates: srcCerts,
 					ClientCAs:    srcClientCAs,
 					ClientAuth:   srcClientAuth,

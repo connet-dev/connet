@@ -13,6 +13,8 @@ import (
 
 	"github.com/connet-dev/connet/model"
 	"github.com/connet-dev/connet/netc"
+	"github.com/gorilla/websocket"
+	"golang.org/x/sync/errgroup"
 )
 
 // SourceTCP creates a new source, and exposes it to a local TCP address to accept incoming traffic
@@ -181,6 +183,86 @@ func (s *HTTPSource) Run(ctx context.Context) error {
 				}
 			},
 		},
+	}
+
+	go func() {
+		<-ctx.Done()
+		srv.Close()
+	}()
+
+	if s.cfg != nil {
+		return srv.ListenAndServeTLS("", "")
+	}
+	return srv.ListenAndServe()
+}
+
+type WSSource struct {
+	src      Source
+	srcURL   *url.URL
+	cfg      *tls.Config
+	upgrader websocket.Upgrader
+}
+
+func NewWSSource(src Source, srcURL *url.URL, cfg *tls.Config) *WSSource {
+	return &WSSource{
+		src, srcURL, cfg, websocket.Upgrader{},
+	}
+}
+
+func (s *WSSource) handle(w http.ResponseWriter, r *http.Request) {
+	hconn, err := s.upgrader.Upgrade(w, r, nil)
+	if err != nil {
+		// TODO
+		return
+	}
+	defer hconn.Close()
+
+	sconn, err := s.src.DialContext(r.Context(), "", "")
+	if err != nil {
+		// TODO
+		return
+	}
+	defer sconn.Close()
+
+	g := &errgroup.Group{}
+
+	g.Go(func() error {
+		for {
+			_, data, err := hconn.ReadMessage()
+			if err != nil {
+				return err
+			}
+			if _, err := sconn.Write(data); err != nil {
+				return err
+			}
+		}
+	})
+
+	g.Go(func() error {
+		var buf = make([]byte, 1024)
+		for {
+			n, err := sconn.Read(buf)
+			if err != nil {
+				return err
+			}
+			if err := hconn.WriteMessage(websocket.BinaryMessage, buf[0:n]); err != nil {
+				return err
+			}
+		}
+	})
+
+	if err := g.Wait(); err != nil {
+		// TODO
+	}
+}
+
+func (s *WSSource) Run(ctx context.Context) error {
+	mux := http.NewServeMux()
+	mux.HandleFunc(s.srcURL.Path, s.handle)
+	srv := &http.Server{
+		Addr:      s.srcURL.Host,
+		TLSConfig: s.cfg,
+		Handler:   mux,
 	}
 
 	go func() {
