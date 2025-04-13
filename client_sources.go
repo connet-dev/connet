@@ -224,7 +224,7 @@ func (s *WSSource) handle(w http.ResponseWriter, r *http.Request) {
 	}
 	defer sconn.Close()
 
-	g := &errgroup.Group{}
+	var g errgroup.Group
 
 	g.Go(func() error {
 		for {
