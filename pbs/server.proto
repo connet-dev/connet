@@ -50,7 +50,7 @@ message Response {
 }
 
 message ClientPeer {
-  DirectRoute direct = 1; // TODO remove in 0.7.0
+  DirectRoute direct = 1; // TODO remove in 0.8.0
   repeated shared.HostPort relays = 2;
   repeated shared.AddrPort directs = 3;
   bytes server_certificate = 4;
@@ -59,7 +59,7 @@ message ClientPeer {
 
 message ServerPeer {
   string id = 1;
-  DirectRoute direct = 2; // TODO remove in 0.7.0
+  DirectRoute direct = 2; // TODO remove in 0.8.0
   repeated shared.HostPort relays = 3;
   repeated shared.AddrPort directs = 4;
   bytes server_certificate = 5;

@@ -242,17 +242,17 @@ func (c *Client) run(ctx context.Context, transport *quic.Transport, errCh chan 
 	}
 	close(errCh)
 
+	var boff netc.SpinBackoff
 	for {
 		if err := c.runSession(ctx, sess); err != nil {
-			switch {
-			case errors.Is(err, context.Canceled):
-				return err
-				// TODO other terminal errors
-			}
-			if perr := pb.GetError(err); perr != nil && perr.IsAuthenticationError() {
-				return err
-			}
 			c.logger.Error("session ended", "err", err)
+			if errors.Is(err, context.Canceled) {
+				return err
+			}
+		}
+
+		if err := boff.Wait(ctx); err != nil {
+			return err
 		}
 
 		if sess, err = c.reconnect(ctx, transport, sess.retoken); err != nil {
@@ -269,7 +269,6 @@ type session struct {
 
 func (c *Client) connect(ctx context.Context, transport *quic.Transport, retoken []byte) (*session, error) {
 	c.logger.Debug("dialing target", "addr", c.controlAddr)
-	// TODO dial timeout if server is not accessible?
 	conn, err := transport.Dial(quicc.RTTContext(ctx), c.controlAddr, &tls.Config{
 		ServerName: c.controlHost,
 		RootCAs:    c.controlCAs,

@@ -17,6 +17,7 @@ import (
 	"github.com/connet-dev/connet/certc"
 	"github.com/connet-dev/connet/logc"
 	"github.com/connet-dev/connet/model"
+	"github.com/connet-dev/connet/netc"
 	"github.com/connet-dev/connet/pb"
 	"github.com/connet-dev/connet/pbr"
 	"github.com/connet-dev/connet/quicc"
@@ -81,7 +82,7 @@ func newRelayServer(
 	}
 
 	serverIDConfig, err := config.GetOrInit(configServerID, func(_ ConfigKey) (ConfigValue, error) {
-		return ConfigValue{String: model.GenServerName("connet")}, nil
+		return ConfigValue{String: netc.GenServerName("connet")}, nil
 	})
 	if err != nil {
 		return nil, fmt.Errorf("relay server id: %w", err)
@@ -188,10 +189,8 @@ func (s *relayServer) listen(ctx context.Context, fwd model.Forward,
 	notifyFn func(map[ksuid.KSUID]relayCacheValue) error) error {
 
 	servers, offset := s.getForward(fwd)
-	if len(servers) > 0 {
-		if err := notifyFn(servers); err != nil {
-			return err
-		}
+	if err := notifyFn(servers); err != nil {
+		return err
 	}
 
 	for {

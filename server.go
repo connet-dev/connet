@@ -9,6 +9,7 @@ import (
 
 	"github.com/connet-dev/connet/control"
 	"github.com/connet-dev/connet/model"
+	"github.com/connet-dev/connet/netc"
 	"github.com/connet-dev/connet/relay"
 	"github.com/connet-dev/connet/selfhosted"
 	"golang.org/x/sync/errgroup"
@@ -32,7 +33,7 @@ func NewServer(opts ...ServerOption) (*Server, error) {
 		return nil, fmt.Errorf("resolve relays address: %w", err)
 	}
 	relayAuth := selfhosted.RelayAuthentication{
-		Token: model.GenServerName("relay"),
+		Token: netc.GenServerName("relay"),
 	}
 
 	control, err := control.NewServer(control.Config{

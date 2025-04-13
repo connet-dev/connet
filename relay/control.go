@@ -173,14 +173,17 @@ func (s *controlClient) run(ctx context.Context, transport *quic.Transport) erro
 		return err
 	}
 
+	var boff netc.SpinBackoff
 	for {
 		if err := s.runConnection(ctx, conn); err != nil {
-			switch {
-			case errors.Is(err, context.Canceled):
-				return err
-				// TODO other terminal errors
-			}
 			s.logger.Error("session ended", "err", err)
+			if errors.Is(err, context.Canceled) {
+				return err
+			}
+		}
+
+		if err := boff.Wait(ctx); err != nil {
+			return err
 		}
 
 		s.logger.Info("reconnecting to control server", "addr", s.controlAddr)
@@ -359,7 +362,7 @@ func (s *controlClient) runClientsLog(ctx context.Context) error {
 
 			switch {
 			case errors.Is(err, klevdb.ErrNotFound):
-				serverName := model.GenServerName("connet-relay")
+				serverName := netc.GenServerName("connet-relay")
 				serverRoot, err := s.root.NewServer(certc.CertOpts{
 					Domains: []string{serverName},
 				})

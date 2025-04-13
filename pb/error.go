@@ -18,10 +18,6 @@ func (e *Error) Error() string {
 	return fmt.Sprintf("%s (%d)", e.Message, e.Code)
 }
 
-func (e *Error) IsAuthenticationError() bool {
-	return e.Code == Error_ForwardNotAllowed || e.Code == Error_RoleNotAllowed
-}
-
 func GetError(err error) *Error {
 	var e *Error
 	if errors.As(err, &e) {

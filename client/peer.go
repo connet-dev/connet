@@ -16,6 +16,7 @@ import (
 
 	"github.com/connet-dev/connet/certc"
 	"github.com/connet-dev/connet/model"
+	"github.com/connet-dev/connet/netc"
 	"github.com/connet-dev/connet/notify"
 	"github.com/connet-dev/connet/pb"
 	"github.com/connet-dev/connet/pbc"
@@ -66,7 +67,7 @@ func (s peerStyle) String() string {
 
 func newPeer(direct *DirectServer, root *certc.Cert, logger *slog.Logger) (*peer, error) {
 	serverCert, err := root.NewServer(certc.CertOpts{
-		Domains: []string{model.GenServerName("connet-direct")},
+		Domains: []string{netc.GenServerName("connet-direct")},
 	})
 	if err != nil {
 		return nil, err

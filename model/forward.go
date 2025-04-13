@@ -1,12 +1,7 @@
 package model
 
 import (
-	"crypto/rand"
-	"fmt"
-	"io"
-
 	"github.com/connet-dev/connet/pb"
-	"github.com/mr-tron/base58"
 )
 
 type Forward struct{ string }
@@ -33,15 +28,6 @@ func PBFromForwards(fwds []Forward) []*pb.Forward {
 		pbs[i] = fwd.PB()
 	}
 	return pbs
-}
-
-// TODO move this out
-func GenServerName(prefix string) string {
-	data := make([]byte, 32)
-	if _, err := io.ReadFull(rand.Reader, data); err != nil {
-		panic(err)
-	}
-	return fmt.Sprintf("%s-%s", prefix, base58.Encode(data))
 }
 
 func (f Forward) MarshalText() ([]byte, error) {
