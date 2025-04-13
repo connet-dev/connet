@@ -5,7 +5,6 @@ import (
 	"context"
 	"crypto/tls"
 	"crypto/x509"
-	"errors"
 	"fmt"
 	"io"
 	"log/slog"
@@ -18,7 +17,6 @@ import (
 	"os"
 	"slices"
 	"strings"
-	"syscall"
 	"testing"
 	"time"
 
@@ -418,14 +416,14 @@ func TestE2E(t *testing.T) {
 		require.NoError(t, err)
 
 		switch {
-		case strings.HasSuffix(name, "-proxy-proto"):
+		case tc.isSuccessProxyProto():
 			dstSrv := NewTCPDestination(dst, ppAddr, logger)
 			g.Go(func() error { return dstSrv.Run(ctx) })
-		case strings.HasSuffix(name, "-tls"):
+		case tc.isSuccessTLS():
 			clientTransport := htsServer.Client().Transport.(*http.Transport)
 			dstSrv := NewTLSDestination(dst, htsAddr, clientTransport.TLSClientConfig, logger)
 			g.Go(func() error { return dstSrv.Run(ctx) })
-		case strings.HasSuffix(name, "-ws"):
+		case tc.isSuccessWS():
 			dstSrv := NewTCPDestination(dst, echoAddr, logger)
 			g.Go(func() error { return dstSrv.Run(ctx) })
 		default:
@@ -437,13 +435,18 @@ func TestE2E(t *testing.T) {
 		require.NoError(t, err)
 
 		switch {
-		case strings.HasSuffix(name, "-tls"):
+		case tc.isSuccessTLS():
 			srcSrv := NewTLSSource(src, fmt.Sprintf(":%d", tc.sport), htsServer.TLS, logger)
 			g.Go(func() error { return srcSrv.Run(ctx) })
-		case strings.HasSuffix(name, "-ws"):
+		case tc.isSuccessWS():
 			srcURL, err := url.Parse(fmt.Sprintf("ws://:%d", tc.sport))
 			require.NoError(t, err)
 			srcSrv := NewWSSource(src, srcURL, nil, logger)
+			g.Go(func() error { return srcSrv.Run(ctx) })
+		case tc.isFail():
+			srcURL, err := url.Parse(fmt.Sprintf("http://:%d", tc.sport))
+			require.NoError(t, err)
+			srcSrv := NewHTTPSource(src, srcURL, nil)
 			g.Go(func() error { return srcSrv.Run(ctx) })
 		default:
 			srcSrv := NewTCPSource(src, fmt.Sprintf(":%d", tc.sport), logger)
@@ -565,14 +568,18 @@ func TestE2E(t *testing.T) {
 					rnd := rand.Uint64()
 					url := fmt.Sprintf("http://127.0.0.1:%d?rand=%d", tc.sport, rnd)
 
-					// TODO better use HTTP source to report errors
-					_, err := httpcl.Get(url)
-					require.Error(t, err)
-					switch {
-					case errors.Is(err, syscall.ECONNRESET):
-					case errors.Is(err, io.EOF):
-					default:
-						require.ErrorContains(t, err, "connection reset by peer")
+					resp, err := httpcl.Get(url)
+					require.NoError(t, err)
+					require.Equal(t, http.StatusBadGateway, resp.StatusCode)
+
+					defer resp.Body.Close()
+					respData, err := io.ReadAll(resp.Body)
+					require.NoError(t, err)
+
+					if strings.Contains(name, "tls") {
+						require.Equal(t, fmt.Sprintf("[source %s] cannot dial active destinations", name), string(respData))
+					} else {
+						require.Equal(t, fmt.Sprintf("[source %s] no active destinations found", name), string(respData))
 					}
 				})
 			}
