@@ -318,7 +318,7 @@ func (s *controlClient) runClientsStream(ctx context.Context, conn quic.Connecti
 				key := ClientKey{
 					Forward: model.ForwardFromPB(change.Forward),
 					Role:    model.RoleFromPB(change.Role),
-					Key:     certc.NewKeyString(change.CertificateKey),
+					Key:     model.NewKeyString(change.CertificateKey),
 				}
 
 				switch change.Change {
@@ -586,7 +586,7 @@ func (s *relayServer) authenticate(certs []*x509.Certificate) *clientAuth {
 	defer s.mu.RUnlock()
 
 	cert := certs[0]
-	key := certc.NewKey(cert)
+	key := model.NewKey(cert)
 
 	if dst, ok := s.clients[serverClientKey{model.Destination, key}]; ok && dst.Equal(cert) {
 		return &clientAuth{s.fwd, model.Destination, key}

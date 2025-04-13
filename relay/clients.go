@@ -14,7 +14,6 @@ import (
 	"sync"
 	"time"
 
-	"github.com/connet-dev/connet/certc"
 	"github.com/connet-dev/connet/model"
 	"github.com/connet-dev/connet/netc"
 	"github.com/connet-dev/connet/pb"
@@ -27,7 +26,7 @@ import (
 type clientAuth struct {
 	fwd  model.Forward
 	role model.Role
-	key  certc.Key
+	key  model.Key
 }
 
 type tlsAuthenticator func(chi *tls.ClientHelloInfo, base *tls.Config) (*tls.Config, error)
@@ -64,8 +63,8 @@ type clientsServer struct {
 
 type forwardClients struct {
 	fwd          model.Forward
-	destinations map[certc.Key]*clientConn
-	sources      map[certc.Key]*clientConn
+	destinations map[model.Key]*clientConn
+	sources      map[model.Key]*clientConn
 	mu           sync.RWMutex
 }
 
@@ -127,8 +126,8 @@ func (s *clientsServer) getByForward(fwd model.Forward) *forwardClients {
 
 	dst = &forwardClients{
 		fwd:          fwd,
-		destinations: map[certc.Key]*clientConn{},
-		sources:      map[certc.Key]*clientConn{},
+		destinations: map[model.Key]*clientConn{},
+		sources:      map[model.Key]*clientConn{},
 	}
 	s.forwards[fwd] = dst
 	return dst

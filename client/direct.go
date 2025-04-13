@@ -9,7 +9,7 @@ import (
 	"sync"
 	"sync/atomic"
 
-	"github.com/connet-dev/connet/certc"
+	"github.com/connet-dev/connet/model"
 	"github.com/connet-dev/connet/pb"
 	"github.com/connet-dev/connet/quicc"
 	"github.com/quic-go/quic-go"
@@ -35,7 +35,7 @@ func NewDirectServer(transport *quic.Transport, logger *slog.Logger) (*DirectSer
 type vServer struct {
 	serverName string
 	serverCert tls.Certificate
-	clients    map[certc.Key]*vClient
+	clients    map[model.Key]*vClient
 	clientCA   atomic.Pointer[x509.CertPool]
 	mu         sync.RWMutex
 }
@@ -45,7 +45,7 @@ type vClient struct {
 	ch   chan quic.Connection
 }
 
-func (s *vServer) dequeue(key certc.Key, cert *x509.Certificate) *vClient {
+func (s *vServer) dequeue(key model.Key, cert *x509.Certificate) *vClient {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
@@ -74,11 +74,11 @@ func (s *DirectServer) addServerCert(cert tls.Certificate) {
 	s.serversMu.Lock()
 	defer s.serversMu.Unlock()
 
-	s.logger.Debug("add server cert", "server", serverName, "cert", certc.NewKey(cert.Leaf))
+	s.logger.Debug("add server cert", "server", serverName, "cert", model.NewKey(cert.Leaf))
 	s.servers[serverName] = &vServer{
 		serverName: serverName,
 		serverCert: cert,
-		clients:    map[certc.Key]*vClient{},
+		clients:    map[model.Key]*vClient{},
 	}
 }
 
@@ -90,7 +90,7 @@ func (s *DirectServer) getServer(serverName string) *vServer {
 }
 
 func (s *DirectServer) expect(serverCert tls.Certificate, cert *x509.Certificate) (chan quic.Connection, func()) {
-	key := certc.NewKey(cert)
+	key := model.NewKey(cert)
 	srv := s.getServer(serverCert.Leaf.DNSNames[0])
 
 	defer srv.updateClientCA()
@@ -153,7 +153,7 @@ func (s *DirectServer) runConn(conn quic.Connection) {
 	}
 
 	cert := conn.ConnectionState().TLS.PeerCertificates[0]
-	key := certc.NewKey(cert)
+	key := model.NewKey(cert)
 	s.logger.Debug("accepted conn", "server", srv.serverName, "cert", key, "remote", conn.RemoteAddr())
 
 	exp := srv.dequeue(key, cert)

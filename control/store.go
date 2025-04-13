@@ -117,7 +117,7 @@ type RelayConnValue struct {
 type RelayClientKey struct {
 	Forward model.Forward `json:"forward"`
 	Role    model.Role    `json:"role"`
-	Key     certc.Key     `json:"key"`
+	Key     model.Key     `json:"key"`
 }
 
 type RelayClientValue struct {

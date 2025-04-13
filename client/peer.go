@@ -277,7 +277,7 @@ func (p *peer) activeConnsListen(ctx context.Context, f func(map[peerConnKey]qui
 }
 
 type serverTLSConfig struct {
-	key  certc.Key
+	key  model.Key
 	name string
 	cas  *x509.CertPool
 }
@@ -290,7 +290,7 @@ func newServerTLSConfig(serverCert []byte) (*serverTLSConfig, error) {
 	cas := x509.NewCertPool()
 	cas.AddCert(cert)
 	return &serverTLSConfig{
-		key:  certc.NewKey(cert),
+		key:  model.NewKey(cert),
 		name: cert.DNSNames[0],
 		cas:  cas,
 	}, nil

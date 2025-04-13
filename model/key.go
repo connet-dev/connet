@@ -1,4 +1,4 @@
-package certc
+package model
 
 import (
 	"crypto/tls"
@@ -8,7 +8,7 @@ import (
 	"golang.org/x/crypto/blake2s"
 )
 
-type Key struct{ string } // TODO move to model
+type Key struct{ string }
 
 func NewKey(cert *x509.Certificate) Key {
 	return NewKeyRaw(cert.Raw)

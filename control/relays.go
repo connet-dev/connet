@@ -14,7 +14,6 @@ import (
 	"net"
 	"sync"
 
-	"github.com/connet-dev/connet/certc"
 	"github.com/connet-dev/connet/logc"
 	"github.com/connet-dev/connet/model"
 	"github.com/connet-dev/connet/netc"
@@ -171,7 +170,7 @@ func (s *relayServer) getForward(fwd model.Forward) (map[ksuid.KSUID]relayCacheV
 func (s *relayServer) Client(ctx context.Context, fwd model.Forward, role model.Role, cert *x509.Certificate,
 	notifyFn func(map[ksuid.KSUID]relayCacheValue) error) error {
 
-	key := RelayClientKey{Forward: fwd, Role: role, Key: certc.NewKey(cert)}
+	key := RelayClientKey{Forward: fwd, Role: role, Key: model.NewKey(cert)}
 	val := RelayClientValue{Cert: cert}
 	if err := s.clients.Put(key, val); err != nil {
 		return err

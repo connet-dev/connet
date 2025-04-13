@@ -55,7 +55,7 @@ type ConfigValue struct {
 type ClientKey struct {
 	Forward model.Forward `json:"forward"`
 	Role    model.Role    `json:"role"`
-	Key     certc.Key     `json:"key"`
+	Key     model.Key     `json:"key"`
 }
 
 type ClientValue struct {
@@ -136,7 +136,7 @@ func (v *ServerValue) UnmarshalJSON(b []byte) error {
 	}
 
 	for _, cl := range s.Clients {
-		sv.Clients[serverClientKey{cl.Role, certc.NewKey(cl.Value.Cert)}] = cl.Value
+		sv.Clients[serverClientKey{cl.Role, model.NewKey(cl.Value.Cert)}] = cl.Value
 	}
 
 	*v = sv
@@ -145,7 +145,7 @@ func (v *ServerValue) UnmarshalJSON(b []byte) error {
 
 type serverClientKey struct {
 	Role model.Role `json:"role"`
-	Key  certc.Key  `json:"key"`
+	Key  model.Key  `json:"key"`
 }
 
 type serverClientValue struct {
