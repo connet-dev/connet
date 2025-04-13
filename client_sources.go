@@ -242,7 +242,7 @@ func (s *WSSource) handle(w http.ResponseWriter, r *http.Request) {
 
 	g.Go(func() error {
 		defer hconn.Close()
-		var buf = make([]byte, 1024)
+		var buf = make([]byte, 4096)
 		for {
 			n, err := sconn.Read(buf)
 			if err != nil {
