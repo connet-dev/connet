@@ -168,6 +168,8 @@ url = "tcp://:8000" # url for the source to listen for incoming connections to b
 url = "tls://:8003" # runs a tls source server
 url = "http://:8080/path" # runs an http reverse proxy source server, path rewrite
 url = "https://:8443" # runs an https reverse proxy source server
+url = "ws://127.0.0.1:8080" # runs websocket tcp converter that exposes the destinations conn as a websocket
+url = "wss://127.0.0.1:8083" # same as above, but exposes it on https
 cert-file = "/path/to/cert/file" # the tls/https server certificate to use
 key-file = "/path/to/key/file" # the tls/https server certificate private key to use
 
@@ -528,7 +530,7 @@ by adding account management and it is one of the easiest way to start.
  - [x] sni rewrite
  - [x] http source
  - [x] http host rewrite
- - [ ] websocket tcp converter
+ - [x] websocket tcp converter
  - [ ] package refactor/rename
 
 ## Future

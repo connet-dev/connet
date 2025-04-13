@@ -365,13 +365,13 @@ func clientRun(ctx context.Context, cfg ClientConfig, logger *slog.Logger) error
 					ClientAuth:   srcClientAuth,
 				})
 			case "ws":
-				return connet.NewWSSource(src, targetURL, nil)
+				return connet.NewWSSource(src, targetURL, nil, logger)
 			case "wss":
 				return connet.NewWSSource(src, targetURL, &tls.Config{
 					Certificates: srcCerts,
 					ClientCAs:    srcClientCAs,
 					ClientAuth:   srcClientAuth,
-				})
+				}, logger)
 			default:
 				panic(fmt.Sprintf("unexpected source scheme: %s", targetURL.Scheme))
 			}

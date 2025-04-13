@@ -200,26 +200,27 @@ type WSSource struct {
 	src      Source
 	srcURL   *url.URL
 	cfg      *tls.Config
+	logger   *slog.Logger
 	upgrader websocket.Upgrader
 }
 
-func NewWSSource(src Source, srcURL *url.URL, cfg *tls.Config) *WSSource {
+func NewWSSource(src Source, srcURL *url.URL, cfg *tls.Config, logger *slog.Logger) *WSSource {
 	return &WSSource{
-		src, srcURL, cfg, websocket.Upgrader{},
+		src, srcURL, cfg, logger, websocket.Upgrader{},
 	}
 }
 
 func (s *WSSource) handle(w http.ResponseWriter, r *http.Request) {
 	hconn, err := s.upgrader.Upgrade(w, r, nil)
 	if err != nil {
-		// TODO
+		s.logger.Debug("could upgrade connection", "err", err)
 		return
 	}
 	defer hconn.Close()
 
 	sconn, err := s.src.DialContext(r.Context(), "", "")
 	if err != nil {
-		// TODO
+		s.logger.Debug("could not dial destination", "err", err)
 		return
 	}
 	defer sconn.Close()
@@ -227,33 +228,34 @@ func (s *WSSource) handle(w http.ResponseWriter, r *http.Request) {
 	var g errgroup.Group
 
 	g.Go(func() error {
+		defer sconn.Close()
 		for {
 			_, data, err := hconn.ReadMessage()
 			if err != nil {
-				return err
+				return fmt.Errorf("websocked connection read: %w", err)
 			}
 			if _, err := sconn.Write(data); err != nil {
-				return err
+				return fmt.Errorf("source connection write: %w", err)
 			}
 		}
 	})
 
 	g.Go(func() error {
+		defer hconn.Close()
 		var buf = make([]byte, 1024)
 		for {
 			n, err := sconn.Read(buf)
 			if err != nil {
-				return err
+				return fmt.Errorf("source connection read: %w", err)
 			}
 			if err := hconn.WriteMessage(websocket.BinaryMessage, buf[0:n]); err != nil {
-				return err
+				return fmt.Errorf("websocked connection write: %w", err)
 			}
 		}
 	})
 
-	if err := g.Wait(); err != nil {
-		// TODO
-	}
+	err = g.Wait()
+	s.logger.Debug("completed websocket connection", "err", err)
 }
 
 func (s *WSSource) Run(ctx context.Context) error {
