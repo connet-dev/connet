@@ -138,7 +138,7 @@ func (s *TCPSource) Run(ctx context.Context) error {
 				}
 			}
 
-			err := netc.Join(ctx, acceptConn, dialConn)
+			err := netc.Join(acceptConn, dialConn)
 			s.logger.Debug("source disconnected", "err", err)
 		},
 	}).Run(ctx)
@@ -260,7 +260,12 @@ func (s *WSSource) handle(w http.ResponseWriter, r *http.Request) {
 
 func (s *WSSource) Run(ctx context.Context) error {
 	mux := http.NewServeMux()
-	mux.HandleFunc(s.srcURL.Path, s.handle)
+	path := s.srcURL.Path
+	if path == "" {
+		path = "/"
+	}
+	mux.HandleFunc(path, s.handle)
+
 	srv := &http.Server{
 		Addr:      s.srcURL.Host,
 		TLSConfig: s.cfg,

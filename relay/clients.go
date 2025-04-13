@@ -379,7 +379,7 @@ func (c *clientConn) connectDestination(ctx context.Context, srcStream quic.Stre
 	}
 
 	c.logger.Debug("joining conns")
-	err = netc.Join(ctx, srcStream, dstStream)
+	err = netc.Join(srcStream, dstStream)
 	c.logger.Debug("disconnected conns", "err", err)
 	return nil
 }

@@ -129,7 +129,7 @@ func (d *TCPDestination) Run(ctx context.Context) error {
 			return conn, err
 		},
 		Join: func(ctx context.Context, acceptConn, dialConn net.Conn) {
-			err := netc.Join(ctx, acceptConn, dialConn)
+			err := netc.Join(acceptConn, dialConn)
 			d.logger.Debug("destination disconnected", "err", err)
 		},
 	}).Run(ctx)

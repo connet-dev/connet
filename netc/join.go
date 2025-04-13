@@ -8,8 +8,7 @@ import (
 	"golang.org/x/sync/errgroup"
 )
 
-// TODO how do we use ctx?
-func Join(ctx context.Context, l io.ReadWriteCloser, r io.ReadWriteCloser) error {
+func Join(l io.ReadWriteCloser, r io.ReadWriteCloser) error {
 	var g errgroup.Group
 	g.Go(func() error {
 		defer l.Close()

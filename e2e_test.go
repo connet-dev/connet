@@ -14,6 +14,7 @@ import (
 	"net"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
 	"os"
 	"slices"
 	"strings"
@@ -23,9 +24,11 @@ import (
 
 	"github.com/connet-dev/connet/certc"
 	"github.com/connet-dev/connet/model"
+	"github.com/connet-dev/connet/netc"
 	"github.com/connet-dev/connet/restr"
 	"github.com/connet-dev/connet/selfhosted"
 	"github.com/connet-dev/connet/statusc"
+	"github.com/gorilla/websocket"
 	"github.com/pires/go-proxyproto"
 	"github.com/stretchr/testify/require"
 	"golang.org/x/sync/errgroup"
@@ -41,20 +44,24 @@ func (tc connectedTestCase) isSuccess() bool {
 	return tc.sport >= 10000 && tc.sport < 10100
 }
 
-func (tc connectedTestCase) isFail() bool {
+func (tc connectedTestCase) isSuccessProxyProto() bool {
 	return tc.sport >= 10100 && tc.sport < 10200
 }
 
-func (tc connectedTestCase) isSuccessProxyProto() bool {
+func (tc connectedTestCase) isSuccessTLS() bool {
 	return tc.sport >= 10200 && tc.sport < 10300
 }
 
-func (tc connectedTestCase) isSuccessTLS() bool {
+func (tc connectedTestCase) isSuccessWS() bool {
 	return tc.sport >= 10300 && tc.sport < 10400
 }
 
+func (tc connectedTestCase) isFail() bool {
+	return tc.sport >= 11000 && tc.sport < 11100
+}
+
 var connectedTests = map[string]connectedTestCase{
-	// 100XX are succesful tests
+	// 100xx are succesful tests
 	"direct": {
 		NewDestinationConfig("direct").WithRoute(model.RouteDirect),
 		NewSourceConfig("direct").WithRoute(model.RouteDirect),
@@ -95,48 +102,54 @@ var connectedTests = map[string]connectedTestCase{
 		NewSourceConfig("relay-dhxcp-encrypted").WithRoute(model.RouteRelay).WithRelayEncryptions(model.DHXCPEncryption),
 		10007,
 	},
-	// 101XX fail to dial
-	"dst-direct-relay-src": {
-		NewDestinationConfig("dst-direct-relay-src").WithRoute(model.RouteDirect),
-		NewSourceConfig("dst-direct-relay-src").WithRoute(model.RouteRelay),
-		10100,
-	},
-	"dst-relay-direct-src": {
-		NewDestinationConfig("dst-relay-direct-src").WithRoute(model.RouteRelay),
-		NewSourceConfig("dst-relay-direct-src").WithRoute(model.RouteDirect),
-		10101,
-	},
-	"relay-dst-none-tls-src": {
-		NewDestinationConfig("relay-dst-none-tls-src").WithRoute(model.RouteRelay).WithRelayEncryptions(model.NoEncryption),
-		NewSourceConfig("relay-dst-none-tls-src").WithRoute(model.RouteRelay).WithRelayEncryptions(model.TLSEncryption),
-		10102,
-	},
-	"relay-dst-tls-none-src": {
-		NewDestinationConfig("relay-dst-tls-none-src").WithRoute(model.RouteRelay).WithRelayEncryptions(model.TLSEncryption),
-		NewSourceConfig("relay-dst-tls-none-src").WithRoute(model.RouteRelay).WithRelayEncryptions(model.NoEncryption),
-		10103,
-	},
-	// 102XX expose proxy proto server
+	// 101xx expose proxy proto server
 	"dst-direct-proxy-proto": {
 		NewDestinationConfig("dst-direct-proxy-proto").WithRoute(model.RouteDirect).WithProxy(model.ProxyV1),
 		NewSourceConfig("dst-direct-proxy-proto").WithRoute(model.RouteAny),
-		10200,
+		10100,
 	},
 	"dst-relay-proxy-proto": {
 		NewDestinationConfig("dst-relay-proxy-proto").WithRoute(model.RouteRelay).WithProxy(model.ProxyV2),
 		NewSourceConfig("dst-relay-proxy-proto").WithRoute(model.RouteAny),
-		10201,
+		10101,
 	},
-	// 103XX expose HTTPS server
+	// 102xx expose HTTPS server
 	"direct-tls": {
 		NewDestinationConfig("direct-tls").WithRoute(model.RouteDirect),
 		NewSourceConfig("direct-tls").WithRoute(model.RouteDirect),
-		10300,
+		10200,
 	},
 	"relay-tls": {
 		NewDestinationConfig("relay-tls").WithRoute(model.RouteRelay),
 		NewSourceConfig("relay-tls").WithRoute(model.RouteRelay),
-		10301,
+		10201,
+	},
+	// 103xx expose echo server for websockets
+	"echo-ws": {
+		NewDestinationConfig("echo-ws"),
+		NewSourceConfig("echo-ws"),
+		10300,
+	},
+	// 110xx fail to dial
+	"dst-direct-relay-src": {
+		NewDestinationConfig("dst-direct-relay-src").WithRoute(model.RouteDirect),
+		NewSourceConfig("dst-direct-relay-src").WithRoute(model.RouteRelay),
+		11000,
+	},
+	"dst-relay-direct-src": {
+		NewDestinationConfig("dst-relay-direct-src").WithRoute(model.RouteRelay),
+		NewSourceConfig("dst-relay-direct-src").WithRoute(model.RouteDirect),
+		11001,
+	},
+	"relay-dst-none-tls-src": {
+		NewDestinationConfig("relay-dst-none-tls-src").WithRoute(model.RouteRelay).WithRelayEncryptions(model.NoEncryption),
+		NewSourceConfig("relay-dst-none-tls-src").WithRoute(model.RouteRelay).WithRelayEncryptions(model.TLSEncryption),
+		11002,
+	},
+	"relay-dst-tls-none-src": {
+		NewDestinationConfig("relay-dst-tls-none-src").WithRoute(model.RouteRelay).WithRelayEncryptions(model.TLSEncryption),
+		NewSourceConfig("relay-dst-tls-none-src").WithRoute(model.RouteRelay).WithRelayEncryptions(model.NoEncryption),
+		11003,
 	},
 }
 
@@ -164,6 +177,11 @@ func TestE2E(t *testing.T) {
 	ppAddr := ppListen.Addr().String()
 	defer ppListen.Close()
 
+	echoListen, err := net.Listen("tcp", "127.0.0.1:0")
+	require.NoError(t, err)
+	echoAddr := echoListen.Addr().String()
+	defer echoListen.Close()
+
 	logger := slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{Level: slog.LevelWarn}))
 
 	localRestr, err := restr.ParseIP([]string{"192.0.2.0/24"}, nil)
@@ -189,6 +207,7 @@ func TestE2E(t *testing.T) {
 
 	g, ctx := errgroup.WithContext(ctx)
 	g.Go(func() error { return proxyProtoServer(ctx, ppListen) })
+	g.Go(func() error { return echoServer(ctx, echoListen) })
 	g.Go(func() error { return srv.Run(ctx) })
 
 	time.Sleep(time.Millisecond) // time for server to come online
@@ -406,6 +425,9 @@ func TestE2E(t *testing.T) {
 			clientTransport := htsServer.Client().Transport.(*http.Transport)
 			dstSrv := NewTLSDestination(dst, htsAddr, clientTransport.TLSClientConfig, logger)
 			g.Go(func() error { return dstSrv.Run(ctx) })
+		case strings.HasSuffix(name, "-ws"):
+			dstSrv := NewTCPDestination(dst, echoAddr, logger)
+			g.Go(func() error { return dstSrv.Run(ctx) })
 		default:
 			dstSrv := NewTCPDestination(dst, htAddr, logger)
 			g.Go(func() error { return dstSrv.Run(ctx) })
@@ -417,6 +439,11 @@ func TestE2E(t *testing.T) {
 		switch {
 		case strings.HasSuffix(name, "-tls"):
 			srcSrv := NewTLSSource(src, fmt.Sprintf(":%d", tc.sport), htsServer.TLS, logger)
+			g.Go(func() error { return srcSrv.Run(ctx) })
+		case strings.HasSuffix(name, "-ws"):
+			srcURL, err := url.Parse(fmt.Sprintf("ws://:%d", tc.sport))
+			require.NoError(t, err)
+			srcSrv := NewWSSource(src, srcURL, nil, logger)
 			g.Go(func() error { return srcSrv.Run(ctx) })
 		default:
 			srcSrv := NewTCPSource(src, fmt.Sprintf(":%d", tc.sport), logger)
@@ -434,7 +461,6 @@ func TestE2E(t *testing.T) {
 	httpcl.Transport = &http.Transport{DisableKeepAlives: true}
 
 	// Positive
-	// ports := slices.Repeat([]int{10000, 10001, 10002, 10003, 10004, 10005, 10006, 10007}, 3)
 	for i := range 3 {
 		t.Run(fmt.Sprintf("success-%d", i), func(t *testing.T) {
 			for name, tc := range connectedTests {
@@ -451,6 +477,80 @@ func TestE2E(t *testing.T) {
 						require.NoError(t, err)
 
 						require.Equal(t, fmt.Sprintf("hello:%d", rnd), string(respData))
+					})
+				}
+			}
+		})
+
+		// proxy proto
+		t.Run(fmt.Sprintf("success-proxy-proto-%d", i), func(t *testing.T) {
+			for name, tc := range connectedTests {
+				if tc.isSuccessProxyProto() {
+					t.Run(name, func(t *testing.T) {
+						expectedVersion := byte(1)
+						if name == "dst-relay-proxy-proto" {
+							expectedVersion = byte(2)
+						}
+						conn, err := net.Dial("tcp", fmt.Sprintf("127.0.0.1:%d", tc.sport))
+						require.NoError(t, err)
+						defer conn.Close()
+
+						_, err = conn.Write([]byte("abc\n"))
+						require.NoError(t, err)
+
+						buf := bufio.NewReader(conn)
+						hdr, err := proxyproto.Read(buf)
+						require.NoError(t, err)
+						require.NotNil(t, hdr)
+						require.Equal(t, expectedVersion, hdr.Version)
+						require.Equal(t, conn.LocalAddr(), hdr.SourceAddr)
+						require.Equal(t, conn.RemoteAddr(), hdr.DestinationAddr)
+
+						rest, err := buf.ReadBytes('\n')
+						require.NoError(t, err)
+						require.Equal(t, "abc\n", string(rest))
+					})
+				}
+			}
+		})
+
+		// tls
+		t.Run(fmt.Sprintf("success-tls-%d", i), func(t *testing.T) {
+			for name, tc := range connectedTests {
+				if tc.isSuccessTLS() {
+					t.Run(name, func(t *testing.T) {
+						rnd := rand.Uint64()
+						url := fmt.Sprintf("https://127.0.0.1:%d?rand=%d", tc.sport, rnd)
+
+						resp, err := htsServer.Client().Get(url)
+						require.NoError(t, err)
+						defer resp.Body.Close()
+
+						respData, err := io.ReadAll(resp.Body)
+						require.NoError(t, err)
+
+						require.Equal(t, fmt.Sprintf("hello:%d", rnd), string(respData))
+					})
+				}
+			}
+		})
+
+		t.Run(fmt.Sprintf("success-ws-%d", i), func(t *testing.T) {
+			for name, tc := range connectedTests {
+				if tc.isSuccessWS() {
+					t.Run(name, func(t *testing.T) {
+						conn, _, err := websocket.DefaultDialer.DialContext(ctx, fmt.Sprintf("ws://127.0.0.1:%d", tc.sport), nil)
+						require.NoError(t, err)
+						defer conn.Close()
+
+						var pingData = []byte(fmt.Sprintf("xxx-%d", rand.Uint64()))
+						err = conn.WriteMessage(websocket.BinaryMessage, pingData)
+						require.NoError(t, err)
+
+						pongType, pongData, err := conn.ReadMessage()
+						require.NoError(t, err)
+						require.Equal(t, websocket.BinaryMessage, pongType)
+						require.Equal(t, pingData, pongData)
 					})
 				}
 			}
@@ -474,58 +574,6 @@ func TestE2E(t *testing.T) {
 					default:
 						require.ErrorContains(t, err, "connection reset by peer")
 					}
-				})
-			}
-		}
-	})
-
-	// specialized
-	t.Run("success-proxy-proto", func(t *testing.T) {
-		for name, tc := range connectedTests {
-			if tc.isSuccessProxyProto() {
-				t.Run(name, func(t *testing.T) {
-					expectedVersion := byte(1)
-					if name == "dst-relay-proxy-proto" {
-						expectedVersion = byte(2)
-					}
-					conn, err := net.Dial("tcp", fmt.Sprintf("127.0.0.1:%d", tc.sport))
-					require.NoError(t, err)
-					defer conn.Close()
-
-					_, err = conn.Write([]byte("abc\n"))
-					require.NoError(t, err)
-
-					buf := bufio.NewReader(conn)
-					hdr, err := proxyproto.Read(buf)
-					require.NoError(t, err)
-					require.NotNil(t, hdr)
-					require.Equal(t, expectedVersion, hdr.Version)
-					require.Equal(t, conn.LocalAddr(), hdr.SourceAddr)
-					require.Equal(t, conn.RemoteAddr(), hdr.DestinationAddr)
-
-					rest, err := buf.ReadBytes('\n')
-					require.NoError(t, err)
-					require.Equal(t, "abc\n", string(rest))
-				})
-			}
-		}
-	})
-
-	t.Run("success-tls", func(t *testing.T) {
-		for name, tc := range connectedTests {
-			if tc.isSuccessTLS() {
-				t.Run(name, func(t *testing.T) {
-					rnd := rand.Uint64()
-					url := fmt.Sprintf("https://127.0.0.1:%d?rand=%d", tc.sport, rnd)
-
-					resp, err := htsServer.Client().Get(url)
-					require.NoError(t, err)
-					defer resp.Body.Close()
-
-					respData, err := io.ReadAll(resp.Body)
-					require.NoError(t, err)
-
-					require.Equal(t, fmt.Sprintf("hello:%d", rnd), string(respData))
 				})
 			}
 		}
@@ -569,6 +617,26 @@ func proxyProtoServer(ctx context.Context, l net.Listener) error {
 		} else if _, err := conn.Write(b); err != nil {
 			return err
 		}
+	}
+}
+
+func echoServer(ctx context.Context, l net.Listener) error {
+	go func() {
+		<-ctx.Done()
+		l.Close()
+	}()
+	for {
+		conn, err := l.Accept()
+		if err != nil {
+			return nil
+		}
+		defer conn.Close()
+
+		go func() {
+			defer conn.Close()
+
+			_ = netc.Join(conn, conn)
+		}()
 	}
 }
 
