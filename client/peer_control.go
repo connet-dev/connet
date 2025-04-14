@@ -3,7 +3,6 @@ package client
 import (
 	"context"
 	"fmt"
-	"time"
 
 	"github.com/connet-dev/connet/model"
 	"github.com/connet-dev/connet/pb"
