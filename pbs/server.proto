@@ -8,8 +8,7 @@ option go_package = "github.com/connet-dev/connet/pbs";
 message Authenticate {
   string token = 1;
   bytes reconnect_token = 2;
-  int32 protocol_version = 3;
-  string build_version = 4;
+  string build_version = 3;
 }
 
 message AuthenticateResp {

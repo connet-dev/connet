@@ -211,11 +211,10 @@ func (s *controlClient) connect(ctx context.Context, transport *quic.Transport) 
 	defer authStream.Close()
 
 	if err := pb.Write(authStream, &pbr.AuthenticateReq{
-		Token:           s.controlToken,
-		Addr:            s.hostport.PB(),
-		ReconnectToken:  reconnConfig.Bytes,
-		ProtocolVersion: 1,
-		BuildVersion:    model.BuildVersion(),
+		Token:          s.controlToken,
+		Addr:           s.hostport.PB(),
+		ReconnectToken: reconnConfig.Bytes,
+		BuildVersion:   model.BuildVersion(),
 	}); err != nil {
 		return nil, fmt.Errorf("server write auth: %w", err)
 	}
