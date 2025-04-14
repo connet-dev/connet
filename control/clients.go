@@ -28,9 +28,9 @@ import (
 )
 
 type ClientAuthenticateRequest struct {
-	Token   string
-	Addr    net.Addr
-	Version string
+	Token        string
+	Addr         net.Addr
+	BuildVersion string
 }
 
 type ClientAuthenticator interface {
@@ -493,9 +493,9 @@ func (c *clientConn) authenticate(ctx context.Context) (ClientAuthentication, ks
 	}
 
 	auth, err := c.server.auth.Authenticate(ClientAuthenticateRequest{
-		Token:   req.Token,
-		Addr:    c.conn.RemoteAddr(),
-		Version: req.ClientVersion,
+		Token:        req.Token,
+		Addr:         c.conn.RemoteAddr(),
+		BuildVersion: req.BuildVersion,
 	})
 	if err != nil {
 		perr := pb.GetError(err)
@@ -537,7 +537,7 @@ func (c *clientConn) authenticate(ctx context.Context) (ClientAuthentication, ks
 		return nil, ksuid.Nil, fmt.Errorf("client auth write: %w", err)
 	}
 
-	c.logger.Debug("authentication completed", "local", c.conn.LocalAddr(), "remote", c.conn.RemoteAddr())
+	c.logger.Debug("authentication completed", "local", c.conn.LocalAddr(), "remote", c.conn.RemoteAddr(), "build", req.BuildVersion)
 	return auth, id, nil
 }
 

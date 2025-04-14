@@ -215,7 +215,7 @@ func (s *controlClient) connect(ctx context.Context, transport *quic.Transport) 
 		Addr:            s.hostport.PB(),
 		ReconnectToken:  reconnConfig.Bytes,
 		ProtocolVersion: 1,
-		RelayVersion:    model.GetBuildVersion(),
+		BuildVersion:    model.BuildVersion(),
 	}); err != nil {
 		return nil, fmt.Errorf("server write auth: %w", err)
 	}

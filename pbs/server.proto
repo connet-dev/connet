@@ -9,7 +9,7 @@ message Authenticate {
   string token = 1;
   bytes reconnect_token = 2;
   int32 protocol_version = 3;
-  string client_version = 4;
+  string build_version = 4;
 }
 
 message AuthenticateResp {

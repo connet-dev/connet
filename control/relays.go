@@ -27,9 +27,9 @@ import (
 )
 
 type RelayAuthenticateRequest struct {
-	Token   string
-	Addr    net.Addr
-	Version string
+	Token        string
+	Addr         net.Addr
+	BuildVersion string
 }
 
 type RelayAuthenticator interface {
@@ -431,9 +431,9 @@ func (c *relayConn) authenticate(ctx context.Context) (*relayConnAuth, error) {
 	}
 
 	auth, err := c.server.auth.Authenticate(RelayAuthenticateRequest{
-		Token:   req.Token,
-		Addr:    c.conn.RemoteAddr(),
-		Version: req.RelayVersion,
+		Token:        req.Token,
+		Addr:         c.conn.RemoteAddr(),
+		BuildVersion: req.BuildVersion,
 	})
 	if err != nil {
 		perr := pb.GetError(err)
@@ -466,7 +466,7 @@ func (c *relayConn) authenticate(ctx context.Context) (*relayConnAuth, error) {
 		return nil, fmt.Errorf("auth write response: %w", err)
 	}
 
-	c.logger.Debug("authentication completed", "local", c.conn.LocalAddr(), "remote", c.conn.RemoteAddr())
+	c.logger.Debug("authentication completed", "local", c.conn.LocalAddr(), "remote", c.conn.RemoteAddr(), "build", req.BuildVersion)
 	return &relayConnAuth{id, auth, model.HostPortFromPB(req.Addr)}, nil
 }
 
