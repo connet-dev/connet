@@ -3,6 +3,7 @@ package connet
 import (
 	"context"
 	"errors"
+	"log/slog"
 	"net"
 	"net/netip"
 	"sync"
@@ -23,12 +24,14 @@ var NewDestinationConfig = client.NewDestinationConfig
 // It implements net.Listener interface, so it
 type Destination interface {
 	Config() DestinationConfig
+	Context() context.Context
 
 	Accept() (net.Conn, error)
 	AcceptContext(ctx context.Context) (net.Conn, error)
 
 	Client() *Client
 	Status(ctx context.Context) (EndpointStatus, error)
+
 	Addr() net.Addr
 	Close() error
 }
@@ -41,12 +44,14 @@ var NewSourceConfig = client.NewSourceConfig
 
 type Source interface {
 	Config() SourceConfig
+	Context() context.Context
 
 	Dial(network, address string) (net.Conn, error)
 	DialContext(ctx context.Context, network, address string) (net.Conn, error)
 
 	Client() *Client
 	Status(ctx context.Context) (EndpointStatus, error)
+
 	Close() error
 }
 
@@ -71,7 +76,7 @@ func newClientDestination(ctx context.Context, cl *Client, cfg DestinationConfig
 		return nil, err
 	}
 
-	ep, err := newClientEndpoint(ctx, cl, dst, func() {
+	ep, err := newClientEndpoint(ctx, cl, dst, cl.logger.With("destination", cfg.Forward), func() {
 		cl.removeDestination(cfg.Forward)
 	})
 	if err != nil {
@@ -92,7 +97,7 @@ func newClientSource(ctx context.Context, cl *Client, cfg SourceConfig) (*client
 		return nil, err
 	}
 
-	ep, err := newClientEndpoint(ctx, cl, src, func() {
+	ep, err := newClientEndpoint(ctx, cl, src, cl.logger.With("source", cfg.Forward), func() {
 		cl.removeSource(cfg.Forward)
 	})
 	if err != nil {
@@ -119,6 +124,8 @@ type clientEndpoint struct {
 
 	onlineReport func(err error)
 	connStatus   atomic.Value
+
+	logger *slog.Logger
 }
 
 // a client endpoint could close when:
@@ -127,7 +134,7 @@ type clientEndpoint struct {
 //   - the parent client is closing, so it calls close on the endpoint too. Session might be closing at the same time.
 //   - an error happens in runPeer
 //   - a terminal error happens in runAnnounce
-func newClientEndpoint(ctx context.Context, cl *Client, ep endpoint, clientCleanup func()) (*clientEndpoint, error) {
+func newClientEndpoint(ctx context.Context, cl *Client, ep endpoint, logger *slog.Logger, clientCleanup func()) (*clientEndpoint, error) {
 	ctx, ctxCancel := context.WithCancelCause(ctx)
 	cep := &clientEndpoint{
 		client:        cl,
@@ -137,6 +144,8 @@ func newClientEndpoint(ctx context.Context, cl *Client, ep endpoint, clientClean
 		ctx:       ctx,
 		ctxCancel: ctxCancel,
 		closer:    make(chan struct{}),
+
+		logger: logger,
 	}
 	cep.connStatus.Store(statusc.NotConnected)
 	context.AfterFunc(ctx, cep.cleanup)
@@ -167,6 +176,10 @@ func newClientEndpoint(ctx context.Context, cl *Client, ep endpoint, clientClean
 	}
 
 	return cep, nil
+}
+
+func (e *clientEndpoint) Context() context.Context {
+	return e.ctx
 }
 
 func (e *clientEndpoint) Client() *Client {
@@ -229,6 +242,7 @@ func (e *clientEndpoint) runAnnounceSession(ctx context.Context, sess *session) 
 		case sess.conn.Context().Err() != nil:
 			return
 		default:
+			e.logger.Debug("announce stopped", "err", err)
 		}
 	}
 }

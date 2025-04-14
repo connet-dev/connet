@@ -399,6 +399,10 @@ func clientRun(ctx context.Context, cfg ClientConfig, logger *slog.Logger) error
 		if err != nil {
 			return err
 		}
+		g.Go(func() error {
+			<-dst.Context().Done()
+			return fmt.Errorf("[destination %s] unexpected error: %w", name, context.Cause(dst.Context()))
+		})
 		if dstrun := destinationHandlers[name]; dstrun != nil {
 			g.Go(func() error { return dstrun(dst).Run(ctx) })
 		}
@@ -409,6 +413,10 @@ func clientRun(ctx context.Context, cfg ClientConfig, logger *slog.Logger) error
 		if err != nil {
 			return err
 		}
+		g.Go(func() error {
+			<-src.Context().Done()
+			return fmt.Errorf("[source %s] unexpected error: %w", name, context.Cause(src.Context()))
+		})
 		if srcrun := sourceHandlers[name]; srcrun != nil {
 			g.Go(func() error { return srcrun(src).Run(ctx) })
 		}
