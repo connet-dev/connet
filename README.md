@@ -531,12 +531,12 @@ by adding account management and it is one of the easiest way to start.
  - [x] http source
  - [x] http host rewrite
  - [x] websocket tcp converter
+ - [x] client versioning support
  - [ ] package refactor/rename
 
 ## Future
  - [ ] UDP support
  - [ ] UPnP and other methods for hole-punching
- - [ ] client versioning support
  - [ ] notarize mac app
  - [ ] systemd dynamic user in nixos
  - [ ] docs section for building the project

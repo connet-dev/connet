@@ -1,8 +1,6 @@
 package selfhosted
 
 import (
-	"net"
-
 	"github.com/connet-dev/connet/control"
 	"github.com/connet-dev/connet/model"
 	"github.com/connet-dev/connet/pb"
@@ -21,13 +19,13 @@ type clientsAuthenticator struct {
 	tokens map[string]*ClientAuthentication
 }
 
-func (s *clientsAuthenticator) Authenticate(token string, addr net.Addr) (control.ClientAuthentication, error) {
-	r, ok := s.tokens[token]
+func (s *clientsAuthenticator) Authenticate(req control.ClientAuthenticateRequest) (control.ClientAuthentication, error) {
+	r, ok := s.tokens[req.Token]
 	if !ok {
 		return nil, pb.NewError(pb.Error_AuthenticationFailed, "token not found")
 	}
-	if !r.IPs.IsAllowedAddr(addr) {
-		return nil, pb.NewError(pb.Error_AuthenticationFailed, "address not allowed: %s", addr)
+	if !r.IPs.IsAllowedAddr(req.Addr) {
+		return nil, pb.NewError(pb.Error_AuthenticationFailed, "address not allowed: %s", req.Addr)
 	}
 	return r, nil
 }

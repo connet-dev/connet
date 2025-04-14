@@ -9,6 +9,8 @@ message AuthenticateReq {
   string token = 1;
   shared.HostPort addr = 2;
   bytes reconnect_token = 3;
+  int32 protocol_version = 4;
+  string relay_version = 5;
 }
 
 message AuthenticateResp {

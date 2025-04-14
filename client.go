@@ -287,8 +287,10 @@ func (c *Client) connect(ctx context.Context, transport *quic.Transport, retoken
 	defer authStream.Close()
 
 	if err := pb.Write(authStream, &pbs.Authenticate{
-		Token:          c.token,
-		ReconnectToken: retoken,
+		Token:           c.token,
+		ReconnectToken:  retoken,
+		ProtocolVersion: 1,
+		ClientVersion:   model.GetBuildVersion(),
 	}); err != nil {
 		return nil, fmt.Errorf("write authentication: %w", err)
 	}

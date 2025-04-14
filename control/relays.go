@@ -26,8 +26,14 @@ import (
 	"golang.org/x/sync/errgroup"
 )
 
+type RelayAuthenticateRequest struct {
+	Token   string
+	Addr    net.Addr
+	Version string
+}
+
 type RelayAuthenticator interface {
-	Authenticate(token string, addr net.Addr) (RelayAuthentication, error)
+	Authenticate(req RelayAuthenticateRequest) (RelayAuthentication, error)
 }
 
 type RelayAuthentication interface {
@@ -424,7 +430,11 @@ func (c *relayConn) authenticate(ctx context.Context) (*relayConnAuth, error) {
 		return nil, fmt.Errorf("auth read request: %w", err)
 	}
 
-	auth, err := c.server.auth.Authenticate(req.Token, c.conn.RemoteAddr())
+	auth, err := c.server.auth.Authenticate(RelayAuthenticateRequest{
+		Token:   req.Token,
+		Addr:    c.conn.RemoteAddr(),
+		Version: req.RelayVersion,
+	})
 	if err != nil {
 		perr := pb.GetError(err)
 		if perr == nil {

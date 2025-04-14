@@ -27,8 +27,14 @@ import (
 	"golang.org/x/sync/errgroup"
 )
 
+type ClientAuthenticateRequest struct {
+	Token   string
+	Addr    net.Addr
+	Version string
+}
+
 type ClientAuthenticator interface {
-	Authenticate(token string, addr net.Addr) (ClientAuthentication, error)
+	Authenticate(req ClientAuthenticateRequest) (ClientAuthentication, error)
 }
 
 type ClientAuthentication interface {
@@ -486,7 +492,11 @@ func (c *clientConn) authenticate(ctx context.Context) (ClientAuthentication, ks
 		return nil, ksuid.Nil, fmt.Errorf("client auth read: %w", err)
 	}
 
-	auth, err := c.server.auth.Authenticate(req.Token, c.conn.RemoteAddr())
+	auth, err := c.server.auth.Authenticate(ClientAuthenticateRequest{
+		Token:   req.Token,
+		Addr:    c.conn.RemoteAddr(),
+		Version: req.ClientVersion,
+	})
 	if err != nil {
 		perr := pb.GetError(err)
 		if perr == nil {
