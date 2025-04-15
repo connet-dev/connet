@@ -431,8 +431,9 @@ func (c *relayConn) authenticate(ctx context.Context) (*relayConnAuth, error) {
 		return nil, fmt.Errorf("auth read request: %w", err)
 	}
 
+	proto := model.GetRelayToControlProto(c.conn)
 	auth, err := c.server.auth.Authenticate(RelayAuthenticateRequest{
-		Proto:        model.GetRelayToControlProto(c.conn),
+		Proto:        proto,
 		Token:        req.Token,
 		Addr:         c.conn.RemoteAddr(),
 		BuildVersion: req.BuildVersion,
@@ -468,7 +469,7 @@ func (c *relayConn) authenticate(ctx context.Context) (*relayConnAuth, error) {
 		return nil, fmt.Errorf("auth write response: %w", err)
 	}
 
-	c.logger.Debug("authentication completed", "local", c.conn.LocalAddr(), "remote", c.conn.RemoteAddr(), "build", req.BuildVersion)
+	c.logger.Debug("authentication completed", "local", c.conn.LocalAddr(), "remote", c.conn.RemoteAddr(), "proto", proto, "build", req.BuildVersion)
 	return &relayConnAuth{id, auth, model.HostPortFromPB(req.Addr)}, nil
 }
 
