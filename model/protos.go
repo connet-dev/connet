@@ -24,7 +24,7 @@ func GetClientToControlProto(conn quic.Connection) ClientToControlProto {
 var (
 	CNUnknown = ClientToControlProto{}
 	CNv00     = ClientToControlProto{"connet"}
-	CNv01     = ClientToControlProto{"connet-control/0.1"}
+	CNv01     = ClientToControlProto{"connet-client/0.1"}
 )
 
 var ClientToControlProtos = []ClientToControlProto{CNv01, CNv00}
@@ -39,7 +39,7 @@ func (v ClientToClientProto) String() string {
 
 var (
 	CCv00 = ClientToClientProto{"connet-direct"}
-	CCv01 = ClientToClientProto{"connet-client/0.1"}
+	CCv01 = ClientToClientProto{"connet-peer/0.1"}
 )
 
 var ClientToClientProtos = []ClientToClientProto{CCv00, CCv01}
@@ -54,7 +54,7 @@ func (v ClientToRelayProto) String() string {
 
 var (
 	CRv00 = ClientToRelayProto{"connet-relay"}
-	CRv01 = ClientToRelayProto{"connet-relay/0.1"}
+	CRv01 = ClientToRelayProto{"connet-peer-relay/0.1"}
 )
 
 var ClientToRelayProtos = []ClientToRelayProto{CRv01, CRv00}
@@ -80,7 +80,7 @@ func GetRelayToControlProto(conn quic.Connection) RelayToControlProto {
 var (
 	RNUnknown = RelayToControlProto{}
 	RNv00     = RelayToControlProto{"connet-relays"}
-	RNv01     = RelayToControlProto{"connet-relays/0.1"}
+	RNv01     = RelayToControlProto{"connet-relay/0.1"}
 )
 
 var RelayToControlProtos = []RelayToControlProto{RNv01, RNv00}
