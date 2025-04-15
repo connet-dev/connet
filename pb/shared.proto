@@ -36,12 +36,13 @@ message Error {
     // Generic
     Unknown = 0;
     RequestUnknown = 1;
-    CheckFailed = 2;
+    ConnectionCheckFailed = 2;
 
     // Authentication
     AuthenticationFailed = 100;
     ForwardNotAllowed = 101;
     RoleNotAllowed = 102;
+    AuthenticationUnknownProtocol = 103;
 
     // Announce
     AnnounceValidationFailed = 200;

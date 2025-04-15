@@ -28,6 +28,7 @@ import (
 )
 
 type RelayAuthenticateRequest struct {
+	ProtoVersion pbs.RelayVersion
 	Token        string
 	Addr         net.Addr
 	BuildVersion string
@@ -431,7 +432,20 @@ func (c *relayConn) authenticate(ctx context.Context) (*relayConnAuth, error) {
 		return nil, fmt.Errorf("auth read request: %w", err)
 	}
 
+	proto, err := pbs.RelayVersionFromConn(c.conn)
+	if err != nil {
+		perr := pb.GetError(err)
+		if perr == nil {
+			perr = pb.NewError(pb.Error_AuthenticationFailed, "authentication failed: %v", err)
+		}
+		if err := pb.Write(authStream, &pbs.AuthenticateResp{Error: perr}); err != nil {
+			return nil, fmt.Errorf("relay auth err write: %w", err)
+		}
+		return nil, fmt.Errorf("auth failed: %w", perr)
+	}
+
 	auth, err := c.server.auth.Authenticate(RelayAuthenticateRequest{
+		ProtoVersion: proto,
 		Token:        req.Token,
 		Addr:         c.conn.RemoteAddr(),
 		BuildVersion: req.BuildVersion,
@@ -442,7 +456,7 @@ func (c *relayConn) authenticate(ctx context.Context) (*relayConnAuth, error) {
 			perr = pb.NewError(pb.Error_AuthenticationFailed, "authentication failed: %v", err)
 		}
 		if err := pb.Write(authStream, &pbr.AuthenticateResp{Error: perr}); err != nil {
-			return nil, fmt.Errorf("auth write err response: %w", err)
+			return nil, fmt.Errorf("relay auth err write: %w", err)
 		}
 		return nil, fmt.Errorf("auth failed: %w", perr)
 	}

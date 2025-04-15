@@ -323,7 +323,7 @@ func (p *directPeerOutgoing) connect(ctx context.Context) (quic.Connection, erro
 		case errors.Is(err, context.Canceled):
 			return nil, err
 		case err != nil:
-			conn.CloseWithError(quic.ApplicationErrorCode(pb.Error_CheckFailed), "connection check failed")
+			conn.CloseWithError(quic.ApplicationErrorCode(pb.Error_ConnectionCheckFailed), "connection check failed")
 			errs = append(errs, err)
 			continue
 		}

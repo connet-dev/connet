@@ -2,12 +2,24 @@ package pbs
 
 import (
 	"github.com/connet-dev/connet/iterc"
+	"github.com/connet-dev/connet/pb"
+	"github.com/quic-go/quic-go"
 )
 
 type ClientVersion struct{ string }
 
 func (v ClientVersion) String() string {
 	return v.string
+}
+
+func ClientVersionFromConn(conn quic.Connection) (ClientVersion, error) {
+	proto := conn.ConnectionState().TLS.NegotiatedProtocol
+	for _, v := range ClientVersions {
+		if v.string == proto {
+			return v, nil
+		}
+	}
+	return ClientVersion{}, pb.NewError(pb.Error_AuthenticationUnknownProtocol, "unknown protocol: %s", proto)
 }
 
 var (
@@ -23,6 +35,16 @@ type RelayVersion struct{ string }
 
 func (v RelayVersion) String() string {
 	return v.string
+}
+
+func RelayVersionFromConn(conn quic.Connection) (RelayVersion, error) {
+	proto := conn.ConnectionState().TLS.NegotiatedProtocol
+	for _, v := range RelayVersions {
+		if v.string == proto {
+			return v, nil
+		}
+	}
+	return RelayVersion{}, pb.NewError(pb.Error_AuthenticationUnknownProtocol, "unknown protocol: %s", proto)
 }
 
 var (

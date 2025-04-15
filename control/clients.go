@@ -28,6 +28,7 @@ import (
 )
 
 type ClientAuthenticateRequest struct {
+	ProtoVersion pbs.ClientVersion
 	Token        string
 	Addr         net.Addr
 	BuildVersion string
@@ -492,7 +493,20 @@ func (c *clientConn) authenticate(ctx context.Context) (ClientAuthentication, ks
 		return nil, ksuid.Nil, fmt.Errorf("client auth read: %w", err)
 	}
 
+	proto, err := pbs.ClientVersionFromConn(c.conn)
+	if err != nil {
+		perr := pb.GetError(err)
+		if perr == nil {
+			perr = pb.NewError(pb.Error_AuthenticationFailed, "authentication failed: %v", err)
+		}
+		if err := pb.Write(authStream, &pbs.AuthenticateResp{Error: perr}); err != nil {
+			return nil, ksuid.Nil, fmt.Errorf("client auth err write: %w", err)
+		}
+		return nil, ksuid.Nil, fmt.Errorf("auth failed: %w", perr)
+	}
+
 	auth, err := c.server.auth.Authenticate(ClientAuthenticateRequest{
+		ProtoVersion: proto,
 		Token:        req.Token,
 		Addr:         c.conn.RemoteAddr(),
 		BuildVersion: req.BuildVersion,
@@ -505,7 +519,7 @@ func (c *clientConn) authenticate(ctx context.Context) (ClientAuthentication, ks
 		if err := pb.Write(authStream, &pbs.AuthenticateResp{Error: perr}); err != nil {
 			return nil, ksuid.Nil, fmt.Errorf("client auth err write: %w", err)
 		}
-		return nil, ksuid.Nil, perr
+		return nil, ksuid.Nil, fmt.Errorf("auth failed: %w", perr)
 	}
 
 	var id ksuid.KSUID
@@ -522,7 +536,7 @@ func (c *clientConn) authenticate(ctx context.Context) (ClientAuthentication, ks
 		if err := pb.Write(authStream, &pbs.AuthenticateResp{Error: err}); err != nil {
 			return nil, ksuid.Nil, fmt.Errorf("client auth err write: %w", err)
 		}
-		return nil, ksuid.Nil, err
+		return nil, ksuid.Nil, fmt.Errorf("client addr port from net: %w", err)
 	}
 
 	retoken, err := c.server.reconnect.sealID(id)

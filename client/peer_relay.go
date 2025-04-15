@@ -99,7 +99,7 @@ func (r *relayPeer) connect(ctx context.Context) (quic.Connection, error) {
 	}
 
 	if err := r.check(ctx, conn); err != nil {
-		conn.CloseWithError(quic.ApplicationErrorCode(pb.Error_CheckFailed), "connection check failed")
+		conn.CloseWithError(quic.ApplicationErrorCode(pb.Error_ConnectionCheckFailed), "connection check failed")
 		return nil, err
 	}
 	return conn, nil
