@@ -121,7 +121,7 @@ func newRelayServer(
 		addr: addr,
 		tlsConf: &tls.Config{
 			Certificates: []tls.Certificate{cert},
-			NextProtos:   []string{"connet-relays"},
+			NextProtos:   []string{"connet-relays/0.1", "connet-relays"},
 		},
 		statelessResetKey: &statelessResetKey,
 
