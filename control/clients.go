@@ -132,7 +132,7 @@ func newClientServer(
 		addr: addr,
 		tlsConf: &tls.Config{
 			Certificates: []tls.Certificate{cert},
-			NextProtos:   []string{"connet-control/0.1", "connet"},
+			NextProtos:   pbs.ClientVersionProtos,
 		},
 		statelessResetKey: &statelessResetKey,
 

@@ -19,6 +19,7 @@ import (
 	"github.com/connet-dev/connet/netc"
 	"github.com/connet-dev/connet/pb"
 	"github.com/connet-dev/connet/pbr"
+	"github.com/connet-dev/connet/pbs"
 	"github.com/connet-dev/connet/quicc"
 	"github.com/connet-dev/connet/restr"
 	"github.com/quic-go/quic-go"
@@ -121,7 +122,7 @@ func newRelayServer(
 		addr: addr,
 		tlsConf: &tls.Config{
 			Certificates: []tls.Certificate{cert},
-			NextProtos:   []string{"connet-relays/0.1", "connet-relays"},
+			NextProtos:   pbs.RelayVersionProtos,
 		},
 		statelessResetKey: &statelessResetKey,
 
