@@ -28,7 +28,7 @@ import (
 )
 
 type RelayAuthenticateRequest struct {
-	ProtoVersion pbs.RelayVersion
+	ProtoVersion pbs.RelayToControlProto
 	Token        string
 	Addr         net.Addr
 	BuildVersion string
@@ -123,7 +123,7 @@ func newRelayServer(
 		addr: addr,
 		tlsConf: &tls.Config{
 			Certificates: []tls.Certificate{cert},
-			NextProtos:   pbs.RelayVersionProtos,
+			NextProtos:   pbs.RelayToControlNextProtos,
 		},
 		statelessResetKey: &statelessResetKey,
 
@@ -432,7 +432,7 @@ func (c *relayConn) authenticate(ctx context.Context) (*relayConnAuth, error) {
 		return nil, fmt.Errorf("auth read request: %w", err)
 	}
 
-	proto, err := pbs.RelayVersionFromConn(c.conn)
+	proto, err := pbs.GetRelayToControlProto(c.conn)
 	if err != nil {
 		perr := pb.GetError(err)
 		if perr == nil {

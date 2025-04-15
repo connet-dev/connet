@@ -92,7 +92,7 @@ func (r *relayPeer) connect(ctx context.Context) (quic.Connection, error) {
 		Certificates: []tls.Certificate{r.local.clientCert},
 		RootCAs:      cfg.cas,
 		ServerName:   cfg.name,
-		NextProtos:   pbc.RelayVersionProtos,
+		NextProtos:   pbc.ClientToRelayNextProtos,
 	}, quicc.StdConfig)
 	if err != nil {
 		return nil, err

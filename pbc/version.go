@@ -2,32 +2,32 @@ package pbc
 
 import "github.com/connet-dev/connet/iterc"
 
-type ClientVersion struct{ string }
+type ClientToClientProto struct{ string }
 
-func (v ClientVersion) String() string {
+func (v ClientToClientProto) String() string {
 	return v.string
 }
 
 var (
-	Cv00 = ClientVersion{"connet-direct"}
-	Cv01 = ClientVersion{"connet-connet/0.1"}
+	Cv00 = ClientToClientProto{"connet-direct"}
+	Cv01 = ClientToClientProto{"connet-connet/0.1"}
 )
 
-var ClientVersions = []ClientVersion{Cv01, Cv00}
+var ClientToClientProtos = []ClientToClientProto{Cv00, Cv01}
 
-var ClientVersionProtos = iterc.MapSlice(ClientVersions, ClientVersion.String)
+var ClientToClientNextProtos = iterc.MapSlice(ClientToClientProtos, ClientToClientProto.String)
 
-type RelayVersion struct{ string }
+type ClientToRelayProto struct{ string }
 
-func (v RelayVersion) String() string {
+func (v ClientToRelayProto) String() string {
 	return v.string
 }
 
 var (
-	Rv00 = RelayVersion{"connet-relay"}
-	Rv01 = RelayVersion{"connet-relay/0.1"}
+	Rv00 = ClientToRelayProto{"connet-relay"}
+	Rv01 = ClientToRelayProto{"connet-relay/0.1"}
 )
 
-var RelayVersions = []RelayVersion{Rv01, Rv00}
+var ClientToRelayProtos = []ClientToRelayProto{Rv01, Rv00}
 
-var RelayVersionProtos = iterc.MapSlice(RelayVersions, RelayVersion.String)
+var ClientToRelayNextProtos = iterc.MapSlice(ClientToRelayProtos, ClientToRelayProto.String)

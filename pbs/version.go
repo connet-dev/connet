@@ -6,52 +6,52 @@ import (
 	"github.com/quic-go/quic-go"
 )
 
-type ClientVersion struct{ string }
+type ClientToControlProto struct{ string }
 
-func (v ClientVersion) String() string {
+func (v ClientToControlProto) String() string {
 	return v.string
 }
 
-func ClientVersionFromConn(conn quic.Connection) (ClientVersion, error) {
+func GetClientToControlProto(conn quic.Connection) (ClientToControlProto, error) {
 	proto := conn.ConnectionState().TLS.NegotiatedProtocol
-	for _, v := range ClientVersions {
+	for _, v := range ClientToControlProtos {
 		if v.string == proto {
 			return v, nil
 		}
 	}
-	return ClientVersion{}, pb.NewError(pb.Error_AuthenticationUnknownProtocol, "unknown protocol: %s", proto)
+	return ClientToControlProto{}, pb.NewError(pb.Error_AuthenticationUnknownProtocol, "unknown protocol: %s", proto)
 }
 
 var (
-	Cv00 = ClientVersion{"connet"}
-	Cv01 = ClientVersion{"connet-control/0.1"}
+	Cv00 = ClientToControlProto{"connet"}
+	Cv01 = ClientToControlProto{"connet-control/0.1"}
 )
 
-var ClientVersions = []ClientVersion{Cv01, Cv00}
+var ClientToControlProtos = []ClientToControlProto{Cv01, Cv00}
 
-var ClientVersionProtos = iterc.MapSlice(ClientVersions, ClientVersion.String)
+var ClientToControlNextProtos = iterc.MapSlice(ClientToControlProtos, ClientToControlProto.String)
 
-type RelayVersion struct{ string }
+type RelayToControlProto struct{ string }
 
-func (v RelayVersion) String() string {
+func (v RelayToControlProto) String() string {
 	return v.string
 }
 
-func RelayVersionFromConn(conn quic.Connection) (RelayVersion, error) {
+func GetRelayToControlProto(conn quic.Connection) (RelayToControlProto, error) {
 	proto := conn.ConnectionState().TLS.NegotiatedProtocol
-	for _, v := range RelayVersions {
+	for _, v := range RelayToControlProtos {
 		if v.string == proto {
 			return v, nil
 		}
 	}
-	return RelayVersion{}, pb.NewError(pb.Error_AuthenticationUnknownProtocol, "unknown protocol: %s", proto)
+	return RelayToControlProto{}, pb.NewError(pb.Error_AuthenticationUnknownProtocol, "unknown protocol: %s", proto)
 }
 
 var (
-	Rv00 = RelayVersion{"connet-relays"}
-	Rv01 = RelayVersion{"connet-relays/0.1"}
+	Rv00 = RelayToControlProto{"connet-relays"}
+	Rv01 = RelayToControlProto{"connet-relays/0.1"}
 )
 
-var RelayVersions = []RelayVersion{Rv01, Rv00}
+var RelayToControlProtos = []RelayToControlProto{Rv01, Rv00}
 
-var RelayVersionProtos = iterc.MapSlice(RelayVersions, RelayVersion.String)
+var RelayToControlNextProtos = iterc.MapSlice(RelayToControlProtos, RelayToControlProto.String)

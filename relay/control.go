@@ -98,7 +98,7 @@ func newControlClient(cfg Config, configStore logc.KV[ConfigKey, ConfigValue]) (
 		controlTLSConf: &tls.Config{
 			ServerName: cfg.ControlHost,
 			RootCAs:    cfg.ControlCAs,
-			NextProtos: pbs.RelayVersionProtos,
+			NextProtos: pbs.RelayToControlNextProtos,
 		},
 
 		config:  configStore,

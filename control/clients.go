@@ -28,7 +28,7 @@ import (
 )
 
 type ClientAuthenticateRequest struct {
-	ProtoVersion pbs.ClientVersion
+	ProtoVersion pbs.ClientToControlProto
 	Token        string
 	Addr         net.Addr
 	BuildVersion string
@@ -133,7 +133,7 @@ func newClientServer(
 		addr: addr,
 		tlsConf: &tls.Config{
 			Certificates: []tls.Certificate{cert},
-			NextProtos:   pbs.ClientVersionProtos,
+			NextProtos:   pbs.ClientToControlNextProtos,
 		},
 		statelessResetKey: &statelessResetKey,
 
@@ -493,7 +493,7 @@ func (c *clientConn) authenticate(ctx context.Context) (ClientAuthentication, ks
 		return nil, ksuid.Nil, fmt.Errorf("client auth read: %w", err)
 	}
 
-	proto, err := pbs.ClientVersionFromConn(c.conn)
+	proto, err := pbs.GetClientToControlProto(c.conn)
 	if err != nil {
 		perr := pb.GetError(err)
 		if perr == nil {
