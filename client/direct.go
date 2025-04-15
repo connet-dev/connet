@@ -11,7 +11,6 @@ import (
 
 	"github.com/connet-dev/connet/model"
 	"github.com/connet-dev/connet/pb"
-	"github.com/connet-dev/connet/pbc"
 	"github.com/connet-dev/connet/quicc"
 	"github.com/quic-go/quic-go"
 )
@@ -117,7 +116,7 @@ func (s *DirectServer) expect(serverCert tls.Certificate, cert *x509.Certificate
 func (s *DirectServer) Run(ctx context.Context) error {
 	tlsConf := &tls.Config{
 		ClientAuth: tls.RequireAndVerifyClientCert,
-		NextProtos: pbc.ClientToClientNextProtos,
+		NextProtos: model.ClientToClientNextProtos,
 	}
 	tlsConf.GetConfigForClient = func(chi *tls.ClientHelloInfo) (*tls.Config, error) {
 		srv := s.getServer(chi.ServerName)

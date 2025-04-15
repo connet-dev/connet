@@ -18,7 +18,6 @@ import (
 	"github.com/connet-dev/connet/netc"
 	"github.com/connet-dev/connet/pb"
 	"github.com/connet-dev/connet/pbr"
-	"github.com/connet-dev/connet/pbs"
 	"github.com/connet-dev/connet/quicc"
 	"github.com/connet-dev/connet/statusc"
 	"github.com/klev-dev/klevdb"
@@ -98,7 +97,7 @@ func newControlClient(cfg Config, configStore logc.KV[ConfigKey, ConfigValue]) (
 		controlTLSConf: &tls.Config{
 			ServerName: cfg.ControlHost,
 			RootCAs:    cfg.ControlCAs,
-			NextProtos: pbs.RelayToControlNextProtos,
+			NextProtos: model.RelayToControlNextProtos,
 		},
 
 		config:  configStore,

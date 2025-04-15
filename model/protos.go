@@ -1,4 +1,4 @@
-package pbs
+package model
 
 import (
 	"github.com/connet-dev/connet/iterc"
@@ -23,13 +23,43 @@ func GetClientToControlProto(conn quic.Connection) (ClientToControlProto, error)
 }
 
 var (
-	Cv00 = ClientToControlProto{"connet"}
-	Cv01 = ClientToControlProto{"connet-control/0.1"}
+	CNv00 = ClientToControlProto{"connet"}
+	CNv01 = ClientToControlProto{"connet-control/0.1"}
 )
 
-var ClientToControlProtos = []ClientToControlProto{Cv01, Cv00}
+var ClientToControlProtos = []ClientToControlProto{CNv01, CNv00}
 
 var ClientToControlNextProtos = iterc.MapSlice(ClientToControlProtos, ClientToControlProto.String)
+
+type ClientToClientProto struct{ string }
+
+func (v ClientToClientProto) String() string {
+	return v.string
+}
+
+var (
+	CCv00 = ClientToClientProto{"connet-direct"}
+	CCv01 = ClientToClientProto{"connet-client/0.1"}
+)
+
+var ClientToClientProtos = []ClientToClientProto{CCv00, CCv01}
+
+var ClientToClientNextProtos = iterc.MapSlice(ClientToClientProtos, ClientToClientProto.String)
+
+type ClientToRelayProto struct{ string }
+
+func (v ClientToRelayProto) String() string {
+	return v.string
+}
+
+var (
+	CRv00 = ClientToRelayProto{"connet-relay"}
+	CRv01 = ClientToRelayProto{"connet-relay/0.1"}
+)
+
+var ClientToRelayProtos = []ClientToRelayProto{CRv01, CRv00}
+
+var ClientToRelayNextProtos = iterc.MapSlice(ClientToRelayProtos, ClientToRelayProto.String)
 
 type RelayToControlProto struct{ string }
 
@@ -48,10 +78,10 @@ func GetRelayToControlProto(conn quic.Connection) (RelayToControlProto, error) {
 }
 
 var (
-	Rv00 = RelayToControlProto{"connet-relays"}
-	Rv01 = RelayToControlProto{"connet-relays/0.1"}
+	RNv00 = RelayToControlProto{"connet-relays"}
+	RNv01 = RelayToControlProto{"connet-relays/0.1"}
 )
 
-var RelayToControlProtos = []RelayToControlProto{Rv01, Rv00}
+var RelayToControlProtos = []RelayToControlProto{RNv01, RNv00}
 
 var RelayToControlNextProtos = iterc.MapSlice(RelayToControlProtos, RelayToControlProto.String)

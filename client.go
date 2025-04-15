@@ -272,7 +272,7 @@ func (c *Client) connect(ctx context.Context, transport *quic.Transport, retoken
 	conn, err := transport.Dial(quicc.RTTContext(ctx), c.controlAddr, &tls.Config{
 		ServerName: c.controlHost,
 		RootCAs:    c.controlCAs,
-		NextProtos: pbs.ClientToControlNextProtos,
+		NextProtos: model.ClientToControlNextProtos,
 	}, quicc.StdConfig)
 	if err != nil {
 		return nil, fmt.Errorf("dial server %s: %w", c.controlAddr, err)

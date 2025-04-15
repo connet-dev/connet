@@ -309,7 +309,7 @@ func (p *directPeerOutgoing) connect(ctx context.Context) (quic.Connection, erro
 			Certificates: []tls.Certificate{p.parent.local.clientCert},
 			RootCAs:      p.serverConf.cas,
 			ServerName:   p.serverConf.name,
-			NextProtos:   pbc.ClientToClientNextProtos,
+			NextProtos:   model.ClientToClientNextProtos,
 		}, quicc.StdConfig)
 		switch {
 		case errors.Is(err, context.Canceled):
