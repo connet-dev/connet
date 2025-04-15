@@ -2,7 +2,6 @@ package model
 
 import (
 	"github.com/connet-dev/connet/iterc"
-	"github.com/connet-dev/connet/pb"
 	"github.com/quic-go/quic-go"
 )
 
@@ -12,19 +11,20 @@ func (v ClientToControlProto) String() string {
 	return v.string
 }
 
-func GetClientToControlProto(conn quic.Connection) (ClientToControlProto, error) {
+func GetClientToControlProto(conn quic.Connection) ClientToControlProto {
 	proto := conn.ConnectionState().TLS.NegotiatedProtocol
 	for _, v := range ClientToControlProtos {
 		if v.string == proto {
-			return v, nil
+			return v
 		}
 	}
-	return ClientToControlProto{}, pb.NewError(pb.Error_AuthenticationUnknownProtocol, "unknown protocol: %s", proto)
+	return CNUnknown
 }
 
 var (
-	CNv00 = ClientToControlProto{"connet"}
-	CNv01 = ClientToControlProto{"connet-control/0.1"}
+	CNUnknown = ClientToControlProto{}
+	CNv00     = ClientToControlProto{"connet"}
+	CNv01     = ClientToControlProto{"connet-control/0.1"}
 )
 
 var ClientToControlProtos = []ClientToControlProto{CNv01, CNv00}
@@ -67,19 +67,20 @@ func (v RelayToControlProto) String() string {
 	return v.string
 }
 
-func GetRelayToControlProto(conn quic.Connection) (RelayToControlProto, error) {
+func GetRelayToControlProto(conn quic.Connection) RelayToControlProto {
 	proto := conn.ConnectionState().TLS.NegotiatedProtocol
 	for _, v := range RelayToControlProtos {
 		if v.string == proto {
-			return v, nil
+			return v
 		}
 	}
-	return RelayToControlProto{}, pb.NewError(pb.Error_AuthenticationUnknownProtocol, "unknown protocol: %s", proto)
+	return RNUnknown
 }
 
 var (
-	RNv00 = RelayToControlProto{"connet-relays"}
-	RNv01 = RelayToControlProto{"connet-relays/0.1"}
+	RNUnknown = RelayToControlProto{}
+	RNv00     = RelayToControlProto{"connet-relays"}
+	RNv01     = RelayToControlProto{"connet-relays/0.1"}
 )
 
 var RelayToControlProtos = []RelayToControlProto{RNv01, RNv00}

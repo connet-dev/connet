@@ -19,7 +19,6 @@ import (
 	"github.com/connet-dev/connet/netc"
 	"github.com/connet-dev/connet/pb"
 	"github.com/connet-dev/connet/pbr"
-	"github.com/connet-dev/connet/pbs"
 	"github.com/connet-dev/connet/quicc"
 	"github.com/connet-dev/connet/restr"
 	"github.com/quic-go/quic-go"
@@ -432,20 +431,8 @@ func (c *relayConn) authenticate(ctx context.Context) (*relayConnAuth, error) {
 		return nil, fmt.Errorf("auth read request: %w", err)
 	}
 
-	proto, err := model.GetRelayToControlProto(c.conn)
-	if err != nil {
-		perr := pb.GetError(err)
-		if perr == nil {
-			perr = pb.NewError(pb.Error_AuthenticationFailed, "authentication failed: %v", err)
-		}
-		if err := pb.Write(authStream, &pbs.AuthenticateResp{Error: perr}); err != nil {
-			return nil, fmt.Errorf("relay auth err write: %w", err)
-		}
-		return nil, fmt.Errorf("auth failed: %w", perr)
-	}
-
 	auth, err := c.server.auth.Authenticate(RelayAuthenticateRequest{
-		Proto:        proto,
+		Proto:        model.GetRelayToControlProto(c.conn),
 		Token:        req.Token,
 		Addr:         c.conn.RemoteAddr(),
 		BuildVersion: req.BuildVersion,

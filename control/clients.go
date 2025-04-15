@@ -493,20 +493,8 @@ func (c *clientConn) authenticate(ctx context.Context) (ClientAuthentication, ks
 		return nil, ksuid.Nil, fmt.Errorf("client auth read: %w", err)
 	}
 
-	proto, err := model.GetClientToControlProto(c.conn)
-	if err != nil {
-		perr := pb.GetError(err)
-		if perr == nil {
-			perr = pb.NewError(pb.Error_AuthenticationFailed, "authentication failed: %v", err)
-		}
-		if err := pb.Write(authStream, &pbs.AuthenticateResp{Error: perr}); err != nil {
-			return nil, ksuid.Nil, fmt.Errorf("client auth err write: %w", err)
-		}
-		return nil, ksuid.Nil, fmt.Errorf("auth failed: %w", perr)
-	}
-
 	auth, err := c.server.auth.Authenticate(ClientAuthenticateRequest{
-		Proto:        proto,
+		Proto:        model.GetClientToControlProto(c.conn),
 		Token:        req.Token,
 		Addr:         c.conn.RemoteAddr(),
 		BuildVersion: req.BuildVersion,

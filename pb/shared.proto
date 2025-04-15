@@ -42,7 +42,6 @@ message Error {
     AuthenticationFailed = 100;
     ForwardNotAllowed = 101;
     RoleNotAllowed = 102;
-    AuthenticationUnknownProtocol = 103;
 
     // Announce
     AnnounceValidationFailed = 200;
