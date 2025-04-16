@@ -154,7 +154,7 @@ func relayRun(ctx context.Context, cfg RelayConfig, logger *slog.Logger) error {
 }
 
 func (c *RelayConfig) merge(o RelayConfig) {
-	if o.Token != "" && o.TokenFile != "" { // new config completely overrides token
+	if o.Token != "" || o.TokenFile != "" { // new config completely overrides token
 		c.Token = o.Token
 		c.TokenFile = o.TokenFile
 	}
