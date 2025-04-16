@@ -36,11 +36,10 @@ type ClientAuthenticateRequest struct {
 
 type ClientAuthenticator interface {
 	Authenticate(req ClientAuthenticateRequest) (ClientAuthentication, error)
+	Validate(auth ClientAuthentication, fwd model.Forward, role model.Role) (model.Forward, error)
 }
 
 type ClientAuthentication interface {
-	Validate(fwd model.Forward, role model.Role) (model.Forward, error)
-
 	encoding.BinaryMarshaler
 }
 
@@ -605,7 +604,7 @@ func validatePeerCert(fwd model.Forward, peer *pbs.ClientPeer) *pb.Error {
 func (s *clientStream) announce(ctx context.Context, req *pbs.Request_Announce) error {
 	fwd := model.ForwardFromPB(req.Forward)
 	role := model.RoleFromPB(req.Role)
-	if newFwd, err := s.conn.auth.Validate(fwd, role); err != nil {
+	if newFwd, err := s.conn.server.auth.Validate(s.conn.auth, fwd, role); err != nil {
 		perr := pb.GetError(err)
 		if perr == nil {
 			perr = pb.NewError(pb.Error_AnnounceValidationFailed, "failed to validate forward '%s': %v", fwd, err)
@@ -686,7 +685,7 @@ func (s *clientStream) announce(ctx context.Context, req *pbs.Request_Announce) 
 func (s *clientStream) relay(ctx context.Context, req *pbs.Request_Relay) error {
 	fwd := model.ForwardFromPB(req.Forward)
 	role := model.RoleFromPB(req.Role)
-	if newFwd, err := s.conn.auth.Validate(fwd, role); err != nil {
+	if newFwd, err := s.conn.server.auth.Validate(s.conn.auth, fwd, role); err != nil {
 		perr := pb.GetError(err)
 		if perr == nil {
 			perr = pb.NewError(pb.Error_RelayValidationFailed, "failed to validate desination '%s': %v", fwd, err)

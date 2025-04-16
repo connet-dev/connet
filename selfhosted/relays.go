@@ -30,13 +30,13 @@ func (s *relayAuthenticator) Authenticate(req control.RelayAuthenticateRequest) 
 	return r, nil
 }
 
+func (s *relayAuthenticator) Allow(auth control.RelayAuthentication, _ model.Forward) bool {
+	return true
+}
+
 type RelayAuthentication struct {
 	Token string
 	IPs   restr.IP
-}
-
-func (r *RelayAuthentication) Allow(_ model.Forward) bool {
-	return true
 }
 
 func (r *RelayAuthentication) MarshalBinary() ([]byte, error) {

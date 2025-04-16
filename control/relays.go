@@ -35,11 +35,10 @@ type RelayAuthenticateRequest struct {
 
 type RelayAuthenticator interface {
 	Authenticate(req RelayAuthenticateRequest) (RelayAuthentication, error)
+	Allow(auth RelayAuthentication, fwd model.Forward) bool
 }
 
 type RelayAuthentication interface {
-	Allow(fwd model.Forward) bool
-
 	encoding.BinaryMarshaler
 }
 
@@ -506,7 +505,7 @@ func (c *relayConn) runRelayClients(ctx context.Context) error {
 		resp := &pbr.ClientsResp{Offset: nextOffset}
 
 		for _, msg := range msgs {
-			if !c.auth.Allow(msg.Key.Forward) {
+			if !c.server.auth.Allow(c.auth, msg.Key.Forward) {
 				continue
 			}
 

@@ -30,14 +30,8 @@ func (s *clientsAuthenticator) Authenticate(req control.ClientAuthenticateReques
 	return r, nil
 }
 
-type ClientAuthentication struct {
-	Token string
-	IPs   restr.IP
-	Names restr.Name
-	Role  model.Role
-}
-
-func (a *ClientAuthentication) Validate(fwd model.Forward, role model.Role) (model.Forward, error) {
+func (s *clientsAuthenticator) Validate(auth control.ClientAuthentication, fwd model.Forward, role model.Role) (model.Forward, error) {
+	a := auth.(*ClientAuthentication)
 	if !a.Names.IsAllowed(fwd.String()) {
 		return model.Forward{}, pb.NewError(pb.Error_ForwardNotAllowed, "forward not allowed: %s", fwd)
 	}
@@ -45,6 +39,13 @@ func (a *ClientAuthentication) Validate(fwd model.Forward, role model.Role) (mod
 		return model.Forward{}, pb.NewError(pb.Error_RoleNotAllowed, "role not allowed: %s", role)
 	}
 	return fwd, nil
+}
+
+type ClientAuthentication struct {
+	Token string
+	IPs   restr.IP
+	Names restr.Name
+	Role  model.Role
 }
 
 func (a *ClientAuthentication) MarshalBinary() ([]byte, error) {
