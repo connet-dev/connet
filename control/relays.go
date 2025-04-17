@@ -5,7 +5,6 @@ import (
 	"crypto/rand"
 	"crypto/tls"
 	"crypto/x509"
-	"encoding"
 	"errors"
 	"fmt"
 	"io"
@@ -35,12 +34,10 @@ type RelayAuthenticateRequest struct {
 
 type RelayAuthenticator interface {
 	Authenticate(req RelayAuthenticateRequest) (RelayAuthentication, error)
-	Allow(rauth RelayAuthentication, cauth []byte, fwd model.Forward) bool
+	Allow(reAuth RelayAuthentication, clAuth ClientAuthentication, fwd model.Forward) bool
 }
 
-type RelayAuthentication interface {
-	encoding.BinaryMarshaler
-}
+type RelayAuthentication []byte
 
 func newRelayServer(
 	addr *net.UDPAddr,
@@ -176,13 +173,8 @@ func (s *relayServer) getForward(fwd model.Forward) (map[ksuid.KSUID]relayCacheV
 func (s *relayServer) Client(ctx context.Context, fwd model.Forward, role model.Role, cert *x509.Certificate, auth ClientAuthentication,
 	notifyFn func(map[ksuid.KSUID]relayCacheValue) error) error {
 
-	authData, err := auth.MarshalBinary()
-	if err != nil {
-		return err
-	}
-
 	key := RelayClientKey{Forward: fwd, Role: role, Key: model.NewKey(cert)}
-	val := RelayClientValue{Cert: cert, Authentication: authData}
+	val := RelayClientValue{Cert: cert, Authentication: auth}
 	if err := s.clients.Put(key, val); err != nil {
 		return err
 	}
@@ -399,11 +391,7 @@ func (c *relayConn) runErr(ctx context.Context) error {
 	c.forwards = forwards
 
 	key := RelayConnKey{ID: c.id}
-	authData, err := c.auth.MarshalBinary()
-	if err != nil {
-		return err
-	}
-	value := RelayConnValue{Authentication: authData, Hostport: c.hostport}
+	value := RelayConnValue{Authentication: c.auth, Hostport: c.hostport}
 	if err := c.server.conns.Put(key, value); err != nil {
 		return err
 	}

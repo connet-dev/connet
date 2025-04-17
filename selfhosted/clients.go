@@ -7,6 +7,13 @@ import (
 	"github.com/connet-dev/connet/restr"
 )
 
+type ClientAuthentication struct {
+	Token string
+	IPs   restr.IP
+	Names restr.Name
+	Role  model.Role
+}
+
 func NewClientAuthenticator(auths ...ClientAuthentication) control.ClientAuthenticator {
 	s := &clientsAuthenticator{map[string]*ClientAuthentication{}}
 	for _, auth := range auths {
@@ -27,27 +34,19 @@ func (s *clientsAuthenticator) Authenticate(req control.ClientAuthenticateReques
 	if !r.IPs.IsAllowedAddr(req.Addr) {
 		return nil, pb.NewError(pb.Error_AuthenticationFailed, "address not allowed: %s", req.Addr)
 	}
-	return r, nil
+	return []byte(req.Token), nil
 }
 
 func (s *clientsAuthenticator) Validate(auth control.ClientAuthentication, fwd model.Forward, role model.Role) (model.Forward, error) {
-	a := auth.(*ClientAuthentication)
-	if !a.Names.IsAllowed(fwd.String()) {
+	r, ok := s.tokens[string(auth)]
+	if !ok {
+		return model.Forward{}, pb.NewError(pb.Error_AuthenticationFailed, "token not found")
+	}
+	if !r.Names.IsAllowed(fwd.String()) {
 		return model.Forward{}, pb.NewError(pb.Error_ForwardNotAllowed, "forward not allowed: %s", fwd)
 	}
-	if a.Role != model.UnknownRole && a.Role != role {
+	if r.Role != model.UnknownRole && r.Role != role {
 		return model.Forward{}, pb.NewError(pb.Error_RoleNotAllowed, "role not allowed: %s", role)
 	}
 	return fwd, nil
-}
-
-type ClientAuthentication struct {
-	Token string
-	IPs   restr.IP
-	Names restr.Name
-	Role  model.Role
-}
-
-func (a *ClientAuthentication) MarshalBinary() ([]byte, error) {
-	return []byte(a.Token), nil
 }

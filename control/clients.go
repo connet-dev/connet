@@ -5,7 +5,6 @@ import (
 	"crypto/rand"
 	"crypto/tls"
 	"crypto/x509"
-	"encoding"
 	"errors"
 	"fmt"
 	"io"
@@ -39,9 +38,7 @@ type ClientAuthenticator interface {
 	Validate(auth ClientAuthentication, fwd model.Forward, role model.Role) (model.Forward, error)
 }
 
-type ClientAuthentication interface {
-	encoding.BinaryMarshaler
-}
+type ClientAuthentication []byte
 
 type ClientRelays interface {
 	Client(ctx context.Context, fwd model.Forward, role model.Role, cert *x509.Certificate, auth ClientAuthentication,
@@ -181,11 +178,7 @@ func (s *clientServer) connected(id ksuid.KSUID, auth ClientAuthentication, remo
 	delete(s.reactivate, ClientConnKey{id})
 	s.reactivateMu.Unlock()
 
-	authData, err := auth.MarshalBinary()
-	if err != nil {
-		return err
-	}
-	return s.conns.Put(ClientConnKey{id}, ClientConnValue{Authentication: authData, Addr: remote.String()})
+	return s.conns.Put(ClientConnKey{id}, ClientConnValue{Authentication: auth, Addr: remote.String()})
 }
 
 func (s *clientServer) disconnected(id ksuid.KSUID) error {

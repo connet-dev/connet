@@ -7,6 +7,11 @@ import (
 	"github.com/connet-dev/connet/restr"
 )
 
+type RelayAuthentication struct {
+	Token string
+	IPs   restr.IP
+}
+
 func NewRelayAuthenticator(auths ...RelayAuthentication) control.RelayAuthenticator {
 	s := &relayAuthenticator{map[string]*RelayAuthentication{}}
 	for _, auth := range auths {
@@ -27,18 +32,9 @@ func (s *relayAuthenticator) Authenticate(req control.RelayAuthenticateRequest) 
 	if !r.IPs.IsAllowedAddr(req.Addr) {
 		return nil, pb.NewError(pb.Error_AuthenticationFailed, "address not allowed: %s", req.Addr)
 	}
-	return r, nil
-}
-
-func (s *relayAuthenticator) Allow(auth control.RelayAuthentication, _ []byte, _ model.Forward) bool {
-	return true
-}
-
-type RelayAuthentication struct {
-	Token string
-	IPs   restr.IP
-}
-
-func (r *RelayAuthentication) MarshalBinary() ([]byte, error) {
 	return []byte(r.Token), nil
+}
+
+func (s *relayAuthenticator) Allow(_ control.RelayAuthentication, _ control.ClientAuthentication, _ model.Forward) bool {
+	return true
 }
