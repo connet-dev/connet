@@ -141,7 +141,7 @@ func (c *Client) GetDestination(name string) (Destination, error) {
 }
 
 // Destination starts a new destination with a given configuration.
-// This call blocks until it is succesfully announced to the control server.
+// This call blocks until it is successfully announced to the control server.
 // The destination can be closed either via cancelling the context or calling its close func.
 func (c *Client) Destination(ctx context.Context, cfg DestinationConfig) (Destination, error) {
 	c.destinationsMu.Lock()
@@ -188,7 +188,7 @@ func (c *Client) GetSource(name string) (Source, error) {
 }
 
 // Source starts a new source with a given configuration.
-// This call blocks until it is succesfully announced to the control server.
+// This call blocks until it is successfully announced to the control server.
 // The source can be closed either via cancelling the context or calling its close func.
 func (c *Client) Source(ctx context.Context, cfg SourceConfig) (Source, error) {
 	c.sourcesMu.Lock()

@@ -121,20 +121,37 @@ type RelayClientKey struct {
 }
 
 type RelayClientValue struct {
-	Cert *x509.Certificate `json:"cert"`
+	Cert           *x509.Certificate `json:"cert"`
+	Authentication []byte            `json:"authentication"`
 }
 
 func (v RelayClientValue) MarshalJSON() ([]byte, error) {
-	return certc.MarshalJSONCert(v.Cert)
+	s := struct {
+		Cert           []byte `json:"cert"`
+		Authentication []byte `json:"authentication"`
+	}{
+		Cert:           v.Cert.Raw,
+		Authentication: v.Authentication,
+	}
+	return json.Marshal(s)
 }
 
 func (v *RelayClientValue) UnmarshalJSON(b []byte) error {
-	cert, err := certc.UnmarshalJSONCert(b)
+	s := struct {
+		Cert           []byte `json:"cert"`
+		Authentication []byte `json:"authentication"`
+	}{}
+
+	if err := json.Unmarshal(b, &s); err != nil {
+		return err
+	}
+
+	cert, err := x509.ParseCertificate(s.Cert)
 	if err != nil {
 		return err
 	}
 
-	*v = RelayClientValue{cert}
+	*v = RelayClientValue{cert, s.Authentication}
 	return nil
 }
 

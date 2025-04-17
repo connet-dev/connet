@@ -59,7 +59,7 @@ func (tc connectedTestCase) isFail() bool {
 }
 
 var connectedTests = map[string]connectedTestCase{
-	// 100xx are succesful tests
+	// 100xx are successful tests
 	"direct": {
 		NewDestinationConfig("direct").WithRoute(model.RouteDirect),
 		NewSourceConfig("direct").WithRoute(model.RouteDirect),

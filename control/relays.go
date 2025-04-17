@@ -35,7 +35,7 @@ type RelayAuthenticateRequest struct {
 
 type RelayAuthenticator interface {
 	Authenticate(req RelayAuthenticateRequest) (RelayAuthentication, error)
-	Allow(auth RelayAuthentication, fwd model.Forward) bool
+	Allow(rauth RelayAuthentication, cauth []byte, fwd model.Forward) bool
 }
 
 type RelayAuthentication interface {
@@ -173,11 +173,16 @@ func (s *relayServer) getForward(fwd model.Forward) (map[ksuid.KSUID]relayCacheV
 	return maps.Clone(s.forwardsCache[fwd]), s.forwardsOffset
 }
 
-func (s *relayServer) Client(ctx context.Context, fwd model.Forward, role model.Role, cert *x509.Certificate,
+func (s *relayServer) Client(ctx context.Context, fwd model.Forward, role model.Role, cert *x509.Certificate, auth ClientAuthentication,
 	notifyFn func(map[ksuid.KSUID]relayCacheValue) error) error {
 
+	authData, err := auth.MarshalBinary()
+	if err != nil {
+		return err
+	}
+
 	key := RelayClientKey{Forward: fwd, Role: role, Key: model.NewKey(cert)}
-	val := RelayClientValue{Cert: cert}
+	val := RelayClientValue{Cert: cert, Authentication: authData}
 	if err := s.clients.Put(key, val); err != nil {
 		return err
 	}
@@ -505,7 +510,7 @@ func (c *relayConn) runRelayClients(ctx context.Context) error {
 		resp := &pbr.ClientsResp{Offset: nextOffset}
 
 		for _, msg := range msgs {
-			if !c.server.auth.Allow(c.auth, msg.Key.Forward) {
+			if !c.server.auth.Allow(c.auth, msg.Value.Authentication, msg.Key.Forward) {
 				continue
 			}
 
