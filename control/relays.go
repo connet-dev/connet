@@ -34,7 +34,7 @@ type RelayAuthenticateRequest struct {
 
 type RelayAuthenticator interface {
 	Authenticate(req RelayAuthenticateRequest) (RelayAuthentication, error)
-	Allow(reAuth RelayAuthentication, clAuth ClientAuthentication, fwd model.Forward) bool
+	Allow(reAuth RelayAuthentication, clAuth ClientAuthentication, fwd model.Forward) (bool, error)
 }
 
 type RelayAuthentication []byte
@@ -498,7 +498,11 @@ func (c *relayConn) runRelayClients(ctx context.Context) error {
 		resp := &pbr.ClientsResp{Offset: nextOffset}
 
 		for _, msg := range msgs {
-			if !c.server.auth.Allow(c.auth, msg.Value.Authentication, msg.Key.Forward) {
+			ok, err := c.server.auth.Allow(c.auth, msg.Value.Authentication, msg.Key.Forward)
+			switch {
+			case err != nil:
+				return err
+			case !ok:
 				continue
 			}
 
