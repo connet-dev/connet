@@ -15,6 +15,7 @@ jobs:
       - uses: DeterminateSystems/nix-installer-action@main
         with:
           determinate: true
+          github-token: ${{ secrets.GITHUB_TOKEN }}
       - uses: DeterminateSystems/flakehub-cache-action@main
       - name: Build connet
         run: nix develop --command make build
@@ -31,6 +32,7 @@ jobs:
       - uses: DeterminateSystems/nix-installer-action@main
         with:
           determinate: true
+          github-token: ${{ secrets.GITHUB_TOKEN }}
       - uses: DeterminateSystems/flakehub-cache-action@main
       - name: Run tests
         run: nix develop --command make test
@@ -55,6 +57,7 @@ jobs:
       - uses: DeterminateSystems/nix-installer-action@main
         with:
           determinate: true
+          github-token: ${{ secrets.GITHUB_TOKEN }}
       - uses: DeterminateSystems/flakehub-cache-action@main
       - uses: DeterminateSystems/flake-checker-action@main
       - name: Build default
