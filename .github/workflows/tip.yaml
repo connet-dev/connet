@@ -4,6 +4,8 @@ on:
 
 permissions:
   packages: write
+  id-token: write
+  contents: read
 
 jobs:
   docker-build-x86:
