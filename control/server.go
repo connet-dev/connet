@@ -5,10 +5,8 @@ import (
 	"crypto/tls"
 	"fmt"
 	"log/slog"
-	"net"
 
 	"github.com/connet-dev/connet/model"
-	"github.com/connet-dev/connet/restr"
 	"github.com/segmentio/ksuid"
 	"golang.org/x/sync/errgroup"
 )
@@ -16,13 +14,11 @@ import (
 type Config struct {
 	Cert tls.Certificate
 
-	ClientsAddr  *net.UDPAddr
-	ClientsAuth  ClientAuthenticator
-	ClientsRestr restr.IP
+	ClientsIngress []model.IngressConfig
+	ClientsAuth    ClientAuthenticator
 
-	RelaysAddr  *net.UDPAddr
-	RelaysAuth  RelayAuthenticator
-	RelaysRestr restr.IP
+	RelaysIngress []model.IngressConfig
+	RelaysAuth    RelayAuthenticator
 
 	Stores Stores
 
@@ -35,21 +31,25 @@ func NewServer(cfg Config) (*Server, error) {
 		return nil, fmt.Errorf("config store open: %w", err)
 	}
 
-	relays, err := newRelayServer(cfg.RelaysAddr, cfg.Cert, cfg.RelaysAuth, cfg.RelaysRestr, configStore, cfg.Stores, cfg.Logger)
+	relays, err := newRelayServer(cfg.RelaysIngress, cfg.Cert, cfg.RelaysAuth, configStore, cfg.Stores, cfg.Logger)
 	if err != nil {
 		return nil, fmt.Errorf("create relay server: %w", err)
 	}
 
-	clients, err := newClientServer(cfg.ClientsAddr, cfg.Cert, cfg.ClientsAuth, cfg.ClientsRestr, relays, configStore, cfg.Stores, cfg.Logger)
+	clients, err := newClientServer(cfg.ClientsIngress, cfg.Cert, cfg.ClientsAuth, relays, configStore, cfg.Stores, cfg.Logger)
 	if err != nil {
 		return nil, fmt.Errorf("create client server: %w", err)
 	}
 
+	var clientsAddrs []string
+	for _, icfg := range cfg.ClientsIngress {
+		clientsAddrs = append(clientsAddrs, icfg.Addr.String())
+	}
 	return &Server{
 		clients: clients,
 		relays:  relays,
 
-		logger: cfg.Logger.With("control", cfg.ClientsAddr),
+		logger: cfg.Logger.With("control", clientsAddrs),
 	}, nil
 }
 

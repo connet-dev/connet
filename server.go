@@ -36,15 +36,24 @@ func NewServer(opts ...ServerOption) (*Server, error) {
 		Token: netc.GenServerName("relay"),
 	}
 
+	var clientsIngress []model.IngressConfig
+	for _, addr := range cfg.clientsAddrs {
+		clientsIngress = append(clientsIngress, model.IngressConfig{
+			Addr:  addr,
+			Restr: cfg.clientsRestr,
+		})
+	}
+
 	control, err := control.NewServer(control.Config{
-		Cert:         cfg.cert,
-		ClientsAddr:  cfg.clientsAddr,
-		ClientsAuth:  cfg.clientsAuth,
-		ClientsRestr: cfg.clientsRestr,
-		RelaysAddr:   relaysAddr,
-		RelaysAuth:   selfhosted.NewRelayAuthenticator(relayAuth),
-		Logger:       cfg.logger,
-		Stores:       control.NewFileStores(filepath.Join(cfg.dir, "control")),
+		Cert:           cfg.cert,
+		ClientsIngress: clientsIngress,
+		ClientsAuth:    cfg.clientsAuth,
+		RelaysIngress: []model.IngressConfig{
+			{Addr: relaysAddr},
+		},
+		RelaysAuth: selfhosted.NewRelayAuthenticator(relayAuth),
+		Logger:     cfg.logger,
+		Stores:     control.NewFileStores(filepath.Join(cfg.dir, "control")),
 	})
 	if err != nil {
 		return nil, fmt.Errorf("create control server: %w", err)
@@ -59,7 +68,9 @@ func NewServer(opts ...ServerOption) (*Server, error) {
 	controlCAs := x509.NewCertPool()
 	controlCAs.AddCert(cfg.cert.Leaf)
 	relay, err := relay.NewServer(relay.Config{
-		Addr:     cfg.relayAddr,
+		Ingress: []model.IngressConfig{
+			{Addr: cfg.relayAddr},
+		},
 		Hostport: model.HostPort{Host: cfg.relayHostname, Port: cfg.relayAddr.AddrPort().Port()},
 		Logger:   cfg.logger,
 		Stores:   relay.NewFileStores(filepath.Join(cfg.dir, "relay")),

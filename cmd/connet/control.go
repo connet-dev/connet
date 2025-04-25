@@ -9,6 +9,7 @@ import (
 	"os"
 
 	"github.com/connet-dev/connet/control"
+	"github.com/connet-dev/connet/model"
 	"github.com/connet-dev/connet/restr"
 	"github.com/connet-dev/connet/selfhosted"
 	"github.com/spf13/cobra"
@@ -108,6 +109,7 @@ func controlRun(ctx context.Context, cfg ControlConfig, logger *slog.Logger) err
 		controlCfg.Cert = cert
 	}
 
+	var clientIngress model.IngressConfig
 	if cfg.ClientsAddr == "" {
 		cfg.ClientsAddr = ":19190"
 	}
@@ -115,15 +117,16 @@ func controlRun(ctx context.Context, cfg ControlConfig, logger *slog.Logger) err
 	if err != nil {
 		return fmt.Errorf("resolve clients address: %w", err)
 	}
-	controlCfg.ClientsAddr = clientAddr
+	clientIngress.Addr = clientAddr
 
 	if len(cfg.ClientsIPRestriction.AllowCIDRs) > 0 || len(cfg.ClientsIPRestriction.DenyCIDRs) > 0 {
 		iprestr, err := restr.ParseIP(cfg.ClientsIPRestriction.AllowCIDRs, cfg.ClientsIPRestriction.DenyCIDRs)
 		if err != nil {
 			return fmt.Errorf("parse client restrictions: %w", err)
 		}
-		controlCfg.ClientsRestr = iprestr
+		clientIngress.Restr = iprestr
 	}
+	controlCfg.ClientsIngress = append(controlCfg.ClientsIngress, clientIngress)
 
 	clientTokens := cfg.ClientsTokens
 	if cfg.ClientsTokensFile != "" {
@@ -137,6 +140,7 @@ func controlRun(ctx context.Context, cfg ControlConfig, logger *slog.Logger) err
 		return err
 	}
 
+	var relayIngress model.IngressConfig
 	if cfg.RelaysAddr == "" {
 		cfg.RelaysAddr = ":19189"
 	}
@@ -144,15 +148,16 @@ func controlRun(ctx context.Context, cfg ControlConfig, logger *slog.Logger) err
 	if err != nil {
 		return fmt.Errorf("resolve relays address: %w", err)
 	}
-	controlCfg.RelaysAddr = relayAddr
+	relayIngress.Addr = relayAddr
 
 	if len(cfg.RelaysIPRestriction.AllowCIDRs) > 0 || len(cfg.RelaysIPRestriction.DenyCIDRs) > 0 {
 		iprestr, err := restr.ParseIP(cfg.RelaysIPRestriction.AllowCIDRs, cfg.RelaysIPRestriction.DenyCIDRs)
 		if err != nil {
 			return fmt.Errorf("parse relays ip restriction: %w", err)
 		}
-		controlCfg.RelaysRestr = iprestr
+		relayIngress.Restr = iprestr
 	}
+	controlCfg.RelaysIngress = append(controlCfg.RelaysIngress, relayIngress)
 
 	relayTokens := cfg.RelaysTokens
 	if cfg.RelaysTokensFile != "" {

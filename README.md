@@ -536,11 +536,11 @@ by adding account management and it is one of the easiest way to start.
 ### v0.7.3
  - [x] info log on adding/removing endpoint
  - [x] websocket join as a func
+ - [ ] multiple ingress addrs
 
 ### v0.8.0
  - [ ] remove expired protocol fields
  - [ ] remove expired protocols
- - [ ] join cancel on context
  - [ ] from forward to endpoint
 
 ## Future

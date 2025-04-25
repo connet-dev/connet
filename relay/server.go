@@ -19,7 +19,7 @@ import (
 )
 
 type Config struct {
-	Addr     *net.UDPAddr
+	Ingress  []model.IngressConfig
 	Hostport model.HostPort
 
 	Stores Stores
@@ -59,7 +59,7 @@ func NewServer(cfg Config) (*Server, error) {
 	clients := newClientsServer(cfg, control.tlsAuthenticate, control.authenticate)
 
 	return &Server{
-		addr:              cfg.Addr,
+		ingress:           cfg.Ingress,
 		statelessResetKey: &statelessResetKey,
 
 		control: control,
@@ -70,7 +70,7 @@ func NewServer(cfg Config) (*Server, error) {
 }
 
 type Server struct {
-	addr              *net.UDPAddr
+	ingress           []model.IngressConfig
 	statelessResetKey *quic.StatelessResetKey
 
 	control *controlClient
@@ -80,21 +80,27 @@ type Server struct {
 }
 
 func (s *Server) Run(ctx context.Context) error {
-	s.logger.Debug("start udp listener")
-	udpConn, err := net.ListenUDP("udp", s.addr)
-	if err != nil {
-		return fmt.Errorf("relay server listen: %w", err)
-	}
-	defer udpConn.Close()
-
-	s.logger.Debug("start quic listener")
-	transport := quicc.ServerTransport(udpConn, s.statelessResetKey)
-	defer transport.Close()
-
 	g, ctx := errgroup.WithContext(ctx)
 
-	g.Go(func() error { return s.control.run(ctx, transport) })
-	g.Go(func() error { return s.clients.run(ctx, transport) })
+	for i, cfg := range s.ingress {
+		s.logger.Debug("start udp listener")
+		udpConn, err := net.ListenUDP("udp", cfg.Addr)
+		if err != nil {
+			return fmt.Errorf("relay server listen: %w", err)
+		}
+		defer udpConn.Close()
+
+		s.logger.Debug("start quic listener")
+		transport := quicc.ServerTransport(udpConn, s.statelessResetKey)
+		defer transport.Close()
+
+		// TODO add ip restrictions
+
+		if i == 0 {
+			g.Go(func() error { return s.control.run(ctx, transport) }) // TODO maybe accept transports and try to connect on each?
+		}
+		g.Go(func() error { return s.clients.run(ctx, transport) })
+	}
 
 	return g.Wait()
 }

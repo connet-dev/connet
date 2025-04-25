@@ -20,7 +20,6 @@ import (
 	"github.com/connet-dev/connet/pbc"
 	"github.com/connet-dev/connet/pbs"
 	"github.com/connet-dev/connet/quicc"
-	"github.com/connet-dev/connet/restr"
 	"github.com/quic-go/quic-go"
 	"github.com/segmentio/ksuid"
 	"golang.org/x/sync/errgroup"
@@ -46,10 +45,9 @@ type ClientRelays interface {
 }
 
 func newClientServer(
-	addr *net.UDPAddr,
+	ingress []model.IngressConfig,
 	cert tls.Certificate,
 	auth ClientAuthenticator,
-	iprestr restr.IP,
 	relays ClientRelays,
 	config logc.KV[ConfigKey, ConfigValue],
 	stores Stores,
@@ -126,17 +124,16 @@ func newClientServer(
 	copy(statelessResetKey[:], statelessResetVal.Bytes)
 
 	return &clientServer{
-		addr: addr,
+		ingress: ingress,
 		tlsConf: &tls.Config{
 			Certificates: []tls.Certificate{cert},
 			NextProtos:   model.ClientToControlNextProtos,
 		},
 		statelessResetKey: &statelessResetKey,
 
-		auth:    auth,
-		iprestr: iprestr,
-		relays:  relays,
-		logger:  logger.With("server", "clients"),
+		auth:   auth,
+		relays: relays,
+		logger: logger.With("server", "clients"),
 
 		reconnect: &reconnectToken{[32]byte(serverSecret.Bytes)},
 
@@ -151,14 +148,13 @@ func newClientServer(
 }
 
 type clientServer struct {
-	addr              *net.UDPAddr
+	ingress           []model.IngressConfig
 	tlsConf           *tls.Config
 	statelessResetKey *quic.StatelessResetKey
 
-	auth    ClientAuthenticator
-	iprestr restr.IP
-	relays  ClientRelays
-	logger  *slog.Logger
+	auth   ClientAuthenticator
+	relays ClientRelays
+	logger *slog.Logger
 
 	reconnect *reconnectToken
 
@@ -254,18 +250,20 @@ func (s *clientServer) listen(ctx context.Context, fwd model.Forward, role model
 func (s *clientServer) run(ctx context.Context) error {
 	g, ctx := errgroup.WithContext(ctx)
 
-	g.Go(func() error { return s.runListener(ctx) })
+	for _, cfg := range s.ingress {
+		g.Go(func() error { return s.runListener(ctx, cfg) })
+	}
 	g.Go(func() error { return s.runPeerCache(ctx) })
 	g.Go(func() error { return s.runCleaner(ctx) })
 
 	return g.Wait()
 }
 
-var errClientConnectNotAllowed = errors.New("client not allowed")
+var errClientConnectNotAllowed = errors.New("client not allowed") // TODO specific addr error
 
-func (s *clientServer) runListener(ctx context.Context) error {
+func (s *clientServer) runListener(ctx context.Context, cfg model.IngressConfig) error {
 	s.logger.Debug("start udp listener")
-	udpConn, err := net.ListenUDP("udp", s.addr)
+	udpConn, err := net.ListenUDP("udp", cfg.Addr)
 	if err != nil {
 		return fmt.Errorf("client server udp listen: %w", err)
 	}
@@ -276,10 +274,10 @@ func (s *clientServer) runListener(ctx context.Context) error {
 	defer transport.Close()
 
 	quicConf := quicc.StdConfig
-	if s.iprestr.IsNotEmpty() {
+	if cfg.Restr.IsNotEmpty() {
 		quicConf = quicConf.Clone()
 		quicConf.GetConfigForClient = func(info *quic.ClientHelloInfo) (*quic.Config, error) {
-			if s.iprestr.IsAllowedAddr(info.RemoteAddr) {
+			if cfg.Restr.IsAllowedAddr(info.RemoteAddr) {
 				return quicConf, nil
 			}
 			return nil, errClientConnectNotAllowed

@@ -15,7 +15,7 @@ import (
 type serverConfig struct {
 	cert tls.Certificate
 
-	clientsAddr  *net.UDPAddr
+	clientsAddrs []*net.UDPAddr
 	clientsAuth  control.ClientAuthenticator
 	clientsRestr restr.IP
 
@@ -40,7 +40,7 @@ func newServerConfig(opts []ServerOption) (*serverConfig, error) {
 		return nil, fmt.Errorf("missing certificate")
 	}
 
-	if cfg.clientsAddr == nil {
+	if len(cfg.clientsAddrs) == 0 {
 		if err := ServerClientsAddress(":19190")(cfg); err != nil {
 			return nil, fmt.Errorf("default clients address: %w", err)
 		}
@@ -90,7 +90,7 @@ func ServerClientsAddress(address string) ServerOption {
 			return fmt.Errorf("resolve clients address: %w", err)
 		}
 
-		cfg.clientsAddr = addr
+		cfg.clientsAddrs = append(cfg.clientsAddrs, addr)
 
 		return nil
 	}
