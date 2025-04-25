@@ -19,6 +19,7 @@ import (
 	"github.com/connet-dev/connet/pb"
 	"github.com/connet-dev/connet/pbc"
 	"github.com/connet-dev/connet/quicc"
+	"github.com/connet-dev/connet/restr"
 	"github.com/quic-go/quic-go"
 	"golang.org/x/sync/errgroup"
 )
@@ -179,8 +180,19 @@ func (s *clientsServer) removeSource(fcs *forwardClients, conn *clientConn) {
 	}
 }
 
-func (s *clientsServer) run(ctx context.Context, transport *quic.Transport) error {
-	l, err := transport.Listen(s.tlsConf, quicc.StdConfig)
+func (s *clientsServer) run(ctx context.Context, transport *quic.Transport, iprestr restr.IP) error {
+	quicConf := quicc.StdConfig
+	if iprestr.IsNotEmpty() {
+		quicConf = quicConf.Clone()
+		quicConf.GetConfigForClient = func(info *quic.ClientHelloInfo) (*quic.Config, error) {
+			if iprestr.IsAllowedAddr(info.RemoteAddr) {
+				return quicConf, nil
+			}
+			return nil, fmt.Errorf("client not allowed from %s", info.RemoteAddr.String())
+		}
+	}
+
+	l, err := transport.Listen(s.tlsConf, quicConf)
 	if err != nil {
 		return fmt.Errorf("client server udp listen: %w", err)
 	}

@@ -80,8 +80,13 @@ type Server struct {
 }
 
 func (s *Server) Run(ctx context.Context) error {
+	if len(s.ingress) == 0 {
+		return fmt.Errorf("no ingresses were provided")
+	}
+
 	g, ctx := errgroup.WithContext(ctx)
 
+	transports := make([]*quic.Transport, len(s.ingress))
 	for i, cfg := range s.ingress {
 		s.logger.Debug("start udp listener")
 		udpConn, err := net.ListenUDP("udp", cfg.Addr)
@@ -94,12 +99,13 @@ func (s *Server) Run(ctx context.Context) error {
 		transport := quicc.ServerTransport(udpConn, s.statelessResetKey)
 		defer transport.Close()
 
-		// TODO add ip restrictions
+		transports[i] = transport
+	}
 
-		if i == 0 {
-			g.Go(func() error { return s.control.run(ctx, transport) }) // TODO maybe accept transports and try to connect on each?
-		}
-		g.Go(func() error { return s.clients.run(ctx, transport) })
+	g.Go(func() error { return s.control.run(ctx, transports[0]) }) // TODO maybe accept transports and try to connect on each?
+
+	for i, cfg := range s.ingress {
+		g.Go(func() error { return s.clients.run(ctx, transports[i], cfg.Restr) })
 	}
 
 	return g.Wait()
