@@ -235,8 +235,6 @@ func (s *relayServer) run(ctx context.Context) error {
 	return g.Wait()
 }
 
-var errRelayConnectNotAllowed = errors.New("relay not allowed") // TODO specific addr error
-
 func (s *relayServer) runListener(ctx context.Context, cfg model.IngressConfig) error {
 	s.logger.Debug("start udp listener")
 	udpConn, err := net.ListenUDP("udp", cfg.Addr)
@@ -256,7 +254,7 @@ func (s *relayServer) runListener(ctx context.Context, cfg model.IngressConfig) 
 			if cfg.Restr.IsAllowedAddr(info.RemoteAddr) {
 				return quicConf, nil
 			}
-			return nil, errRelayConnectNotAllowed
+			return nil, fmt.Errorf("relay not allowed from %s", info.RemoteAddr.String())
 		}
 	}
 

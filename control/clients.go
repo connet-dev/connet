@@ -5,7 +5,6 @@ import (
 	"crypto/rand"
 	"crypto/tls"
 	"crypto/x509"
-	"errors"
 	"fmt"
 	"io"
 	"log/slog"
@@ -259,8 +258,6 @@ func (s *clientServer) run(ctx context.Context) error {
 	return g.Wait()
 }
 
-var errClientConnectNotAllowed = errors.New("client not allowed") // TODO specific addr error
-
 func (s *clientServer) runListener(ctx context.Context, cfg model.IngressConfig) error {
 	s.logger.Debug("start udp listener")
 	udpConn, err := net.ListenUDP("udp", cfg.Addr)
@@ -280,7 +277,7 @@ func (s *clientServer) runListener(ctx context.Context, cfg model.IngressConfig)
 			if cfg.Restr.IsAllowedAddr(info.RemoteAddr) {
 				return quicConf, nil
 			}
-			return nil, errClientConnectNotAllowed
+			return nil, fmt.Errorf("client not allowed from %s", info.RemoteAddr.String())
 		}
 	}
 

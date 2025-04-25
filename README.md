@@ -537,6 +537,7 @@ by adding account management and it is one of the easiest way to start.
  - [x] info log on adding/removing endpoint
  - [x] websocket join as a func
  - [ ] multiple ingress addrs
+ - [ ] api to control client/control/relay
 
 ### v0.8.0
  - [ ] remove expired protocol fields
