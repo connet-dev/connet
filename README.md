@@ -533,12 +533,14 @@ by adding account management and it is one of the easiest way to start.
  - [x] websocket tcp converter
  - [x] client versioning support
 
+### v0.7.3
+ - [x] info log on adding/removing endpoint
+ - [x] websocket join as a func
+
 ### v0.8.0
  - [ ] remove expired protocol fields
  - [ ] remove expired protocols
- - [ ] info log on adding/removing endpoint
  - [ ] join cancel on context
- - [ ] websocket join as a func
  - [ ] from forward to endpoint
 
 ## Future
