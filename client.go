@@ -157,6 +157,7 @@ func (c *Client) Destination(ctx context.Context, cfg DestinationConfig) (Destin
 	}
 
 	c.destinations[cfg.Forward] = clDst
+	c.logger.Info("added destination", "fwd", cfg.Forward)
 	return clDst, nil
 }
 
@@ -165,6 +166,7 @@ func (c *Client) removeDestination(fwd model.Forward) {
 	defer c.destinationsMu.Unlock()
 
 	delete(c.destinations, fwd)
+	c.logger.Info("removed destination", "fwd", fwd)
 }
 
 // Sources returns the set of currently active sources
@@ -204,6 +206,7 @@ func (c *Client) Source(ctx context.Context, cfg SourceConfig) (Source, error) {
 	}
 
 	c.sources[cfg.Forward] = clSrc
+	c.logger.Info("added source", "fwd", cfg.Forward)
 	return clSrc, nil
 }
 
@@ -212,6 +215,7 @@ func (c *Client) removeSource(fwd model.Forward) {
 	defer c.sourcesMu.Unlock()
 
 	delete(c.sources, fwd)
+	c.logger.Info("removed source", "fwd", fwd)
 }
 
 // Close closes this client. It disconnects the client and all endpoints (destinations and sources) associated with it.
