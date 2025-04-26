@@ -10,6 +10,7 @@ import (
 	"log/slog"
 	"maps"
 	"math"
+	"net"
 	"slices"
 	"sync"
 	"time"
@@ -19,7 +20,6 @@ import (
 	"github.com/connet-dev/connet/pb"
 	"github.com/connet-dev/connet/pbc"
 	"github.com/connet-dev/connet/quicc"
-	"github.com/connet-dev/connet/restr"
 	"github.com/quic-go/quic-go"
 	"golang.org/x/sync/errgroup"
 )
@@ -180,12 +180,33 @@ func (s *clientsServer) removeSource(fcs *forwardClients, conn *clientConn) {
 	}
 }
 
-func (s *clientsServer) run(ctx context.Context, transport *quic.Transport, iprestr restr.IP) error {
+type clientsServerCfg struct {
+	ingress           model.IngressConfig
+	statelessResetKey *quic.StatelessResetKey
+	addedTransport    func(*quic.Transport)
+	removeTransport   func(*quic.Transport)
+}
+
+func (s *clientsServer) run(ctx context.Context, cfg clientsServerCfg) error {
+	s.logger.Debug("start udp listener")
+	udpConn, err := net.ListenUDP("udp", cfg.ingress.Addr)
+	if err != nil {
+		return fmt.Errorf("relay server listen: %w", err)
+	}
+	defer udpConn.Close()
+
+	s.logger.Debug("start quic listener")
+	transport := quicc.ServerTransport(udpConn, cfg.statelessResetKey)
+	defer transport.Close()
+
+	cfg.addedTransport(transport)
+	defer cfg.removeTransport(transport)
+
 	quicConf := quicc.StdConfig
-	if iprestr.IsNotEmpty() {
+	if cfg.ingress.Restr.IsNotEmpty() {
 		quicConf = quicConf.Clone()
 		quicConf.GetConfigForClient = func(info *quic.ClientHelloInfo) (*quic.Config, error) {
-			if iprestr.IsAllowedAddr(info.RemoteAddr) {
+			if cfg.ingress.Restr.IsAllowedAddr(info.RemoteAddr) {
 				return quicConf, nil
 			}
 			return nil, fmt.Errorf("client not allowed from %s", info.RemoteAddr.String())

@@ -164,11 +164,13 @@ func (s *controlClient) authenticate(serverName string, certs []*x509.Certificat
 	return nil
 }
 
-func (s *controlClient) run(ctx context.Context, transport *quic.Transport) error {
+type TransportsFn func(ctx context.Context) ([]*quic.Transport, error)
+
+func (s *controlClient) run(ctx context.Context, tfn TransportsFn) error {
 	defer s.connStatus.Store(statusc.Disconnected)
 
 	s.logger.Info("connecting to control server", "addr", s.controlAddr)
-	conn, err := s.connect(ctx, transport)
+	conn, err := s.connect(ctx, tfn)
 	if err != nil {
 		return err
 	}
@@ -187,67 +189,80 @@ func (s *controlClient) run(ctx context.Context, transport *quic.Transport) erro
 		}
 
 		s.logger.Info("reconnecting to control server", "addr", s.controlAddr)
-		if conn, err = s.reconnect(ctx, transport); err != nil {
+		if conn, err = s.reconnect(ctx, tfn); err != nil {
 			return err
 		}
 	}
 }
 
-func (s *controlClient) connect(ctx context.Context, transport *quic.Transport) (quic.Connection, error) {
+func (s *controlClient) connect(ctx context.Context, tfn TransportsFn) (quic.Connection, error) {
+	transports, err := tfn(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("cannot get transports: %w", err)
+	}
+
 	reconnConfig, err := s.config.GetOrDefault(configControlReconnect, ConfigValue{})
 	if err != nil {
 		return nil, fmt.Errorf("server reconnect get: %w", err)
 	}
 
-	conn, err := transport.Dial(quicc.RTTContext(ctx), s.controlAddr, s.controlTLSConf, quicc.StdConfig)
-	if err != nil {
-		return nil, fmt.Errorf("server dial: %w", err)
+	for _, transport := range transports {
+		conn, err := transport.Dial(quicc.RTTContext(ctx), s.controlAddr, s.controlTLSConf, quicc.StdConfig)
+		if err != nil {
+			s.logger.Debug("relay control server: dial error", "localAddr", transport.Conn.LocalAddr(), "err", err)
+			continue
+		}
+
+		authStream, err := conn.OpenStreamSync(ctx)
+		if err != nil {
+			s.logger.Debug("relay control server: open stream error", "localAddr", transport.Conn.LocalAddr(), "err", err)
+			continue
+		}
+		defer authStream.Close()
+
+		if err := pb.Write(authStream, &pbr.AuthenticateReq{
+			Token:          s.controlToken,
+			Addr:           s.hostport.PB(),
+			ReconnectToken: reconnConfig.Bytes,
+			BuildVersion:   model.BuildVersion(),
+		}); err != nil {
+			s.logger.Debug("relay control server: auth write error", "localAddr", transport.Conn.LocalAddr(), "err", err)
+			continue
+		}
+
+		resp := &pbr.AuthenticateResp{}
+		if err := pb.Read(authStream, resp); err != nil {
+			s.logger.Debug("relay control server: auth read error", "localAddr", transport.Conn.LocalAddr(), "err", err)
+			continue
+		}
+		if resp.Error != nil {
+			return nil, resp.Error
+		}
+
+		controlIDConfig, err := s.config.GetOrDefault(configControlID, ConfigValue{})
+		if err != nil {
+			return nil, fmt.Errorf("server control id get: %w", err)
+		}
+		if controlIDConfig.String != "" && controlIDConfig.String != resp.ControlId {
+			return nil, fmt.Errorf("unexpected server id, has: %s, resp: %s", controlIDConfig.String, resp.ControlId)
+		}
+		controlIDConfig.String = resp.ControlId
+		if err := s.config.Put(configControlID, controlIDConfig); err != nil {
+			return nil, fmt.Errorf("server control id set: %w", err)
+		}
+
+		reconnConfig.Bytes = resp.ReconnectToken
+		if err := s.config.Put(configControlReconnect, reconnConfig); err != nil {
+			return nil, fmt.Errorf("server reconnect set: %w", err)
+		}
+
+		return conn, nil
 	}
 
-	authStream, err := conn.OpenStreamSync(ctx)
-	if err != nil {
-		return nil, fmt.Errorf("server stream: %w", err)
-	}
-	defer authStream.Close()
-
-	if err := pb.Write(authStream, &pbr.AuthenticateReq{
-		Token:          s.controlToken,
-		Addr:           s.hostport.PB(),
-		ReconnectToken: reconnConfig.Bytes,
-		BuildVersion:   model.BuildVersion(),
-	}); err != nil {
-		return nil, fmt.Errorf("server write auth: %w", err)
-	}
-
-	resp := &pbr.AuthenticateResp{}
-	if err := pb.Read(authStream, resp); err != nil {
-		return nil, fmt.Errorf("server read auth: %w", err)
-	}
-	if resp.Error != nil {
-		return nil, resp.Error
-	}
-
-	controlIDConfig, err := s.config.GetOrDefault(configControlID, ConfigValue{})
-	if err != nil {
-		return nil, fmt.Errorf("server control id get: %w", err)
-	}
-	if controlIDConfig.String != "" && controlIDConfig.String != resp.ControlId {
-		return nil, fmt.Errorf("unexpected server id, has: %s, resp: %s", controlIDConfig.String, resp.ControlId)
-	}
-	controlIDConfig.String = resp.ControlId
-	if err := s.config.Put(configControlID, controlIDConfig); err != nil {
-		return nil, fmt.Errorf("server control id set: %w", err)
-	}
-
-	reconnConfig.Bytes = resp.ReconnectToken
-	if err := s.config.Put(configControlReconnect, reconnConfig); err != nil {
-		return nil, fmt.Errorf("server reconnect set: %w", err)
-	}
-
-	return conn, nil
+	return nil, fmt.Errorf("could not reach the control server on any of the transports")
 }
 
-func (s *controlClient) reconnect(ctx context.Context, transport *quic.Transport) (quic.Connection, error) {
+func (s *controlClient) reconnect(ctx context.Context, tfn TransportsFn) (quic.Connection, error) {
 	d := netc.MinBackoff
 	t := time.NewTimer(d)
 	defer t.Stop()
@@ -259,7 +274,7 @@ func (s *controlClient) reconnect(ctx context.Context, transport *quic.Transport
 		case <-t.C:
 		}
 
-		if conn, err := s.connect(ctx, transport); err != nil {
+		if conn, err := s.connect(ctx, tfn); err != nil {
 			s.logger.Debug("reconnect failed, retrying", "err", err)
 		} else {
 			return conn, nil

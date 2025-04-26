@@ -12,7 +12,7 @@ import (
 	"slices"
 
 	"github.com/connet-dev/connet/model"
-	"github.com/connet-dev/connet/quicc"
+	"github.com/connet-dev/connet/notify"
 	"github.com/connet-dev/connet/statusc"
 	"github.com/quic-go/quic-go"
 	"golang.org/x/sync/errgroup"
@@ -81,32 +81,34 @@ type Server struct {
 
 func (s *Server) Run(ctx context.Context) error {
 	if len(s.ingress) == 0 {
-		return fmt.Errorf("no ingresses were provided")
+		return fmt.Errorf("relay server is missing ingresses")
 	}
 
 	g, ctx := errgroup.WithContext(ctx)
 
-	transports := make([]*quic.Transport, len(s.ingress))
-	for i, cfg := range s.ingress {
-		s.logger.Debug("start udp listener")
-		udpConn, err := net.ListenUDP("udp", cfg.Addr)
-		if err != nil {
-			return fmt.Errorf("relay server listen: %w", err)
-		}
-		defer udpConn.Close()
+	transports := notify.NewEmpty[[]*quic.Transport]()
 
-		s.logger.Debug("start quic listener")
-		transport := quicc.ServerTransport(udpConn, s.statelessResetKey)
-		defer transport.Close()
-
-		transports[i] = transport
+	for _, ingress := range s.ingress {
+		g.Go(func() error {
+			return s.clients.run(ctx, clientsServerCfg{
+				ingress:           ingress,
+				statelessResetKey: s.statelessResetKey,
+				addedTransport: func(t *quic.Transport) {
+					notify.SliceAppend(transports, t)
+				},
+				removeTransport: func(t *quic.Transport) {
+					notify.SliceRemove(transports, t)
+				},
+			})
+		})
 	}
 
-	g.Go(func() error { return s.control.run(ctx, transports[0]) }) // TODO maybe accept transports and try to connect on each?
-
-	for i, cfg := range s.ingress {
-		g.Go(func() error { return s.clients.run(ctx, transports[i], cfg.Restr) })
-	}
+	g.Go(func() error {
+		return s.control.run(ctx, func(ctx context.Context) ([]*quic.Transport, error) {
+			t, _, err := transports.GetAny(ctx)
+			return t, err
+		})
+	})
 
 	return g.Wait()
 }

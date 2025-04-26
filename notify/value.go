@@ -3,7 +3,10 @@ package notify
 import (
 	"context"
 	"errors"
+	"slices"
 	"sync/atomic"
+
+	"github.com/connet-dev/connet/iterc"
 )
 
 var errNotifyClosed = errors.New("notify already closed")
@@ -206,5 +209,19 @@ func (c *C[T]) Update(f func(t T)) {
 		t = c.copier(t)
 		f(t)
 		return t, true
+	})
+}
+
+// TODO support slices and maps
+
+func SliceAppend[S []T, T any](v *V[S], val T) {
+	v.Update(func(t S) S {
+		return append(slices.Clone(t), val)
+	})
+}
+
+func SliceRemove[S []T, T comparable](v *V[S], val T) {
+	v.Update(func(t S) S {
+		return iterc.FilterSlice(t, func(el T) bool { return el != val })
 	})
 }
