@@ -122,9 +122,15 @@ func (p *directPeer) runRemote(ctx context.Context) error {
 			}
 		}
 
-		relays := map[model.HostPort]struct{}{}
-		for _, relay := range remote.Relays {
-			relays[model.HostPortFromPB(relay)] = struct{}{}
+		relays := map[model.RelayID]struct{}{}
+		for _, relay := range remote.RelayIds {
+			relays[model.RelayID(relay)] = struct{}{}
+		}
+		if len(remote.RelayIds) == 0 {
+			// compat: if remote peer didn't send any relayIds, try useing the relays with the hostport as id
+			for _, relay := range remote.Relays {
+				relays[model.RelayID(relay.String())] = struct{}{}
+			}
 		}
 
 		switch {
@@ -373,11 +379,11 @@ func (p *directPeerOutgoing) keepalive(ctx context.Context, conn quic.Connection
 
 type directPeerRelays struct {
 	parent   *directPeer
-	remotes  *notify.V[map[model.HostPort]struct{}]
+	remotes  *notify.V[map[model.RelayID]struct{}]
 	closerCh chan struct{}
 }
 
-func newDirectPeerRelays(ctx context.Context, parent *directPeer, remotes map[model.HostPort]struct{}) *directPeerRelays {
+func newDirectPeerRelays(ctx context.Context, parent *directPeer, remotes map[model.RelayID]struct{}) *directPeerRelays {
 	if len(remotes) == 0 {
 		return nil
 	}
@@ -392,32 +398,32 @@ func newDirectPeerRelays(ctx context.Context, parent *directPeer, remotes map[mo
 
 func (p *directPeerRelays) run(ctx context.Context) {
 	var (
-		relays map[model.HostPort]quic.Connection
-		remote map[model.HostPort]struct{}
+		relays map[model.RelayID]relayConn
+		remote map[model.RelayID]struct{}
 	)
 
-	active := map[model.HostPort]struct{}{}
+	active := map[model.RelayID]struct{}{}
 	defer func() {
-		for hp := range active {
-			p.parent.local.removeActiveConn(p.parent.remoteID, peerRelay, hp.String())
+		for id := range active {
+			p.parent.local.removeActiveConn(p.parent.remoteID, peerRelay, string(id))
 		}
 	}()
 
 	update := func() {
-		for hp := range active {
-			_, relayed := relays[hp]
-			_, remoted := remote[hp]
+		for id := range active {
+			_, relayed := relays[id]
+			_, remoted := remote[id]
 			if !(relayed && remoted) {
-				p.parent.local.removeActiveConn(p.parent.remoteID, peerRelay, hp.String())
-				delete(active, hp)
+				p.parent.local.removeActiveConn(p.parent.remoteID, peerRelay, string(id))
+				delete(active, id)
 			}
 		}
 
-		for hp := range remote {
-			if conn := relays[hp]; conn != nil {
-				if _, ok := active[hp]; !ok {
-					p.parent.local.addActiveConn(p.parent.remoteID, peerRelay, hp.String(), conn)
-					active[hp] = struct{}{}
+		for id := range remote {
+			if conn, ok := relays[id]; ok {
+				if _, ok := active[id]; !ok {
+					p.parent.local.addActiveConn(p.parent.remoteID, peerRelay, string(id), conn.conn)
+					active[id] = struct{}{}
 				}
 			}
 		}

@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"github.com/connet-dev/connet/certc"
+	"github.com/connet-dev/connet/iterc"
 	"github.com/connet-dev/connet/logc"
 	"github.com/connet-dev/connet/model"
 	"github.com/connet-dev/connet/netc"
@@ -26,8 +27,8 @@ import (
 )
 
 type controlClient struct {
-	hostport model.HostPort
-	root     *certc.Cert
+	hostports []model.HostPort
+	root      *certc.Cert
 
 	controlAddr    *net.UDPAddr
 	controlToken   string
@@ -89,8 +90,8 @@ func newControlClient(cfg Config, configStore logc.KV[ConfigKey, ConfigValue]) (
 	}
 
 	c := &controlClient{
-		hostport: cfg.Hostport,
-		root:     root,
+		hostports: cfg.Hostports,
+		root:      root,
 
 		controlAddr:  cfg.ControlAddr,
 		controlToken: cfg.ControlToken,
@@ -110,7 +111,7 @@ func newControlClient(cfg Config, configStore logc.KV[ConfigKey, ConfigValue]) (
 		clientsStreamOffset: clientsStreamOffset.Int64,
 		clientsLogOffset:    clientsLogOffset.Int64,
 
-		logger: cfg.Logger.With("relay-control", cfg.Hostport),
+		logger: cfg.Logger.With("relay-control", cfg.Hostports),
 	}
 	c.connStatus.Store(statusc.NotConnected)
 	return c, nil
@@ -222,7 +223,8 @@ func (s *controlClient) connect(ctx context.Context, tfn TransportsFn) (quic.Con
 
 		if err := pb.Write(authStream, &pbr.AuthenticateReq{
 			Token:          s.controlToken,
-			Addr:           s.hostport.PB(),
+			Addr:           s.hostports[0].PB(),
+			Addresses:      iterc.MapSlice(s.hostports, model.HostPort.PB),
 			ReconnectToken: reconnConfig.Bytes,
 			BuildVersion:   model.BuildVersion(),
 		}); err != nil {

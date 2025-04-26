@@ -13,6 +13,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/connet-dev/connet/iterc"
 	"github.com/connet-dev/connet/logc"
 	"github.com/connet-dev/connet/model"
 	"github.com/connet-dev/connet/pb"
@@ -85,6 +86,7 @@ func newClientServer(
 				Id:                msg.Key.ID.String(),
 				Direct:            msg.Value.Peer.Direct,
 				Relays:            msg.Value.Peer.Relays,
+				RelayIds:          msg.Value.Peer.RelayIds,
 				Directs:           msg.Value.Peer.Directs,
 				ServerCertificate: msg.Value.Peer.ServerCertificate,
 				ClientCertificate: msg.Value.Peer.ClientCertificate,
@@ -222,6 +224,7 @@ func (s *clientServer) listen(ctx context.Context, fwd model.Forward, role model
 					Id:                msg.Key.ID.String(),
 					Direct:            msg.Value.Peer.Direct,
 					Relays:            msg.Value.Peer.Relays,
+					RelayIds:          msg.Value.Peer.RelayIds,
 					Directs:           msg.Value.Peer.Directs,
 					ServerCertificate: msg.Value.Peer.ServerCertificate,
 					ClientCertificate: msg.Value.Peer.ClientCertificate,
@@ -325,6 +328,7 @@ func (s *clientServer) runPeerCache(ctx context.Context) error {
 				Id:                msg.Key.ID.String(),
 				Direct:            msg.Value.Peer.Direct,
 				Relays:            msg.Value.Peer.Relays,
+				RelayIds:          msg.Value.Peer.RelayIds,
 				Directs:           msg.Value.Peer.Directs,
 				ServerCertificate: msg.Value.Peer.ServerCertificate,
 				ClientCertificate: msg.Value.Peer.ClientCertificate,
@@ -709,9 +713,12 @@ func (s *clientStream) relay(ctx context.Context, req *pbs.Request_Relay) error 
 			s.conn.logger.Debug("updated relay list", "relays", len(relays))
 
 			var addrs []*pbs.Relay
-			for _, value := range relays {
+			for id, value := range relays {
 				addrs = append(addrs, &pbs.Relay{
-					Address:           value.Hostport.PB(),
+					// compat: old clients only read Address field, use first hostport as such
+					Address:           value.Hostports[0].PB(),
+					Id:                id.String(),
+					Addresses:         iterc.MapSlice(value.Hostports, model.HostPort.PB),
 					ServerCertificate: value.Cert.Raw,
 				})
 			}

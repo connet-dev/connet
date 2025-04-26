@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/tls"
 	"errors"
+	"fmt"
 	"log/slog"
 	"net"
 	"sync/atomic"
@@ -21,20 +22,22 @@ import (
 type relayPeer struct {
 	local *peer
 
-	serverHostport model.HostPort
-	serverConf     atomic.Pointer[serverTLSConfig]
+	serverID        model.RelayID
+	serverHostports []model.HostPort
+	serverConf      atomic.Pointer[serverTLSConfig]
 
 	closer chan struct{}
 
 	logger *slog.Logger
 }
 
-func newRelayPeer(local *peer, hp model.HostPort, serverConf *serverTLSConfig, logger *slog.Logger) *relayPeer {
+func newRelayPeer(local *peer, id model.RelayID, hps []model.HostPort, serverConf *serverTLSConfig, logger *slog.Logger) *relayPeer {
 	r := &relayPeer{
-		local:          local,
-		serverHostport: hp,
-		closer:         make(chan struct{}),
-		logger:         logger.With("relay", hp),
+		local:           local,
+		serverID:        id,
+		serverHostports: hps,
+		closer:          make(chan struct{}),
+		logger:          logger.With("relay", hps[0]),
 	}
 	r.serverConf.Store(serverConf)
 	return r
@@ -57,7 +60,7 @@ func (r *relayPeer) run(ctx context.Context) {
 func (r *relayPeer) runConn(ctx context.Context) error {
 	boff := netc.MinBackoff
 	for {
-		conn, err := r.connect(ctx)
+		conn, err := r.connectAny(ctx)
 		if err != nil {
 			r.logger.Debug("could not connect relay", "err", err)
 			if errors.Is(err, context.Canceled) {
@@ -80,8 +83,20 @@ func (r *relayPeer) runConn(ctx context.Context) error {
 	}
 }
 
-func (r *relayPeer) connect(ctx context.Context) (quic.Connection, error) {
-	addr, err := net.ResolveUDPAddr("udp", r.serverHostport.String())
+func (r *relayPeer) connectAny(ctx context.Context) (relayConn, error) {
+	for _, hp := range r.serverHostports {
+		if conn, err := r.connect(ctx, hp); err != nil {
+			r.logger.Debug("cannot connet relay", "hostport", hp, "err", err)
+		} else {
+			// compat: use the first one as "connected relay" since old peers will only look at it anyways
+			return relayConn{conn, r.serverHostports[0]}, nil
+		}
+	}
+	return relayConn{}, fmt.Errorf("cannot connect to relay: %s", r.serverID)
+}
+
+func (r *relayPeer) connect(ctx context.Context, hp model.HostPort) (quic.Connection, error) {
+	addr, err := net.ResolveUDPAddr("udp", hp.String())
 	if err != nil {
 		return nil, err
 	}
@@ -122,21 +137,21 @@ func (r *relayPeer) check(ctx context.Context, conn quic.Connection) error {
 	return nil
 }
 
-func (r *relayPeer) keepalive(ctx context.Context, conn quic.Connection) error {
-	defer conn.CloseWithError(quic.ApplicationErrorCode(pb.Error_RelayKeepaliveClosed), "keepalive closed")
+func (r *relayPeer) keepalive(ctx context.Context, conn relayConn) error {
+	defer conn.conn.CloseWithError(quic.ApplicationErrorCode(pb.Error_RelayKeepaliveClosed), "keepalive closed")
 
-	r.local.addRelayConn(r.serverHostport, conn)
-	defer r.local.removeRelayConn(r.serverHostport)
+	r.local.addRelayConn(r.serverID, conn)
+	defer r.local.removeRelayConn(r.serverID)
 
-	quicc.RTTLogStats(conn, r.logger)
+	quicc.RTTLogStats(conn.conn, r.logger)
 	for {
 		select {
 		case <-ctx.Done():
 			return context.Cause(ctx)
-		case <-conn.Context().Done():
-			return context.Cause(conn.Context())
+		case <-conn.conn.Context().Done():
+			return context.Cause(conn.conn.Context())
 		case <-time.After(30 * time.Second):
-			quicc.RTTLogStats(conn, r.logger)
+			quicc.RTTLogStats(conn.conn, r.logger)
 		}
 	}
 }

@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"log/slog"
 
+	"github.com/connet-dev/connet/iterc"
 	"github.com/connet-dev/connet/model"
 	"github.com/segmentio/ksuid"
 	"golang.org/x/sync/errgroup"
@@ -137,8 +138,8 @@ func (s *Server) getRelays() ([]StatusRelay, error) {
 	var relays []StatusRelay
 	for _, msg := range msgs {
 		relays = append(relays, StatusRelay{
-			ID:       msg.Key.ID,
-			Hostport: msg.Value.Hostport.String(),
+			ID:        msg.Key.ID,
+			Hostports: iterc.MapSlice(msg.Value.Hostports, model.HostPort.String),
 		})
 	}
 
@@ -164,6 +165,6 @@ type StatusPeer struct {
 }
 
 type StatusRelay struct {
-	ID       ksuid.KSUID `json:"id"`
-	Hostport string      `json:"hostport"`
+	ID        ksuid.KSUID `json:"id"`
+	Hostports []string    `json:"hostport"`
 }

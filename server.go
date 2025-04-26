@@ -71,9 +71,9 @@ func NewServer(opts ...ServerOption) (*Server, error) {
 		Ingress: []model.IngressConfig{
 			{Addr: cfg.relayAddr},
 		},
-		Hostport: model.HostPort{Host: cfg.relayHostname, Port: cfg.relayAddr.AddrPort().Port()},
-		Logger:   cfg.logger,
-		Stores:   relay.NewFileStores(filepath.Join(cfg.dir, "relay")),
+		Hostports: []model.HostPort{{Host: cfg.relayHostname, Port: cfg.relayAddr.AddrPort().Port()}},
+		Logger:    cfg.logger,
+		Stores:    relay.NewFileStores(filepath.Join(cfg.dir, "relay")),
 
 		ControlAddr:  relaysAddr,
 		ControlHost:  controlHost,

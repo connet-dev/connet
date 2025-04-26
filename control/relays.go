@@ -78,7 +78,12 @@ func newRelayServer(
 			srv = map[ksuid.KSUID]relayCacheValue{}
 			forwardsCache[msg.Key.Forward] = srv
 		}
-		srv[msg.Key.RelayID] = relayCacheValue{Hostport: msg.Value.Hostport, Cert: msg.Value.Cert}
+		rcv := relayCacheValue{Hostports: msg.Value.Hostports, Cert: msg.Value.Cert}
+		if len(rcv.Hostports) == 0 {
+			// compat: old values contain single hostport, use it
+			rcv.Hostports = append(rcv.Hostports, msg.Value.Hostport)
+		}
+		srv[msg.Key.RelayID] = rcv
 	}
 
 	serverIDConfig, err := config.GetOrInit(configServerID, func(_ ConfigKey) (ConfigValue, error) {
@@ -209,7 +214,7 @@ func (s *relayServer) listen(ctx context.Context, fwd model.Forward,
 				if servers == nil {
 					servers = map[ksuid.KSUID]relayCacheValue{}
 				}
-				servers[msg.Key.RelayID] = relayCacheValue{Hostport: msg.Value.Hostport, Cert: msg.Value.Cert}
+				servers[msg.Key.RelayID] = relayCacheValue{Hostports: msg.Value.Hostports, Cert: msg.Value.Cert}
 			}
 			changed = true
 		}
@@ -297,7 +302,12 @@ func (s *relayServer) runForwardsCache(ctx context.Context) error {
 				srv = map[ksuid.KSUID]relayCacheValue{}
 				s.forwardsCache[msg.Key.Forward] = srv
 			}
-			srv[msg.Key.RelayID] = relayCacheValue{Hostport: msg.Value.Hostport, Cert: msg.Value.Cert}
+			rcv := relayCacheValue{Hostports: msg.Value.Hostports, Cert: msg.Value.Cert}
+			if len(rcv.Hostports) == 0 {
+				// compat: old values are missing hostports, use single to cache
+				rcv.Hostports = append(rcv.Hostports, msg.Value.Hostport)
+			}
+			srv[msg.Key.RelayID] = rcv
 		}
 
 		s.forwardsOffset = msg.Offset + 1
@@ -344,16 +354,16 @@ type relayConn struct {
 	conn   quic.Connection
 	logger *slog.Logger
 
-	forwards logc.KV[RelayForwardKey, RelayForwardValue]
-	id       ksuid.KSUID
-	auth     RelayAuthentication
-	hostport model.HostPort
+	forwards  logc.KV[RelayForwardKey, RelayForwardValue]
+	id        ksuid.KSUID
+	auth      RelayAuthentication
+	hostports []model.HostPort
 }
 
 type relayConnAuth struct {
-	id       ksuid.KSUID
-	auth     RelayAuthentication
-	hostport model.HostPort
+	id        ksuid.KSUID
+	auth      RelayAuthentication
+	hostports []model.HostPort
 }
 
 func (c *relayConn) run(ctx context.Context) {
@@ -375,8 +385,8 @@ func (c *relayConn) runErr(ctx context.Context) error {
 	} else {
 		c.id = rauth.id
 		c.auth = rauth.auth
-		c.hostport = rauth.hostport
-		c.logger = c.logger.With("relay", c.hostport)
+		c.hostports = rauth.hostports
+		c.logger = c.logger.With("relay", c.hostports)
 	}
 
 	forwards, err := c.server.stores.RelayForwards(c.id)
@@ -387,7 +397,7 @@ func (c *relayConn) runErr(ctx context.Context) error {
 	c.forwards = forwards
 
 	key := RelayConnKey{ID: c.id}
-	value := RelayConnValue{Authentication: c.auth, Hostport: c.hostport}
+	value := RelayConnValue{Authentication: c.auth, Hostport: c.hostports[0], Hostports: c.hostports}
 	if err := c.server.conns.Put(key, value); err != nil {
 		return err
 	}
@@ -458,7 +468,11 @@ func (c *relayConn) authenticate(ctx context.Context) (*relayConnAuth, error) {
 	}
 
 	c.logger.Debug("authentication completed", "local", c.conn.LocalAddr(), "remote", c.conn.RemoteAddr(), "proto", proto, "build", req.BuildVersion)
-	return &relayConnAuth{id, auth, model.HostPortFromPB(req.Addr)}, nil
+	hostports := model.HostPortFromPBs(req.Addresses)
+	if len(hostports) == 0 { // compat: old relays only send a single one
+		hostports = append(hostports, model.HostPortFromPB(req.Addr))
+	}
+	return &relayConnAuth{id, auth, hostports}, nil
 }
 
 func (c *relayConn) runRelayClients(ctx context.Context) error {
@@ -585,7 +599,7 @@ func (c *relayConn) runRelayForwards(ctx context.Context) error {
 
 	for _, msg := range initialMsgs {
 		key := RelayServerKey{Forward: msg.Key.Forward, RelayID: c.id}
-		value := RelayServerValue{Hostport: c.hostport, Cert: msg.Value.Cert}
+		value := RelayServerValue{Hostport: c.hostports[0], Hostports: c.hostports, Cert: msg.Value.Cert}
 		if err := c.server.servers.Put(key, value); err != nil {
 			return err
 		}
@@ -619,7 +633,7 @@ func (c *relayConn) runRelayForwards(ctx context.Context) error {
 					return err
 				}
 			} else {
-				value := RelayServerValue{Hostport: c.hostport, Cert: msg.Value.Cert}
+				value := RelayServerValue{Hostport: c.hostports[0], Hostports: c.hostports, Cert: msg.Value.Cert}
 				if err := c.server.servers.Put(key, value); err != nil {
 					return err
 				}

@@ -3,6 +3,7 @@ package model
 import (
 	"fmt"
 
+	"github.com/connet-dev/connet/iterc"
 	"github.com/connet-dev/connet/pb"
 )
 
@@ -16,6 +17,10 @@ func HostPortFromPB(h *pb.HostPort) HostPort {
 		Host: h.Host,
 		Port: uint16(h.Port),
 	}
+}
+
+func HostPortFromPBs(hs []*pb.HostPort) []HostPort {
+	return iterc.MapSlice(hs, HostPortFromPB)
 }
 
 func (h HostPort) PB() *pb.HostPort {

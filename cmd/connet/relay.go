@@ -97,7 +97,7 @@ func relayRun(ctx context.Context, cfg RelayConfig, logger *slog.Logger) error {
 	}
 	relayCfg.Ingress = append(relayCfg.Ingress, model.IngressConfig{Addr: serverAddr})
 
-	relayCfg.Hostport = model.HostPort{Host: cfg.Hostname, Port: uint16(serverAddr.Port)}
+	relayCfg.Hostports = []model.HostPort{{Host: cfg.Hostname, Port: uint16(serverAddr.Port)}}
 
 	if cfg.ControlAddr == "" {
 		cfg.ControlAddr = "localhost:19189"

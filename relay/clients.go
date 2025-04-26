@@ -48,7 +48,7 @@ func newClientsServer(cfg Config, tlsAuth tlsAuthenticator, clAuth clientAuthent
 
 		forwards: map[model.Forward]*forwardClients{},
 
-		logger: cfg.Logger.With("relay-clients", cfg.Hostport),
+		logger: cfg.Logger.With("relay-clients", cfg.Hostports),
 	}
 }
 

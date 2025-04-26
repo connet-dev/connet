@@ -11,6 +11,7 @@ import (
 	"net"
 	"slices"
 
+	"github.com/connet-dev/connet/iterc"
 	"github.com/connet-dev/connet/model"
 	"github.com/connet-dev/connet/notify"
 	"github.com/connet-dev/connet/statusc"
@@ -19,8 +20,8 @@ import (
 )
 
 type Config struct {
-	Ingress  []model.IngressConfig
-	Hostport model.HostPort
+	Ingress   []model.IngressConfig
+	Hostports []model.HostPort
 
 	Stores Stores
 
@@ -65,7 +66,7 @@ func NewServer(cfg Config) (*Server, error) {
 		control: control,
 		clients: clients,
 
-		logger: cfg.Logger.With("relay", cfg.Hostport),
+		logger: cfg.Logger.With("relay", cfg.Hostports),
 	}, nil
 }
 
@@ -125,7 +126,7 @@ func (s *Server) Status(ctx context.Context) (Status, error) {
 
 	return Status{
 		Status:            stat,
-		Hostport:          s.control.hostport.String(),
+		Hostports:         iterc.MapSlice(s.control.hostports, model.HostPort.String),
 		ControlServerAddr: s.control.controlAddr.String(),
 		ControlServerID:   controlID,
 		Forwards:          fwds,
@@ -149,7 +150,7 @@ func (s *Server) getForwards() []model.Forward {
 
 type Status struct {
 	Status            statusc.Status  `json:"status"`
-	Hostport          string          `json:"hostport"`
+	Hostports         []string        `json:"hostports"`
 	ControlServerAddr string          `json:"control_server_addr"`
 	ControlServerID   string          `json:"control_server_id"`
 	Forwards          []model.Forward `json:"forwards"`
