@@ -226,7 +226,6 @@ func (s *clientsServer) run(ctx context.Context, cfg clientsServerCfg) error {
 			s.logger.Debug("accept error", "err", err)
 			return fmt.Errorf("client server quic accept: %w", err)
 		}
-		s.logger.Info("new client connected", "remote", conn.RemoteAddr())
 
 		rc := &clientConn{
 			server: s,
@@ -246,6 +245,7 @@ type clientConn struct {
 }
 
 func (c *clientConn) run(ctx context.Context) {
+	c.logger.Info("new client connected", "proto", c.conn.ConnectionState().TLS.NegotiatedProtocol, "remote", c.conn.RemoteAddr())
 	defer c.conn.CloseWithError(quic.ApplicationErrorCode(pb.Error_Unknown), "connection closed")
 
 	if err := c.runErr(ctx); err != nil {
