@@ -3,7 +3,11 @@ package notify
 import (
 	"context"
 	"errors"
+	"maps"
+	"slices"
 	"sync/atomic"
+
+	"github.com/connet-dev/connet/iterc"
 )
 
 var errNotifyClosed = errors.New("notify already closed")
@@ -192,19 +196,38 @@ func (v *V[T]) Notify(ctx context.Context) <-chan T {
 	return ch
 }
 
-func (v *V[T]) Copying(f func(T) T) *C[T] {
-	return &C[T]{v, f}
+func SliceAppend[S []T, T any](v *V[S], val T) {
+	v.Update(func(t S) S {
+		return append(slices.Clone(t), val)
+	})
 }
 
-type C[T any] struct {
-	*V[T]
-	copier func(T) T
+func SliceRemove[S []T, T comparable](v *V[S], val T) {
+	v.Update(func(t S) S {
+		return iterc.FilterSlice(t, func(el T) bool { return el != val })
+	})
 }
 
-func (c *C[T]) Update(f func(t T)) {
-	c.V.UpdateOpt(func(t T) (T, bool) {
-		t = c.copier(t)
-		f(t)
-		return t, true
+func MapPut[M ~map[K]T, K comparable, T any](m *V[M], k K, v T) {
+	m.Update(func(t M) M {
+		t = maps.Clone(t)
+		t[k] = v
+		return t
+	})
+}
+
+func MapDelete[M ~map[K]T, K comparable, T any](m *V[M], k K) {
+	m.Update(func(t M) M {
+		t = maps.Clone(t)
+		delete(t, k)
+		return t
+	})
+}
+
+func MapDeleteFunc[M ~map[K]T, K comparable, T any](m *V[M], del func(K, T) bool) {
+	m.Update(func(t M) M {
+		t = maps.Clone(t)
+		maps.DeleteFunc(t, del)
+		return t
 	})
 }

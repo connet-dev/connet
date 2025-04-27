@@ -16,3 +16,17 @@ func Map[P any, R any](it iter.Seq[P], f func(P) R) iter.Seq[R] {
 func MapSlice[SP ~[]P, P any, R any](s SP, f func(P) R) []R {
 	return slices.Collect(Map(slices.Values(s), f))
 }
+
+func Filter[P any](it iter.Seq[P], f func(P) bool) iter.Seq[P] {
+	return func(yield func(P) bool) {
+		for p := range it {
+			if f(p) {
+				yield(p)
+			}
+		}
+	}
+}
+
+func FilterSlice[SP ~[]P, P any](s SP, f func(P) bool) []P {
+	return slices.Collect(Filter(slices.Values(s), f))
+}
