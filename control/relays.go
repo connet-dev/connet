@@ -110,12 +110,6 @@ func newRelayServer(
 	var statelessResetKey quic.StatelessResetKey
 	copy(statelessResetKey[:], statelessResetVal.Bytes)
 
-	for _, ingress := range ingresses {
-		if len(ingress.TLS.NextProtos) == 0 {
-			ingress.TLS.NextProtos = model.RelayToControlNextProtos // TODO should this instead clone and set?
-		}
-	}
-
 	return &relayServer{
 		ingresses:         ingresses,
 		statelessResetKey: &statelessResetKey,
@@ -248,6 +242,11 @@ func (s *relayServer) runListener(ctx context.Context, ingress model.IngressConf
 	transport := quicc.ServerTransport(udpConn, s.statelessResetKey)
 	defer transport.Close()
 
+	tlsConf := ingress.TLS.Clone()
+	if len(tlsConf.NextProtos) == 0 {
+		tlsConf.NextProtos = model.RelayToControlNextProtos
+	}
+
 	quicConf := quicc.StdConfig
 	if ingress.Restr.IsNotEmpty() {
 		quicConf = quicConf.Clone()
@@ -259,7 +258,7 @@ func (s *relayServer) runListener(ctx context.Context, ingress model.IngressConf
 		}
 	}
 
-	l, err := transport.Listen(ingress.TLS, quicConf)
+	l, err := transport.Listen(tlsConf, quicConf)
 	if err != nil {
 		return fmt.Errorf("relay server quic listen: %w", err)
 	}

@@ -29,6 +29,10 @@ func NewServer(opts ...ServerOption) (*Server, error) {
 		return nil, err
 	}
 
+	tlsConf := &tls.Config{
+		Certificates: []tls.Certificate{cfg.cert},
+	}
+
 	relaysAddr, err := net.ResolveUDPAddr("udp", "127.0.0.1:19189")
 	if err != nil {
 		return nil, fmt.Errorf("resolve relays address: %w", err)
@@ -41,16 +45,12 @@ func NewServer(opts ...ServerOption) (*Server, error) {
 		ClientsIngress: []model.IngressConfig{{
 			Addr:  cfg.clientsAddr,
 			Restr: cfg.clientsRestr,
-			TLS: &tls.Config{
-				Certificates: []tls.Certificate{cfg.cert},
-			},
+			TLS:   tlsConf,
 		}},
 		ClientsAuth: cfg.clientsAuth,
 		RelaysIngress: []model.IngressConfig{{
 			Addr: relaysAddr,
-			TLS: &tls.Config{
-				Certificates: []tls.Certificate{cfg.cert},
-			},
+			TLS:  tlsConf,
 		}},
 		RelaysAuth: selfhosted.NewRelayAuthenticator(relayAuth),
 		Logger:     cfg.logger,

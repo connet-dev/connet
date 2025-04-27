@@ -121,12 +121,6 @@ func newClientServer(
 	var statelessResetKey quic.StatelessResetKey
 	copy(statelessResetKey[:], statelessResetVal.Bytes)
 
-	for _, ingress := range ingresses {
-		if len(ingress.TLS.NextProtos) == 0 {
-			ingress.TLS.NextProtos = model.ClientToControlNextProtos // TODO should this instead clone and set?
-		}
-	}
-
 	return &clientServer{
 		ingresses:         ingresses,
 		statelessResetKey: &statelessResetKey,
@@ -272,6 +266,11 @@ func (s *clientServer) runListener(ctx context.Context, ingress model.IngressCon
 	transport := quicc.ServerTransport(udpConn, s.statelessResetKey)
 	defer transport.Close()
 
+	tlsConf := ingress.TLS.Clone()
+	if len(tlsConf.NextProtos) == 0 {
+		tlsConf.NextProtos = model.ClientToControlNextProtos
+	}
+
 	quicConf := quicc.StdConfig
 	if ingress.Restr.IsNotEmpty() {
 		quicConf = quicConf.Clone()
@@ -283,7 +282,7 @@ func (s *clientServer) runListener(ctx context.Context, ingress model.IngressCon
 		}
 	}
 
-	l, err := transport.Listen(ingress.TLS, quicConf)
+	l, err := transport.Listen(tlsConf, quicConf)
 	if err != nil {
 		return fmt.Errorf("client server quic listen: %w", err)
 	}

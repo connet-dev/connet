@@ -101,17 +101,17 @@ func controlRun(ctx context.Context, cfg ControlConfig, logger *slog.Logger) err
 		Logger: logger,
 	}
 
-	var certs []tls.Certificate
+	tlsConf := &tls.Config{}
 	if cfg.Cert != "" {
 		cert, err := tls.LoadX509KeyPair(cfg.Cert, cfg.Key)
 		if err != nil {
 			return fmt.Errorf("load server certificate: %w", err)
 		}
-		certs = append(certs, cert)
+		tlsConf.Certificates = append(tlsConf.Certificates, cert)
 	}
 
 	clientIngress := model.IngressConfig{
-		TLS: &tls.Config{Certificates: certs},
+		TLS: tlsConf,
 	}
 	if cfg.ClientsAddr == "" {
 		cfg.ClientsAddr = ":19190"
@@ -144,7 +144,7 @@ func controlRun(ctx context.Context, cfg ControlConfig, logger *slog.Logger) err
 	}
 
 	relaysIngress := model.IngressConfig{
-		TLS: &tls.Config{Certificates: certs},
+		TLS: tlsConf,
 	}
 	if cfg.RelaysAddr == "" {
 		cfg.RelaysAddr = ":19189"
