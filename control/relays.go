@@ -3,7 +3,6 @@ package control
 import (
 	"context"
 	"crypto/rand"
-	"crypto/tls"
 	"crypto/x509"
 	"errors"
 	"fmt"
@@ -19,7 +18,6 @@ import (
 	"github.com/connet-dev/connet/pb"
 	"github.com/connet-dev/connet/pbr"
 	"github.com/connet-dev/connet/quicc"
-	"github.com/connet-dev/connet/restr"
 	"github.com/quic-go/quic-go"
 	"github.com/segmentio/ksuid"
 	"golang.org/x/sync/errgroup"
@@ -40,10 +38,8 @@ type RelayAuthenticator interface {
 type RelayAuthentication []byte
 
 func newRelayServer(
-	addr *net.UDPAddr,
-	cert tls.Certificate,
+	ingresses []model.IngressConfig,
 	auth RelayAuthenticator,
-	iprestr restr.IP,
 	config logc.KV[ConfigKey, ConfigValue],
 	stores Stores,
 	logger *slog.Logger,
@@ -114,18 +110,19 @@ func newRelayServer(
 	var statelessResetKey quic.StatelessResetKey
 	copy(statelessResetKey[:], statelessResetVal.Bytes)
 
+	for _, ingress := range ingresses {
+		if len(ingress.TLS.NextProtos) == 0 {
+			ingress.TLS.NextProtos = model.RelayToControlNextProtos // TODO should this instead clone and set?
+		}
+	}
+
 	return &relayServer{
-		addr: addr,
-		tlsConf: &tls.Config{
-			Certificates: []tls.Certificate{cert},
-			NextProtos:   model.RelayToControlNextProtos,
-		},
+		ingresses:         ingresses,
 		statelessResetKey: &statelessResetKey,
 
-		id:      serverIDConfig.String,
-		auth:    auth,
-		iprestr: iprestr,
-		logger:  logger.With("server", "relays"),
+		id:     serverIDConfig.String,
+		auth:   auth,
+		logger: logger.With("server", "relays"),
 
 		reconnect: &reconnectToken{[32]byte(serverSecret.Bytes)},
 
@@ -141,14 +138,12 @@ func newRelayServer(
 }
 
 type relayServer struct {
-	addr              *net.UDPAddr
-	tlsConf           *tls.Config
+	ingresses         []model.IngressConfig
 	statelessResetKey *quic.StatelessResetKey
 
-	id      string
-	auth    RelayAuthenticator
-	iprestr restr.IP
-	logger  *slog.Logger
+	id     string
+	auth   RelayAuthenticator
+	logger *slog.Logger
 
 	reconnect *reconnectToken
 
@@ -231,7 +226,9 @@ func (s *relayServer) listen(ctx context.Context, fwd model.Forward,
 func (s *relayServer) run(ctx context.Context) error {
 	g, ctx := errgroup.WithContext(ctx)
 
-	g.Go(func() error { return s.runListener(ctx) })
+	for _, ingress := range s.ingresses {
+		g.Go(func() error { return s.runListener(ctx, ingress) })
+	}
 	g.Go(func() error { return s.runForwardsCache(ctx) })
 
 	return g.Wait()
@@ -239,9 +236,9 @@ func (s *relayServer) run(ctx context.Context) error {
 
 var errRelayConnectNotAllowed = errors.New("relay not allowed")
 
-func (s *relayServer) runListener(ctx context.Context) error {
+func (s *relayServer) runListener(ctx context.Context, ingress model.IngressConfig) error {
 	s.logger.Debug("start udp listener")
-	udpConn, err := net.ListenUDP("udp", s.addr)
+	udpConn, err := net.ListenUDP("udp", ingress.Addr)
 	if err != nil {
 		return fmt.Errorf("relay server udp listen: %w", err)
 	}
@@ -252,17 +249,17 @@ func (s *relayServer) runListener(ctx context.Context) error {
 	defer transport.Close()
 
 	quicConf := quicc.StdConfig
-	if s.iprestr.IsNotEmpty() {
+	if ingress.Restr.IsNotEmpty() {
 		quicConf = quicConf.Clone()
 		quicConf.GetConfigForClient = func(info *quic.ClientHelloInfo) (*quic.Config, error) {
-			if s.iprestr.IsAllowedAddr(info.RemoteAddr) {
+			if ingress.Restr.IsAllowedAddr(info.RemoteAddr) {
 				return quicConf, nil
 			}
 			return nil, errRelayConnectNotAllowed
 		}
 	}
 
-	l, err := transport.Listen(s.tlsConf, quicConf)
+	l, err := transport.Listen(ingress.TLS, quicConf)
 	if err != nil {
 		return fmt.Errorf("relay server quic listen: %w", err)
 	}

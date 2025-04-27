@@ -2,6 +2,7 @@ package connet
 
 import (
 	"context"
+	"crypto/tls"
 	"crypto/x509"
 	"fmt"
 	"net"
@@ -37,14 +38,23 @@ func NewServer(opts ...ServerOption) (*Server, error) {
 	}
 
 	control, err := control.NewServer(control.Config{
-		Cert:         cfg.cert,
-		ClientsAddr:  cfg.clientsAddr,
-		ClientsAuth:  cfg.clientsAuth,
-		ClientsRestr: cfg.clientsRestr,
-		RelaysAddr:   relaysAddr,
-		RelaysAuth:   selfhosted.NewRelayAuthenticator(relayAuth),
-		Logger:       cfg.logger,
-		Stores:       control.NewFileStores(filepath.Join(cfg.dir, "control")),
+		ClientsIngress: []model.IngressConfig{{
+			Addr:  cfg.clientsAddr,
+			Restr: cfg.clientsRestr,
+			TLS: &tls.Config{
+				Certificates: []tls.Certificate{cfg.cert},
+			},
+		}},
+		ClientsAuth: cfg.clientsAuth,
+		RelaysIngress: []model.IngressConfig{{
+			Addr: relaysAddr,
+			TLS: &tls.Config{
+				Certificates: []tls.Certificate{cfg.cert},
+			},
+		}},
+		RelaysAuth: selfhosted.NewRelayAuthenticator(relayAuth),
+		Logger:     cfg.logger,
+		Stores:     control.NewFileStores(filepath.Join(cfg.dir, "control")),
 	})
 	if err != nil {
 		return nil, fmt.Errorf("create control server: %w", err)
