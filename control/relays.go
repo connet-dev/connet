@@ -264,7 +264,7 @@ func (s *relayServer) runListener(ctx context.Context, ingress model.IngressConf
 	}
 	defer l.Close()
 
-	s.logger.Info("waiting for connections")
+	s.logger.Info("waiting for connections", "addr", ingress.Addr)
 	for {
 		conn, err := l.Accept(ctx)
 		if err != nil {
