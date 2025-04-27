@@ -13,8 +13,8 @@ import (
 
 	"github.com/connet-dev/connet/model"
 	"github.com/connet-dev/connet/netc"
+	"github.com/connet-dev/connet/websocketc"
 	"github.com/gorilla/websocket"
-	"golang.org/x/sync/errgroup"
 )
 
 // SourceTCP creates a new source, and exposes it to a local TCP address to accept incoming traffic
@@ -225,36 +225,7 @@ func (s *WSSource) handle(w http.ResponseWriter, r *http.Request) {
 	}
 	defer sconn.Close()
 
-	var g errgroup.Group
-
-	g.Go(func() error {
-		defer sconn.Close()
-		for {
-			_, data, err := hconn.ReadMessage()
-			if err != nil {
-				return fmt.Errorf("websocked connection read: %w", err)
-			}
-			if _, err := sconn.Write(data); err != nil {
-				return fmt.Errorf("source connection write: %w", err)
-			}
-		}
-	})
-
-	g.Go(func() error {
-		defer hconn.Close()
-		var buf = make([]byte, 4096)
-		for {
-			n, err := sconn.Read(buf)
-			if err != nil {
-				return fmt.Errorf("source connection read: %w", err)
-			}
-			if err := hconn.WriteMessage(websocket.BinaryMessage, buf[0:n]); err != nil {
-				return fmt.Errorf("websocked connection write: %w", err)
-			}
-		}
-	})
-
-	err = g.Wait()
+	err = websocketc.Join(sconn, hconn)
 	s.logger.Debug("completed websocket connection", "err", err)
 }
 

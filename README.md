@@ -533,6 +533,11 @@ by adding account management and it is one of the easiest way to start.
  - [x] websocket tcp converter
  - [x] client versioning support
 
+### v0.8.0
+ - [x] info log on adding/removing endpoint
+ - [x] websocket join as a func
+ - [x] info log on client connecting
+
 ## Future
  - [ ] UDP support
  - [ ] UPnP and other methods for hole-punching
