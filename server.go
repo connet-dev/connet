@@ -37,11 +37,11 @@ func NewServer(opts ...ServerOption) (*Server, error) {
 	}
 
 	control, err := control.NewServer(control.Config{
-		ClientsIngress: []model.IngressConfig{cfg.clientsIngress},
+		ClientsIngress: cfg.clientsIngresses,
 		ClientsAuth:    cfg.clientsAuth,
 		RelaysIngress: []model.IngressConfig{{
 			Addr: relaysAddr,
-			TLS:  cfg.clientsIngress.TLS,
+			TLS:  cfg.clientsIngresses[0].TLS, // TODO should choose one of the certs and use that, controlHost
 		}},
 		RelaysAuth: selfhosted.NewRelayAuthenticator(relayAuth),
 		Logger:     cfg.logger,
@@ -53,13 +53,15 @@ func NewServer(opts ...ServerOption) (*Server, error) {
 
 	controlHost := "localhost"
 	controlCAs := x509.NewCertPool()
-	for _, cert := range cfg.clientsIngress.TLS.Certificates {
-		if len(cert.Leaf.IPAddresses) > 0 {
-			controlHost = cert.Leaf.IPAddresses[0].String()
-		} else if len(cert.Leaf.DNSNames) > 0 {
-			controlHost = cert.Leaf.DNSNames[0]
+	for _, ingress := range cfg.clientsIngresses {
+		for _, cert := range ingress.TLS.Certificates {
+			if len(cert.Leaf.IPAddresses) > 0 {
+				controlHost = cert.Leaf.IPAddresses[0].String()
+			} else if len(cert.Leaf.DNSNames) > 0 {
+				controlHost = cert.Leaf.DNSNames[0]
+			}
+			controlCAs.AddCert(cert.Leaf)
 		}
-		controlCAs.AddCert(cert.Leaf)
 	}
 	relay, err := relay.NewServer(relay.Config{
 		Addr:     cfg.relayAddr,

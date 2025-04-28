@@ -1,7 +1,6 @@
 package connet
 
 import (
-	"crypto/tls"
 	"fmt"
 	"log/slog"
 	"net"
@@ -9,13 +8,12 @@ import (
 
 	"github.com/connet-dev/connet/control"
 	"github.com/connet-dev/connet/model"
-	"github.com/connet-dev/connet/restr"
 	"github.com/connet-dev/connet/selfhosted"
 )
 
 type serverConfig struct {
-	clientsIngress model.IngressConfig
-	clientsAuth    control.ClientAuthenticator
+	clientsIngresses []model.IngressConfig
+	clientsAuth      control.ClientAuthenticator
 
 	relayAddr     *net.UDPAddr
 	relayHostname string
@@ -34,13 +32,19 @@ func newServerConfig(opts []ServerOption) (*serverConfig, error) {
 		}
 	}
 
-	if cfg.clientsIngress.TLS == nil {
-		return nil, fmt.Errorf("missing tls configuration/certificate")
+	if len(cfg.clientsIngresses) == 0 {
+		addr, err := net.ResolveUDPAddr("udp", ":19190")
+		if err != nil {
+			return nil, fmt.Errorf("resolve clients address: %w", err)
+		}
+		if err := ServerClientsIngress(model.IngressConfig{Addr: addr})(cfg); err != nil {
+			return nil, fmt.Errorf("default clients address: %w", err)
+		}
 	}
 
-	if cfg.clientsIngress.Addr == nil {
-		if err := ServerClientsAddress(":19190")(cfg); err != nil {
-			return nil, fmt.Errorf("default clients address: %w", err)
+	for i, ingress := range cfg.clientsIngresses {
+		if ingress.TLS == nil {
+			return nil, fmt.Errorf("ingress at %d is missing tls config", i)
 		}
 	}
 
@@ -70,46 +74,7 @@ type ServerOption func(*serverConfig) error
 
 func ServerClientsIngress(icfg model.IngressConfig) ServerOption {
 	return func(cfg *serverConfig) error {
-		cfg.clientsIngress = icfg
-
-		return nil
-	}
-}
-
-func ServerCertificate(certFile, keyFile string) ServerOption {
-	return func(cfg *serverConfig) error {
-		cert, err := tls.LoadX509KeyPair(certFile, keyFile)
-		if err != nil {
-			return fmt.Errorf("load server certificate: %w", err)
-		}
-
-		cfg.clientsIngress.TLS = &tls.Config{Certificates: []tls.Certificate{cert}}
-
-		return nil
-	}
-}
-
-func ServerClientsAddress(address string) ServerOption {
-	return func(cfg *serverConfig) error {
-		addr, err := net.ResolveUDPAddr("udp", address)
-		if err != nil {
-			return fmt.Errorf("resolve clients address: %w", err)
-		}
-
-		cfg.clientsIngress.Addr = addr
-
-		return nil
-	}
-}
-
-func ServerClientsRestrictions(allow []string, deny []string) ServerOption {
-	return func(cfg *serverConfig) error {
-		iprestr, err := restr.ParseIP(allow, deny)
-		if err != nil {
-			return fmt.Errorf("parse client restrictions: %w", err)
-		}
-
-		cfg.clientsIngress.Restr = iprestr
+		cfg.clientsIngresses = append(cfg.clientsIngresses, icfg)
 
 		return nil
 	}
