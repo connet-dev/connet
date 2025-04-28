@@ -3,7 +3,6 @@ package control
 import (
 	"context"
 	"crypto/rand"
-	"crypto/tls"
 	"crypto/x509"
 	"errors"
 	"fmt"
@@ -39,8 +38,7 @@ type RelayAuthenticator interface {
 type RelayAuthentication []byte
 
 func newRelayServer(
-	ingress []model.IngressConfig,
-	cert tls.Certificate,
+	ingresses []Ingress,
 	auth RelayAuthenticator,
 	config logc.KV[ConfigKey, ConfigValue],
 	stores Stores,
@@ -118,11 +116,7 @@ func newRelayServer(
 	copy(statelessResetKey[:], statelessResetVal.Bytes)
 
 	return &relayServer{
-		ingress: ingress,
-		tlsConf: &tls.Config{
-			Certificates: []tls.Certificate{cert},
-			NextProtos:   model.RelayToControlNextProtos,
-		},
+		ingresses:         ingresses,
 		statelessResetKey: &statelessResetKey,
 
 		id:     serverIDConfig.String,
@@ -143,8 +137,7 @@ func newRelayServer(
 }
 
 type relayServer struct {
-	ingress           []model.IngressConfig
-	tlsConf           *tls.Config
+	ingresses         []Ingress
 	statelessResetKey *quic.StatelessResetKey
 
 	id     string
@@ -232,17 +225,17 @@ func (s *relayServer) listen(ctx context.Context, fwd model.Forward,
 func (s *relayServer) run(ctx context.Context) error {
 	g, ctx := errgroup.WithContext(ctx)
 
-	for _, cfg := range s.ingress {
-		g.Go(func() error { return s.runListener(ctx, cfg) })
+	for _, ingress := range s.ingresses {
+		g.Go(func() error { return s.runListener(ctx, ingress) })
 	}
 	g.Go(func() error { return s.runForwardsCache(ctx) })
 
 	return g.Wait()
 }
 
-func (s *relayServer) runListener(ctx context.Context, cfg model.IngressConfig) error {
+func (s *relayServer) runListener(ctx context.Context, ingress Ingress) error {
 	s.logger.Debug("start udp listener")
-	udpConn, err := net.ListenUDP("udp", cfg.Addr)
+	udpConn, err := net.ListenUDP("udp", ingress.Addr)
 	if err != nil {
 		return fmt.Errorf("relay server udp listen: %w", err)
 	}
@@ -252,24 +245,29 @@ func (s *relayServer) runListener(ctx context.Context, cfg model.IngressConfig) 
 	transport := quicc.ServerTransport(udpConn, s.statelessResetKey)
 	defer transport.Close()
 
+	tlsConf := ingress.TLS.Clone()
+	if len(tlsConf.NextProtos) == 0 {
+		tlsConf.NextProtos = model.RelayToControlNextProtos
+	}
+
 	quicConf := quicc.StdConfig
-	if cfg.Restr.IsNotEmpty() {
+	if ingress.Restr.IsNotEmpty() {
 		quicConf = quicConf.Clone()
 		quicConf.GetConfigForClient = func(info *quic.ClientHelloInfo) (*quic.Config, error) {
-			if cfg.Restr.IsAllowedAddr(info.RemoteAddr) {
+			if ingress.Restr.IsAllowedAddr(info.RemoteAddr) {
 				return quicConf, nil
 			}
 			return nil, fmt.Errorf("relay not allowed from %s", info.RemoteAddr.String())
 		}
 	}
 
-	l, err := transport.Listen(s.tlsConf, quicConf)
+	l, err := transport.Listen(tlsConf, quicConf)
 	if err != nil {
 		return fmt.Errorf("relay server quic listen: %w", err)
 	}
 	defer l.Close()
 
-	s.logger.Info("waiting for connections")
+	s.logger.Info("waiting for connections", "addr", ingress.Addr)
 	for {
 		conn, err := l.Accept(ctx)
 		if err != nil {

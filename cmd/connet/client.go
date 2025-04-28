@@ -65,6 +65,7 @@ func clientCmd() *cobra.Command {
 		SilenceUsage:  true,
 		SilenceErrors: true,
 	}
+	cmd.Flags().SortFlags = false
 
 	filenames := cmd.Flags().StringArray("config", nil, "config file to load")
 

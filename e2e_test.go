@@ -21,6 +21,7 @@ import (
 	"time"
 
 	"github.com/connet-dev/connet/certc"
+	"github.com/connet-dev/connet/control"
 	"github.com/connet-dev/connet/model"
 	"github.com/connet-dev/connet/netc"
 	"github.com/connet-dev/connet/restr"
@@ -194,10 +195,16 @@ func TestE2E(t *testing.T) {
 		selfhosted.ClientAuthentication{Token: "test-token-deny-role", Role: model.Source},
 	)
 
+	serverClientsAddr, err := net.ResolveUDPAddr("udp", ":20000")
+	require.NoError(t, err)
 	srv, err := NewServer(
-		ServerClientAuthenticator(clientAuth),
-		serverCertificate(cert),
-		ServerClientsAddress(":20000"),
+		ServerClientsAuthenticator(clientAuth),
+		ServerClientsIngress(control.Ingress{
+			Addr: serverClientsAddr,
+			TLS: &tls.Config{
+				Certificates: []tls.Certificate{cert},
+			},
+		}),
 		ServerRelayAddress(":20001"),
 		ServerLogger(logger.With("test", "server")),
 	)
@@ -590,14 +597,6 @@ func TestE2E(t *testing.T) {
 
 	// make sure everything shuts down on context cancel
 	_ = g.Wait()
-}
-
-func serverCertificate(cert tls.Certificate) ServerOption {
-	return func(cfg *serverConfig) error {
-		cfg.cert = cert
-
-		return nil
-	}
 }
 
 func proxyProtoServer(ctx context.Context, l net.Listener) error {

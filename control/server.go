@@ -2,7 +2,6 @@ package control
 
 import (
 	"context"
-	"crypto/tls"
 	"fmt"
 	"log/slog"
 
@@ -13,12 +12,10 @@ import (
 )
 
 type Config struct {
-	Cert tls.Certificate
-
-	ClientsIngress []model.IngressConfig
+	ClientsIngress []Ingress
 	ClientsAuth    ClientAuthenticator
 
-	RelaysIngress []model.IngressConfig
+	RelaysIngress []Ingress
 	RelaysAuth    RelayAuthenticator
 
 	Stores Stores
@@ -32,12 +29,12 @@ func NewServer(cfg Config) (*Server, error) {
 		return nil, fmt.Errorf("config store open: %w", err)
 	}
 
-	relays, err := newRelayServer(cfg.RelaysIngress, cfg.Cert, cfg.RelaysAuth, configStore, cfg.Stores, cfg.Logger)
+	relays, err := newRelayServer(cfg.RelaysIngress, cfg.RelaysAuth, configStore, cfg.Stores, cfg.Logger)
 	if err != nil {
 		return nil, fmt.Errorf("create relay server: %w", err)
 	}
 
-	clients, err := newClientServer(cfg.ClientsIngress, cfg.Cert, cfg.ClientsAuth, relays, configStore, cfg.Stores, cfg.Logger)
+	clients, err := newClientServer(cfg.ClientsIngress, cfg.ClientsAuth, relays, configStore, cfg.Stores, cfg.Logger)
 	if err != nil {
 		return nil, fmt.Errorf("create client server: %w", err)
 	}

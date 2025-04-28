@@ -32,6 +32,7 @@ func relayCmd() *cobra.Command {
 		Use:   "relay",
 		Short: "run connet relay server",
 	}
+	cmd.Flags().SortFlags = false
 
 	filenames := cmd.Flags().StringArray("config", nil, "config file to load")
 

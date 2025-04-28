@@ -1,23 +1,18 @@
 package connet
 
 import (
-	"crypto/tls"
 	"fmt"
 	"log/slog"
 	"net"
 	"os"
 
 	"github.com/connet-dev/connet/control"
-	"github.com/connet-dev/connet/restr"
 	"github.com/connet-dev/connet/selfhosted"
 )
 
 type serverConfig struct {
-	cert tls.Certificate
-
-	clientsAddrs []*net.UDPAddr
-	clientsAuth  control.ClientAuthenticator
-	clientsRestr restr.IP
+	clientsIngresses []control.Ingress
+	clientsAuth      control.ClientAuthenticator
 
 	relayAddr     *net.UDPAddr
 	relayHostname string
@@ -36,13 +31,19 @@ func newServerConfig(opts []ServerOption) (*serverConfig, error) {
 		}
 	}
 
-	if cfg.cert.Leaf == nil {
-		return nil, fmt.Errorf("missing certificate")
+	if len(cfg.clientsIngresses) == 0 {
+		addr, err := net.ResolveUDPAddr("udp", ":19190")
+		if err != nil {
+			return nil, fmt.Errorf("resolve clients address: %w", err)
+		}
+		if err := ServerClientsIngress(control.Ingress{Addr: addr})(cfg); err != nil {
+			return nil, fmt.Errorf("default clients address: %w", err)
+		}
 	}
 
-	if len(cfg.clientsAddrs) == 0 {
-		if err := ServerClientsAddress(":19190")(cfg); err != nil {
-			return nil, fmt.Errorf("default clients address: %w", err)
+	for i, ingress := range cfg.clientsIngresses {
+		if ingress.TLS == nil {
+			return nil, fmt.Errorf("ingress at %d is missing tls config", i)
 		}
 	}
 
@@ -70,46 +71,15 @@ func newServerConfig(opts []ServerOption) (*serverConfig, error) {
 
 type ServerOption func(*serverConfig) error
 
-func ServerCertificate(certFile, keyFile string) ServerOption {
+func ServerClientsIngress(icfg control.Ingress) ServerOption {
 	return func(cfg *serverConfig) error {
-		cert, err := tls.LoadX509KeyPair(certFile, keyFile)
-		if err != nil {
-			return fmt.Errorf("load server certificate: %w", err)
-		}
-
-		cfg.cert = cert
+		cfg.clientsIngresses = append(cfg.clientsIngresses, icfg)
 
 		return nil
 	}
 }
 
-func ServerClientsAddress(address string) ServerOption {
-	return func(cfg *serverConfig) error {
-		addr, err := net.ResolveUDPAddr("udp", address)
-		if err != nil {
-			return fmt.Errorf("resolve clients address: %w", err)
-		}
-
-		cfg.clientsAddrs = append(cfg.clientsAddrs, addr)
-
-		return nil
-	}
-}
-
-func ServerClientRestrictions(allow []string, deny []string) ServerOption {
-	return func(cfg *serverConfig) error {
-		iprestr, err := restr.ParseIP(allow, deny)
-		if err != nil {
-			return fmt.Errorf("parse client restrictions: %w", err)
-		}
-
-		cfg.clientsRestr = iprestr
-
-		return nil
-	}
-}
-
-func ServerClientTokens(tokens ...string) ServerOption {
+func ServerClientsTokens(tokens ...string) ServerOption {
 	return func(cfg *serverConfig) error {
 		auths := make([]selfhosted.ClientAuthentication, len(tokens))
 		for i, t := range tokens {
@@ -122,7 +92,7 @@ func ServerClientTokens(tokens ...string) ServerOption {
 	}
 }
 
-func ServerClientAuthenticator(clientsAuth control.ClientAuthenticator) ServerOption {
+func ServerClientsAuthenticator(clientsAuth control.ClientAuthenticator) ServerOption {
 	return func(cfg *serverConfig) error {
 		cfg.clientsAuth = clientsAuth
 
