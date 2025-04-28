@@ -1,4 +1,4 @@
-package model
+package control
 
 import (
 	"crypto/tls"
@@ -7,7 +7,7 @@ import (
 	"github.com/connet-dev/connet/restr"
 )
 
-type IngressConfig struct {
+type Ingress struct {
 	Addr  *net.UDPAddr
 	TLS   *tls.Config
 	Restr restr.IP

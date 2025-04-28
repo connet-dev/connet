@@ -39,7 +39,7 @@ func NewServer(opts ...ServerOption) (*Server, error) {
 	control, err := control.NewServer(control.Config{
 		ClientsIngress: cfg.clientsIngresses,
 		ClientsAuth:    cfg.clientsAuth,
-		RelaysIngress: []model.IngressConfig{{
+		RelaysIngress: []control.Ingress{{
 			Addr: relaysAddr,
 			TLS:  cfg.clientsIngresses[0].TLS, // TODO should choose one of the certs and use that, controlHost
 		}},

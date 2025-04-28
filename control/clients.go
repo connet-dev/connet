@@ -44,7 +44,7 @@ type ClientRelays interface {
 }
 
 func newClientServer(
-	ingresses []model.IngressConfig,
+	ingresses []Ingress,
 	auth ClientAuthenticator,
 	relays ClientRelays,
 	config logc.KV[ConfigKey, ConfigValue],
@@ -142,7 +142,7 @@ func newClientServer(
 }
 
 type clientServer struct {
-	ingresses         []model.IngressConfig
+	ingresses         []Ingress
 	statelessResetKey *quic.StatelessResetKey
 
 	auth   ClientAuthenticator
@@ -254,7 +254,7 @@ func (s *clientServer) run(ctx context.Context) error {
 
 var errClientConnectNotAllowed = errors.New("client not allowed")
 
-func (s *clientServer) runListener(ctx context.Context, ingress model.IngressConfig) error {
+func (s *clientServer) runListener(ctx context.Context, ingress Ingress) error {
 	s.logger.Debug("start udp listener")
 	udpConn, err := net.ListenUDP("udp", ingress.Addr)
 	if err != nil {

@@ -38,7 +38,7 @@ type RelayAuthenticator interface {
 type RelayAuthentication []byte
 
 func newRelayServer(
-	ingresses []model.IngressConfig,
+	ingresses []Ingress,
 	auth RelayAuthenticator,
 	config logc.KV[ConfigKey, ConfigValue],
 	stores Stores,
@@ -132,7 +132,7 @@ func newRelayServer(
 }
 
 type relayServer struct {
-	ingresses         []model.IngressConfig
+	ingresses         []Ingress
 	statelessResetKey *quic.StatelessResetKey
 
 	id     string
@@ -230,7 +230,7 @@ func (s *relayServer) run(ctx context.Context) error {
 
 var errRelayConnectNotAllowed = errors.New("relay not allowed")
 
-func (s *relayServer) runListener(ctx context.Context, ingress model.IngressConfig) error {
+func (s *relayServer) runListener(ctx context.Context, ingress Ingress) error {
 	s.logger.Debug("start udp listener")
 	udpConn, err := net.ListenUDP("udp", ingress.Addr)
 	if err != nil {

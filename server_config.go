@@ -7,12 +7,11 @@ import (
 	"os"
 
 	"github.com/connet-dev/connet/control"
-	"github.com/connet-dev/connet/model"
 	"github.com/connet-dev/connet/selfhosted"
 )
 
 type serverConfig struct {
-	clientsIngresses []model.IngressConfig
+	clientsIngresses []control.Ingress
 	clientsAuth      control.ClientAuthenticator
 
 	relayAddr     *net.UDPAddr
@@ -37,7 +36,7 @@ func newServerConfig(opts []ServerOption) (*serverConfig, error) {
 		if err != nil {
 			return nil, fmt.Errorf("resolve clients address: %w", err)
 		}
-		if err := ServerClientsIngress(model.IngressConfig{Addr: addr})(cfg); err != nil {
+		if err := ServerClientsIngress(control.Ingress{Addr: addr})(cfg); err != nil {
 			return nil, fmt.Errorf("default clients address: %w", err)
 		}
 	}
@@ -72,7 +71,7 @@ func newServerConfig(opts []ServerOption) (*serverConfig, error) {
 
 type ServerOption func(*serverConfig) error
 
-func ServerClientsIngress(icfg model.IngressConfig) ServerOption {
+func ServerClientsIngress(icfg control.Ingress) ServerOption {
 	return func(cfg *serverConfig) error {
 		cfg.clientsIngresses = append(cfg.clientsIngresses, icfg)
 

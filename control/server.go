@@ -11,10 +11,10 @@ import (
 )
 
 type Config struct {
-	ClientsIngress []model.IngressConfig
+	ClientsIngress []Ingress
 	ClientsAuth    ClientAuthenticator
 
-	RelaysIngress []model.IngressConfig
+	RelaysIngress []Ingress
 	RelaysAuth    RelayAuthenticator
 
 	Stores Stores

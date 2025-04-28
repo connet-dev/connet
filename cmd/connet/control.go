@@ -9,7 +9,6 @@ import (
 	"os"
 
 	"github.com/connet-dev/connet/control"
-	"github.com/connet-dev/connet/model"
 	"github.com/connet-dev/connet/restr"
 	"github.com/connet-dev/connet/selfhosted"
 	"github.com/spf13/cobra"
@@ -197,19 +196,19 @@ func controlRun(ctx context.Context, cfg ControlConfig, logger *slog.Logger) err
 	return runWithStatus(ctx, srv, statusAddr, logger)
 }
 
-func parseIngress(cfg Ingress) (model.IngressConfig, error) {
-	var result model.IngressConfig
+func parseIngress(cfg Ingress) (control.Ingress, error) {
+	var result control.Ingress
 
 	clientAddr, err := net.ResolveUDPAddr("udp", cfg.Addr)
 	if err != nil {
-		return model.IngressConfig{}, fmt.Errorf("resolve udp address: %w", err)
+		return control.Ingress{}, fmt.Errorf("resolve udp address: %w", err)
 	}
 	result.Addr = clientAddr
 
 	if len(cfg.Restr.AllowCIDRs) > 0 || len(cfg.Restr.DenyCIDRs) > 0 {
 		iprestr, err := restr.ParseIP(cfg.Restr.AllowCIDRs, cfg.Restr.DenyCIDRs)
 		if err != nil {
-			return model.IngressConfig{}, fmt.Errorf("parse restrictions: %w", err)
+			return control.Ingress{}, fmt.Errorf("parse restrictions: %w", err)
 		}
 		result.Restr = iprestr
 	}
@@ -218,7 +217,7 @@ func parseIngress(cfg Ingress) (model.IngressConfig, error) {
 	if cfg.Cert != "" {
 		cert, err := tls.LoadX509KeyPair(cfg.Cert, cfg.Key)
 		if err != nil {
-			return model.IngressConfig{}, fmt.Errorf("load server certificate: %w", err)
+			return control.Ingress{}, fmt.Errorf("load server certificate: %w", err)
 		}
 		result.TLS.Certificates = append(result.TLS.Certificates, cert)
 	}

@@ -21,6 +21,7 @@ import (
 	"time"
 
 	"github.com/connet-dev/connet/certc"
+	"github.com/connet-dev/connet/control"
 	"github.com/connet-dev/connet/model"
 	"github.com/connet-dev/connet/netc"
 	"github.com/connet-dev/connet/restr"
@@ -198,7 +199,7 @@ func TestE2E(t *testing.T) {
 	require.NoError(t, err)
 	srv, err := NewServer(
 		ServerClientsAuthenticator(clientAuth),
-		ServerClientsIngress(model.IngressConfig{
+		ServerClientsIngress(control.Ingress{
 			Addr: serverClientsAddr,
 			TLS: &tls.Config{
 				Certificates: []tls.Certificate{cert},
