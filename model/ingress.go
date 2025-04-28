@@ -9,6 +9,6 @@ import (
 
 type IngressConfig struct {
 	Addr  *net.UDPAddr
-	Restr restr.IP
 	TLS   *tls.Config
+	Restr restr.IP
 }

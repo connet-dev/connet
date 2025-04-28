@@ -195,7 +195,7 @@ func TestE2E(t *testing.T) {
 	)
 
 	srv, err := NewServer(
-		ServerClientAuthenticator(clientAuth),
+		ServerClientsAuthenticator(clientAuth),
 		serverCertificate(cert),
 		ServerClientsAddress(":20000"),
 		ServerRelayAddress(":20001"),
@@ -594,7 +594,9 @@ func TestE2E(t *testing.T) {
 
 func serverCertificate(cert tls.Certificate) ServerOption {
 	return func(cfg *serverConfig) error {
-		cfg.cert = cert
+		cfg.clientsIngress.TLS = &tls.Config{
+			Certificates: []tls.Certificate{cert},
+		}
 
 		return nil
 	}

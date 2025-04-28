@@ -32,9 +32,9 @@ type ControlConfig struct {
 
 type Ingress struct {
 	Addr  string        `toml:"addr"`
-	Restr IPRestriction `toml:"ip-restriction"`
 	Cert  string        `toml:"cert-file"`
 	Key   string        `toml:"key-file"`
+	Restr IPRestriction `toml:"ip-restriction"`
 }
 
 type IPRestriction struct {
@@ -56,32 +56,32 @@ func controlCmd() *cobra.Command {
 	}
 	cmd.Flags().SortFlags = false
 
-	filenames := cmd.Flags().StringArray("config", nil, "config file(s) to load, can be passed mulitple times")
+	filenames := cmd.Flags().StringArray("config", nil, "config file to load, can be passed mulitple times")
 
 	var flagsConfig Config
 	cmd.Flags().StringVar(&flagsConfig.LogLevel, "log-level", "", "log level to use")
 	cmd.Flags().StringVar(&flagsConfig.LogFormat, "log-format", "", "log formatter to use")
 
 	var commonIngress Ingress
-	cmd.Flags().StringVar(&commonIngress.Cert, "cert-file", "", "control server cert to use (default for clients/relays if the specific one is unset)")
-	cmd.Flags().StringVar(&commonIngress.Key, "key-file", "", "control server key to use (default for clients/relays if the specific one is unset)")
+	cmd.Flags().StringVar(&commonIngress.Cert, "cert-file", "", "control server cert to use (both clients and relays)")
+	cmd.Flags().StringVar(&commonIngress.Key, "key-file", "", "control server key to use (both clients and relays)")
 
 	var clientIngress Ingress
 	cmd.Flags().StringVar(&clientIngress.Addr, "clients-addr", "", "control client server addr to use")
-	cmd.Flags().StringSliceVar(&clientIngress.Restr.AllowCIDRs, "clients-allow-cidr", nil, "cidr to allow client connections from")
-	cmd.Flags().StringSliceVar(&clientIngress.Restr.DenyCIDRs, "clients-deny-cidr", nil, "cidr to deny client connections from")
 	cmd.Flags().StringVar(&clientIngress.Cert, "clients-cert-file", "", "control server cert to use for clients")
 	cmd.Flags().StringVar(&clientIngress.Key, "clients-key-file", "", "control server key to use for clients")
+	cmd.Flags().StringSliceVar(&clientIngress.Restr.AllowCIDRs, "clients-allow-cidr", nil, "cidr to allow client connections from")
+	cmd.Flags().StringSliceVar(&clientIngress.Restr.DenyCIDRs, "clients-deny-cidr", nil, "cidr to deny client connections from")
 
 	cmd.Flags().StringArrayVar(&flagsConfig.Control.ClientsTokens, "clients-tokens", nil, "client tokens for clients to connect")
 	cmd.Flags().StringVar(&flagsConfig.Control.ClientsTokensFile, "clients-tokens-file", "", "client tokens file to load")
 
 	var relayIngress Ingress
 	cmd.Flags().StringVar(&relayIngress.Addr, "relays-addr", "", "control relay server addr to use")
-	cmd.Flags().StringSliceVar(&relayIngress.Restr.AllowCIDRs, "relays-allow-cidr", nil, "cidr to allow relay connections from")
-	cmd.Flags().StringSliceVar(&relayIngress.Restr.DenyCIDRs, "relays-deny-cidr", nil, "cidr to deny relay connections from")
 	cmd.Flags().StringVar(&relayIngress.Cert, "relays-cert-file", "", "control server cert to use for relays")
 	cmd.Flags().StringVar(&relayIngress.Key, "relays-key-file", "", "control server key to use for relays")
+	cmd.Flags().StringSliceVar(&relayIngress.Restr.AllowCIDRs, "relays-allow-cidr", nil, "cidr to allow relay connections from")
+	cmd.Flags().StringSliceVar(&relayIngress.Restr.DenyCIDRs, "relays-deny-cidr", nil, "cidr to deny relay connections from")
 
 	cmd.Flags().StringArrayVar(&flagsConfig.Control.RelaysTokens, "relays-tokens", nil, "relay tokens for clients to connect")
 	cmd.Flags().StringVar(&flagsConfig.Control.RelaysTokensFile, "relays-tokens-file", "", "relay tokens file to load")
@@ -96,12 +96,12 @@ func controlCmd() *cobra.Command {
 		}
 
 		clientIngress = mergeIngress(clientIngress, commonIngress)
-		if !clientIngress.isZero() || len(cfg.Control.ClientsIngresses) == 0 {
+		if !clientIngress.isZero() {
 			flagsConfig.Control.ClientsIngresses = append(flagsConfig.Control.ClientsIngresses, clientIngress)
 		}
 
 		relayIngress = mergeIngress(relayIngress, commonIngress)
-		if !relayIngress.isZero() || len(cfg.Control.RelaysIngresses) == 0 {
+		if !relayIngress.isZero() {
 			flagsConfig.Control.RelaysIngresses = append(flagsConfig.Control.RelaysIngresses, relayIngress)
 		}
 
@@ -329,12 +329,12 @@ func (c *ControlConfig) merge(o ControlConfig) {
 func mergeIngress(c, o Ingress) Ingress {
 	return Ingress{
 		Addr: override(c.Addr, o.Addr),
+		Cert: override(c.Cert, o.Cert),
+		Key:  override(c.Key, o.Key),
 		Restr: IPRestriction{
 			AllowCIDRs: overrides(c.Restr.AllowCIDRs, o.Restr.AllowCIDRs),
 			DenyCIDRs:  overrides(c.Restr.DenyCIDRs, o.Restr.DenyCIDRs),
 		},
-		Cert: override(c.Cert, o.Cert),
-		Key:  override(c.Key, o.Key),
 	}
 }
 

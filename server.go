@@ -2,7 +2,6 @@ package connet
 
 import (
 	"context"
-	"crypto/tls"
 	"crypto/x509"
 	"fmt"
 	"net"
@@ -29,10 +28,6 @@ func NewServer(opts ...ServerOption) (*Server, error) {
 		return nil, err
 	}
 
-	tlsConf := &tls.Config{
-		Certificates: []tls.Certificate{cfg.cert},
-	}
-
 	relaysAddr, err := net.ResolveUDPAddr("udp", "127.0.0.1:19189")
 	if err != nil {
 		return nil, fmt.Errorf("resolve relays address: %w", err)
@@ -42,15 +37,11 @@ func NewServer(opts ...ServerOption) (*Server, error) {
 	}
 
 	control, err := control.NewServer(control.Config{
-		ClientsIngress: []model.IngressConfig{{
-			Addr:  cfg.clientsAddr,
-			Restr: cfg.clientsRestr,
-			TLS:   tlsConf,
-		}},
-		ClientsAuth: cfg.clientsAuth,
+		ClientsIngress: []model.IngressConfig{cfg.clientsIngress},
+		ClientsAuth:    cfg.clientsAuth,
 		RelaysIngress: []model.IngressConfig{{
 			Addr: relaysAddr,
-			TLS:  tlsConf,
+			TLS:  cfg.clientsIngress.TLS,
 		}},
 		RelaysAuth: selfhosted.NewRelayAuthenticator(relayAuth),
 		Logger:     cfg.logger,
@@ -61,13 +52,15 @@ func NewServer(opts ...ServerOption) (*Server, error) {
 	}
 
 	controlHost := "localhost"
-	if len(cfg.cert.Leaf.IPAddresses) > 0 {
-		controlHost = cfg.cert.Leaf.IPAddresses[0].String()
-	} else if len(cfg.cert.Leaf.DNSNames) > 0 {
-		controlHost = cfg.cert.Leaf.DNSNames[0]
-	}
 	controlCAs := x509.NewCertPool()
-	controlCAs.AddCert(cfg.cert.Leaf)
+	for _, cert := range cfg.clientsIngress.TLS.Certificates {
+		if len(cert.Leaf.IPAddresses) > 0 {
+			controlHost = cert.Leaf.IPAddresses[0].String()
+		} else if len(cert.Leaf.DNSNames) > 0 {
+			controlHost = cert.Leaf.DNSNames[0]
+		}
+		controlCAs.AddCert(cert.Leaf)
+	}
 	relay, err := relay.NewServer(relay.Config{
 		Addr:     cfg.relayAddr,
 		Hostport: model.HostPort{Host: cfg.relayHostname, Port: cfg.relayAddr.AddrPort().Port()},

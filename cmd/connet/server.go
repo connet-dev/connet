@@ -11,11 +11,8 @@ import (
 )
 
 type ServerConfig struct {
-	Cert string `toml:"cert-file"`
-	Key  string `toml:"key-file"`
+	Ingress
 
-	Addr              string             `toml:"addr"`
-	IPRestriction     IPRestriction      `toml:"ip-restriction"`
 	Tokens            []string           `toml:"tokens"`
 	TokensFile        string             `toml:"tokens-file"`
 	TokenRestrictions []TokenRestriction `toml:"token-restriction"`
@@ -32,8 +29,9 @@ func serverCmd() *cobra.Command {
 		Use:   "server",
 		Short: "run connet server",
 	}
+	cmd.Flags().SortFlags = false
 
-	filenames := cmd.Flags().StringArray("config", nil, "config file to load")
+	filenames := cmd.Flags().StringArray("config", nil, "config file to load, can be passed mulitple times")
 
 	var flagsConfig Config
 	cmd.Flags().StringVar(&flagsConfig.LogLevel, "log-level", "", "log level to use")
@@ -42,11 +40,11 @@ func serverCmd() *cobra.Command {
 	cmd.Flags().StringVar(&flagsConfig.Server.Addr, "addr", "", "control server addr to use")
 	cmd.Flags().StringVar(&flagsConfig.Server.Cert, "cert-file", "", "control server cert to use")
 	cmd.Flags().StringVar(&flagsConfig.Server.Key, "key-file", "", "control server key to use")
+	cmd.Flags().StringSliceVar(&flagsConfig.Server.Restr.AllowCIDRs, "allow-cidr", nil, "cidr to allow client connections from")
+	cmd.Flags().StringSliceVar(&flagsConfig.Server.Restr.DenyCIDRs, "deny-cidr", nil, "cidr to deny client connections from")
 
 	cmd.Flags().StringArrayVar(&flagsConfig.Server.Tokens, "tokens", nil, "tokens for clients to connect")
 	cmd.Flags().StringVar(&flagsConfig.Server.TokensFile, "tokens-file", "", "tokens file to load")
-	cmd.Flags().StringSliceVar(&flagsConfig.Server.IPRestriction.AllowCIDRs, "tokens-allow-cidr", nil, "cidr to allow client connections from")
-	cmd.Flags().StringSliceVar(&flagsConfig.Server.IPRestriction.DenyCIDRs, "tokens-deny-cidr", nil, "cidr to deny client connections from")
 
 	cmd.Flags().StringVar(&flagsConfig.Server.RelayAddr, "relay-addr", "", "relay server addr to use")
 	cmd.Flags().StringVar(&flagsConfig.Server.RelayHostname, "relay-hostname", "", "relay server public hostname to use")
@@ -76,15 +74,13 @@ func serverCmd() *cobra.Command {
 func serverRun(ctx context.Context, cfg ServerConfig, logger *slog.Logger) error {
 	var opts []connet.ServerOption
 
-	if cfg.Addr != "" {
-		opts = append(opts, connet.ServerClientsAddress(cfg.Addr))
+	if cfg.Ingress.Addr == "" {
+		cfg.Ingress.Addr = ":19190"
 	}
-	if cfg.Cert != "" {
-		opts = append(opts, connet.ServerCertificate(cfg.Cert, cfg.Key))
-	}
-
-	if len(cfg.IPRestriction.AllowCIDRs) > 0 || len(cfg.IPRestriction.DenyCIDRs) > 0 {
-		opts = append(opts, connet.ServerClientRestrictions(cfg.IPRestriction.AllowCIDRs, cfg.IPRestriction.DenyCIDRs))
+	if ingress, err := parseIngress(cfg.Ingress); err != nil {
+		return fmt.Errorf("parse ingress: %w", err)
+	} else {
+		opts = append(opts, connet.ServerClientsIngress(ingress))
 	}
 
 	var err error
@@ -99,7 +95,7 @@ func serverRun(ctx context.Context, cfg ServerConfig, logger *slog.Logger) error
 	if err != nil {
 		return err
 	}
-	opts = append(opts, connet.ServerClientAuthenticator(clientAuth))
+	opts = append(opts, connet.ServerClientsAuthenticator(clientAuth))
 
 	if cfg.RelayAddr != "" {
 		opts = append(opts, connet.ServerRelayAddress(cfg.RelayAddr))
@@ -131,12 +127,8 @@ func serverRun(ctx context.Context, cfg ServerConfig, logger *slog.Logger) error
 }
 
 func (c *ServerConfig) merge(o ServerConfig) {
-	c.Cert = override(c.Cert, o.Cert)
-	c.Key = override(c.Key, o.Key)
+	c.Ingress = mergeIngress(c.Ingress, o.Ingress)
 
-	c.Addr = override(c.Addr, o.Addr)
-	c.IPRestriction.AllowCIDRs = overrides(c.IPRestriction.AllowCIDRs, o.IPRestriction.AllowCIDRs)
-	c.IPRestriction.DenyCIDRs = overrides(c.IPRestriction.DenyCIDRs, o.IPRestriction.DenyCIDRs)
 	if len(o.Tokens) > 0 || o.TokensFile != "" { // new config completely overrides tokens
 		c.Tokens = o.Tokens
 		c.TokensFile = o.TokensFile
