@@ -2,11 +2,12 @@ package connet
 
 import (
 	"context"
-	"crypto/x509"
+	"crypto/tls"
 	"fmt"
 	"net"
 	"path/filepath"
 
+	"github.com/connet-dev/connet/certc"
 	"github.com/connet-dev/connet/control"
 	"github.com/connet-dev/connet/model"
 	"github.com/connet-dev/connet/netc"
@@ -28,10 +29,30 @@ func NewServer(opts ...ServerOption) (*Server, error) {
 		return nil, err
 	}
 
+	rootCert, err := certc.NewRoot()
+	if err != nil {
+		return nil, fmt.Errorf("generate relays root cert: %w", err)
+	}
+
 	relaysAddr, err := net.ResolveUDPAddr("udp", "127.0.0.1:19189")
 	if err != nil {
 		return nil, fmt.Errorf("resolve relays address: %w", err)
 	}
+	relaysCert, err := rootCert.NewServer(certc.CertOpts{
+		IPs: []net.IP{relaysAddr.IP},
+	})
+	if err != nil {
+		return nil, fmt.Errorf("generate relays cert: %w", err)
+	}
+	relaysCAs, err := relaysCert.CertPool()
+	if err != nil {
+		return nil, fmt.Errorf("get relays CAs: %w", err)
+	}
+	relaysTLSCert, err := relaysCert.TLSCert()
+	if err != nil {
+		return nil, fmt.Errorf("get relays TLS cert: %w", err)
+	}
+
 	relayAuth := selfhosted.RelayAuthentication{
 		Token: netc.GenServerName("relay"),
 	}
@@ -41,7 +62,9 @@ func NewServer(opts ...ServerOption) (*Server, error) {
 		ClientsAuth:    cfg.clientsAuth,
 		RelaysIngress: []control.Ingress{{
 			Addr: relaysAddr,
-			TLS:  cfg.clientsIngresses[0].TLS, // TODO should choose one of the certs and use that, controlHost
+			TLS: &tls.Config{
+				Certificates: []tls.Certificate{relaysTLSCert},
+			},
 		}},
 		RelaysAuth: selfhosted.NewRelayAuthenticator(relayAuth),
 		Logger:     cfg.logger,
@@ -51,18 +74,6 @@ func NewServer(opts ...ServerOption) (*Server, error) {
 		return nil, fmt.Errorf("create control server: %w", err)
 	}
 
-	controlHost := "localhost"
-	controlCAs := x509.NewCertPool()
-	for _, ingress := range cfg.clientsIngresses {
-		for _, cert := range ingress.TLS.Certificates {
-			if len(cert.Leaf.IPAddresses) > 0 {
-				controlHost = cert.Leaf.IPAddresses[0].String()
-			} else if len(cert.Leaf.DNSNames) > 0 {
-				controlHost = cert.Leaf.DNSNames[0]
-			}
-			controlCAs.AddCert(cert.Leaf)
-		}
-	}
 	relay, err := relay.NewServer(relay.Config{
 		Addr:     cfg.relayAddr,
 		Hostport: model.HostPort{Host: cfg.relayHostname, Port: cfg.relayAddr.AddrPort().Port()},
@@ -70,9 +81,9 @@ func NewServer(opts ...ServerOption) (*Server, error) {
 		Stores:   relay.NewFileStores(filepath.Join(cfg.dir, "relay")),
 
 		ControlAddr:  relaysAddr,
-		ControlHost:  controlHost,
+		ControlHost:  relaysTLSCert.Leaf.IPAddresses[0].String(),
 		ControlToken: relayAuth.Token,
-		ControlCAs:   controlCAs,
+		ControlCAs:   relaysCAs,
 	})
 	if err != nil {
 		return nil, fmt.Errorf("create relay server: %w", err)
