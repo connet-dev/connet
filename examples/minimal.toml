@@ -12,6 +12,8 @@ url = "tcp://:9999"
 
 [server]
 tokens-file = "examples/client-token.secret"
+
+[[server.ingress]]
 cert-file = ".direnv/localhost/cert.pem"
 key-file = ".direnv/localhost/key.pem"
 

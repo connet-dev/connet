@@ -72,6 +72,8 @@ In the setup above, start `connet server --config server.toml` with the followin
 ```toml
 [server]
 tokens = ["client-d-token", "client-s-token"]
+
+[[server.ingress]]
 cert-file = "cert.pem"
 key-file = "key.pem"
 ```
@@ -184,10 +186,6 @@ To run a server (e.g. running both control and a relay server), use `connet serv
 Here is the full server `server-config.toml` configuration specification:
 ```toml
 [server]
-addr = ":19190" # the address at which the control server will listen for connections, defaults to :19190
-cert-file = "path/to/cert.pem" # the server certificate file, in pem format
-key-file = "path/to/key.pem" # the server certificate private key file
-
 tokens = ["client-token-1", "client-token-n"] # set of recognized client tokens
 tokens-file = "path/to/client/tokens" # a file that contains a list of client tokens, one token per line
 # one of tokens or tokens-file is required
@@ -198,7 +196,10 @@ relay-hostname = "localhost" # the public hostname (e.g. domain, ip address) whi
 status-addr = "127.0.0.1:19180" # at what address the server listens for status connections, disabled unless set
 store-dir = "path/to/server-store" # where does this server persist runtime information, defaults to a /tmp subdirectory
 
-[server.ip-restriction] # defines restriction applicable for all client tokens, checked before verifying the token
+[[server.ingress]] # defines how to accept client connections, can define mulitple
+addr = ":19190" # the address at which the control server will listen for client connections, defaults to :19190
+cert-file = "path/to/cert.pem" # the client server certificate file, in pem format
+key-file = "path/to/key.pem" # the client server certificate private key file
 allow-cidrs = [] # set of networks in CIDR format, to allow client connetctions from
 deny-cidrs = [] # set of networks in CIDR format, to deny client connetctions from
 
@@ -215,23 +216,21 @@ To run a control server, use `connet control --config control-config.toml` comma
 `control-config.toml` configuration specification:
 ```toml
 [control]
-cert-file = "path/to/cert.pem" # the server certificate file, in pem format
-key-file = "path/to/key.pem" # the server certificate private key file
-
-clients-addr = ":19190" # the address at which the control server will listen for client connections, defaults to :19190
 clients-tokens = ["client-token-1", "client-token-n"] # set of recognized client tokens
 clients-tokens-file = "path/to/client/tokens" # a file that contains a list of client tokens, one token per line
 # one of client-tokens or client-tokens-file is required
 
-relays-addr = ":19189" # the address at which the control server will listen for relay connections, defaults to :19189
 relays-tokens = ["relay-token-1", "relay-token-n"] # set of recognized relay tokens
 relays-tokens-file = "path/to/relay/token" # a file that contains a list of relay tokens, one token per line
-# one of relay-tokens or relay-tokens-file is necessary when connecting relays
+# one of relay-tokens or relay-tokens-file is required if connecting relays
 
 status-addr = "127.0.0.1:19180" # at what address the control server listens for status connections, disabled unless set
 store-dir = "path/to/control-store" # where does this control server persist runtime information, defaults to a /tmp subdirectory
 
-[control.clients-ip-restriction] # defines restriction applicable for all client tokens, checked before verifying the token
+[[control.clients-ingress]] # defines how client connections will be accepted, can add mulitple
+addr = ":19190" # the address at which the control server will listen for client connections, defaults to :19190
+cert-file = "path/to/cert.pem" # the clients server certificate file, in pem format
+key-file = "path/to/key.pem" # the clients server certificate private key file
 allow-cidrs = [] # set of networks in CIDR format, to allow client connetctions from
 deny-cidrs = [] # set of networks in CIDR format, to deny client connetctions from
 
@@ -241,11 +240,14 @@ deny-cidrs = [] # set of networks in CIDR format, to deny client connetctions fr
 name-matches = "" # regular expression to check the name of the destination/source against
 role-matches = "" # only allow specific role for this token, either 'source' or 'destination'
 
-[control.relays-ip-restriction] # defines restriction applicable for all relay tokens, checked before verifying the token
+[[control.relays-ingress]] # defines how relay connections will be accepted, can add mulitple
+addr = ":19189" # the address at which the control server will listen for relay connections, defaults to :19189
+cert-file = "path/to/cert.pem" # the relays server certificate file, in pem format
+key-file = "path/to/key.pem" # the relays server certificate private key file
 allow-cidrs = [] # set of networks in CIDR format, to allow relay connetctions from
 deny-cidrs = [] # set of networks in CIDR format, to deny relay connetctions from
 
-[[control.relays-token-ip-restriction]] # defines restriction per relay token, if specified must match the number of relay tokens
+[[control.relays-token-restriction]] # defines restriction per relay token, if specified must match the number of relay tokens
 allow-cidrs = [] # set of networks in CIDR format, to allow relay connetctions from
 deny-cidrs = [] # set of networks in CIDR format, to deny relay connetctions from
 ```

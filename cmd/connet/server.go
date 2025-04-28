@@ -11,7 +11,7 @@ import (
 )
 
 type ServerConfig struct {
-	Ingress
+	Ingresses []Ingress `toml:"ingress"`
 
 	Tokens            []string           `toml:"tokens"`
 	TokensFile        string             `toml:"tokens-file"`
@@ -37,11 +37,12 @@ func serverCmd() *cobra.Command {
 	cmd.Flags().StringVar(&flagsConfig.LogLevel, "log-level", "", "log level to use")
 	cmd.Flags().StringVar(&flagsConfig.LogFormat, "log-format", "", "log formatter to use")
 
-	cmd.Flags().StringVar(&flagsConfig.Server.Addr, "addr", "", "control server addr to use")
-	cmd.Flags().StringVar(&flagsConfig.Server.Cert, "cert-file", "", "control server cert to use")
-	cmd.Flags().StringVar(&flagsConfig.Server.Key, "key-file", "", "control server key to use")
-	cmd.Flags().StringSliceVar(&flagsConfig.Server.Restr.AllowCIDRs, "allow-cidr", nil, "cidr to allow client connections from")
-	cmd.Flags().StringSliceVar(&flagsConfig.Server.Restr.DenyCIDRs, "deny-cidr", nil, "cidr to deny client connections from")
+	var ingress Ingress
+	cmd.Flags().StringVar(&ingress.Addr, "addr", "", "control server addr to use")
+	cmd.Flags().StringVar(&ingress.Cert, "cert-file", "", "control server cert to use")
+	cmd.Flags().StringVar(&ingress.Key, "key-file", "", "control server key to use")
+	cmd.Flags().StringSliceVar(&ingress.IPRestriction.AllowCIDRs, "allow-cidr", nil, "cidr to allow client connections from")
+	cmd.Flags().StringSliceVar(&ingress.IPRestriction.DenyCIDRs, "deny-cidr", nil, "cidr to deny client connections from")
 
 	cmd.Flags().StringArrayVar(&flagsConfig.Server.Tokens, "tokens", nil, "tokens for clients to connect")
 	cmd.Flags().StringVar(&flagsConfig.Server.TokensFile, "tokens-file", "", "tokens file to load")
@@ -58,6 +59,9 @@ func serverCmd() *cobra.Command {
 			return fmt.Errorf("load config: %w", err)
 		}
 
+		if !ingress.isZero() {
+			flagsConfig.Server.Ingresses = append(flagsConfig.Server.Ingresses, ingress)
+		}
 		cfg.merge(flagsConfig)
 
 		logger, err := logger(cfg)
@@ -74,13 +78,17 @@ func serverCmd() *cobra.Command {
 func serverRun(ctx context.Context, cfg ServerConfig, logger *slog.Logger) error {
 	var opts []connet.ServerOption
 
-	if cfg.Ingress.Addr == "" {
-		cfg.Ingress.Addr = ":19190"
-	}
-	if ingress, err := parseIngress(cfg.Ingress); err != nil {
-		return fmt.Errorf("parse ingress: %w", err)
-	} else {
-		opts = append(opts, connet.ServerClientsIngress(ingress))
+	var usedDefault bool
+	for ix, ingressCfg := range cfg.Ingresses {
+		if ingressCfg.Addr == "" && !usedDefault {
+			ingressCfg.Addr = ":19190"
+			usedDefault = true
+		}
+		if ingress, err := parseIngress(ingressCfg); err != nil {
+			return fmt.Errorf("parse ingress at %d: %w", ix, err)
+		} else {
+			opts = append(opts, connet.ServerClientsIngress(ingress))
+		}
 	}
 
 	var err error
@@ -127,7 +135,13 @@ func serverRun(ctx context.Context, cfg ServerConfig, logger *slog.Logger) error
 }
 
 func (c *ServerConfig) merge(o ServerConfig) {
-	c.Ingress = mergeIngress(c.Ingress, o.Ingress)
+	if len(c.Ingresses) == len(o.Ingresses) {
+		for i := range c.Ingresses {
+			c.Ingresses[i] = mergeIngress(c.Ingresses[i], o.Ingresses[i])
+		}
+	} else if len(o.Ingresses) > 0 {
+		c.Ingresses = o.Ingresses
+	}
 
 	if len(o.Tokens) > 0 || o.TokensFile != "" { // new config completely overrides tokens
 		c.Tokens = o.Tokens
