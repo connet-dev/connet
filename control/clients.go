@@ -84,8 +84,8 @@ func newClientServer(
 				Id:                msg.Key.ID.String(),
 				Direct:            msg.Value.Peer.Direct,
 				Relays:            msg.Value.Peer.Relays,
-				RelayIds:          msg.Value.Peer.RelayIds,
 				Directs:           msg.Value.Peer.Directs,
+				RelayIds:          msg.Value.Peer.RelayIds,
 				ServerCertificate: msg.Value.Peer.ServerCertificate,
 				ClientCertificate: msg.Value.Peer.ClientCertificate,
 			})
@@ -217,8 +217,8 @@ func (s *clientServer) listen(ctx context.Context, fwd model.Forward, role model
 					Id:                msg.Key.ID.String(),
 					Direct:            msg.Value.Peer.Direct,
 					Relays:            msg.Value.Peer.Relays,
-					RelayIds:          msg.Value.Peer.RelayIds,
 					Directs:           msg.Value.Peer.Directs,
+					RelayIds:          msg.Value.Peer.RelayIds,
 					ServerCertificate: msg.Value.Peer.ServerCertificate,
 					ClientCertificate: msg.Value.Peer.ClientCertificate,
 				}
@@ -326,8 +326,8 @@ func (s *clientServer) runPeerCache(ctx context.Context) error {
 				Id:                msg.Key.ID.String(),
 				Direct:            msg.Value.Peer.Direct,
 				Relays:            msg.Value.Peer.Relays,
-				RelayIds:          msg.Value.Peer.RelayIds,
 				Directs:           msg.Value.Peer.Directs,
+				RelayIds:          msg.Value.Peer.RelayIds,
 				ServerCertificate: msg.Value.Peer.ServerCertificate,
 				ClientCertificate: msg.Value.Peer.ClientCertificate,
 			}
@@ -714,9 +714,8 @@ func (s *clientStream) relay(ctx context.Context, req *pbs.Request_Relay) error 
 			var addrs []*pbs.Relay
 			for id, value := range relays {
 				addrs = append(addrs, &pbs.Relay{
-					// compat: old clients only read Address field, use first hostport as such
-					Address:           value.Hostports[0].PB(),
 					Id:                id.String(),
+					Address:           value.Hostports[0].PB(),
 					Addresses:         iterc.MapSlice(value.Hostports, model.HostPort.PB),
 					ServerCertificate: value.Cert.Raw,
 				})

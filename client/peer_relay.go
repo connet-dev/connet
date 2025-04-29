@@ -19,10 +19,12 @@ import (
 	"golang.org/x/sync/errgroup"
 )
 
+type relayID string
+
 type relayPeer struct {
 	local *peer
 
-	serverID        model.RelayID
+	serverID        relayID
 	serverHostports []model.HostPort
 	serverConf      atomic.Pointer[serverTLSConfig]
 
@@ -31,13 +33,13 @@ type relayPeer struct {
 	logger *slog.Logger
 }
 
-func newRelayPeer(local *peer, id model.RelayID, hps []model.HostPort, serverConf *serverTLSConfig, logger *slog.Logger) *relayPeer {
+func newRelayPeer(local *peer, id relayID, hps []model.HostPort, serverConf *serverTLSConfig, logger *slog.Logger) *relayPeer {
 	r := &relayPeer{
 		local:           local,
 		serverID:        id,
 		serverHostports: hps,
 		closer:          make(chan struct{}),
-		logger:          logger.With("relay", hps[0]),
+		logger:          logger.With("relay", id, "addrs", hps),
 	}
 	r.serverConf.Store(serverConf)
 	return r
