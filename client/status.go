@@ -1,8 +1,13 @@
 package client
 
 type PeerStatus struct {
-	Relays      []string         `json:"relays"`
-	Connections []PeerConnection `json:"connections"`
+	Relays      []RelayConnection `json:"relays"`
+	Connections []PeerConnection  `json:"connections"`
+}
+
+type RelayConnection struct {
+	ID       string `json:"id"`
+	Hostport string `json:"hostport"`
 }
 
 type PeerConnection struct {
@@ -18,8 +23,11 @@ func (p *peer) status() (PeerStatus, error) {
 	if err != nil {
 		return PeerStatus{}, err
 	}
-	for k := range relays {
-		stat.Relays = append(stat.Relays, k.String())
+	for id, conn := range relays {
+		stat.Relays = append(stat.Relays, RelayConnection{
+			ID:       string(id),
+			Hostport: conn.hp.String(),
+		})
 	}
 
 	conns, err := p.peerConns.Peek()

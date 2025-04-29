@@ -122,19 +122,28 @@ func (p *directPeer) runRemote(ctx context.Context) error {
 			}
 		}
 
-		relays := map[model.HostPort]struct{}{}
-		for _, relay := range remote.Relays {
-			relays[model.HostPortFromPB(relay)] = struct{}{}
+		var remotes remoteRelays
+		for _, id := range remote.RelayIds {
+			if remotes.ids == nil {
+				remotes.ids = map[relayID]struct{}{}
+			}
+			remotes.ids[relayID(id)] = struct{}{}
+		}
+		for _, hp := range remote.Relays {
+			if remotes.hps == nil {
+				remotes.hps = map[model.HostPort]struct{}{}
+			}
+			remotes.hps[model.HostPortFromPB(hp)] = struct{}{}
 		}
 
 		switch {
 		case p.relays == nil:
-			p.relays = newDirectPeerRelays(ctx, p, relays)
-		case len(relays) == 0:
+			p.relays = newDirectPeerRelays(ctx, p, remotes)
+		case remotes.isEmpty():
 			close(p.relays.closerCh)
 			p.relays = nil
 		default:
-			p.relays.remotes.Set(relays)
+			p.relays.remotes.Set(remotes)
 		}
 
 		return nil
@@ -373,12 +382,19 @@ func (p *directPeerOutgoing) keepalive(ctx context.Context, conn quic.Connection
 
 type directPeerRelays struct {
 	parent   *directPeer
-	remotes  *notify.V[map[model.HostPort]struct{}]
+	remotes  *notify.V[remoteRelays]
 	closerCh chan struct{}
 }
 
-func newDirectPeerRelays(ctx context.Context, parent *directPeer, remotes map[model.HostPort]struct{}) *directPeerRelays {
-	if len(remotes) == 0 {
+type remoteRelays struct {
+	ids map[relayID]struct{}        // new remotes send relay ids
+	hps map[model.HostPort]struct{} // old relays send hostports
+}
+
+func (r remoteRelays) isEmpty() bool { return len(r.ids) == 0 && len(r.hps) == 0 }
+
+func newDirectPeerRelays(ctx context.Context, parent *directPeer, remotes remoteRelays) *directPeerRelays {
+	if remotes.isEmpty() {
 		return nil
 	}
 	p := &directPeerRelays{
@@ -392,32 +408,44 @@ func newDirectPeerRelays(ctx context.Context, parent *directPeer, remotes map[mo
 
 func (p *directPeerRelays) run(ctx context.Context) {
 	var (
-		relays map[model.HostPort]quic.Connection
-		remote map[model.HostPort]struct{}
+		locals  map[relayID]relayConn
+		remotes remoteRelays
 	)
 
-	active := map[model.HostPort]struct{}{}
+	active := map[relayID]model.HostPort{}
 	defer func() {
-		for hp := range active {
-			p.parent.local.removeActiveConn(p.parent.remoteID, peerRelay, hp.String())
+		for id := range active {
+			p.parent.local.removeActiveConn(p.parent.remoteID, peerRelay, string(id))
 		}
 	}()
 
 	update := func() {
-		for hp := range active {
-			_, relayed := relays[hp]
-			_, remoted := remote[hp]
-			if !(relayed && remoted) {
-				p.parent.local.removeActiveConn(p.parent.remoteID, peerRelay, hp.String())
-				delete(active, hp)
+		for id, hp := range active {
+			_, relayed := locals[id]
+			_, remoteByID := remotes.ids[id]
+			_, remoteByHP := remotes.hps[hp]
+			if !(relayed && (remoteByID || remoteByHP)) {
+				p.parent.local.removeActiveConn(p.parent.remoteID, peerRelay, string(id))
+				delete(active, id)
 			}
 		}
 
-		for hp := range remote {
-			if conn := relays[hp]; conn != nil {
-				if _, ok := active[hp]; !ok {
-					p.parent.local.addActiveConn(p.parent.remoteID, peerRelay, hp.String(), conn)
-					active[hp] = struct{}{}
+		for id := range remotes.ids {
+			if conn, ok := locals[id]; ok {
+				if _, ok := active[id]; !ok {
+					p.parent.local.addActiveConn(p.parent.remoteID, peerRelay, string(id), conn.conn)
+					active[id] = conn.hp
+				}
+			}
+		}
+
+		for hp := range remotes.hps {
+			for id, conn := range locals {
+				if conn.hp == hp {
+					if _, ok := active[id]; !ok {
+						p.parent.local.addActiveConn(p.parent.remoteID, peerRelay, string(id), conn.conn)
+						active[id] = conn.hp
+					}
 				}
 			}
 		}
@@ -434,9 +462,9 @@ func (p *directPeerRelays) run(ctx context.Context) {
 			return
 		case <-p.closerCh:
 			return
-		case relays = <-relaysCh:
+		case locals = <-relaysCh:
 			update()
-		case remote = <-remoteCh:
+		case remotes = <-remoteCh:
 			update()
 		}
 	}

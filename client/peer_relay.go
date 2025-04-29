@@ -18,9 +18,12 @@ import (
 	"golang.org/x/sync/errgroup"
 )
 
+type relayID string
+
 type relayPeer struct {
 	local *peer
 
+	serverID       relayID
 	serverHostport model.HostPort
 	serverConf     atomic.Pointer[serverTLSConfig]
 
@@ -29,9 +32,10 @@ type relayPeer struct {
 	logger *slog.Logger
 }
 
-func newRelayPeer(local *peer, hp model.HostPort, serverConf *serverTLSConfig, logger *slog.Logger) *relayPeer {
+func newRelayPeer(local *peer, id relayID, hp model.HostPort, serverConf *serverTLSConfig, logger *slog.Logger) *relayPeer {
 	r := &relayPeer{
 		local:          local,
+		serverID:       id,
 		serverHostport: hp,
 		closer:         make(chan struct{}),
 		logger:         logger.With("relay", hp),
@@ -125,8 +129,8 @@ func (r *relayPeer) check(ctx context.Context, conn quic.Connection) error {
 func (r *relayPeer) keepalive(ctx context.Context, conn quic.Connection) error {
 	defer conn.CloseWithError(quic.ApplicationErrorCode(pb.Error_RelayKeepaliveClosed), "keepalive closed")
 
-	r.local.addRelayConn(r.serverHostport, conn)
-	defer r.local.removeRelayConn(r.serverHostport)
+	r.local.addRelayConn(r.serverID, relayConn{conn: conn, hp: r.serverHostport})
+	defer r.local.removeRelayConn(r.serverID)
 
 	quicc.RTTLogStats(conn, r.logger)
 	for {

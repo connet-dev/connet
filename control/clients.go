@@ -85,6 +85,7 @@ func newClientServer(
 				Direct:            msg.Value.Peer.Direct,
 				Relays:            msg.Value.Peer.Relays,
 				Directs:           msg.Value.Peer.Directs,
+				RelayIds:          msg.Value.Peer.RelayIds,
 				ServerCertificate: msg.Value.Peer.ServerCertificate,
 				ClientCertificate: msg.Value.Peer.ClientCertificate,
 			})
@@ -217,6 +218,7 @@ func (s *clientServer) listen(ctx context.Context, fwd model.Forward, role model
 					Direct:            msg.Value.Peer.Direct,
 					Relays:            msg.Value.Peer.Relays,
 					Directs:           msg.Value.Peer.Directs,
+					RelayIds:          msg.Value.Peer.RelayIds,
 					ServerCertificate: msg.Value.Peer.ServerCertificate,
 					ClientCertificate: msg.Value.Peer.ClientCertificate,
 				}
@@ -327,6 +329,7 @@ func (s *clientServer) runPeerCache(ctx context.Context) error {
 				Direct:            msg.Value.Peer.Direct,
 				Relays:            msg.Value.Peer.Relays,
 				Directs:           msg.Value.Peer.Directs,
+				RelayIds:          msg.Value.Peer.RelayIds,
 				ServerCertificate: msg.Value.Peer.ServerCertificate,
 				ClientCertificate: msg.Value.Peer.ClientCertificate,
 			}
@@ -711,8 +714,9 @@ func (s *clientStream) relay(ctx context.Context, req *pbs.Request_Relay) error 
 			s.conn.logger.Debug("updated relay list", "relays", len(relays))
 
 			var addrs []*pbs.Relay
-			for _, value := range relays {
+			for id, value := range relays {
 				addrs = append(addrs, &pbs.Relay{
+					Id:                id.String(),
 					Address:           value.Hostport.PB(),
 					ServerCertificate: value.Cert.Raw,
 				})

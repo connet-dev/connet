@@ -51,18 +51,20 @@ message Response {
 }
 
 message ClientPeer {
-  DirectRoute direct = 1; // TODO remove in 0.8.0
-  repeated shared.HostPort relays = 2;
+  DirectRoute direct = 1; // TODO remove in 0.9.0
+  repeated shared.HostPort relays = 2; // TODO remove in 0.10.0
   repeated shared.AddrPort directs = 3;
+  repeated string relayIds = 6;
   bytes server_certificate = 4;
   bytes client_certificate = 5;
 }
 
 message ServerPeer {
   string id = 1;
-  DirectRoute direct = 2; // TODO remove in 0.8.0
-  repeated shared.HostPort relays = 3;
+  DirectRoute direct = 2; // TODO remove in 0.9.0
+  repeated shared.HostPort relays = 3; // TODO remove in 0.10.0
   repeated shared.AddrPort directs = 4;
+  repeated string relayIds = 7;
   bytes server_certificate = 5;
   bytes client_certificate = 6;
 }
@@ -74,6 +76,7 @@ message DirectRoute {
 }
 
 message Relay {
-  shared.HostPort address = 1;
+  string id = 3;
+  shared.HostPort address = 1; // TODO remove in 0.10.0
   bytes server_certificate = 2;
 }
