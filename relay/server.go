@@ -20,7 +20,7 @@ import (
 )
 
 type Config struct {
-	Ingress   []model.IngressConfig
+	Ingress   []Ingress
 	Hostports []model.HostPort
 
 	Stores Stores
@@ -71,7 +71,7 @@ func NewServer(cfg Config) (*Server, error) {
 }
 
 type Server struct {
-	ingress           []model.IngressConfig
+	ingress           []Ingress
 	statelessResetKey *quic.StatelessResetKey
 
 	control *controlClient

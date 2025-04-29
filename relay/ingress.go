@@ -1,4 +1,4 @@
-package model
+package relay
 
 import (
 	"net"
@@ -6,7 +6,7 @@ import (
 	"github.com/connet-dev/connet/restr"
 )
 
-type IngressConfig struct {
+type Ingress struct {
 	Addr  *net.UDPAddr
 	Restr restr.IP
 }

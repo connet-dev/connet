@@ -181,7 +181,7 @@ func (s *clientsServer) removeSource(fcs *forwardClients, conn *clientConn) {
 }
 
 type clientsServerCfg struct {
-	ingress           model.IngressConfig
+	ingress           Ingress
 	statelessResetKey *quic.StatelessResetKey
 	addedTransport    func(*quic.Transport)
 	removeTransport   func(*quic.Transport)

@@ -96,7 +96,7 @@ func relayRun(ctx context.Context, cfg RelayConfig, logger *slog.Logger) error {
 	if err != nil {
 		return fmt.Errorf("resolve server address: %w", err)
 	}
-	relayCfg.Ingress = append(relayCfg.Ingress, model.IngressConfig{Addr: serverAddr})
+	relayCfg.Ingress = append(relayCfg.Ingress, relay.Ingress{Addr: serverAddr})
 
 	relayCfg.Hostports = []model.HostPort{{Host: cfg.Hostname, Port: uint16(serverAddr.Port)}}
 

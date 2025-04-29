@@ -75,7 +75,7 @@ func NewServer(opts ...ServerOption) (*Server, error) {
 	}
 
 	relay, err := relay.NewServer(relay.Config{
-		Ingress: []model.IngressConfig{
+		Ingress: []relay.Ingress{
 			{Addr: cfg.relayAddr},
 		},
 		Hostports: []model.HostPort{{Host: cfg.relayHostname, Port: cfg.relayAddr.AddrPort().Port()}},
