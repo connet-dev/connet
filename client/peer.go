@@ -162,6 +162,10 @@ func (p *peer) runRelays(ctx context.Context) error {
 		for _, relay := range relays {
 			id := relayID(relay.Id)
 			hp := model.HostPortFromPB(relay.Address)
+			if id == "" {
+				// TODO remove in 0.10.0: if id is missing, client is connected to an old server, use the hostport as id
+				id = relayID(hp.String())
+			}
 			activeRelays[id] = struct{}{}
 
 			cfg, err := newServerTLSConfig(relay.ServerCertificate)
