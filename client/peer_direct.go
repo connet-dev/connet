@@ -386,7 +386,7 @@ type directPeerRelays struct {
 	closerCh chan struct{}
 }
 
-type remoteRelays struct {
+type remoteRelays struct { // TODO remove 0.10.0
 	ids map[relayID]struct{}        // new remotes send relay ids
 	hps map[model.HostPort]struct{} // old relays send hostports
 }
