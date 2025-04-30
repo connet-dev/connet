@@ -124,10 +124,12 @@
                 settings = {
                   log-level = "debug";
                   server = {
-                    cert-file = "/etc/server.cert";
-                    key-file = "/etc/server.key";
                     tokens-file = "/etc/tokens";
                     relay-hostname = "server";
+                    ingress = [{
+                      cert-file = "/etc/server.cert";
+                      key-file = "/etc/server.key";
+                    }];
                   };
                 };
               };
@@ -138,7 +140,7 @@
               server.wait_for_unit("connet-server.service")
               destination.wait_for_unit("connet-client.service")
               source.wait_for_unit("connet-client.service")
-              source.execute("${pkgs.curl}/bin/curl http://localhost:3000")
+              source.succeed("${pkgs.curl}/bin/curl http://localhost:3000")
             '';
           };
         };
