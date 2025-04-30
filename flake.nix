@@ -140,6 +140,7 @@
               server.wait_for_unit("connet-server.service")
               destination.wait_for_unit("connet-client.service")
               source.wait_for_unit("connet-client.service")
+              source.wait_for_open_port(3000)
               source.succeed("${pkgs.curl}/bin/curl http://localhost:3000")
             '';
           };
