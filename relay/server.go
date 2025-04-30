@@ -33,6 +33,10 @@ type Config struct {
 }
 
 func NewServer(cfg Config) (*Server, error) {
+	if len(cfg.Ingress) == 0 {
+		return nil, fmt.Errorf("relay server is missing ingresses")
+	}
+
 	configStore, err := cfg.Stores.Config()
 	if err != nil {
 		return nil, fmt.Errorf("relay stores: %w", err)
@@ -76,10 +80,6 @@ type Server struct {
 }
 
 func (s *Server) Run(ctx context.Context) error {
-	if len(s.ingress) == 0 {
-		return fmt.Errorf("relay server is missing ingresses")
-	}
-
 	g, ctx := errgroup.WithContext(ctx)
 
 	transports := notify.NewEmpty[[]*quic.Transport]()
@@ -121,7 +121,7 @@ func (s *Server) Status(ctx context.Context) (Status, error) {
 
 	return Status{
 		Status:            stat,
-		Hostports:         iterc.MapSlice(s.control.hostports, model.HostPort.String),
+		Hostports:         iterc.MapSliceStrings(s.control.hostports),
 		ControlServerAddr: s.control.controlAddr.String(),
 		ControlServerID:   controlID,
 		Forwards:          fwds,
