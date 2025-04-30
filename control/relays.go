@@ -121,7 +121,7 @@ func newRelayServer(
 
 		id:     serverIDConfig.String,
 		auth:   auth,
-		logger: logger.With("server", "relays"),
+		logger: logger.With("server", "control-relays"),
 
 		reconnect: &reconnectToken{[32]byte(serverSecret.Bytes)},
 
@@ -234,14 +234,14 @@ func (s *relayServer) run(ctx context.Context) error {
 }
 
 func (s *relayServer) runListener(ctx context.Context, ingress Ingress) error {
-	s.logger.Debug("start udp listener")
+	s.logger.Debug("start udp listener", "addr", ingress.Addr)
 	udpConn, err := net.ListenUDP("udp", ingress.Addr)
 	if err != nil {
 		return fmt.Errorf("relay server udp listen: %w", err)
 	}
 	defer udpConn.Close()
 
-	s.logger.Debug("start quic listener")
+	s.logger.Debug("start quic listener", "addr", ingress.Addr)
 	transport := quicc.ServerTransport(udpConn, s.statelessResetKey)
 	defer transport.Close()
 
@@ -267,7 +267,7 @@ func (s *relayServer) runListener(ctx context.Context, ingress Ingress) error {
 	}
 	defer l.Close()
 
-	s.logger.Info("waiting for connections", "addr", ingress.Addr)
+	s.logger.Info("accepting relay connections", "addr", transport.Conn.LocalAddr())
 	for {
 		conn, err := l.Accept(ctx)
 		if err != nil {

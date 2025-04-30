@@ -128,7 +128,7 @@ func newClientServer(
 
 		auth:   auth,
 		relays: relays,
-		logger: logger.With("server", "clients"),
+		logger: logger.With("server", "control-clients"),
 
 		reconnect: &reconnectToken{[32]byte(serverSecret.Bytes)},
 
@@ -255,14 +255,14 @@ func (s *clientServer) run(ctx context.Context) error {
 }
 
 func (s *clientServer) runListener(ctx context.Context, ingress Ingress) error {
-	s.logger.Debug("start udp listener")
+	s.logger.Debug("start udp listener", "addr", ingress.Addr)
 	udpConn, err := net.ListenUDP("udp", ingress.Addr)
 	if err != nil {
 		return fmt.Errorf("client server udp listen: %w", err)
 	}
 	defer udpConn.Close()
 
-	s.logger.Debug("start quic listener")
+	s.logger.Debug("start quic listener", "addr", ingress.Addr)
 	transport := quicc.ServerTransport(udpConn, s.statelessResetKey)
 	defer transport.Close()
 
@@ -288,7 +288,7 @@ func (s *clientServer) runListener(ctx context.Context, ingress Ingress) error {
 	}
 	defer l.Close()
 
-	s.logger.Info("waiting for connections", "addr", ingress.Addr)
+	s.logger.Info("accepting client connections", "addr", transport.Conn.LocalAddr())
 	for {
 		conn, err := l.Accept(ctx)
 		if err != nil {
