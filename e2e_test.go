@@ -3,7 +3,6 @@ package connet
 import (
 	"bufio"
 	"context"
-	"crypto/tls"
 	"crypto/x509"
 	"fmt"
 	"io"
@@ -24,6 +23,7 @@ import (
 	"github.com/connet-dev/connet/control"
 	"github.com/connet-dev/connet/model"
 	"github.com/connet-dev/connet/netc"
+	"github.com/connet-dev/connet/relay"
 	"github.com/connet-dev/connet/restr"
 	"github.com/connet-dev/connet/selfhosted"
 	"github.com/connet-dev/connet/statusc"
@@ -195,17 +195,16 @@ func TestE2E(t *testing.T) {
 		selfhosted.ClientAuthentication{Token: "test-token-deny-role", Role: model.Source},
 	)
 
-	serverClientsAddr, err := net.ResolveUDPAddr("udp", ":20000")
+	clientsIngress, err := control.NewIngressBuilder().
+		WithAddrFrom(":20000").WithTLSCert(cert).Ingress()
+	require.NoError(t, err)
+	relayIngress, err := relay.NewIngressBuilder().
+		WithAddrFrom(":20001").WithHostportFrom("localhost").Ingress()
 	require.NoError(t, err)
 	srv, err := NewServer(
 		ServerClientsAuthenticator(clientAuth),
-		ServerClientsIngress(control.Ingress{
-			Addr: serverClientsAddr,
-			TLS: &tls.Config{
-				Certificates: []tls.Certificate{cert},
-			},
-		}),
-		ServerRelayAddress(":20001"),
+		ServerClientsIngress(clientsIngress),
+		ServerRelayIngress(relayIngress),
 		ServerLogger(logger.With("test", "server")),
 	)
 	require.NoError(t, err)

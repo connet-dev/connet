@@ -2,7 +2,6 @@ package main
 
 import (
 	"context"
-	"crypto/tls"
 	"fmt"
 	"log/slog"
 	"net"
@@ -123,11 +122,11 @@ func controlRun(ctx context.Context, cfg ControlConfig, logger *slog.Logger) err
 		Logger: logger,
 	}
 
-	var usedDefault bool
+	var usedClientsDefault bool
 	for ix, ingressCfg := range cfg.ClientsIngresses {
-		if ingressCfg.Addr == "" && !usedDefault {
+		if ingressCfg.Addr == "" && !usedClientsDefault {
 			ingressCfg.Addr = ":19190"
-			usedDefault = true
+			usedClientsDefault = true
 		}
 		if ingress, err := ingressCfg.parse(); err != nil {
 			return fmt.Errorf("parse client ingress at %d: %w", ix, err)
@@ -148,9 +147,11 @@ func controlRun(ctx context.Context, cfg ControlConfig, logger *slog.Logger) err
 		return err
 	}
 
+	var usedRelaysDefault bool
 	for ix, ingressCfg := range cfg.RelaysIngresses {
-		if ingressCfg.Addr == "" {
+		if ingressCfg.Addr == "" && !usedRelaysDefault {
 			ingressCfg.Addr = ":19189"
+			usedRelaysDefault = true
 		}
 		if ingress, err := ingressCfg.parse(); err != nil {
 			return fmt.Errorf("parse relay ingress at %d: %w", ix, err)
@@ -198,32 +199,11 @@ func controlRun(ctx context.Context, cfg ControlConfig, logger *slog.Logger) err
 }
 
 func (cfg ControlIngress) parse() (control.Ingress, error) {
-	var result control.Ingress
-
-	addr, err := net.ResolveUDPAddr("udp", cfg.Addr)
-	if err != nil {
-		return control.Ingress{}, fmt.Errorf("resolve udp address: %w", err)
-	}
-	result.Addr = addr
-
-	if len(cfg.IPRestriction.AllowCIDRs) > 0 || len(cfg.IPRestriction.DenyCIDRs) > 0 {
-		iprestr, err := restr.ParseIP(cfg.IPRestriction.AllowCIDRs, cfg.IPRestriction.DenyCIDRs)
-		if err != nil {
-			return control.Ingress{}, fmt.Errorf("parse restrictions: %w", err)
-		}
-		result.Restr = iprestr
-	}
-
-	result.TLS = &tls.Config{}
-	if cfg.Cert != "" {
-		cert, err := tls.LoadX509KeyPair(cfg.Cert, cfg.Key)
-		if err != nil {
-			return control.Ingress{}, fmt.Errorf("load server certificate: %w", err)
-		}
-		result.TLS.Certificates = append(result.TLS.Certificates, cert)
-	}
-
-	return result, nil
+	return control.NewIngressBuilder().
+		WithAddrFrom(cfg.Addr).
+		WithTLSCertFrom(cfg.Cert, cfg.Key).
+		WithRestrFrom(cfg.AllowCIDRs, cfg.DenyCIDRs).
+		Ingress()
 }
 
 func parseClientAuth(tokens []string, restrs []TokenRestriction) (control.ClientAuthenticator, error) {

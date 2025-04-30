@@ -7,11 +7,8 @@ import (
 	"log/slog"
 	"net"
 	"os"
-	"strconv"
 
-	"github.com/connet-dev/connet/model"
 	"github.com/connet-dev/connet/relay"
-	"github.com/connet-dev/connet/restr"
 	"github.com/spf13/cobra"
 )
 
@@ -50,11 +47,11 @@ func relayCmd() *cobra.Command {
 	cmd.Flags().StringVar(&flagsConfig.Relay.Token, "token", "", "token to use")
 	cmd.Flags().StringVar(&flagsConfig.Relay.TokenFile, "token-file", "", "token file to use")
 
-	var ingressConfig RelayIngress
-	cmd.Flags().StringVar(&ingressConfig.Addr, "addr", "", "server addr to use")
-	cmd.Flags().StringArrayVar(&ingressConfig.Hostports, "hostname", nil, "server public host[:port] to use (if port is missing will use addr's port)")
-	cmd.Flags().StringArrayVar(&ingressConfig.AllowCIDRs, "allow-cidr", nil, "cidr to allow client connections from")
-	cmd.Flags().StringArrayVar(&ingressConfig.DenyCIDRs, "deny-cidr", nil, "cidr to deny client connections from")
+	var ingress RelayIngress
+	cmd.Flags().StringVar(&ingress.Addr, "addr", "", "server addr to use")
+	cmd.Flags().StringArrayVar(&ingress.Hostports, "hostport", nil, "server public host[:port] to use (if port is missing will use addr's port)")
+	cmd.Flags().StringArrayVar(&ingress.IPRestriction.AllowCIDRs, "allow-cidr", nil, "cidr to allow client connections from")
+	cmd.Flags().StringArrayVar(&ingress.IPRestriction.DenyCIDRs, "deny-cidr", nil, "cidr to deny client connections from")
 
 	cmd.Flags().StringVar(&flagsConfig.Relay.ControlAddr, "control-addr", "", "control server address to connect")
 	cmd.Flags().StringVar(&flagsConfig.Relay.ControlCAs, "control-cas", "", "control server CAs to use")
@@ -68,8 +65,8 @@ func relayCmd() *cobra.Command {
 			return fmt.Errorf("load config: %w", err)
 		}
 
-		if !ingressConfig.isZero() {
-			flagsConfig.Relay.Ingresses = append(flagsConfig.Relay.Ingresses, ingressConfig)
+		if !ingress.isZero() {
+			flagsConfig.Relay.Ingresses = append(flagsConfig.Relay.Ingresses, ingress)
 		}
 		cfg.merge(flagsConfig)
 
@@ -171,44 +168,17 @@ func relayRun(ctx context.Context, cfg RelayConfig, logger *slog.Logger) error {
 }
 
 func (cfg RelayIngress) parse() (relay.Ingress, error) {
-	var result relay.Ingress
-
-	addr, err := net.ResolveUDPAddr("udp", cfg.Addr)
-	if err != nil {
-		return relay.Ingress{}, fmt.Errorf("resolve udp address: %w", err)
-	}
-	result.Addr = addr
-
-	if len(cfg.Hostports) == 0 {
-		hostAddr := addr.String()
-		if len(addr.IP) == 0 {
-			hostAddr = fmt.Sprintf("localhost:%d", addr.Port)
-		}
-		cfg.Hostports = append(cfg.Hostports, hostAddr)
-	}
+	bldr := relay.NewIngressBuilder().
+		WithAddrFrom(cfg.Addr).WithRestrFrom(cfg.AllowCIDRs, cfg.DenyCIDRs)
 
 	for ix, hp := range cfg.Hostports {
-		host, portStr, err := net.SplitHostPort(hp) // TODO better check
-		if err != nil {
-			host = hp
-			portStr = strconv.Itoa(addr.Port)
+		bldr = bldr.WithHostportFrom(hp)
+		if bldr.Error() != nil {
+			return relay.Ingress{}, fmt.Errorf("parse hostport at %d: %w", ix, bldr.Error())
 		}
-		port, err := strconv.ParseInt(portStr, 10, 16)
-		if err != nil {
-			return relay.Ingress{}, fmt.Errorf("parse port at %d: %w", ix, err)
-		}
-		result.Hostports = append(result.Hostports, model.HostPort{Host: host, Port: uint16(port)})
 	}
 
-	if len(cfg.IPRestriction.AllowCIDRs) > 0 || len(cfg.IPRestriction.DenyCIDRs) > 0 {
-		iprestr, err := restr.ParseIP(cfg.IPRestriction.AllowCIDRs, cfg.IPRestriction.DenyCIDRs)
-		if err != nil {
-			return relay.Ingress{}, fmt.Errorf("parse restrictions: %w", err)
-		}
-		result.Restr = iprestr
-	}
-
-	return result, nil
+	return bldr.Ingress()
 }
 
 func (c *RelayConfig) merge(o RelayConfig) {

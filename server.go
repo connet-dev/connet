@@ -9,7 +9,6 @@ import (
 
 	"github.com/connet-dev/connet/certc"
 	"github.com/connet-dev/connet/control"
-	"github.com/connet-dev/connet/model"
 	"github.com/connet-dev/connet/netc"
 	"github.com/connet-dev/connet/relay"
 	"github.com/connet-dev/connet/selfhosted"
@@ -60,6 +59,7 @@ func NewServer(opts ...ServerOption) (*Server, error) {
 	control, err := control.NewServer(control.Config{
 		ClientsIngress: cfg.clientsIngresses,
 		ClientsAuth:    cfg.clientsAuth,
+
 		RelaysIngress: []control.Ingress{{
 			Addr: relaysAddr,
 			TLS: &tls.Config{
@@ -67,25 +67,24 @@ func NewServer(opts ...ServerOption) (*Server, error) {
 			},
 		}},
 		RelaysAuth: selfhosted.NewRelayAuthenticator(relayAuth),
-		Logger:     cfg.logger,
-		Stores:     control.NewFileStores(filepath.Join(cfg.dir, "control")),
+
+		Stores: control.NewFileStores(filepath.Join(cfg.dir, "control")),
+		Logger: cfg.logger,
 	})
 	if err != nil {
 		return nil, fmt.Errorf("create control server: %w", err)
 	}
 
 	relay, err := relay.NewServer(relay.Config{
-		Ingress: []relay.Ingress{{
-			Addr:      cfg.relayAddr,
-			Hostports: []model.HostPort{{Host: cfg.relayHostname, Port: cfg.relayAddr.AddrPort().Port()}},
-		}},
-		Logger: cfg.logger,
-		Stores: relay.NewFileStores(filepath.Join(cfg.dir, "relay")),
-
 		ControlAddr:  relaysAddr,
 		ControlHost:  relaysTLSCert.Leaf.IPAddresses[0].String(),
 		ControlToken: relayAuth.Token,
 		ControlCAs:   relaysCAs,
+
+		Ingress: cfg.relayIngresses,
+
+		Stores: relay.NewFileStores(filepath.Join(cfg.dir, "relay")),
+		Logger: cfg.logger,
 	})
 	if err != nil {
 		return nil, fmt.Errorf("create relay server: %w", err)

@@ -7,6 +7,8 @@ import (
 	"os"
 
 	"github.com/connet-dev/connet/control"
+	"github.com/connet-dev/connet/model"
+	"github.com/connet-dev/connet/relay"
 	"github.com/connet-dev/connet/selfhosted"
 )
 
@@ -14,8 +16,7 @@ type serverConfig struct {
 	clientsIngresses []control.Ingress
 	clientsAuth      control.ClientAuthenticator
 
-	relayAddr     *net.UDPAddr
-	relayHostname string
+	relayIngresses []relay.Ingress
 
 	dir    string
 	logger *slog.Logger
@@ -47,15 +48,14 @@ func newServerConfig(opts []ServerOption) (*serverConfig, error) {
 		}
 	}
 
-	if cfg.relayAddr == nil {
-		if err := ServerRelayAddress(":19191")(cfg); err != nil {
-			return nil, fmt.Errorf("default relay address: %w", err)
+	if len(cfg.relayIngresses) == 0 {
+		addr, err := net.ResolveUDPAddr("udp", ":19191")
+		if err != nil {
+			return nil, fmt.Errorf("resolve clients relay address: %w", err)
 		}
-	}
-
-	if cfg.relayHostname == "" {
-		if err := ServerRelayHostname("localhost")(cfg); err != nil {
-			return nil, fmt.Errorf("default relay hostname: %w", err)
+		hps := []model.HostPort{{Host: "localhost", Port: 19191}}
+		if err := ServerRelayIngress(relay.Ingress{Addr: addr, Hostports: hps})(cfg); err != nil {
+			return nil, fmt.Errorf("default clients relay address: %w", err)
 		}
 	}
 
@@ -100,22 +100,10 @@ func ServerClientsAuthenticator(clientsAuth control.ClientAuthenticator) ServerO
 	}
 }
 
-func ServerRelayAddress(address string) ServerOption {
+func ServerRelayIngress(icfg relay.Ingress) ServerOption {
 	return func(cfg *serverConfig) error {
-		addr, err := net.ResolveUDPAddr("udp", address)
-		if err != nil {
-			return fmt.Errorf("resolve relay address: %w", err)
-		}
+		cfg.relayIngresses = append(cfg.relayIngresses, icfg)
 
-		cfg.relayAddr = addr
-
-		return nil
-	}
-}
-
-func ServerRelayHostname(hostname string) ServerOption {
-	return func(cfg *serverConfig) error {
-		cfg.relayHostname = hostname
 		return nil
 	}
 }
