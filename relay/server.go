@@ -58,18 +58,12 @@ func NewServer(cfg Config) (*Server, error) {
 
 	clients := newClientsServer(cfg, control.tlsAuthenticate, control.authenticate)
 
-	hostports := iterc.FlattenSlice(iterc.MapSlice(cfg.Ingress, func(in Ingress) []model.HostPort {
-		return in.Hostports
-	}))
-
 	return &Server{
 		ingress:           cfg.Ingress,
 		statelessResetKey: &statelessResetKey,
 
 		control: control,
 		clients: clients,
-
-		logger: cfg.Logger.With("relay", hostports),
 	}, nil
 }
 
@@ -79,8 +73,6 @@ type Server struct {
 
 	control *controlClient
 	clients *clientsServer
-
-	logger *slog.Logger
 }
 
 func (s *Server) Run(ctx context.Context) error {

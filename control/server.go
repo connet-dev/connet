@@ -39,23 +39,15 @@ func NewServer(cfg Config) (*Server, error) {
 		return nil, fmt.Errorf("create client server: %w", err)
 	}
 
-	var clientsAddrs []string
-	for _, icfg := range cfg.ClientsIngress {
-		clientsAddrs = append(clientsAddrs, icfg.Addr.String())
-	}
 	return &Server{
 		clients: clients,
 		relays:  relays,
-
-		logger: cfg.Logger.With("control", clientsAddrs),
 	}, nil
 }
 
 type Server struct {
 	clients *clientServer
 	relays  *relayServer
-
-	logger *slog.Logger
 }
 
 func (s *Server) Run(ctx context.Context) error {
