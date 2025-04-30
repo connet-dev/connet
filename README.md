@@ -261,14 +261,17 @@ To run a relay server, use `connet relay --config relay-config.toml` command. He
 token = "relay-token-1" # the token which the relay server uses to authenticate against the control server
 token-file = "path/to/relay/token" # a file that contains the token, one of token or token-file is required
 
-addr = ":19191" # the address at which the relay will listen for connectsion, defaults to :19191
-hostname = "localhost" # the public hostname (e.g. domain, ip address) which will be advertised to clients, defaults to localhost
-
 control-addr = "localhost:19190" # the control server address to connect to, defaults to localhost:19191
 control-cas = "path/to/ca/file.pem" # the public certificate root of the control server, no default, required when using self-signed certs
 
 status-addr = "127.0.0.1:19181" # at what address the relay server listens for status connections, disabled unless set
 store-dir = "path/to/relay-store" # where does this relay persist runtime information, defaults to a /tmp subdirectory
+
+[[relay.ingress]] # defines how relay server will accept client connections, defaults to "localhost:19191"
+addr = ":19191" # the address at which the relay will listen for connectsion, defaults to :19191
+hostports = ["localhost:19191"] # the public host:port (e.g. domain, ip address) which will be advertised to clients, defaults to localhost:[addr.port]
+allow-cidrs = [] # set of networks in CIDR format, to allow client connetctions from
+deny-cidrs = [] # set of networks in CIDR format, to deny client connetctions from
 ```
 
 ### IP Restrictions
@@ -539,12 +542,14 @@ by adding account management and it is one of the easiest way to start.
  - [x] info log on adding/removing endpoint
  - [x] websocket join as a func
  - [x] info log on client connecting
- - [ ] multiple ingress addrs
+ - [x] multiple ingress addrs
+ - [ ] protos in single folder, subpackages
+
+### v0.9.0
  - [ ] api to control client/control/relay
  - [ ] remove expired protocol fields
  - [ ] remove expired protocols
  - [ ] from forward to endpoint
- - [ ] protos in single folder, subpackages
 
 ## Future
  - [ ] UDP support
