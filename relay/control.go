@@ -115,7 +115,7 @@ func newControlClient(cfg Config, configStore logc.KV[ConfigKey, ConfigValue]) (
 		clientsStreamOffset: clientsStreamOffset.Int64,
 		clientsLogOffset:    clientsLogOffset.Int64,
 
-		logger: cfg.Logger.With("relay-control", hostports),
+		logger: cfg.Logger.With("client", "relay-control"),
 	}
 	c.connStatus.Store(statusc.NotConnected)
 	return c, nil
@@ -174,7 +174,7 @@ type TransportsFn func(ctx context.Context) ([]*quic.Transport, error)
 func (s *controlClient) run(ctx context.Context, tfn TransportsFn) error {
 	defer s.connStatus.Store(statusc.Disconnected)
 
-	s.logger.Info("connecting to control server", "addr", s.controlAddr)
+	s.logger.Info("connecting to control server", "addr", s.controlAddr, "hostports", s.hostports)
 	conn, err := s.connect(ctx, tfn)
 	if err != nil {
 		return err

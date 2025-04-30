@@ -99,6 +99,10 @@ func relayRun(ctx context.Context, cfg RelayConfig, logger *slog.Logger) error {
 		relayCfg.ControlToken = cfg.Token
 	}
 
+	if len(cfg.Ingresses) == 0 {
+		cfg.Ingresses = append(cfg.Ingresses, RelayIngress{})
+	}
+
 	var usedDefault bool
 	for ix, ingressCfg := range cfg.Ingresses {
 		if ingressCfg.Addr == "" && !usedDefault {
