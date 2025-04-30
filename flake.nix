@@ -125,10 +125,12 @@
                   log-level = "debug";
                   server = {
                     tokens-file = "/etc/tokens";
-                    relay-hostname = "server";
                     ingress = [{
                       cert-file = "/etc/server.cert";
                       key-file = "/etc/server.key";
+                    }];
+                    relay-ingress = [{
+                      hostports = [ "server" ];
                     }];
                   };
                 };

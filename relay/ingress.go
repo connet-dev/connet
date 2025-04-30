@@ -65,64 +65,45 @@ func (b *IngressBuilder) WithHostportFrom(hostport string) *IngressBuilder {
 		return b
 	}
 
-	lastCol := strings.LastIndex(hostport, ":")
-	if lastCol < 0 {
-		if bracketIndex := strings.IndexAny(hostport, "[]"); bracketIndex >= 0 {
-			b.err = fmt.Errorf("cannot parse hostport, [ and ] are not allowed")
-			return b
-		}
-		// no ':', just a host, lets use that, will try to set the port at the end
-		return b.WithHostport(model.HostPort{Host: hostport})
-	}
-	if lastCol == 0 {
-		// starts with ':', must be a ':port', will try to set the host at the end
-		port, err := strconv.ParseInt(hostport[lastCol+1:], 10, 16)
-		if err != nil {
-			b.err = fmt.Errorf("cannot parse port: %w", err)
-			return b
-		}
-		return b.WithHostport(model.HostPort{Port: uint16(port)})
-	}
-
-	if hostport[0] == '[' {
-		end := strings.Index(hostport, "]")
-		if end < 0 {
+	if strings.HasPrefix(hostport, "[") {
+		closeBracket := strings.LastIndex(hostport, "]")
+		if closeBracket < 0 {
 			b.err = fmt.Errorf("cannot parse hostport, missing ]")
 			return b
 		}
-		switch end + 1 {
-		case len(hostport):
-			// ipv6 host without a port, will try to set the port at the end
-			return b.WithHostport(model.HostPort{Host: hostport})
-		case lastCol:
-			// ipv6 host followed by a port
-			port, err := strconv.ParseInt(hostport[lastCol+1:], 10, 16)
+		colonPort := hostport[closeBracket+1:]
+		if len(colonPort) > 0 {
+			if colonPort[0] != ':' {
+				b.err = fmt.Errorf("cannot parse hostport, missing :")
+				return b
+			}
+			portStr := hostport[1:]
+			if len(portStr) == 0 {
+				b.err = fmt.Errorf("cannot parse hostport, missing port")
+				return b
+			}
+			port, err := strconv.ParseInt(portStr, 10, 16)
 			if err != nil {
 				b.err = fmt.Errorf("cannot parse port: %w", err)
 				return b
 			}
-			return b.WithHostport(model.HostPort{Host: hostport[:lastCol], Port: uint16(port)})
-		default:
-			if lastCol < end {
-				// ipv6 without a port, will try to set the port at the end
-				return b.WithHostport(model.HostPort{Host: hostport})
-			}
-			b.err = fmt.Errorf("port doesn't follow ]")
+			return b.WithHostport(model.HostPort{Host: hostport[:closeBracket+1], Port: uint16(port)})
+		}
+	} else if colonIndex := strings.LastIndex(hostport, ":"); colonIndex != -1 {
+		portStr := hostport[colonIndex+1:]
+		if len(portStr) == 0 {
+			b.err = fmt.Errorf("cannot parse hostport, missing port")
 			return b
 		}
+		port, err := strconv.ParseInt(portStr, 10, 16)
+		if err != nil {
+			b.err = fmt.Errorf("cannot parse port: %w", err)
+			return b
+		}
+		return b.WithHostport(model.HostPort{Host: hostport[:colonIndex], Port: uint16(port)})
 	}
 
-	host := hostport[:lastCol]
-	if bracketIndex := strings.IndexAny(host, "[]"); bracketIndex >= 0 {
-		b.err = fmt.Errorf("cannot parse hostport, [ and ] are not allowed")
-		return b
-	}
-	port, err := strconv.ParseInt(hostport[lastCol+1:], 10, 16)
-	if err != nil {
-		b.err = fmt.Errorf("cannot parse port: %w", err)
-		return b
-	}
-	return b.WithHostport(model.HostPort{Host: host, Port: uint16(port)})
+	return b.WithHostport(model.HostPort{Host: hostport})
 }
 
 func (b *IngressBuilder) WithRestr(iprestr restr.IP) *IngressBuilder {

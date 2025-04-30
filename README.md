@@ -190,9 +190,6 @@ tokens = ["client-token-1", "client-token-n"] # set of recognized client tokens
 tokens-file = "path/to/client/tokens" # a file that contains a list of client tokens, one token per line
 # one of tokens or tokens-file is required
 
-relay-addr = ":19191" # the address at which the relay will listen for connectsion, defaults to :19191
-relay-hostname = "localhost" # the public hostname (e.g. domain, ip address) which will be advertised to clients, defaults to localhost
-
 status-addr = "127.0.0.1:19180" # at what address the server listens for status connections, disabled unless set
 store-dir = "path/to/server-store" # where does this server persist runtime information, defaults to a /tmp subdirectory
 
@@ -208,6 +205,12 @@ allow-cidrs = [] # set of networks in CIDR format, to allow token client connetc
 deny-cidrs = [] # set of networks in CIDR format, to deny token client connetctions from
 name-matches = "" # regular expression to check the name of the destination/source against
 role-matches = "" # only allow specific role for this token, either 'source' or 'destination'
+
+[[server.relay-ingress]]
+addr = ":19191" # the address at which the relay will listen for connectsion, defaults to :19191
+hostports = ["localhost"] # the public host[:port] (e.g. domain, ip address) which will be advertised to clients, defaults to localhost:<port of address>
+allow-cidrs = [] # set of networks in CIDR format, to allow client relay connetctions from
+deny-cidrs = [] # set of networks in CIDR format, to deny client relay connetctions from
 ```
 
 #### Control server
