@@ -11,7 +11,7 @@ import (
 )
 
 type ServerConfig struct {
-	Ingresses []Ingress `toml:"ingress"`
+	Ingresses []ControlIngress `toml:"ingress"`
 
 	Tokens            []string           `toml:"tokens"`
 	TokensFile        string             `toml:"tokens-file"`
@@ -37,12 +37,12 @@ func serverCmd() *cobra.Command {
 	cmd.Flags().StringVar(&flagsConfig.LogLevel, "log-level", "", "log level to use")
 	cmd.Flags().StringVar(&flagsConfig.LogFormat, "log-format", "", "log formatter to use")
 
-	var ingress Ingress
+	var ingress ControlIngress
 	cmd.Flags().StringVar(&ingress.Addr, "addr", "", "control server addr to use")
 	cmd.Flags().StringVar(&ingress.Cert, "cert-file", "", "control server cert to use")
 	cmd.Flags().StringVar(&ingress.Key, "key-file", "", "control server key to use")
-	cmd.Flags().StringSliceVar(&ingress.IPRestriction.AllowCIDRs, "allow-cidr", nil, "cidr to allow client connections from")
-	cmd.Flags().StringSliceVar(&ingress.IPRestriction.DenyCIDRs, "deny-cidr", nil, "cidr to deny client connections from")
+	cmd.Flags().StringArrayVar(&ingress.IPRestriction.AllowCIDRs, "allow-cidr", nil, "cidr to allow client connections from")
+	cmd.Flags().StringArrayVar(&ingress.IPRestriction.DenyCIDRs, "deny-cidr", nil, "cidr to deny client connections from")
 
 	cmd.Flags().StringArrayVar(&flagsConfig.Server.Tokens, "tokens", nil, "tokens for clients to connect")
 	cmd.Flags().StringVar(&flagsConfig.Server.TokensFile, "tokens-file", "", "tokens file to load")
@@ -84,7 +84,7 @@ func serverRun(ctx context.Context, cfg ServerConfig, logger *slog.Logger) error
 			ingressCfg.Addr = ":19190"
 			usedDefault = true
 		}
-		if ingress, err := parseIngress(ingressCfg); err != nil {
+		if ingress, err := ingressCfg.parse(); err != nil {
 			return fmt.Errorf("parse ingress at %d: %w", ix, err)
 		} else {
 			opts = append(opts, connet.ServerClientsIngress(ingress))
@@ -135,25 +135,12 @@ func serverRun(ctx context.Context, cfg ServerConfig, logger *slog.Logger) error
 }
 
 func (c *ServerConfig) merge(o ServerConfig) {
-	if len(c.Ingresses) == len(o.Ingresses) {
-		for i := range c.Ingresses {
-			c.Ingresses[i] = mergeIngress(c.Ingresses[i], o.Ingresses[i])
-		}
-	} else if len(o.Ingresses) > 0 {
-		c.Ingresses = o.Ingresses
-	}
-
+	c.Ingresses = mergeSlices(c.Ingresses, o.Ingresses)
 	if len(o.Tokens) > 0 || o.TokensFile != "" { // new config completely overrides tokens
 		c.Tokens = o.Tokens
 		c.TokensFile = o.TokensFile
 	}
-	if len(c.TokenRestrictions) == len(o.TokenRestrictions) {
-		for i := range c.TokenRestrictions {
-			c.TokenRestrictions[i] = mergeTokenRestriction(c.TokenRestrictions[i], o.TokenRestrictions[i])
-		}
-	} else if len(o.TokenRestrictions) > 0 {
-		c.TokenRestrictions = o.TokenRestrictions
-	}
+	c.TokenRestrictions = mergeSlices(c.TokenRestrictions, o.TokenRestrictions)
 
 	c.RelayAddr = override(c.RelayAddr, o.RelayAddr)
 	c.RelayHostname = override(c.RelayHostname, o.RelayHostname)

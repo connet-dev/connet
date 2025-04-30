@@ -86,6 +86,7 @@ func clientCmd() *cobra.Command {
 	var dstCfg DestinationConfig
 	cmd.Flags().StringVar(&dstName, "dst-name", "", "destination name")
 	cmd.Flags().StringVar(&dstCfg.Route, "dst-route", "", "destination route")
+	cmd.Flags().StringSliceVar(&dstCfg.RelayEncryptions, "dst-relay-encryption", nil, "destination relay encryptions")
 	cmd.Flags().StringVar(&dstCfg.URL, "dst-url", "", "destination url (scheme describes the destination)")
 	cmd.Flags().StringVar(&dstCfg.CAsFile, "dst-cas-file", "", "destination client tls certificate authorities file")
 
@@ -93,6 +94,7 @@ func clientCmd() *cobra.Command {
 	var srcCfg SourceConfig
 	cmd.Flags().StringVar(&srcName, "src-name", "", "source name")
 	cmd.Flags().StringVar(&srcCfg.Route, "src-route", "", "source route")
+	cmd.Flags().StringSliceVar(&srcCfg.RelayEncryptions, "src-relay-encryption", nil, "source relay encryptions")
 	cmd.Flags().StringVar(&srcCfg.URL, "src-url", "", "source url (scheme describes server type)")
 	cmd.Flags().StringVar(&srcCfg.CertFile, "src-cert-file", "", "source server tls cert file")
 	cmd.Flags().StringVar(&srcCfg.KeyFile, "src-key-file", "", "source server tls key file")
@@ -481,18 +483,18 @@ func (c *ClientConfig) merge(o ClientConfig) {
 		if c.Destinations == nil {
 			c.Destinations = map[string]DestinationConfig{}
 		}
-		c.Destinations[k] = mergeDestinationConfig(c.Destinations[k], v)
+		c.Destinations[k] = c.Destinations[k].merge(v)
 	}
 
 	for k, v := range o.Sources {
 		if c.Sources == nil {
 			c.Sources = map[string]SourceConfig{}
 		}
-		c.Sources[k] = mergeSourceConfig(c.Sources[k], v)
+		c.Sources[k] = c.Sources[k].merge(v)
 	}
 }
 
-func mergeDestinationConfig(c, o DestinationConfig) DestinationConfig {
+func (c DestinationConfig) merge(o DestinationConfig) DestinationConfig {
 	return DestinationConfig{
 		Route:             override(c.Route, o.Route),
 		RelayEncryptions:  overrides(c.RelayEncryptions, o.RelayEncryptions),
@@ -505,8 +507,8 @@ func mergeDestinationConfig(c, o DestinationConfig) DestinationConfig {
 	}
 }
 
-func mergeSourceConfig(c, o SourceConfig) SourceConfig {
-	n := SourceConfig{
+func (c SourceConfig) merge(o SourceConfig) SourceConfig {
+	return SourceConfig{
 		Route:            override(c.Route, o.Route),
 		RelayEncryptions: overrides(c.RelayEncryptions, o.RelayEncryptions),
 
@@ -515,6 +517,4 @@ func mergeSourceConfig(c, o SourceConfig) SourceConfig {
 		CertFile: override(c.CertFile, o.CertFile),
 		KeyFile:  override(c.KeyFile, o.KeyFile),
 	}
-
-	return n
 }

@@ -89,8 +89,12 @@ func newControlClient(cfg Config, configStore logc.KV[ConfigKey, ConfigValue]) (
 		return nil, err
 	}
 
+	hostports := iterc.FlattenSlice(iterc.MapSlice(cfg.Ingress, func(in Ingress) []model.HostPort {
+		return in.Hostports
+	}))
+
 	c := &controlClient{
-		hostports: cfg.Hostports,
+		hostports: hostports,
 		root:      root,
 
 		controlAddr:  cfg.ControlAddr,
@@ -111,7 +115,7 @@ func newControlClient(cfg Config, configStore logc.KV[ConfigKey, ConfigValue]) (
 		clientsStreamOffset: clientsStreamOffset.Int64,
 		clientsLogOffset:    clientsLogOffset.Int64,
 
-		logger: cfg.Logger.With("relay-control", cfg.Hostports),
+		logger: cfg.Logger.With("relay-control", hostports),
 	}
 	c.connStatus.Store(statusc.NotConnected)
 	return c, nil

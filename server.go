@@ -75,12 +75,12 @@ func NewServer(opts ...ServerOption) (*Server, error) {
 	}
 
 	relay, err := relay.NewServer(relay.Config{
-		Ingress: []relay.Ingress{
-			{Addr: cfg.relayAddr},
-		},
-		Hostports: []model.HostPort{{Host: cfg.relayHostname, Port: cfg.relayAddr.AddrPort().Port()}},
-		Logger:    cfg.logger,
-		Stores:    relay.NewFileStores(filepath.Join(cfg.dir, "relay")),
+		Ingress: []relay.Ingress{{
+			Addr:      cfg.relayAddr,
+			Hostports: []model.HostPort{{Host: cfg.relayHostname, Port: cfg.relayAddr.AddrPort().Port()}},
+		}},
+		Logger: cfg.logger,
+		Stores: relay.NewFileStores(filepath.Join(cfg.dir, "relay")),
 
 		ControlAddr:  relaysAddr,
 		ControlHost:  relaysTLSCert.Leaf.IPAddresses[0].String(),

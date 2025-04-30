@@ -23,11 +23,12 @@ func GetClientToControlProto(conn quic.Connection) ClientToControlProto {
 
 var (
 	CNUnknown = ClientToControlProto{}
-	CNv00     = ClientToControlProto{"connet"}
-	CNv01     = ClientToControlProto{"connet-client/0.1"}
+	CNv00     = ClientToControlProto{"connet"}            // before 0.7.0
+	CNv01     = ClientToControlProto{"connet-client/0.1"} // 0.7.0
+	CNv02     = ClientToControlProto{"connet-client/0.2"} // 0.8.0
 )
 
-var ClientToControlProtos = []ClientToControlProto{CNv01, CNv00}
+var ClientToControlProtos = []ClientToControlProto{CNv02, CNv01, CNv00}
 
 var ClientToControlNextProtos = iterc.MapSlice(ClientToControlProtos, ClientToControlProto.String)
 
@@ -38,8 +39,8 @@ func (v ClientToClientProto) String() string {
 }
 
 var (
-	CCv00 = ClientToClientProto{"connet-direct"}
-	CCv01 = ClientToClientProto{"connet-peer/0.1"}
+	CCv00 = ClientToClientProto{"connet-direct"}   // pre 0.7.0
+	CCv01 = ClientToClientProto{"connet-peer/0.1"} // 0.7.0
 )
 
 var ClientToClientProtos = []ClientToClientProto{CCv00, CCv01}
@@ -53,8 +54,8 @@ func (v ClientToRelayProto) String() string {
 }
 
 var (
-	CRv00 = ClientToRelayProto{"connet-relay"}
-	CRv01 = ClientToRelayProto{"connet-peer-relay/0.1"}
+	CRv00 = ClientToRelayProto{"connet-relay"}          // pre 0.7.0
+	CRv01 = ClientToRelayProto{"connet-peer-relay/0.1"} // 0.7.0
 )
 
 var ClientToRelayProtos = []ClientToRelayProto{CRv01, CRv00}
@@ -79,10 +80,11 @@ func GetRelayToControlProto(conn quic.Connection) RelayToControlProto {
 
 var (
 	RNUnknown = RelayToControlProto{}
-	RNv00     = RelayToControlProto{"connet-relays"}
-	RNv01     = RelayToControlProto{"connet-relay/0.1"}
+	RNv00     = RelayToControlProto{"connet-relays"}    // pre 0.7.0
+	RNv01     = RelayToControlProto{"connet-relay/0.1"} // 0.7.0
+	RNv02     = RelayToControlProto{"connet-relay/0.2"} // 0.8.0
 )
 
-var RelayToControlProtos = []RelayToControlProto{RNv01, RNv00}
+var RelayToControlProtos = []RelayToControlProto{RNv02, RNv01, RNv00}
 
 var RelayToControlNextProtos = iterc.MapSlice(RelayToControlProtos, RelayToControlProto.String)

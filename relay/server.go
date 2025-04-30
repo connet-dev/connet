@@ -20,15 +20,14 @@ import (
 )
 
 type Config struct {
-	Ingress   []Ingress
-	Hostports []model.HostPort
-
-	Stores Stores
-
 	ControlAddr  *net.UDPAddr
 	ControlHost  string
 	ControlToken string
 	ControlCAs   *x509.CertPool
+
+	Ingress []Ingress
+
+	Stores Stores
 
 	Logger *slog.Logger
 }
@@ -59,6 +58,10 @@ func NewServer(cfg Config) (*Server, error) {
 
 	clients := newClientsServer(cfg, control.tlsAuthenticate, control.authenticate)
 
+	hostports := iterc.FlattenSlice(iterc.MapSlice(cfg.Ingress, func(in Ingress) []model.HostPort {
+		return in.Hostports
+	}))
+
 	return &Server{
 		ingress:           cfg.Ingress,
 		statelessResetKey: &statelessResetKey,
@@ -66,7 +69,7 @@ func NewServer(cfg Config) (*Server, error) {
 		control: control,
 		clients: clients,
 
-		logger: cfg.Logger.With("relay", cfg.Hostports),
+		logger: cfg.Logger.With("relay", hostports),
 	}, nil
 }
 

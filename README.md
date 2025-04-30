@@ -544,6 +544,7 @@ by adding account management and it is one of the easiest way to start.
  - [ ] remove expired protocol fields
  - [ ] remove expired protocols
  - [ ] from forward to endpoint
+ - [ ] protos in single folder, subpackages
 
 ## Future
  - [ ] UDP support

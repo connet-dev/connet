@@ -206,6 +206,17 @@ func overrides(s, o []string) []string {
 	return s
 }
 
+func mergeSlices[S ~[]T, T interface{ merge(T) T }](c S, o S) S {
+	if len(c) == len(o) {
+		for i := range c {
+			c[i] = c[i].merge(o[i])
+		}
+	} else if len(o) > 0 {
+		return o
+	}
+	return c
+}
+
 type withStatus[T any] interface {
 	Run(context.Context) error
 	Status(context.Context) (T, error)

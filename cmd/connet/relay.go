@@ -7,9 +7,11 @@ import (
 	"log/slog"
 	"net"
 	"os"
+	"strconv"
 
 	"github.com/connet-dev/connet/model"
 	"github.com/connet-dev/connet/relay"
+	"github.com/connet-dev/connet/restr"
 	"github.com/spf13/cobra"
 )
 
@@ -17,14 +19,19 @@ type RelayConfig struct {
 	Token     string `toml:"token"`
 	TokenFile string `toml:"token-file"`
 
-	Addr     string `toml:"addr"`
-	Hostname string `toml:"hostname"`
+	Ingresses []RelayIngress `toml:"ingress"`
 
 	ControlAddr string `toml:"control-addr"`
 	ControlCAs  string `toml:"control-cas"`
 
 	StatusAddr string `toml:"status-addr"`
 	StoreDir   string `toml:"store-dir"`
+}
+
+type RelayIngress struct {
+	Addr      string   `toml:"addr"`
+	Hostports []string `toml:"hostports"`
+	IPRestriction
 }
 
 func relayCmd() *cobra.Command {
@@ -43,8 +50,11 @@ func relayCmd() *cobra.Command {
 	cmd.Flags().StringVar(&flagsConfig.Relay.Token, "token", "", "token to use")
 	cmd.Flags().StringVar(&flagsConfig.Relay.TokenFile, "token-file", "", "token file to use")
 
-	cmd.Flags().StringVar(&flagsConfig.Relay.Addr, "addr", "", "server addr to use")
-	cmd.Flags().StringVar(&flagsConfig.Relay.Hostname, "hostname", "", "server public hostname to use")
+	var ingressConfig RelayIngress
+	cmd.Flags().StringVar(&ingressConfig.Addr, "addr", "", "server addr to use")
+	cmd.Flags().StringArrayVar(&ingressConfig.Hostports, "hostname", nil, "server public host[:port] to use (if port is missing will use addr's port)")
+	cmd.Flags().StringArrayVar(&ingressConfig.AllowCIDRs, "allow-cidr", nil, "cidr to allow client connections from")
+	cmd.Flags().StringArrayVar(&ingressConfig.DenyCIDRs, "deny-cidr", nil, "cidr to deny client connections from")
 
 	cmd.Flags().StringVar(&flagsConfig.Relay.ControlAddr, "control-addr", "", "control server address to connect")
 	cmd.Flags().StringVar(&flagsConfig.Relay.ControlCAs, "control-cas", "", "control server CAs to use")
@@ -58,6 +68,9 @@ func relayCmd() *cobra.Command {
 			return fmt.Errorf("load config: %w", err)
 		}
 
+		if !ingressConfig.isZero() {
+			flagsConfig.Relay.Ingresses = append(flagsConfig.Relay.Ingresses, ingressConfig)
+		}
 		cfg.merge(flagsConfig)
 
 		logger, err := logger(cfg)
@@ -86,19 +99,18 @@ func relayRun(ctx context.Context, cfg RelayConfig, logger *slog.Logger) error {
 		relayCfg.ControlToken = cfg.Token
 	}
 
-	if cfg.Addr == "" {
-		cfg.Addr = ":19191"
-		if cfg.Hostname == "" {
-			cfg.Hostname = "localhost"
+	var usedDefault bool
+	for ix, ingressCfg := range cfg.Ingresses {
+		if ingressCfg.Addr == "" && !usedDefault {
+			ingressCfg.Addr = ":19191"
+			usedDefault = true
+		}
+		if ingress, err := ingressCfg.parse(); err != nil {
+			return fmt.Errorf("parse ingress at %d: %w", ix, err)
+		} else {
+			relayCfg.Ingress = append(relayCfg.Ingress, ingress)
 		}
 	}
-	serverAddr, err := net.ResolveUDPAddr("udp", cfg.Addr)
-	if err != nil {
-		return fmt.Errorf("resolve server address: %w", err)
-	}
-	relayCfg.Ingress = append(relayCfg.Ingress, relay.Ingress{Addr: serverAddr})
-
-	relayCfg.Hostports = []model.HostPort{{Host: cfg.Hostname, Port: uint16(serverAddr.Port)}}
 
 	if cfg.ControlAddr == "" {
 		cfg.ControlAddr = "localhost:19189"
@@ -154,14 +166,54 @@ func relayRun(ctx context.Context, cfg RelayConfig, logger *slog.Logger) error {
 	return runWithStatus(ctx, srv, statusAddr, logger)
 }
 
+func (cfg RelayIngress) parse() (relay.Ingress, error) {
+	var result relay.Ingress
+
+	addr, err := net.ResolveUDPAddr("udp", cfg.Addr)
+	if err != nil {
+		return relay.Ingress{}, fmt.Errorf("resolve udp address: %w", err)
+	}
+	result.Addr = addr
+
+	if len(cfg.Hostports) == 0 {
+		hostAddr := addr.String()
+		if len(addr.IP) == 0 {
+			hostAddr = fmt.Sprintf("localhost:%d", addr.Port)
+		}
+		cfg.Hostports = append(cfg.Hostports, hostAddr)
+	}
+
+	for ix, hp := range cfg.Hostports {
+		host, portStr, err := net.SplitHostPort(hp) // TODO better check
+		if err != nil {
+			host = hp
+			portStr = strconv.Itoa(addr.Port)
+		}
+		port, err := strconv.ParseInt(portStr, 10, 16)
+		if err != nil {
+			return relay.Ingress{}, fmt.Errorf("parse port at %d: %w", ix, err)
+		}
+		result.Hostports = append(result.Hostports, model.HostPort{Host: host, Port: uint16(port)})
+	}
+
+	if len(cfg.IPRestriction.AllowCIDRs) > 0 || len(cfg.IPRestriction.DenyCIDRs) > 0 {
+		iprestr, err := restr.ParseIP(cfg.IPRestriction.AllowCIDRs, cfg.IPRestriction.DenyCIDRs)
+		if err != nil {
+			return relay.Ingress{}, fmt.Errorf("parse restrictions: %w", err)
+		}
+		result.Restr = iprestr
+	}
+
+	return result, nil
+}
+
 func (c *RelayConfig) merge(o RelayConfig) {
 	if o.Token != "" || o.TokenFile != "" { // new config completely overrides token
 		c.Token = o.Token
 		c.TokenFile = o.TokenFile
 	}
 
-	c.Addr = override(c.Addr, o.Addr)
-	c.Hostname = override(c.Hostname, o.Hostname)
+	c.Ingresses = mergeSlices(c.Ingresses, o.Ingresses)
 
 	c.ControlAddr = override(c.ControlAddr, o.ControlAddr)
 	c.ControlCAs = override(c.ControlCAs, o.ControlCAs)
@@ -169,3 +221,17 @@ func (c *RelayConfig) merge(o RelayConfig) {
 	c.StatusAddr = override(c.StatusAddr, o.StatusAddr)
 	c.StoreDir = override(c.StoreDir, o.StoreDir)
 }
+
+func (c RelayIngress) merge(o RelayIngress) RelayIngress {
+	return RelayIngress{
+		Addr:          override(c.Addr, o.Addr),
+		Hostports:     overrides(c.Hostports, o.Hostports),
+		IPRestriction: c.IPRestriction.merge(o.IPRestriction),
+	}
+}
+
+func (s RelayIngress) isZero() bool {
+	return s.Addr == "" && len(s.Hostports) == 0 && len(s.IPRestriction.AllowCIDRs) == 0 && len(s.IPRestriction.DenyCIDRs) == 0
+}
+
+var _ = RelayIngress.merge

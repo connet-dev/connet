@@ -15,21 +15,21 @@ import (
 )
 
 type ControlConfig struct {
-	ClientsIngresses         []Ingress          `toml:"clients-ingress"`
+	ClientsIngresses         []ControlIngress   `toml:"clients-ingress"`
 	ClientsTokens            []string           `toml:"clients-tokens"`
 	ClientsTokensFile        string             `toml:"clients-tokens-file"`
 	ClientsTokenRestrictions []TokenRestriction `toml:"clients-token-restriction"`
 
-	RelaysIngresses           []Ingress       `toml:"relays-ingress"`
-	RelaysTokens              []string        `toml:"relays-tokens"`
-	RelaysTokensFile          string          `toml:"relays-tokens-file"`
-	RelaysTokenIPRestrictions []IPRestriction `toml:"relays-token-restriction"`
+	RelaysIngresses         []ControlIngress `toml:"relays-ingress"`
+	RelaysTokens            []string         `toml:"relays-tokens"`
+	RelaysTokensFile        string           `toml:"relays-tokens-file"`
+	RelaysTokenRestrictions []IPRestriction  `toml:"relays-token-restriction"`
 
 	StatusAddr string `toml:"status-addr"`
 	StoreDir   string `toml:"store-dir"`
 }
 
-type Ingress struct {
+type ControlIngress struct {
 	Addr string `toml:"addr"`
 	Cert string `toml:"cert-file"`
 	Key  string `toml:"key-file"`
@@ -42,10 +42,9 @@ type IPRestriction struct {
 }
 
 type TokenRestriction struct {
-	AllowCIDRs  []string `toml:"allow-cidrs"`
-	DenyCIDRs   []string `toml:"deny-cidrs"`
-	NameMatches string   `toml:"name-matches"`
-	RoleMatches string   `toml:"role-matches"`
+	NameMatches string `toml:"name-matches"`
+	RoleMatches string `toml:"role-matches"`
+	IPRestriction
 }
 
 func controlCmd() *cobra.Command {
@@ -61,26 +60,26 @@ func controlCmd() *cobra.Command {
 	cmd.Flags().StringVar(&flagsConfig.LogLevel, "log-level", "", "log level to use")
 	cmd.Flags().StringVar(&flagsConfig.LogFormat, "log-format", "", "log formatter to use")
 
-	var commonIngress Ingress
+	var commonIngress ControlIngress
 	cmd.Flags().StringVar(&commonIngress.Cert, "cert-file", "", "control server cert to use (both clients and relays)")
 	cmd.Flags().StringVar(&commonIngress.Key, "key-file", "", "control server key to use (both clients and relays)")
 
-	var clientIngress Ingress
+	var clientIngress ControlIngress
 	cmd.Flags().StringVar(&clientIngress.Addr, "clients-addr", "", "control client server addr to use")
 	cmd.Flags().StringVar(&clientIngress.Cert, "clients-cert-file", "", "control server cert to use for clients")
 	cmd.Flags().StringVar(&clientIngress.Key, "clients-key-file", "", "control server key to use for clients")
-	cmd.Flags().StringSliceVar(&clientIngress.IPRestriction.AllowCIDRs, "clients-allow-cidr", nil, "cidr to allow client connections from")
-	cmd.Flags().StringSliceVar(&clientIngress.IPRestriction.DenyCIDRs, "clients-deny-cidr", nil, "cidr to deny client connections from")
+	cmd.Flags().StringArrayVar(&clientIngress.IPRestriction.AllowCIDRs, "clients-allow-cidr", nil, "cidr to allow client connections from")
+	cmd.Flags().StringArrayVar(&clientIngress.IPRestriction.DenyCIDRs, "clients-deny-cidr", nil, "cidr to deny client connections from")
 
 	cmd.Flags().StringArrayVar(&flagsConfig.Control.ClientsTokens, "clients-tokens", nil, "client tokens for clients to connect")
 	cmd.Flags().StringVar(&flagsConfig.Control.ClientsTokensFile, "clients-tokens-file", "", "client tokens file to load")
 
-	var relayIngress Ingress
+	var relayIngress ControlIngress
 	cmd.Flags().StringVar(&relayIngress.Addr, "relays-addr", "", "control relay server addr to use")
 	cmd.Flags().StringVar(&relayIngress.Cert, "relays-cert-file", "", "control server cert to use for relays")
 	cmd.Flags().StringVar(&relayIngress.Key, "relays-key-file", "", "control server key to use for relays")
-	cmd.Flags().StringSliceVar(&relayIngress.IPRestriction.AllowCIDRs, "relays-allow-cidr", nil, "cidr to allow relay connections from")
-	cmd.Flags().StringSliceVar(&relayIngress.IPRestriction.DenyCIDRs, "relays-deny-cidr", nil, "cidr to deny relay connections from")
+	cmd.Flags().StringArrayVar(&relayIngress.IPRestriction.AllowCIDRs, "relays-allow-cidr", nil, "cidr to allow relay connections from")
+	cmd.Flags().StringArrayVar(&relayIngress.IPRestriction.DenyCIDRs, "relays-deny-cidr", nil, "cidr to deny relay connections from")
 
 	cmd.Flags().StringArrayVar(&flagsConfig.Control.RelaysTokens, "relays-tokens", nil, "relay tokens for clients to connect")
 	cmd.Flags().StringVar(&flagsConfig.Control.RelaysTokensFile, "relays-tokens-file", "", "relay tokens file to load")
@@ -94,12 +93,12 @@ func controlCmd() *cobra.Command {
 			return fmt.Errorf("load config: %w", err)
 		}
 
-		clientIngress = mergeIngress(clientIngress, commonIngress)
+		clientIngress = clientIngress.merge(commonIngress)
 		if !clientIngress.isZero() {
 			flagsConfig.Control.ClientsIngresses = append(flagsConfig.Control.ClientsIngresses, clientIngress)
 		}
 
-		relayIngress = mergeIngress(relayIngress, commonIngress)
+		relayIngress = relayIngress.merge(commonIngress)
 		if !relayIngress.isZero() {
 			flagsConfig.Control.RelaysIngresses = append(flagsConfig.Control.RelaysIngresses, relayIngress)
 		}
@@ -130,7 +129,7 @@ func controlRun(ctx context.Context, cfg ControlConfig, logger *slog.Logger) err
 			ingressCfg.Addr = ":19190"
 			usedDefault = true
 		}
-		if ingress, err := parseIngress(ingressCfg); err != nil {
+		if ingress, err := ingressCfg.parse(); err != nil {
 			return fmt.Errorf("parse client ingress at %d: %w", ix, err)
 		} else {
 			controlCfg.ClientsIngress = append(controlCfg.ClientsIngress, ingress)
@@ -153,7 +152,7 @@ func controlRun(ctx context.Context, cfg ControlConfig, logger *slog.Logger) err
 		if ingressCfg.Addr == "" {
 			ingressCfg.Addr = ":19189"
 		}
-		if ingress, err := parseIngress(ingressCfg); err != nil {
+		if ingress, err := ingressCfg.parse(); err != nil {
 			return fmt.Errorf("parse relay ingress at %d: %w", ix, err)
 		} else {
 			controlCfg.RelaysIngress = append(controlCfg.RelaysIngress, ingress)
@@ -167,7 +166,7 @@ func controlRun(ctx context.Context, cfg ControlConfig, logger *slog.Logger) err
 			return fmt.Errorf("load relays tokens: %w", err)
 		}
 	}
-	controlCfg.RelaysAuth, err = parseRelayAuth(relayTokens, cfg.RelaysTokenIPRestrictions)
+	controlCfg.RelaysAuth, err = parseRelayAuth(relayTokens, cfg.RelaysTokenRestrictions)
 	if err != nil {
 		return err
 	}
@@ -198,14 +197,14 @@ func controlRun(ctx context.Context, cfg ControlConfig, logger *slog.Logger) err
 	return runWithStatus(ctx, srv, statusAddr, logger)
 }
 
-func parseIngress(cfg Ingress) (control.Ingress, error) {
+func (cfg ControlIngress) parse() (control.Ingress, error) {
 	var result control.Ingress
 
-	clientAddr, err := net.ResolveUDPAddr("udp", cfg.Addr)
+	addr, err := net.ResolveUDPAddr("udp", cfg.Addr)
 	if err != nil {
 		return control.Ingress{}, fmt.Errorf("resolve udp address: %w", err)
 	}
-	result.Addr = clientAddr
+	result.Addr = addr
 
 	if len(cfg.IPRestriction.AllowCIDRs) > 0 || len(cfg.IPRestriction.DenyCIDRs) > 0 {
 		iprestr, err := restr.ParseIP(cfg.IPRestriction.AllowCIDRs, cfg.IPRestriction.DenyCIDRs)
@@ -283,78 +282,50 @@ func parseRelayAuth(tokens []string, restrs []IPRestriction) (control.RelayAuthe
 }
 
 func (c *ControlConfig) merge(o ControlConfig) {
-	if len(c.ClientsIngresses) == len(o.ClientsIngresses) {
-		for i := range c.ClientsIngresses {
-			c.ClientsIngresses[i] = mergeIngress(c.ClientsIngresses[i], o.ClientsIngresses[i])
-		}
-	} else if len(o.ClientsIngresses) > 0 {
-		c.ClientsIngresses = o.ClientsIngresses
-	}
-
+	c.ClientsIngresses = mergeSlices(c.ClientsIngresses, o.ClientsIngresses)
 	if len(o.ClientsTokens) > 0 || o.ClientsTokensFile != "" { // new config completely overrides tokens
 		c.ClientsTokens = o.ClientsTokens
 		c.ClientsTokensFile = o.ClientsTokensFile
 	}
-	if len(c.ClientsTokenRestrictions) == len(o.ClientsTokenRestrictions) {
-		for i := range c.ClientsTokenRestrictions {
-			c.ClientsTokenRestrictions[i] = mergeTokenRestriction(c.ClientsTokenRestrictions[i], o.ClientsTokenRestrictions[i])
-		}
-	} else if len(o.ClientsTokenRestrictions) > 0 {
-		c.ClientsTokenRestrictions = o.ClientsTokenRestrictions
-	}
+	c.ClientsTokenRestrictions = mergeSlices(c.ClientsTokenRestrictions, o.ClientsTokenRestrictions)
 
-	if len(c.RelaysIngresses) == len(o.RelaysIngresses) {
-		for i := range c.RelaysIngresses {
-			c.RelaysIngresses[i] = mergeIngress(c.RelaysIngresses[i], o.RelaysIngresses[i])
-		}
-	} else if len(o.RelaysIngresses) > 0 {
-		c.RelaysIngresses = o.RelaysIngresses
-	}
-
+	c.RelaysIngresses = mergeSlices(c.RelaysIngresses, o.RelaysIngresses)
 	if len(o.RelaysTokens) > 0 || o.RelaysTokensFile != "" { // new config completely overrides tokens
 		c.RelaysTokens = o.RelaysTokens
 		c.RelaysTokensFile = o.RelaysTokensFile
 	}
-	if len(c.RelaysTokenIPRestrictions) == len(o.RelaysTokenIPRestrictions) {
-		for i := range c.RelaysTokenIPRestrictions {
-			c.RelaysTokenIPRestrictions[i] = mergeIPRestriction(c.RelaysTokenIPRestrictions[i], o.RelaysTokenIPRestrictions[i])
-		}
-	} else if len(o.RelaysTokenIPRestrictions) > 0 {
-		c.RelaysTokenIPRestrictions = o.RelaysTokenIPRestrictions
-	}
+	c.RelaysTokenRestrictions = mergeSlices(c.RelaysTokenRestrictions, o.RelaysTokenRestrictions)
 
 	c.StatusAddr = override(c.StatusAddr, o.StatusAddr)
 	c.StoreDir = override(c.StoreDir, o.StoreDir)
 }
 
-func mergeIngress(c, o Ingress) Ingress {
-	return Ingress{
-		Addr: override(c.Addr, o.Addr),
-		Cert: override(c.Cert, o.Cert),
-		Key:  override(c.Key, o.Key),
-		IPRestriction: IPRestriction{
-			AllowCIDRs: overrides(c.IPRestriction.AllowCIDRs, o.IPRestriction.AllowCIDRs),
-			DenyCIDRs:  overrides(c.IPRestriction.DenyCIDRs, o.IPRestriction.DenyCIDRs),
-		},
+func (c ControlIngress) merge(o ControlIngress) ControlIngress {
+	return ControlIngress{
+		Addr:          override(c.Addr, o.Addr),
+		Cert:          override(c.Cert, o.Cert),
+		Key:           override(c.Key, o.Key),
+		IPRestriction: c.IPRestriction.merge(o.IPRestriction),
 	}
 }
 
-func mergeTokenRestriction(c, o TokenRestriction) TokenRestriction {
+func (c TokenRestriction) merge(o TokenRestriction) TokenRestriction {
 	return TokenRestriction{
-		AllowCIDRs:  overrides(c.AllowCIDRs, o.AllowCIDRs),
-		DenyCIDRs:   overrides(c.DenyCIDRs, o.DenyCIDRs),
-		NameMatches: override(c.NameMatches, o.NameMatches),
-		RoleMatches: override(c.RoleMatches, o.RoleMatches),
+		NameMatches:   override(c.NameMatches, o.NameMatches),
+		RoleMatches:   override(c.RoleMatches, o.RoleMatches),
+		IPRestriction: c.IPRestriction.merge(o.IPRestriction),
 	}
 }
 
-func mergeIPRestriction(c, o IPRestriction) IPRestriction {
+func (c IPRestriction) merge(o IPRestriction) IPRestriction {
 	return IPRestriction{
 		AllowCIDRs: overrides(c.AllowCIDRs, o.AllowCIDRs),
 		DenyCIDRs:  overrides(c.DenyCIDRs, o.DenyCIDRs),
 	}
 }
 
-func (s Ingress) isZero() bool {
+func (s ControlIngress) isZero() bool {
 	return s.Addr == "" && s.Cert == "" && s.Key == "" && len(s.IPRestriction.AllowCIDRs) == 0 && len(s.IPRestriction.DenyCIDRs) == 0
 }
+
+var _ = TokenRestriction.merge

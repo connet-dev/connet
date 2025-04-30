@@ -48,7 +48,7 @@ func newClientsServer(cfg Config, tlsAuth tlsAuthenticator, clAuth clientAuthent
 
 		forwards: map[model.Forward]*forwardClients{},
 
-		logger: cfg.Logger.With("relay-clients", cfg.Hostports),
+		logger: cfg.Logger.With("server", "relay-clients"),
 	}
 }
 
@@ -188,14 +188,14 @@ type clientsServerCfg struct {
 }
 
 func (s *clientsServer) run(ctx context.Context, cfg clientsServerCfg) error {
-	s.logger.Debug("start udp listener")
+	s.logger.Debug("start udp listener", "addr", cfg.ingress.Addr)
 	udpConn, err := net.ListenUDP("udp", cfg.ingress.Addr)
 	if err != nil {
 		return fmt.Errorf("relay server listen: %w", err)
 	}
 	defer udpConn.Close()
 
-	s.logger.Debug("start quic listener")
+	s.logger.Debug("start quic listener", "addr", cfg.ingress.Addr)
 	transport := quicc.ServerTransport(udpConn, cfg.statelessResetKey)
 	defer transport.Close()
 
