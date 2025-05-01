@@ -1,9 +1,9 @@
 syntax = "proto3";
-package client;
+package connect;
 
 import "proto.proto";
 
-option go_package = "github.com/connet-dev/connet/proto/pbclient";
+option go_package = "github.com/connet-dev/connet/proto/pbconnect";
 
 message Request {
   // Soft one-of

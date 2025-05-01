@@ -17,7 +17,7 @@ import (
 	"github.com/connet-dev/connet/model"
 	"github.com/connet-dev/connet/netc"
 	"github.com/connet-dev/connet/notify"
-	"github.com/connet-dev/connet/proto/pbclient"
+	"github.com/connet-dev/connet/proto/pbconnect"
 	"github.com/connet-dev/connet/proto/pbcserver"
 	"github.com/connet-dev/connet/proto/pbmodel"
 	"github.com/quic-go/quic-go"
@@ -302,7 +302,7 @@ func newServerTLSConfig(serverCert []byte) (*serverTLSConfig, error) {
 	}, nil
 }
 
-func (p *peer) newECDHConfig() (*ecdh.PrivateKey, *pbclient.ECDHConfiguration, error) {
+func (p *peer) newECDHConfig() (*ecdh.PrivateKey, *pbconnect.ECDHConfiguration, error) {
 	sk, err := ecdh.X25519().GenerateKey(rand.Reader)
 	if err != nil {
 		return nil, nil, fmt.Errorf("peer generate key: %w", err)
@@ -318,14 +318,14 @@ func (p *peer) newECDHConfig() (*ecdh.PrivateKey, *pbclient.ECDHConfiguration, e
 		return nil, nil, fmt.Errorf("peer sign: %w", err)
 	}
 
-	return sk, &pbclient.ECDHConfiguration{
+	return sk, &pbconnect.ECDHConfiguration{
 		ClientName: p.serverCert.Leaf.DNSNames[0],
 		KeyTime:    keyTime,
 		Signature:  signature,
 	}, nil
 }
 
-func (p *peer) getECDHPublicKey(cfg *pbclient.ECDHConfiguration) (*ecdh.PublicKey, error) {
+func (p *peer) getECDHPublicKey(cfg *pbconnect.ECDHConfiguration) (*ecdh.PublicKey, error) {
 	peers, err := p.peers.Peek()
 	if err != nil {
 		return nil, fmt.Errorf("peers peer: %w", err)

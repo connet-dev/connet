@@ -13,7 +13,7 @@ import (
 	"github.com/connet-dev/connet/cryptoc"
 	"github.com/connet-dev/connet/model"
 	"github.com/connet-dev/connet/proto"
-	"github.com/connet-dev/connet/proto/pbclient"
+	"github.com/connet-dev/connet/proto/pbconnect"
 	"github.com/connet-dev/connet/quicc"
 	"github.com/quic-go/quic-go"
 	"golang.org/x/sync/errgroup"
@@ -213,7 +213,7 @@ func (d *destinationConn) runDestination(ctx context.Context, stream quic.Stream
 }
 
 func (d *destinationConn) runDestinationErr(ctx context.Context, stream quic.Stream) error {
-	req, err := pbclient.ReadRequest(stream)
+	req, err := pbconnect.ReadRequest(stream)
 	if err != nil {
 		return fmt.Errorf("destination read request: %w", err)
 	}
@@ -222,15 +222,15 @@ func (d *destinationConn) runDestinationErr(ctx context.Context, stream quic.Str
 	case req.Connect != nil:
 		return d.runConnect(ctx, stream, req)
 	default:
-		return pbclient.WriteError(stream, proto.Error_RequestUnknown, "unknown request: %v", req)
+		return pbconnect.WriteError(stream, proto.Error_RequestUnknown, "unknown request: %v", req)
 	}
 }
 
-func (d *destinationConn) runConnect(ctx context.Context, stream quic.Stream, req *pbclient.Request) error {
+func (d *destinationConn) runConnect(ctx context.Context, stream quic.Stream, req *pbconnect.Request) error {
 	var srcConfig *tls.Config
 	var srcStreamer cryptoc.Streamer
 
-	connect := &pbclient.Response_Connect{
+	connect := &pbconnect.Response_Connect{
 		ProxyProto: d.dst.cfg.Proxy.PB(),
 	}
 
@@ -244,46 +244,46 @@ func (d *destinationConn) runConnect(ctx context.Context, stream quic.Stream, re
 		encryption, err := model.SelectEncryptionScheme(d.dst.cfg.RelayEncryptions, srcEncryptions)
 		switch {
 		case err != nil:
-			return pbclient.WriteError(stream, proto.Error_DestinationRelayEncryptionError, "select encryption scheme: %v", err)
+			return pbconnect.WriteError(stream, proto.Error_DestinationRelayEncryptionError, "select encryption scheme: %v", err)
 		case encryption == model.TLSEncryption:
 			scfg, err := d.dst.getSourceTLS(req.Connect.SourceTls.ClientName)
 			if err != nil {
-				return pbclient.WriteError(stream, proto.Error_DestinationRelayEncryptionError, "destination tls: %v", err)
+				return pbconnect.WriteError(stream, proto.Error_DestinationRelayEncryptionError, "destination tls: %v", err)
 			}
 			srcConfig = scfg
 
-			connect.DestinationEncryption = pbclient.RelayEncryptionScheme_TLS
-			connect.DestinationTls = &pbclient.TLSConfiguration{
+			connect.DestinationEncryption = pbconnect.RelayEncryptionScheme_TLS
+			connect.DestinationTls = &pbconnect.TLSConfiguration{
 				ClientName: d.dst.peer.serverCert.Leaf.DNSNames[0],
 			}
 		case encryption == model.DHXCPEncryption:
 			// get check peer public key
 			srcPublic, err := d.dst.peer.getECDHPublicKey(req.Connect.SourceDhX25519)
 			if err != nil {
-				return pbclient.WriteError(stream, proto.Error_DestinationRelayEncryptionError, "destination public key: %v", err)
+				return pbconnect.WriteError(stream, proto.Error_DestinationRelayEncryptionError, "destination public key: %v", err)
 			}
 
 			dstSecret, ecdhCfg, err := d.dst.peer.newECDHConfig()
 			if err != nil {
-				return pbclient.WriteError(stream, proto.Error_DestinationRelayEncryptionError, "new ecdh config: %v", err)
+				return pbconnect.WriteError(stream, proto.Error_DestinationRelayEncryptionError, "new ecdh config: %v", err)
 			}
 
-			connect.DestinationEncryption = pbclient.RelayEncryptionScheme_DHX25519_CHACHAPOLY
+			connect.DestinationEncryption = pbconnect.RelayEncryptionScheme_DHX25519_CHACHAPOLY
 			connect.DestinationDhX25519 = ecdhCfg
 
 			streamer, err := cryptoc.NewStreamer(dstSecret, srcPublic, false)
 			if err != nil {
-				return pbclient.WriteError(stream, proto.Error_DestinationRelayEncryptionError, "new streamer: %v", err)
+				return pbconnect.WriteError(stream, proto.Error_DestinationRelayEncryptionError, "new streamer: %v", err)
 			}
 			srcStreamer = streamer
 		case encryption == model.NoEncryption:
 			// do nothing
 		default:
-			return pbclient.WriteError(stream, proto.Error_DestinationRelayEncryptionError, "unknown encryption scheme: %s", encryption)
+			return pbconnect.WriteError(stream, proto.Error_DestinationRelayEncryptionError, "unknown encryption scheme: %s", encryption)
 		}
 	}
 
-	if err := proto.Write(stream, &pbclient.Response{
+	if err := proto.Write(stream, &pbconnect.Response{
 		Connect: connect,
 	}); err != nil {
 		return fmt.Errorf("destination connect write response: %w", err)
@@ -292,7 +292,7 @@ func (d *destinationConn) runConnect(ctx context.Context, stream quic.Stream, re
 	var encStream net.Conn = quicc.StreamConn(stream, d.conn)
 	if d.peer.style == peerRelay {
 		switch connect.DestinationEncryption {
-		case pbclient.RelayEncryptionScheme_TLS:
+		case pbconnect.RelayEncryptionScheme_TLS:
 			d.logger.Debug("upgrading relay connection to TLS")
 			tlsConn := tls.Server(quicc.StreamConn(stream, d.conn), srcConfig)
 			if err := tlsConn.HandshakeContext(ctx); err != nil {
@@ -300,10 +300,10 @@ func (d *destinationConn) runConnect(ctx context.Context, stream quic.Stream, re
 			}
 
 			encStream = tlsConn
-		case pbclient.RelayEncryptionScheme_DHX25519_CHACHAPOLY:
+		case pbconnect.RelayEncryptionScheme_DHX25519_CHACHAPOLY:
 			d.logger.Debug("upgrading relay connection to DHXCP")
 			encStream = srcStreamer(encStream)
-		case pbclient.RelayEncryptionScheme_EncryptionNone:
+		case pbconnect.RelayEncryptionScheme_EncryptionNone:
 			// do nothing
 		default:
 		}

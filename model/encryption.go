@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"slices"
 
-	"github.com/connet-dev/connet/proto/pbclient"
+	"github.com/connet-dev/connet/proto/pbconnect"
 )
 
 type EncryptionScheme struct{ string }
@@ -15,13 +15,13 @@ var (
 	DHXCPEncryption = EncryptionScheme{"dhxcp"}
 )
 
-func EncryptionFromPB(pb pbclient.RelayEncryptionScheme) EncryptionScheme {
+func EncryptionFromPB(pb pbconnect.RelayEncryptionScheme) EncryptionScheme {
 	switch pb {
-	case pbclient.RelayEncryptionScheme_EncryptionNone:
+	case pbconnect.RelayEncryptionScheme_EncryptionNone:
 		return NoEncryption
-	case pbclient.RelayEncryptionScheme_TLS:
+	case pbconnect.RelayEncryptionScheme_TLS:
 		return TLSEncryption
-	case pbclient.RelayEncryptionScheme_DHX25519_CHACHAPOLY:
+	case pbconnect.RelayEncryptionScheme_DHX25519_CHACHAPOLY:
 		return DHXCPEncryption
 	default:
 		panic(fmt.Sprintf("invalid encryption scheme: %d", pb))
@@ -41,28 +41,28 @@ func ParseEncryptionScheme(s string) (EncryptionScheme, error) {
 	}
 }
 
-func (e EncryptionScheme) PB() pbclient.RelayEncryptionScheme {
+func (e EncryptionScheme) PB() pbconnect.RelayEncryptionScheme {
 	switch e {
 	case NoEncryption:
-		return pbclient.RelayEncryptionScheme_EncryptionNone
+		return pbconnect.RelayEncryptionScheme_EncryptionNone
 	case TLSEncryption:
-		return pbclient.RelayEncryptionScheme_TLS
+		return pbconnect.RelayEncryptionScheme_TLS
 	case DHXCPEncryption:
-		return pbclient.RelayEncryptionScheme_DHX25519_CHACHAPOLY
+		return pbconnect.RelayEncryptionScheme_DHX25519_CHACHAPOLY
 	default:
 		panic(fmt.Sprintf("invalid encryption scheme: %s", e.string))
 	}
 }
 
-func PBFromEncryptions(schemes []EncryptionScheme) []pbclient.RelayEncryptionScheme {
-	pbs := make([]pbclient.RelayEncryptionScheme, len(schemes))
+func PBFromEncryptions(schemes []EncryptionScheme) []pbconnect.RelayEncryptionScheme {
+	pbs := make([]pbconnect.RelayEncryptionScheme, len(schemes))
 	for i, sc := range schemes {
 		pbs[i] = sc.PB()
 	}
 	return pbs
 }
 
-func EncryptionsFromPB(pbs []pbclient.RelayEncryptionScheme) []EncryptionScheme {
+func EncryptionsFromPB(pbs []pbconnect.RelayEncryptionScheme) []EncryptionScheme {
 	schemes := make([]EncryptionScheme, len(pbs))
 	for i, s := range pbs {
 		schemes[i] = EncryptionFromPB(s)

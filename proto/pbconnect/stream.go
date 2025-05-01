@@ -1,4 +1,4 @@
-package pbclient
+package pbconnect
 
 import (
 	"fmt"

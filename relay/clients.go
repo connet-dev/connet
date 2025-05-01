@@ -18,7 +18,7 @@ import (
 	"github.com/connet-dev/connet/model"
 	"github.com/connet-dev/connet/netc"
 	"github.com/connet-dev/connet/proto"
-	"github.com/connet-dev/connet/proto/pbclient"
+	"github.com/connet-dev/connet/proto/pbconnect"
 	"github.com/connet-dev/connet/quicc"
 	"github.com/quic-go/quic-go"
 	"golang.org/x/sync/errgroup"
@@ -286,9 +286,9 @@ func (c *clientConn) check(ctx context.Context) error {
 	}
 	defer stream.Close()
 
-	if _, err := pbclient.ReadRequest(stream); err != nil {
+	if _, err := pbconnect.ReadRequest(stream); err != nil {
 		return fmt.Errorf("read client stream: %w", err)
-	} else if err := proto.Write(stream, &pbclient.Response{}); err != nil {
+	} else if err := proto.Write(stream, &pbconnect.Response{}); err != nil {
 		return fmt.Errorf("write client stream: %w", err)
 	}
 
@@ -354,7 +354,7 @@ func (c *clientConn) runSourceStream(ctx context.Context, stream quic.Stream, fc
 }
 
 func (c *clientConn) runSourceStreamErr(ctx context.Context, stream quic.Stream, fcs *forwardClients) error {
-	req, err := pbclient.ReadRequest(stream)
+	req, err := pbconnect.ReadRequest(stream)
 	if err != nil {
 		return fmt.Errorf("source stream read: %w", err)
 	}
@@ -367,11 +367,11 @@ func (c *clientConn) runSourceStreamErr(ctx context.Context, stream quic.Stream,
 	}
 }
 
-func (c *clientConn) connect(ctx context.Context, stream quic.Stream, fcs *forwardClients, req *pbclient.Request) error {
+func (c *clientConn) connect(ctx context.Context, stream quic.Stream, fcs *forwardClients, req *pbconnect.Request) error {
 	dests := fcs.getDestinations()
 	if len(dests) == 0 {
 		err := proto.NewError(proto.Error_DestinationNotFound, "could not find destination")
-		return proto.Write(stream, &pbclient.Response{Error: err})
+		return proto.Write(stream, &pbconnect.Response{Error: err})
 	}
 
 	var pberrs []string
@@ -388,10 +388,10 @@ func (c *clientConn) connect(ctx context.Context, stream quic.Stream, fcs *forwa
 	}
 
 	err := proto.NewError(proto.Error_DestinationDialFailed, "could not dial destinations: %v", pberrs)
-	return proto.Write(stream, &pbclient.Response{Error: err})
+	return proto.Write(stream, &pbconnect.Response{Error: err})
 }
 
-func (c *clientConn) connectDestination(ctx context.Context, srcStream quic.Stream, dest *clientConn, req *pbclient.Request) error {
+func (c *clientConn) connectDestination(ctx context.Context, srcStream quic.Stream, dest *clientConn, req *pbconnect.Request) error {
 	dstStream, err := dest.conn.OpenStreamSync(ctx)
 	if err != nil {
 		return fmt.Errorf("destination open stream: %w", err)
@@ -401,7 +401,7 @@ func (c *clientConn) connectDestination(ctx context.Context, srcStream quic.Stre
 		return fmt.Errorf("destination write request: %w", err)
 	}
 
-	resp, err := pbclient.ReadResponse(dstStream)
+	resp, err := pbconnect.ReadResponse(dstStream)
 	if err != nil {
 		return fmt.Errorf("destination read response: %w", err)
 	}
@@ -416,8 +416,8 @@ func (c *clientConn) connectDestination(ctx context.Context, srcStream quic.Stre
 	return nil
 }
 
-func (c *clientConn) unknown(_ context.Context, stream quic.Stream, req *pbclient.Request) error {
+func (c *clientConn) unknown(_ context.Context, stream quic.Stream, req *pbconnect.Request) error {
 	c.logger.Error("unknown request", "req", req)
 	err := proto.NewError(proto.Error_RequestUnknown, "unknown request: %v", req)
-	return proto.Write(stream, &pbclient.Response{Error: err})
+	return proto.Write(stream, &pbconnect.Response{Error: err})
 }

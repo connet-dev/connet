@@ -15,7 +15,7 @@ import (
 	"github.com/connet-dev/connet/netc"
 	"github.com/connet-dev/connet/notify"
 	"github.com/connet-dev/connet/proto"
-	"github.com/connet-dev/connet/proto/pbclient"
+	"github.com/connet-dev/connet/proto/pbconnect"
 	"github.com/connet-dev/connet/proto/pbcserver"
 	"github.com/connet-dev/connet/quicc"
 	"github.com/quic-go/quic-go"
@@ -223,9 +223,9 @@ func (p *directPeerIncoming) connect(ctx context.Context) (quic.Connection, erro
 		}
 		defer stream.Close()
 
-		if _, err := pbclient.ReadRequest(stream); err != nil {
+		if _, err := pbconnect.ReadRequest(stream); err != nil {
 			return nil, err
-		} else if err := proto.Write(stream, &pbclient.Response{}); err != nil {
+		} else if err := proto.Write(stream, &pbconnect.Response{}); err != nil {
 			return nil, err
 		}
 
@@ -349,10 +349,10 @@ func (p *directPeerOutgoing) check(ctx context.Context, conn quic.Connection) er
 	}
 	defer stream.Close()
 
-	if err := proto.Write(stream, &pbclient.Request{}); err != nil {
+	if err := proto.Write(stream, &pbconnect.Request{}); err != nil {
 		return err
 	}
-	if _, err := pbclient.ReadResponse(stream); err != nil {
+	if _, err := pbconnect.ReadResponse(stream); err != nil {
 		return err
 	}
 

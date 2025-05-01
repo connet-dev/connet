@@ -13,7 +13,7 @@ import (
 	"github.com/connet-dev/connet/model"
 	"github.com/connet-dev/connet/netc"
 	"github.com/connet-dev/connet/proto"
-	"github.com/connet-dev/connet/proto/pbclient"
+	"github.com/connet-dev/connet/proto/pbconnect"
 	"github.com/connet-dev/connet/quicc"
 	"github.com/quic-go/quic-go"
 	"golang.org/x/sync/errgroup"
@@ -129,10 +129,10 @@ func (r *relayPeer) check(ctx context.Context, conn quic.Connection) error {
 	}
 	defer stream.Close()
 
-	if err := proto.Write(stream, &pbclient.Request{}); err != nil {
+	if err := proto.Write(stream, &pbconnect.Request{}); err != nil {
 		return err
 	}
-	if _, err := pbclient.ReadResponse(stream); err != nil {
+	if _, err := pbconnect.ReadResponse(stream); err != nil {
 		return err
 	}
 
