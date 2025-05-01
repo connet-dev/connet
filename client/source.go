@@ -18,8 +18,8 @@ import (
 	"github.com/connet-dev/connet/certc"
 	"github.com/connet-dev/connet/cryptoc"
 	"github.com/connet-dev/connet/model"
+	"github.com/connet-dev/connet/proto"
 	"github.com/connet-dev/connet/proto/pbclient"
-	"github.com/connet-dev/connet/proto/pbmodel"
 	"github.com/connet-dev/connet/quicc"
 	"github.com/quic-go/quic-go"
 	"golang.org/x/sync/errgroup"
@@ -224,7 +224,7 @@ func (s *Source) dialStream(ctx context.Context, dest sourceConn, stream quic.St
 		}
 	}
 
-	if err := pbmodel.Write(stream, &pbclient.Request{
+	if err := proto.Write(stream, &pbclient.Request{
 		Connect: connect,
 	}); err != nil {
 		return nil, fmt.Errorf("source connect write request: %w", err)

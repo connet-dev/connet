@@ -15,7 +15,7 @@ import (
 	"github.com/connet-dev/connet/logc"
 	"github.com/connet-dev/connet/model"
 	"github.com/connet-dev/connet/netc"
-	"github.com/connet-dev/connet/proto/pbmodel"
+	"github.com/connet-dev/connet/proto"
 	"github.com/connet-dev/connet/proto/pbrserver"
 	"github.com/connet-dev/connet/quicc"
 	"github.com/quic-go/quic-go"
@@ -365,7 +365,7 @@ type relayConnAuth struct {
 }
 
 func (c *relayConn) run(ctx context.Context) {
-	defer c.conn.CloseWithError(quic.ApplicationErrorCode(pbmodel.Error_Unknown), "connection closed")
+	defer c.conn.CloseWithError(quic.ApplicationErrorCode(proto.Error_Unknown), "connection closed")
 
 	if err := c.runErr(ctx); err != nil {
 		c.logger.Debug("error while running zzz", "err", err)
@@ -374,10 +374,10 @@ func (c *relayConn) run(ctx context.Context) {
 
 func (c *relayConn) runErr(ctx context.Context) error {
 	if rauth, err := c.authenticate(ctx); err != nil {
-		if perr := pbmodel.GetError(err); perr != nil {
+		if perr := proto.GetError(err); perr != nil {
 			c.conn.CloseWithError(quic.ApplicationErrorCode(perr.Code), perr.Message)
 		} else {
-			c.conn.CloseWithError(quic.ApplicationErrorCode(pbmodel.Error_AuthenticationFailed), "Error while authenticating")
+			c.conn.CloseWithError(quic.ApplicationErrorCode(proto.Error_AuthenticationFailed), "Error while authenticating")
 		}
 		return err
 	} else {
@@ -423,23 +423,23 @@ func (c *relayConn) authenticate(ctx context.Context) (*relayConnAuth, error) {
 	defer authStream.Close()
 
 	req := &pbrserver.AuthenticateReq{}
-	if err := pbmodel.Read(authStream, req); err != nil {
+	if err := proto.Read(authStream, req); err != nil {
 		return nil, fmt.Errorf("auth read request: %w", err)
 	}
 
-	proto := model.GetRelayToControlProto(c.conn)
+	protocol := model.GetRelayToControlProto(c.conn)
 	auth, err := c.server.auth.Authenticate(RelayAuthenticateRequest{
-		Proto:        proto,
+		Proto:        protocol,
 		Token:        req.Token,
 		Addr:         c.conn.RemoteAddr(),
 		BuildVersion: req.BuildVersion,
 	})
 	if err != nil {
-		perr := pbmodel.GetError(err)
+		perr := proto.GetError(err)
 		if perr == nil {
-			perr = pbmodel.NewError(pbmodel.Error_AuthenticationFailed, "authentication failed: %v", err)
+			perr = proto.NewError(proto.Error_AuthenticationFailed, "authentication failed: %v", err)
 		}
-		if err := pbmodel.Write(authStream, &pbrserver.AuthenticateResp{Error: perr}); err != nil {
+		if err := proto.Write(authStream, &pbrserver.AuthenticateResp{Error: perr}); err != nil {
 			return nil, fmt.Errorf("relay auth err write: %w", err)
 		}
 		return nil, fmt.Errorf("auth failed: %w", perr)
@@ -458,14 +458,14 @@ func (c *relayConn) authenticate(ctx context.Context) (*relayConnAuth, error) {
 		c.logger.Debug("encrypting failed", "err", err)
 		retoken = nil
 	}
-	if err := pbmodel.Write(authStream, &pbrserver.AuthenticateResp{
+	if err := proto.Write(authStream, &pbrserver.AuthenticateResp{
 		ControlId:      c.server.id,
 		ReconnectToken: retoken,
 	}); err != nil {
 		return nil, fmt.Errorf("auth write response: %w", err)
 	}
 
-	c.logger.Debug("authentication completed", "local", c.conn.LocalAddr(), "remote", c.conn.RemoteAddr(), "proto", proto, "build", req.BuildVersion)
+	c.logger.Debug("authentication completed", "local", c.conn.LocalAddr(), "remote", c.conn.RemoteAddr(), "proto", protocol, "build", req.BuildVersion)
 	hostports := model.HostPortFromPBs(req.Addresses)
 	if len(hostports) == 0 { // compat: old relays only send a single one
 		hostports = append(hostports, model.HostPortFromPB(req.Addr))
@@ -482,7 +482,7 @@ func (c *relayConn) runRelayClients(ctx context.Context) error {
 
 	for {
 		req := &pbrserver.ClientsReq{}
-		if err := pbmodel.Read(stream, req); err != nil {
+		if err := proto.Read(stream, req); err != nil {
 			return err
 		}
 
@@ -530,7 +530,7 @@ func (c *relayConn) runRelayClients(ctx context.Context) error {
 			resp.Changes = append(resp.Changes, change)
 		}
 
-		if err := pbmodel.Write(stream, resp); err != nil {
+		if err := proto.Write(stream, resp); err != nil {
 			return err
 		}
 	}
@@ -552,12 +552,12 @@ func (c *relayConn) runRelayServers(ctx context.Context) error {
 		req := &pbrserver.ServersReq{
 			Offset: offset,
 		}
-		if err := pbmodel.Write(stream, req); err != nil {
+		if err := proto.Write(stream, req); err != nil {
 			return err
 		}
 
 		resp := &pbrserver.ServersResp{}
-		if err := pbmodel.Read(stream, resp); err != nil {
+		if err := proto.Read(stream, resp); err != nil {
 			return err
 		}
 

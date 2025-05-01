@@ -5,8 +5,8 @@ import (
 	"fmt"
 
 	"github.com/connet-dev/connet/model"
+	"github.com/connet-dev/connet/proto"
 	"github.com/connet-dev/connet/proto/pbcserver"
-	"github.com/connet-dev/connet/proto/pbmodel"
 	"github.com/quic-go/quic-go"
 	"golang.org/x/sync/errgroup"
 )
@@ -50,7 +50,7 @@ func (d *peerControl) runAnnounce(ctx context.Context) error {
 		defer d.local.logger.Debug("completed announce notify")
 		return d.local.selfListen(ctx, func(peer *pbcserver.ClientPeer) error {
 			d.local.logger.Debug("updated announce", "direct", len(peer.Directs), "relay", len(peer.Relays), "relayIds", len(peer.RelayIds))
-			return pbmodel.Write(stream, &pbcserver.Request{
+			return proto.Write(stream, &pbcserver.Request{
 				Announce: &pbcserver.Request_Announce{
 					Forward: d.fwd.PB(),
 					Role:    d.role.PB(),
@@ -87,7 +87,7 @@ func (d *peerControl) runRelay(ctx context.Context) error {
 	}
 	defer stream.Close()
 
-	if err := pbmodel.Write(stream, &pbcserver.Request{
+	if err := proto.Write(stream, &pbcserver.Request{
 		Relay: &pbcserver.Request_Relay{
 			Forward:           d.fwd.PB(),
 			Role:              d.role.PB(),

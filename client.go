@@ -18,8 +18,8 @@ import (
 	"github.com/connet-dev/connet/model"
 	"github.com/connet-dev/connet/netc"
 	"github.com/connet-dev/connet/notify"
+	"github.com/connet-dev/connet/proto"
 	"github.com/connet-dev/connet/proto/pbcserver"
-	"github.com/connet-dev/connet/proto/pbmodel"
 	"github.com/connet-dev/connet/quicc"
 	"github.com/connet-dev/connet/statusc"
 	"github.com/quic-go/quic-go"
@@ -290,7 +290,7 @@ func (c *Client) connect(ctx context.Context, transport *quic.Transport, retoken
 	}
 	defer authStream.Close()
 
-	if err := pbmodel.Write(authStream, &pbcserver.Authenticate{
+	if err := proto.Write(authStream, &pbcserver.Authenticate{
 		Token:          c.token,
 		ReconnectToken: retoken,
 		BuildVersion:   model.BuildVersion(),
@@ -299,7 +299,7 @@ func (c *Client) connect(ctx context.Context, transport *quic.Transport, retoken
 	}
 
 	resp := &pbcserver.AuthenticateResp{}
-	if err := pbmodel.Read(authStream, resp); err != nil {
+	if err := proto.Read(authStream, resp); err != nil {
 		return nil, fmt.Errorf("authentication read failed: %w", err)
 	}
 	if resp.Error != nil {
@@ -345,7 +345,7 @@ func (c *Client) reconnect(ctx context.Context, transport *quic.Transport, retok
 }
 
 func (c *Client) runSession(ctx context.Context, sess *session) error {
-	defer sess.conn.CloseWithError(quic.ApplicationErrorCode(pbmodel.Error_Unknown), "connection closed")
+	defer sess.conn.CloseWithError(quic.ApplicationErrorCode(proto.Error_Unknown), "connection closed")
 
 	c.currentSession.Set(sess)
 	defer c.currentSession.Set(nil)

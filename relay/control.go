@@ -17,7 +17,7 @@ import (
 	"github.com/connet-dev/connet/logc"
 	"github.com/connet-dev/connet/model"
 	"github.com/connet-dev/connet/netc"
-	"github.com/connet-dev/connet/proto/pbmodel"
+	"github.com/connet-dev/connet/proto"
 	"github.com/connet-dev/connet/proto/pbrserver"
 	"github.com/connet-dev/connet/quicc"
 	"github.com/connet-dev/connet/statusc"
@@ -225,7 +225,7 @@ func (s *controlClient) connect(ctx context.Context, tfn TransportsFn) (quic.Con
 		}
 		defer authStream.Close()
 
-		if err := pbmodel.Write(authStream, &pbrserver.AuthenticateReq{
+		if err := proto.Write(authStream, &pbrserver.AuthenticateReq{
 			Token:          s.controlToken,
 			Addr:           s.hostports[0].PB(),
 			Addresses:      iterc.MapSlice(s.hostports, model.HostPort.PB),
@@ -237,7 +237,7 @@ func (s *controlClient) connect(ctx context.Context, tfn TransportsFn) (quic.Con
 		}
 
 		resp := &pbrserver.AuthenticateResp{}
-		if err := pbmodel.Read(authStream, resp); err != nil {
+		if err := proto.Read(authStream, resp); err != nil {
 			s.logger.Debug("relay control server: auth read error", "localAddr", transport.Conn.LocalAddr(), "err", err)
 			continue
 		}
@@ -292,7 +292,7 @@ func (s *controlClient) reconnect(ctx context.Context, tfn TransportsFn) (quic.C
 }
 
 func (s *controlClient) runConnection(ctx context.Context, conn quic.Connection) error {
-	defer conn.CloseWithError(quic.ApplicationErrorCode(pbmodel.Error_Unknown), "connection closed")
+	defer conn.CloseWithError(quic.ApplicationErrorCode(proto.Error_Unknown), "connection closed")
 
 	s.connStatus.Store(statusc.Connected)
 	defer s.connStatus.Store(statusc.Reconnecting)
@@ -327,12 +327,12 @@ func (s *controlClient) runClientsStream(ctx context.Context, conn quic.Connecti
 			req := &pbrserver.ClientsReq{
 				Offset: s.getClientsStreamOffset(),
 			}
-			if err := pbmodel.Write(stream, req); err != nil {
+			if err := proto.Write(stream, req); err != nil {
 				return err
 			}
 
 			resp := &pbrserver.ClientsResp{}
-			if err := pbmodel.Read(stream, resp); err != nil {
+			if err := proto.Read(stream, resp); err != nil {
 				return err
 			}
 
@@ -440,7 +440,7 @@ func (s *controlClient) runServersStream(ctx context.Context, conn quic.Connecti
 	g.Go(func() error {
 		for {
 			req := &pbrserver.ServersReq{}
-			if err := pbmodel.Read(stream, req); err != nil {
+			if err := proto.Read(stream, req); err != nil {
 				return err
 			}
 
@@ -472,7 +472,7 @@ func (s *controlClient) runServersStream(ctx context.Context, conn quic.Connecti
 				resp.Changes = append(resp.Changes, change)
 			}
 
-			if err := pbmodel.Write(stream, resp); err != nil {
+			if err := proto.Write(stream, resp); err != nil {
 				return err
 			}
 		}

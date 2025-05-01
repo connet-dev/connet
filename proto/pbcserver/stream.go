@@ -4,12 +4,12 @@ import (
 	"fmt"
 	"io"
 
-	"github.com/connet-dev/connet/proto/pbmodel"
+	"github.com/connet-dev/connet/proto"
 )
 
 func ReadRequest(r io.Reader) (*Request, error) {
 	req := &Request{}
-	if err := pbmodel.Read(r, req); err != nil {
+	if err := proto.Read(r, req); err != nil {
 		return nil, fmt.Errorf("server request read: %w", err)
 	}
 	return req, nil
@@ -17,7 +17,7 @@ func ReadRequest(r io.Reader) (*Request, error) {
 
 func ReadResponse(r io.Reader) (*Response, error) {
 	resp := &Response{}
-	if err := pbmodel.Read(r, resp); err != nil {
+	if err := proto.Read(r, resp); err != nil {
 		return nil, fmt.Errorf("server response read: %w", err)
 	}
 	if resp.Error != nil {

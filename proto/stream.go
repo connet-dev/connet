@@ -1,4 +1,4 @@
-package pbmodel
+package proto
 
 import (
 	"encoding/binary"

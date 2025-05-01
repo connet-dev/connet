@@ -1,7 +1,7 @@
 syntax = "proto3";
 package client;
 
-import "model.proto";
+import "proto.proto";
 
 option go_package = "github.com/connet-dev/connet/proto/pbclient";
 
@@ -17,7 +17,7 @@ message Request {
 }
 
 message Response {
-  model.Error error = 1;
+  proto.Error error = 1;
 
   Connect connect = 2;
 

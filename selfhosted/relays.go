@@ -3,7 +3,7 @@ package selfhosted
 import (
 	"github.com/connet-dev/connet/control"
 	"github.com/connet-dev/connet/model"
-	"github.com/connet-dev/connet/proto/pbmodel"
+	"github.com/connet-dev/connet/proto"
 	"github.com/connet-dev/connet/restr"
 )
 
@@ -27,10 +27,10 @@ type relayAuthenticator struct {
 func (s *relayAuthenticator) Authenticate(req control.RelayAuthenticateRequest) (control.RelayAuthentication, error) {
 	r, ok := s.tokens[req.Token]
 	if !ok {
-		return nil, pbmodel.NewError(pbmodel.Error_AuthenticationFailed, "token not found")
+		return nil, proto.NewError(proto.Error_AuthenticationFailed, "token not found")
 	}
 	if !r.IPs.IsAllowedAddr(req.Addr) {
-		return nil, pbmodel.NewError(pbmodel.Error_AuthenticationFailed, "address not allowed: %s", req.Addr)
+		return nil, proto.NewError(proto.Error_AuthenticationFailed, "address not allowed: %s", req.Addr)
 	}
 	return []byte(r.Token), nil
 }
