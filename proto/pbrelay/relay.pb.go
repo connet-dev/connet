@@ -2,9 +2,9 @@
 // versions:
 // 	protoc-gen-go v1.36.3
 // 	protoc        v5.29.2
-// source: relays_server.proto
+// source: relay.proto
 
-package pbrserver
+package pbrelay
 
 import (
 	proto "github.com/connet-dev/connet/proto"
@@ -55,11 +55,11 @@ func (x ChangeType) String() string {
 }
 
 func (ChangeType) Descriptor() protoreflect.EnumDescriptor {
-	return file_relays_server_proto_enumTypes[0].Descriptor()
+	return file_relay_proto_enumTypes[0].Descriptor()
 }
 
 func (ChangeType) Type() protoreflect.EnumType {
-	return &file_relays_server_proto_enumTypes[0]
+	return &file_relay_proto_enumTypes[0]
 }
 
 func (x ChangeType) Number() protoreflect.EnumNumber {
@@ -68,7 +68,7 @@ func (x ChangeType) Number() protoreflect.EnumNumber {
 
 // Deprecated: Use ChangeType.Descriptor instead.
 func (ChangeType) EnumDescriptor() ([]byte, []int) {
-	return file_relays_server_proto_rawDescGZIP(), []int{0}
+	return file_relay_proto_rawDescGZIP(), []int{0}
 }
 
 type AuthenticateReq struct {
@@ -84,7 +84,7 @@ type AuthenticateReq struct {
 
 func (x *AuthenticateReq) Reset() {
 	*x = AuthenticateReq{}
-	mi := &file_relays_server_proto_msgTypes[0]
+	mi := &file_relay_proto_msgTypes[0]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -96,7 +96,7 @@ func (x *AuthenticateReq) String() string {
 func (*AuthenticateReq) ProtoMessage() {}
 
 func (x *AuthenticateReq) ProtoReflect() protoreflect.Message {
-	mi := &file_relays_server_proto_msgTypes[0]
+	mi := &file_relay_proto_msgTypes[0]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -109,7 +109,7 @@ func (x *AuthenticateReq) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use AuthenticateReq.ProtoReflect.Descriptor instead.
 func (*AuthenticateReq) Descriptor() ([]byte, []int) {
-	return file_relays_server_proto_rawDescGZIP(), []int{0}
+	return file_relay_proto_rawDescGZIP(), []int{0}
 }
 
 func (x *AuthenticateReq) GetToken() string {
@@ -158,7 +158,7 @@ type AuthenticateResp struct {
 
 func (x *AuthenticateResp) Reset() {
 	*x = AuthenticateResp{}
-	mi := &file_relays_server_proto_msgTypes[1]
+	mi := &file_relay_proto_msgTypes[1]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -170,7 +170,7 @@ func (x *AuthenticateResp) String() string {
 func (*AuthenticateResp) ProtoMessage() {}
 
 func (x *AuthenticateResp) ProtoReflect() protoreflect.Message {
-	mi := &file_relays_server_proto_msgTypes[1]
+	mi := &file_relay_proto_msgTypes[1]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -183,7 +183,7 @@ func (x *AuthenticateResp) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use AuthenticateResp.ProtoReflect.Descriptor instead.
 func (*AuthenticateResp) Descriptor() ([]byte, []int) {
-	return file_relays_server_proto_rawDescGZIP(), []int{1}
+	return file_relay_proto_rawDescGZIP(), []int{1}
 }
 
 func (x *AuthenticateResp) GetError() *proto.Error {
@@ -216,7 +216,7 @@ type ClientsReq struct {
 
 func (x *ClientsReq) Reset() {
 	*x = ClientsReq{}
-	mi := &file_relays_server_proto_msgTypes[2]
+	mi := &file_relay_proto_msgTypes[2]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -228,7 +228,7 @@ func (x *ClientsReq) String() string {
 func (*ClientsReq) ProtoMessage() {}
 
 func (x *ClientsReq) ProtoReflect() protoreflect.Message {
-	mi := &file_relays_server_proto_msgTypes[2]
+	mi := &file_relay_proto_msgTypes[2]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -241,7 +241,7 @@ func (x *ClientsReq) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ClientsReq.ProtoReflect.Descriptor instead.
 func (*ClientsReq) Descriptor() ([]byte, []int) {
-	return file_relays_server_proto_rawDescGZIP(), []int{2}
+	return file_relay_proto_rawDescGZIP(), []int{2}
 }
 
 func (x *ClientsReq) GetOffset() int64 {
@@ -262,7 +262,7 @@ type ClientsResp struct {
 
 func (x *ClientsResp) Reset() {
 	*x = ClientsResp{}
-	mi := &file_relays_server_proto_msgTypes[3]
+	mi := &file_relay_proto_msgTypes[3]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -274,7 +274,7 @@ func (x *ClientsResp) String() string {
 func (*ClientsResp) ProtoMessage() {}
 
 func (x *ClientsResp) ProtoReflect() protoreflect.Message {
-	mi := &file_relays_server_proto_msgTypes[3]
+	mi := &file_relay_proto_msgTypes[3]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -287,7 +287,7 @@ func (x *ClientsResp) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ClientsResp.ProtoReflect.Descriptor instead.
 func (*ClientsResp) Descriptor() ([]byte, []int) {
-	return file_relays_server_proto_rawDescGZIP(), []int{3}
+	return file_relay_proto_rawDescGZIP(), []int{3}
 }
 
 func (x *ClientsResp) GetChanges() []*ClientsResp_Change {
@@ -320,7 +320,7 @@ type ServersReq struct {
 
 func (x *ServersReq) Reset() {
 	*x = ServersReq{}
-	mi := &file_relays_server_proto_msgTypes[4]
+	mi := &file_relay_proto_msgTypes[4]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -332,7 +332,7 @@ func (x *ServersReq) String() string {
 func (*ServersReq) ProtoMessage() {}
 
 func (x *ServersReq) ProtoReflect() protoreflect.Message {
-	mi := &file_relays_server_proto_msgTypes[4]
+	mi := &file_relay_proto_msgTypes[4]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -345,7 +345,7 @@ func (x *ServersReq) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ServersReq.ProtoReflect.Descriptor instead.
 func (*ServersReq) Descriptor() ([]byte, []int) {
-	return file_relays_server_proto_rawDescGZIP(), []int{4}
+	return file_relay_proto_rawDescGZIP(), []int{4}
 }
 
 func (x *ServersReq) GetOffset() int64 {
@@ -366,7 +366,7 @@ type ServersResp struct {
 
 func (x *ServersResp) Reset() {
 	*x = ServersResp{}
-	mi := &file_relays_server_proto_msgTypes[5]
+	mi := &file_relay_proto_msgTypes[5]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -378,7 +378,7 @@ func (x *ServersResp) String() string {
 func (*ServersResp) ProtoMessage() {}
 
 func (x *ServersResp) ProtoReflect() protoreflect.Message {
-	mi := &file_relays_server_proto_msgTypes[5]
+	mi := &file_relay_proto_msgTypes[5]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -391,7 +391,7 @@ func (x *ServersResp) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ServersResp.ProtoReflect.Descriptor instead.
 func (*ServersResp) Descriptor() ([]byte, []int) {
-	return file_relays_server_proto_rawDescGZIP(), []int{5}
+	return file_relay_proto_rawDescGZIP(), []int{5}
 }
 
 func (x *ServersResp) GetChanges() []*ServersResp_Change {
@@ -417,7 +417,7 @@ func (x *ServersResp) GetRestart() bool {
 
 type ClientsResp_Change struct {
 	state          protoimpl.MessageState `protogen:"open.v1"`
-	Change         ChangeType             `protobuf:"varint,1,opt,name=change,proto3,enum=relays_server.ChangeType" json:"change,omitempty"`
+	Change         ChangeType             `protobuf:"varint,1,opt,name=change,proto3,enum=relay.ChangeType" json:"change,omitempty"`
 	Forward        *pbmodel.Forward       `protobuf:"bytes,2,opt,name=forward,proto3" json:"forward,omitempty"`
 	Role           pbmodel.Role           `protobuf:"varint,3,opt,name=role,proto3,enum=model.Role" json:"role,omitempty"`
 	CertificateKey string                 `protobuf:"bytes,4,opt,name=certificate_key,json=certificateKey,proto3" json:"certificate_key,omitempty"`
@@ -428,7 +428,7 @@ type ClientsResp_Change struct {
 
 func (x *ClientsResp_Change) Reset() {
 	*x = ClientsResp_Change{}
-	mi := &file_relays_server_proto_msgTypes[6]
+	mi := &file_relay_proto_msgTypes[6]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -440,7 +440,7 @@ func (x *ClientsResp_Change) String() string {
 func (*ClientsResp_Change) ProtoMessage() {}
 
 func (x *ClientsResp_Change) ProtoReflect() protoreflect.Message {
-	mi := &file_relays_server_proto_msgTypes[6]
+	mi := &file_relay_proto_msgTypes[6]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -453,7 +453,7 @@ func (x *ClientsResp_Change) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ClientsResp_Change.ProtoReflect.Descriptor instead.
 func (*ClientsResp_Change) Descriptor() ([]byte, []int) {
-	return file_relays_server_proto_rawDescGZIP(), []int{3, 0}
+	return file_relay_proto_rawDescGZIP(), []int{3, 0}
 }
 
 func (x *ClientsResp_Change) GetChange() ChangeType {
@@ -493,7 +493,7 @@ func (x *ClientsResp_Change) GetCertificate() []byte {
 
 type ServersResp_Change struct {
 	state             protoimpl.MessageState `protogen:"open.v1"`
-	Change            ChangeType             `protobuf:"varint,1,opt,name=change,proto3,enum=relays_server.ChangeType" json:"change,omitempty"`
+	Change            ChangeType             `protobuf:"varint,1,opt,name=change,proto3,enum=relay.ChangeType" json:"change,omitempty"`
 	Forward           *pbmodel.Forward       `protobuf:"bytes,2,opt,name=forward,proto3" json:"forward,omitempty"`
 	ServerCertificate []byte                 `protobuf:"bytes,3,opt,name=server_certificate,json=serverCertificate,proto3" json:"server_certificate,omitempty"`
 	unknownFields     protoimpl.UnknownFields
@@ -502,7 +502,7 @@ type ServersResp_Change struct {
 
 func (x *ServersResp_Change) Reset() {
 	*x = ServersResp_Change{}
-	mi := &file_relays_server_proto_msgTypes[7]
+	mi := &file_relay_proto_msgTypes[7]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -514,7 +514,7 @@ func (x *ServersResp_Change) String() string {
 func (*ServersResp_Change) ProtoMessage() {}
 
 func (x *ServersResp_Change) ProtoReflect() protoreflect.Message {
-	mi := &file_relays_server_proto_msgTypes[7]
+	mi := &file_relay_proto_msgTypes[7]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -527,7 +527,7 @@ func (x *ServersResp_Change) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ServersResp_Change.ProtoReflect.Descriptor instead.
 func (*ServersResp_Change) Descriptor() ([]byte, []int) {
-	return file_relays_server_proto_rawDescGZIP(), []int{5, 0}
+	return file_relay_proto_rawDescGZIP(), []int{5, 0}
 }
 
 func (x *ServersResp_Change) GetChange() ChangeType {
@@ -551,12 +551,11 @@ func (x *ServersResp_Change) GetServerCertificate() []byte {
 	return nil
 }
 
-var File_relays_server_proto protoreflect.FileDescriptor
+var File_relay_proto protoreflect.FileDescriptor
 
-var file_relays_server_proto_rawDesc = []byte{
-	0x0a, 0x13, 0x72, 0x65, 0x6c, 0x61, 0x79, 0x73, 0x5f, 0x73, 0x65, 0x72, 0x76, 0x65, 0x72, 0x2e,
-	0x70, 0x72, 0x6f, 0x74, 0x6f, 0x12, 0x0d, 0x72, 0x65, 0x6c, 0x61, 0x79, 0x73, 0x5f, 0x73, 0x65,
-	0x72, 0x76, 0x65, 0x72, 0x1a, 0x0b, 0x70, 0x72, 0x6f, 0x74, 0x6f, 0x2e, 0x70, 0x72, 0x6f, 0x74,
+var file_relay_proto_rawDesc = []byte{
+	0x0a, 0x0b, 0x72, 0x65, 0x6c, 0x61, 0x79, 0x2e, 0x70, 0x72, 0x6f, 0x74, 0x6f, 0x12, 0x05, 0x72,
+	0x65, 0x6c, 0x61, 0x79, 0x1a, 0x0b, 0x70, 0x72, 0x6f, 0x74, 0x6f, 0x2e, 0x70, 0x72, 0x6f, 0x74,
 	0x6f, 0x1a, 0x0b, 0x6d, 0x6f, 0x64, 0x65, 0x6c, 0x2e, 0x70, 0x72, 0x6f, 0x74, 0x6f, 0x22, 0xc9,
 	0x01, 0x0a, 0x0f, 0x41, 0x75, 0x74, 0x68, 0x65, 0x6e, 0x74, 0x69, 0x63, 0x61, 0x74, 0x65, 0x52,
 	0x65, 0x71, 0x12, 0x14, 0x0a, 0x05, 0x74, 0x6f, 0x6b, 0x65, 0x6e, 0x18, 0x01, 0x20, 0x01, 0x28,
@@ -581,17 +580,16 @@ var file_relays_server_proto_rawDesc = []byte{
 	0x6e, 0x6e, 0x65, 0x63, 0x74, 0x54, 0x6f, 0x6b, 0x65, 0x6e, 0x22, 0x24, 0x0a, 0x0a, 0x43, 0x6c,
 	0x69, 0x65, 0x6e, 0x74, 0x73, 0x52, 0x65, 0x71, 0x12, 0x16, 0x0a, 0x06, 0x6f, 0x66, 0x66, 0x73,
 	0x65, 0x74, 0x18, 0x01, 0x20, 0x01, 0x28, 0x03, 0x52, 0x06, 0x6f, 0x66, 0x66, 0x73, 0x65, 0x74,
-	0x22, 0xd0, 0x02, 0x0a, 0x0b, 0x43, 0x6c, 0x69, 0x65, 0x6e, 0x74, 0x73, 0x52, 0x65, 0x73, 0x70,
-	0x12, 0x3b, 0x0a, 0x07, 0x63, 0x68, 0x61, 0x6e, 0x67, 0x65, 0x73, 0x18, 0x01, 0x20, 0x03, 0x28,
-	0x0b, 0x32, 0x21, 0x2e, 0x72, 0x65, 0x6c, 0x61, 0x79, 0x73, 0x5f, 0x73, 0x65, 0x72, 0x76, 0x65,
-	0x72, 0x2e, 0x43, 0x6c, 0x69, 0x65, 0x6e, 0x74, 0x73, 0x52, 0x65, 0x73, 0x70, 0x2e, 0x43, 0x68,
-	0x61, 0x6e, 0x67, 0x65, 0x52, 0x07, 0x63, 0x68, 0x61, 0x6e, 0x67, 0x65, 0x73, 0x12, 0x16, 0x0a,
-	0x06, 0x6f, 0x66, 0x66, 0x73, 0x65, 0x74, 0x18, 0x02, 0x20, 0x01, 0x28, 0x03, 0x52, 0x06, 0x6f,
-	0x66, 0x66, 0x73, 0x65, 0x74, 0x12, 0x18, 0x0a, 0x07, 0x72, 0x65, 0x73, 0x74, 0x61, 0x72, 0x74,
-	0x18, 0x03, 0x20, 0x01, 0x28, 0x08, 0x52, 0x07, 0x72, 0x65, 0x73, 0x74, 0x61, 0x72, 0x74, 0x1a,
-	0xd1, 0x01, 0x0a, 0x06, 0x43, 0x68, 0x61, 0x6e, 0x67, 0x65, 0x12, 0x31, 0x0a, 0x06, 0x63, 0x68,
-	0x61, 0x6e, 0x67, 0x65, 0x18, 0x01, 0x20, 0x01, 0x28, 0x0e, 0x32, 0x19, 0x2e, 0x72, 0x65, 0x6c,
-	0x61, 0x79, 0x73, 0x5f, 0x73, 0x65, 0x72, 0x76, 0x65, 0x72, 0x2e, 0x43, 0x68, 0x61, 0x6e, 0x67,
+	0x22, 0xc0, 0x02, 0x0a, 0x0b, 0x43, 0x6c, 0x69, 0x65, 0x6e, 0x74, 0x73, 0x52, 0x65, 0x73, 0x70,
+	0x12, 0x33, 0x0a, 0x07, 0x63, 0x68, 0x61, 0x6e, 0x67, 0x65, 0x73, 0x18, 0x01, 0x20, 0x03, 0x28,
+	0x0b, 0x32, 0x19, 0x2e, 0x72, 0x65, 0x6c, 0x61, 0x79, 0x2e, 0x43, 0x6c, 0x69, 0x65, 0x6e, 0x74,
+	0x73, 0x52, 0x65, 0x73, 0x70, 0x2e, 0x43, 0x68, 0x61, 0x6e, 0x67, 0x65, 0x52, 0x07, 0x63, 0x68,
+	0x61, 0x6e, 0x67, 0x65, 0x73, 0x12, 0x16, 0x0a, 0x06, 0x6f, 0x66, 0x66, 0x73, 0x65, 0x74, 0x18,
+	0x02, 0x20, 0x01, 0x28, 0x03, 0x52, 0x06, 0x6f, 0x66, 0x66, 0x73, 0x65, 0x74, 0x12, 0x18, 0x0a,
+	0x07, 0x72, 0x65, 0x73, 0x74, 0x61, 0x72, 0x74, 0x18, 0x03, 0x20, 0x01, 0x28, 0x08, 0x52, 0x07,
+	0x72, 0x65, 0x73, 0x74, 0x61, 0x72, 0x74, 0x1a, 0xc9, 0x01, 0x0a, 0x06, 0x43, 0x68, 0x61, 0x6e,
+	0x67, 0x65, 0x12, 0x29, 0x0a, 0x06, 0x63, 0x68, 0x61, 0x6e, 0x67, 0x65, 0x18, 0x01, 0x20, 0x01,
+	0x28, 0x0e, 0x32, 0x11, 0x2e, 0x72, 0x65, 0x6c, 0x61, 0x79, 0x2e, 0x43, 0x68, 0x61, 0x6e, 0x67,
 	0x65, 0x54, 0x79, 0x70, 0x65, 0x52, 0x06, 0x63, 0x68, 0x61, 0x6e, 0x67, 0x65, 0x12, 0x28, 0x0a,
 	0x07, 0x66, 0x6f, 0x72, 0x77, 0x61, 0x72, 0x64, 0x18, 0x02, 0x20, 0x01, 0x28, 0x0b, 0x32, 0x0e,
 	0x2e, 0x6d, 0x6f, 0x64, 0x65, 0x6c, 0x2e, 0x46, 0x6f, 0x72, 0x77, 0x61, 0x72, 0x64, 0x52, 0x07,
@@ -604,18 +602,17 @@ var file_relays_server_proto_rawDesc = []byte{
 	0x18, 0x05, 0x20, 0x01, 0x28, 0x0c, 0x52, 0x0b, 0x63, 0x65, 0x72, 0x74, 0x69, 0x66, 0x69, 0x63,
 	0x61, 0x74, 0x65, 0x22, 0x24, 0x0a, 0x0a, 0x53, 0x65, 0x72, 0x76, 0x65, 0x72, 0x73, 0x52, 0x65,
 	0x71, 0x12, 0x16, 0x0a, 0x06, 0x6f, 0x66, 0x66, 0x73, 0x65, 0x74, 0x18, 0x01, 0x20, 0x01, 0x28,
-	0x03, 0x52, 0x06, 0x6f, 0x66, 0x66, 0x73, 0x65, 0x74, 0x22, 0x93, 0x02, 0x0a, 0x0b, 0x53, 0x65,
-	0x72, 0x76, 0x65, 0x72, 0x73, 0x52, 0x65, 0x73, 0x70, 0x12, 0x3b, 0x0a, 0x07, 0x63, 0x68, 0x61,
-	0x6e, 0x67, 0x65, 0x73, 0x18, 0x01, 0x20, 0x03, 0x28, 0x0b, 0x32, 0x21, 0x2e, 0x72, 0x65, 0x6c,
-	0x61, 0x79, 0x73, 0x5f, 0x73, 0x65, 0x72, 0x76, 0x65, 0x72, 0x2e, 0x53, 0x65, 0x72, 0x76, 0x65,
-	0x72, 0x73, 0x52, 0x65, 0x73, 0x70, 0x2e, 0x43, 0x68, 0x61, 0x6e, 0x67, 0x65, 0x52, 0x07, 0x63,
-	0x68, 0x61, 0x6e, 0x67, 0x65, 0x73, 0x12, 0x16, 0x0a, 0x06, 0x6f, 0x66, 0x66, 0x73, 0x65, 0x74,
-	0x18, 0x02, 0x20, 0x01, 0x28, 0x03, 0x52, 0x06, 0x6f, 0x66, 0x66, 0x73, 0x65, 0x74, 0x12, 0x18,
-	0x0a, 0x07, 0x72, 0x65, 0x73, 0x74, 0x61, 0x72, 0x74, 0x18, 0x03, 0x20, 0x01, 0x28, 0x08, 0x52,
-	0x07, 0x72, 0x65, 0x73, 0x74, 0x61, 0x72, 0x74, 0x1a, 0x94, 0x01, 0x0a, 0x06, 0x43, 0x68, 0x61,
-	0x6e, 0x67, 0x65, 0x12, 0x31, 0x0a, 0x06, 0x63, 0x68, 0x61, 0x6e, 0x67, 0x65, 0x18, 0x01, 0x20,
-	0x01, 0x28, 0x0e, 0x32, 0x19, 0x2e, 0x72, 0x65, 0x6c, 0x61, 0x79, 0x73, 0x5f, 0x73, 0x65, 0x72,
-	0x76, 0x65, 0x72, 0x2e, 0x43, 0x68, 0x61, 0x6e, 0x67, 0x65, 0x54, 0x79, 0x70, 0x65, 0x52, 0x06,
+	0x03, 0x52, 0x06, 0x6f, 0x66, 0x66, 0x73, 0x65, 0x74, 0x22, 0x83, 0x02, 0x0a, 0x0b, 0x53, 0x65,
+	0x72, 0x76, 0x65, 0x72, 0x73, 0x52, 0x65, 0x73, 0x70, 0x12, 0x33, 0x0a, 0x07, 0x63, 0x68, 0x61,
+	0x6e, 0x67, 0x65, 0x73, 0x18, 0x01, 0x20, 0x03, 0x28, 0x0b, 0x32, 0x19, 0x2e, 0x72, 0x65, 0x6c,
+	0x61, 0x79, 0x2e, 0x53, 0x65, 0x72, 0x76, 0x65, 0x72, 0x73, 0x52, 0x65, 0x73, 0x70, 0x2e, 0x43,
+	0x68, 0x61, 0x6e, 0x67, 0x65, 0x52, 0x07, 0x63, 0x68, 0x61, 0x6e, 0x67, 0x65, 0x73, 0x12, 0x16,
+	0x0a, 0x06, 0x6f, 0x66, 0x66, 0x73, 0x65, 0x74, 0x18, 0x02, 0x20, 0x01, 0x28, 0x03, 0x52, 0x06,
+	0x6f, 0x66, 0x66, 0x73, 0x65, 0x74, 0x12, 0x18, 0x0a, 0x07, 0x72, 0x65, 0x73, 0x74, 0x61, 0x72,
+	0x74, 0x18, 0x03, 0x20, 0x01, 0x28, 0x08, 0x52, 0x07, 0x72, 0x65, 0x73, 0x74, 0x61, 0x72, 0x74,
+	0x1a, 0x8c, 0x01, 0x0a, 0x06, 0x43, 0x68, 0x61, 0x6e, 0x67, 0x65, 0x12, 0x29, 0x0a, 0x06, 0x63,
+	0x68, 0x61, 0x6e, 0x67, 0x65, 0x18, 0x01, 0x20, 0x01, 0x28, 0x0e, 0x32, 0x11, 0x2e, 0x72, 0x65,
+	0x6c, 0x61, 0x79, 0x2e, 0x43, 0x68, 0x61, 0x6e, 0x67, 0x65, 0x54, 0x79, 0x70, 0x65, 0x52, 0x06,
 	0x63, 0x68, 0x61, 0x6e, 0x67, 0x65, 0x12, 0x28, 0x0a, 0x07, 0x66, 0x6f, 0x72, 0x77, 0x61, 0x72,
 	0x64, 0x18, 0x02, 0x20, 0x01, 0x28, 0x0b, 0x32, 0x0e, 0x2e, 0x6d, 0x6f, 0x64, 0x65, 0x6c, 0x2e,
 	0x46, 0x6f, 0x72, 0x77, 0x61, 0x72, 0x64, 0x52, 0x07, 0x66, 0x6f, 0x72, 0x77, 0x61, 0x72, 0x64,
@@ -625,53 +622,53 @@ var file_relays_server_proto_rawDesc = []byte{
 	0x3d, 0x0a, 0x0a, 0x43, 0x68, 0x61, 0x6e, 0x67, 0x65, 0x54, 0x79, 0x70, 0x65, 0x12, 0x11, 0x0a,
 	0x0d, 0x43, 0x68, 0x61, 0x6e, 0x67, 0x65, 0x55, 0x6e, 0x6b, 0x6e, 0x6f, 0x77, 0x6e, 0x10, 0x00,
 	0x12, 0x0d, 0x0a, 0x09, 0x43, 0x68, 0x61, 0x6e, 0x67, 0x65, 0x50, 0x75, 0x74, 0x10, 0x01, 0x12,
-	0x0d, 0x0a, 0x09, 0x43, 0x68, 0x61, 0x6e, 0x67, 0x65, 0x44, 0x65, 0x6c, 0x10, 0x02, 0x42, 0x2e,
-	0x5a, 0x2c, 0x67, 0x69, 0x74, 0x68, 0x75, 0x62, 0x2e, 0x63, 0x6f, 0x6d, 0x2f, 0x63, 0x6f, 0x6e,
+	0x0d, 0x0a, 0x09, 0x43, 0x68, 0x61, 0x6e, 0x67, 0x65, 0x44, 0x65, 0x6c, 0x10, 0x02, 0x42, 0x2c,
+	0x5a, 0x2a, 0x67, 0x69, 0x74, 0x68, 0x75, 0x62, 0x2e, 0x63, 0x6f, 0x6d, 0x2f, 0x63, 0x6f, 0x6e,
 	0x6e, 0x65, 0x74, 0x2d, 0x64, 0x65, 0x76, 0x2f, 0x63, 0x6f, 0x6e, 0x6e, 0x65, 0x74, 0x2f, 0x70,
-	0x72, 0x6f, 0x74, 0x6f, 0x2f, 0x70, 0x62, 0x72, 0x73, 0x65, 0x72, 0x76, 0x65, 0x72, 0x62, 0x06,
-	0x70, 0x72, 0x6f, 0x74, 0x6f, 0x33,
+	0x72, 0x6f, 0x74, 0x6f, 0x2f, 0x70, 0x62, 0x72, 0x65, 0x6c, 0x61, 0x79, 0x62, 0x06, 0x70, 0x72,
+	0x6f, 0x74, 0x6f, 0x33,
 }
 
 var (
-	file_relays_server_proto_rawDescOnce sync.Once
-	file_relays_server_proto_rawDescData = file_relays_server_proto_rawDesc
+	file_relay_proto_rawDescOnce sync.Once
+	file_relay_proto_rawDescData = file_relay_proto_rawDesc
 )
 
-func file_relays_server_proto_rawDescGZIP() []byte {
-	file_relays_server_proto_rawDescOnce.Do(func() {
-		file_relays_server_proto_rawDescData = protoimpl.X.CompressGZIP(file_relays_server_proto_rawDescData)
+func file_relay_proto_rawDescGZIP() []byte {
+	file_relay_proto_rawDescOnce.Do(func() {
+		file_relay_proto_rawDescData = protoimpl.X.CompressGZIP(file_relay_proto_rawDescData)
 	})
-	return file_relays_server_proto_rawDescData
+	return file_relay_proto_rawDescData
 }
 
-var file_relays_server_proto_enumTypes = make([]protoimpl.EnumInfo, 1)
-var file_relays_server_proto_msgTypes = make([]protoimpl.MessageInfo, 8)
-var file_relays_server_proto_goTypes = []any{
-	(ChangeType)(0),            // 0: relays_server.ChangeType
-	(*AuthenticateReq)(nil),    // 1: relays_server.AuthenticateReq
-	(*AuthenticateResp)(nil),   // 2: relays_server.AuthenticateResp
-	(*ClientsReq)(nil),         // 3: relays_server.ClientsReq
-	(*ClientsResp)(nil),        // 4: relays_server.ClientsResp
-	(*ServersReq)(nil),         // 5: relays_server.ServersReq
-	(*ServersResp)(nil),        // 6: relays_server.ServersResp
-	(*ClientsResp_Change)(nil), // 7: relays_server.ClientsResp.Change
-	(*ServersResp_Change)(nil), // 8: relays_server.ServersResp.Change
+var file_relay_proto_enumTypes = make([]protoimpl.EnumInfo, 1)
+var file_relay_proto_msgTypes = make([]protoimpl.MessageInfo, 8)
+var file_relay_proto_goTypes = []any{
+	(ChangeType)(0),            // 0: relay.ChangeType
+	(*AuthenticateReq)(nil),    // 1: relay.AuthenticateReq
+	(*AuthenticateResp)(nil),   // 2: relay.AuthenticateResp
+	(*ClientsReq)(nil),         // 3: relay.ClientsReq
+	(*ClientsResp)(nil),        // 4: relay.ClientsResp
+	(*ServersReq)(nil),         // 5: relay.ServersReq
+	(*ServersResp)(nil),        // 6: relay.ServersResp
+	(*ClientsResp_Change)(nil), // 7: relay.ClientsResp.Change
+	(*ServersResp_Change)(nil), // 8: relay.ServersResp.Change
 	(*pbmodel.HostPort)(nil),   // 9: model.HostPort
 	(*proto.Error)(nil),        // 10: proto.Error
 	(*pbmodel.Forward)(nil),    // 11: model.Forward
 	(pbmodel.Role)(0),          // 12: model.Role
 }
-var file_relays_server_proto_depIdxs = []int32{
-	9,  // 0: relays_server.AuthenticateReq.addr:type_name -> model.HostPort
-	9,  // 1: relays_server.AuthenticateReq.addresses:type_name -> model.HostPort
-	10, // 2: relays_server.AuthenticateResp.error:type_name -> proto.Error
-	7,  // 3: relays_server.ClientsResp.changes:type_name -> relays_server.ClientsResp.Change
-	8,  // 4: relays_server.ServersResp.changes:type_name -> relays_server.ServersResp.Change
-	0,  // 5: relays_server.ClientsResp.Change.change:type_name -> relays_server.ChangeType
-	11, // 6: relays_server.ClientsResp.Change.forward:type_name -> model.Forward
-	12, // 7: relays_server.ClientsResp.Change.role:type_name -> model.Role
-	0,  // 8: relays_server.ServersResp.Change.change:type_name -> relays_server.ChangeType
-	11, // 9: relays_server.ServersResp.Change.forward:type_name -> model.Forward
+var file_relay_proto_depIdxs = []int32{
+	9,  // 0: relay.AuthenticateReq.addr:type_name -> model.HostPort
+	9,  // 1: relay.AuthenticateReq.addresses:type_name -> model.HostPort
+	10, // 2: relay.AuthenticateResp.error:type_name -> proto.Error
+	7,  // 3: relay.ClientsResp.changes:type_name -> relay.ClientsResp.Change
+	8,  // 4: relay.ServersResp.changes:type_name -> relay.ServersResp.Change
+	0,  // 5: relay.ClientsResp.Change.change:type_name -> relay.ChangeType
+	11, // 6: relay.ClientsResp.Change.forward:type_name -> model.Forward
+	12, // 7: relay.ClientsResp.Change.role:type_name -> model.Role
+	0,  // 8: relay.ServersResp.Change.change:type_name -> relay.ChangeType
+	11, // 9: relay.ServersResp.Change.forward:type_name -> model.Forward
 	10, // [10:10] is the sub-list for method output_type
 	10, // [10:10] is the sub-list for method input_type
 	10, // [10:10] is the sub-list for extension type_name
@@ -679,28 +676,28 @@ var file_relays_server_proto_depIdxs = []int32{
 	0,  // [0:10] is the sub-list for field type_name
 }
 
-func init() { file_relays_server_proto_init() }
-func file_relays_server_proto_init() {
-	if File_relays_server_proto != nil {
+func init() { file_relay_proto_init() }
+func file_relay_proto_init() {
+	if File_relay_proto != nil {
 		return
 	}
 	type x struct{}
 	out := protoimpl.TypeBuilder{
 		File: protoimpl.DescBuilder{
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
-			RawDescriptor: file_relays_server_proto_rawDesc,
+			RawDescriptor: file_relay_proto_rawDesc,
 			NumEnums:      1,
 			NumMessages:   8,
 			NumExtensions: 0,
 			NumServices:   0,
 		},
-		GoTypes:           file_relays_server_proto_goTypes,
-		DependencyIndexes: file_relays_server_proto_depIdxs,
-		EnumInfos:         file_relays_server_proto_enumTypes,
-		MessageInfos:      file_relays_server_proto_msgTypes,
+		GoTypes:           file_relay_proto_goTypes,
+		DependencyIndexes: file_relay_proto_depIdxs,
+		EnumInfos:         file_relay_proto_enumTypes,
+		MessageInfos:      file_relay_proto_msgTypes,
 	}.Build()
-	File_relays_server_proto = out.File
-	file_relays_server_proto_rawDesc = nil
-	file_relays_server_proto_goTypes = nil
-	file_relays_server_proto_depIdxs = nil
+	File_relay_proto = out.File
+	file_relay_proto_rawDesc = nil
+	file_relay_proto_goTypes = nil
+	file_relay_proto_depIdxs = nil
 }

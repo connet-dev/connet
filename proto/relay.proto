@@ -1,10 +1,10 @@
 syntax = "proto3";
-package relays_server;
+package relay;
 
 import "proto.proto";
 import "model.proto";
 
-option go_package = "github.com/connet-dev/connet/proto/pbrserver";
+option go_package = "github.com/connet-dev/connet/proto/pbrelay";
 
 message AuthenticateReq {
   string token = 1;

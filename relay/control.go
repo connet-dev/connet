@@ -18,7 +18,7 @@ import (
 	"github.com/connet-dev/connet/model"
 	"github.com/connet-dev/connet/netc"
 	"github.com/connet-dev/connet/proto"
-	"github.com/connet-dev/connet/proto/pbrserver"
+	"github.com/connet-dev/connet/proto/pbrelay"
 	"github.com/connet-dev/connet/quicc"
 	"github.com/connet-dev/connet/statusc"
 	"github.com/klev-dev/klevdb"
@@ -225,7 +225,7 @@ func (s *controlClient) connect(ctx context.Context, tfn TransportsFn) (quic.Con
 		}
 		defer authStream.Close()
 
-		if err := proto.Write(authStream, &pbrserver.AuthenticateReq{
+		if err := proto.Write(authStream, &pbrelay.AuthenticateReq{
 			Token:          s.controlToken,
 			Addr:           s.hostports[0].PB(),
 			Addresses:      iterc.MapSlice(s.hostports, model.HostPort.PB),
@@ -236,7 +236,7 @@ func (s *controlClient) connect(ctx context.Context, tfn TransportsFn) (quic.Con
 			continue
 		}
 
-		resp := &pbrserver.AuthenticateResp{}
+		resp := &pbrelay.AuthenticateResp{}
 		if err := proto.Read(authStream, resp); err != nil {
 			s.logger.Debug("relay control server: auth read error", "localAddr", transport.Conn.LocalAddr(), "err", err)
 			continue
@@ -324,14 +324,14 @@ func (s *controlClient) runClientsStream(ctx context.Context, conn quic.Connecti
 
 	g.Go(func() error {
 		for {
-			req := &pbrserver.ClientsReq{
+			req := &pbrelay.ClientsReq{
 				Offset: s.getClientsStreamOffset(),
 			}
 			if err := proto.Write(stream, req); err != nil {
 				return err
 			}
 
-			resp := &pbrserver.ClientsResp{}
+			resp := &pbrelay.ClientsResp{}
 			if err := proto.Read(stream, resp); err != nil {
 				return err
 			}
@@ -344,7 +344,7 @@ func (s *controlClient) runClientsStream(ctx context.Context, conn quic.Connecti
 				}
 
 				switch change.Change {
-				case pbrserver.ChangeType_ChangePut:
+				case pbrelay.ChangeType_ChangePut:
 					cert, err := x509.ParseCertificate(change.Certificate)
 					if err != nil {
 						return err
@@ -352,7 +352,7 @@ func (s *controlClient) runClientsStream(ctx context.Context, conn quic.Connecti
 					if err := s.clients.Put(key, ClientValue{cert}); err != nil {
 						return err
 					}
-				case pbrserver.ChangeType_ChangeDel:
+				case pbrelay.ChangeType_ChangeDel:
 					if err := s.clients.Del(key); err != nil {
 						return err
 					}
@@ -439,7 +439,7 @@ func (s *controlClient) runServersStream(ctx context.Context, conn quic.Connecti
 
 	g.Go(func() error {
 		for {
-			req := &pbrserver.ServersReq{}
+			req := &pbrelay.ServersReq{}
 			if err := proto.Read(stream, req); err != nil {
 				return err
 			}
@@ -457,17 +457,17 @@ func (s *controlClient) runServersStream(ctx context.Context, conn quic.Connecti
 				return err
 			}
 
-			resp := &pbrserver.ServersResp{Offset: nextOffset}
+			resp := &pbrelay.ServersResp{Offset: nextOffset}
 
 			for _, msg := range msgs {
-				var change = &pbrserver.ServersResp_Change{
+				var change = &pbrelay.ServersResp_Change{
 					Forward: msg.Key.Forward.PB(),
 				}
 				if msg.Delete {
-					change.Change = pbrserver.ChangeType_ChangeDel
+					change.Change = pbrelay.ChangeType_ChangeDel
 				} else {
 					change.ServerCertificate = msg.Value.Cert.Raw()
-					change.Change = pbrserver.ChangeType_ChangePut
+					change.Change = pbrelay.ChangeType_ChangePut
 				}
 				resp.Changes = append(resp.Changes, change)
 			}
