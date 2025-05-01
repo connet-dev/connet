@@ -3,7 +3,7 @@ package model
 import (
 	"fmt"
 
-	"github.com/connet-dev/connet/pb"
+	"github.com/connet-dev/connet/proto/pbmodel"
 )
 
 type Role struct{ string }
@@ -14,11 +14,11 @@ var (
 	Source      = Role{"source"}
 )
 
-func RoleFromPB(r pb.Role) Role {
+func RoleFromPB(r pbmodel.Role) Role {
 	switch r {
-	case pb.Role_RoleDestination:
+	case pbmodel.Role_RoleDestination:
 		return Destination
-	case pb.Role_RoleSource:
+	case pbmodel.Role_RoleSource:
 		return Source
 	default:
 		return UnknownRole
@@ -35,14 +35,14 @@ func ParseRole(s string) (Role, error) {
 	return UnknownRole, fmt.Errorf("invalid role '%s'", s)
 }
 
-func (r Role) PB() pb.Role {
+func (r Role) PB() pbmodel.Role {
 	switch r {
 	case Destination:
-		return pb.Role_RoleDestination
+		return pbmodel.Role_RoleDestination
 	case Source:
-		return pb.Role_RoleSource
+		return pbmodel.Role_RoleSource
 	default:
-		return pb.Role_RoleUnknown
+		return pbmodel.Role_RoleUnknown
 	}
 }
 

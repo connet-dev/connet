@@ -1,9 +1,9 @@
 syntax = "proto3";
-package server;
+package clients_server;
 
-import "shared.proto";
+import "model.proto";
 
-option go_package = "github.com/connet-dev/connet/pbs";
+option go_package = "github.com/connet-dev/connet/proto/pbcserver";
 
 message Authenticate {
   string token = 1;
@@ -12,9 +12,9 @@ message Authenticate {
 }
 
 message AuthenticateResp {
-  shared.Error error = 1;
+  model.Error error = 1;
 
-  shared.AddrPort public = 2;
+  model.AddrPort public = 2;
   bytes reconnect_token = 3;
 }
 
@@ -24,19 +24,19 @@ message Request {
   Relay relay = 2;
 
   message Announce {
-    shared.Forward forward = 1;
-    shared.Role role = 2;
+    model.Forward forward = 1;
+    model.Role role = 2;
     ClientPeer peer = 3;
   }
   message Relay {
-    shared.Forward forward = 1;
-    shared.Role role = 2;
+    model.Forward forward = 1;
+    model.Role role = 2;
     bytes client_certificate = 3; // certificate to use when connecting to a relay
   }
 }
 
 message Response {
-  shared.Error error = 1;
+  model.Error error = 1;
 
   // Soft one-of if error is nil
   Announce announce = 2;
@@ -52,8 +52,8 @@ message Response {
 
 message ClientPeer {
   DirectRoute direct = 1; // TODO remove in 0.9.0
-  repeated shared.HostPort relays = 2; // TODO remove in 0.10.0
-  repeated shared.AddrPort directs = 3;
+  repeated model.HostPort relays = 2; // TODO remove in 0.10.0
+  repeated model.AddrPort directs = 3;
   repeated string relayIds = 6;
   bytes server_certificate = 4;
   bytes client_certificate = 5;
@@ -62,22 +62,22 @@ message ClientPeer {
 message ServerPeer {
   string id = 1;
   DirectRoute direct = 2; // TODO remove in 0.9.0
-  repeated shared.HostPort relays = 3; // TODO remove in 0.10.0
-  repeated shared.AddrPort directs = 4;
+  repeated model.HostPort relays = 3; // TODO remove in 0.10.0
+  repeated model.AddrPort directs = 4;
   repeated string relayIds = 7;
   bytes server_certificate = 5;
   bytes client_certificate = 6;
 }
 
 message DirectRoute {
-  repeated shared.AddrPort addresses = 1;
+  repeated model.AddrPort addresses = 1;
   bytes server_certificate = 2;
   bytes client_certificate = 3;
 }
 
 message Relay {
   string id = 3;
-  shared.HostPort address = 1; // TODO remove in 0.10.0
-  repeated shared.HostPort addresses = 4;
+  model.HostPort address = 1; // TODO remove in 0.10.0
+  repeated model.HostPort addresses = 4;
   bytes server_certificate = 2;
 }

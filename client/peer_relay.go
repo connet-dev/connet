@@ -12,8 +12,8 @@ import (
 
 	"github.com/connet-dev/connet/model"
 	"github.com/connet-dev/connet/netc"
-	"github.com/connet-dev/connet/pb"
-	"github.com/connet-dev/connet/pbc"
+	"github.com/connet-dev/connet/proto/pbclient"
+	"github.com/connet-dev/connet/proto/pbmodel"
 	"github.com/connet-dev/connet/quicc"
 	"github.com/quic-go/quic-go"
 	"golang.org/x/sync/errgroup"
@@ -116,7 +116,7 @@ func (r *relayPeer) connect(ctx context.Context, hp model.HostPort) (quic.Connec
 	}
 
 	if err := r.check(ctx, conn); err != nil {
-		conn.CloseWithError(quic.ApplicationErrorCode(pb.Error_ConnectionCheckFailed), "connection check failed")
+		conn.CloseWithError(quic.ApplicationErrorCode(pbmodel.Error_ConnectionCheckFailed), "connection check failed")
 		return nil, err
 	}
 	return conn, nil
@@ -129,10 +129,10 @@ func (r *relayPeer) check(ctx context.Context, conn quic.Connection) error {
 	}
 	defer stream.Close()
 
-	if err := pb.Write(stream, &pbc.Request{}); err != nil {
+	if err := pbmodel.Write(stream, &pbclient.Request{}); err != nil {
 		return err
 	}
-	if _, err := pbc.ReadResponse(stream); err != nil {
+	if _, err := pbclient.ReadResponse(stream); err != nil {
 		return err
 	}
 
@@ -140,7 +140,7 @@ func (r *relayPeer) check(ctx context.Context, conn quic.Connection) error {
 }
 
 func (r *relayPeer) keepalive(ctx context.Context, conn relayConn) error {
-	defer conn.conn.CloseWithError(quic.ApplicationErrorCode(pb.Error_RelayKeepaliveClosed), "keepalive closed")
+	defer conn.conn.CloseWithError(quic.ApplicationErrorCode(pbmodel.Error_RelayKeepaliveClosed), "keepalive closed")
 
 	r.local.addRelayConn(r.serverID, conn)
 	defer r.local.removeRelayConn(r.serverID)

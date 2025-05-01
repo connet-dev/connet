@@ -25,7 +25,7 @@ test-nix-interactive:
 .PHONY: gen
 gen:
 	fd --extension ".pb.go" . --exec-batch rm {}
-	protoc --proto_path=pb/ --proto_path=pbs/ --proto_path=pbc/ --proto_path=pbr/ --go_opt=module=github.com/connet-dev/connet --go_out=./ pb/*.proto pbs/*.proto pbc/*.proto pbr/*.proto
+	protoc --proto_path=proto/ --go_opt=module=github.com/connet-dev/connet --go_out=./ proto/*.proto
 
 .PHONY: run-server run-client run-sws
 run-server: build

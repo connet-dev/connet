@@ -1,20 +1,20 @@
 syntax = "proto3";
-package relay;
+package relays_server;
 
-import "shared.proto";
+import "model.proto";
 
-option go_package = "github.com/connet-dev/connet/pbr";
+option go_package = "github.com/connet-dev/connet/proto/pbrserver";
 
 message AuthenticateReq {
   string token = 1;
-  shared.HostPort addr = 2; // TODO remove in 0.9.0
-  repeated shared.HostPort addresses = 5;
+  model.HostPort addr = 2; // TODO remove in 0.9.0
+  repeated model.HostPort addresses = 5;
   bytes reconnect_token = 3;
   string build_version = 4;
 }
 
 message AuthenticateResp {
-  shared.Error error = 1;
+  model.Error error = 1;
   string control_id = 2;
   bytes reconnect_token = 3;
 }
@@ -36,8 +36,8 @@ message ClientsResp {
 
   message Change {
     ChangeType change = 1;
-    shared.Forward forward = 2;
-    shared.Role role = 3;
+    model.Forward forward = 2;
+    model.Role role = 3;
     string certificate_key = 4;
     bytes certificate = 5;
   }
@@ -54,7 +54,7 @@ message ServersResp {
 
   message Change {
     ChangeType change = 1;
-    shared.Forward forward = 2;
+    model.Forward forward = 2;
     bytes server_certificate = 3;
   }
 }

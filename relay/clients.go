@@ -17,8 +17,8 @@ import (
 
 	"github.com/connet-dev/connet/model"
 	"github.com/connet-dev/connet/netc"
-	"github.com/connet-dev/connet/pb"
-	"github.com/connet-dev/connet/pbc"
+	"github.com/connet-dev/connet/proto/pbclient"
+	"github.com/connet-dev/connet/proto/pbmodel"
 	"github.com/connet-dev/connet/quicc"
 	"github.com/quic-go/quic-go"
 	"golang.org/x/sync/errgroup"
@@ -246,7 +246,7 @@ type clientConn struct {
 
 func (c *clientConn) run(ctx context.Context) {
 	c.logger.Info("new client connected", "proto", c.conn.ConnectionState().TLS.NegotiatedProtocol, "remote", c.conn.RemoteAddr())
-	defer c.conn.CloseWithError(quic.ApplicationErrorCode(pb.Error_Unknown), "connection closed")
+	defer c.conn.CloseWithError(quic.ApplicationErrorCode(pbmodel.Error_Unknown), "connection closed")
 
 	if err := c.runErr(ctx); err != nil {
 		c.logger.Debug("error while running client conn", "err", err)
@@ -259,7 +259,7 @@ func (c *clientConn) runErr(ctx context.Context) error {
 	serverName := c.conn.ConnectionState().TLS.ServerName
 	certs := c.conn.ConnectionState().TLS.PeerCertificates
 	if auth := c.server.auth(serverName, certs); auth == nil {
-		return c.conn.CloseWithError(quic.ApplicationErrorCode(pb.Error_AuthenticationFailed), "authentication missing")
+		return c.conn.CloseWithError(quic.ApplicationErrorCode(pbmodel.Error_AuthenticationFailed), "authentication missing")
 	} else {
 		c.auth = auth
 		c.logger = c.logger.With("fwd", auth.fwd, "role", auth.role, "key", auth.key)
@@ -286,9 +286,9 @@ func (c *clientConn) check(ctx context.Context) error {
 	}
 	defer stream.Close()
 
-	if _, err := pbc.ReadRequest(stream); err != nil {
+	if _, err := pbclient.ReadRequest(stream); err != nil {
 		return fmt.Errorf("read client stream: %w", err)
-	} else if err := pb.Write(stream, &pbc.Response{}); err != nil {
+	} else if err := pbmodel.Write(stream, &pbclient.Response{}); err != nil {
 		return fmt.Errorf("write client stream: %w", err)
 	}
 
@@ -354,7 +354,7 @@ func (c *clientConn) runSourceStream(ctx context.Context, stream quic.Stream, fc
 }
 
 func (c *clientConn) runSourceStreamErr(ctx context.Context, stream quic.Stream, fcs *forwardClients) error {
-	req, err := pbc.ReadRequest(stream)
+	req, err := pbclient.ReadRequest(stream)
 	if err != nil {
 		return fmt.Errorf("source stream read: %w", err)
 	}
@@ -367,17 +367,17 @@ func (c *clientConn) runSourceStreamErr(ctx context.Context, stream quic.Stream,
 	}
 }
 
-func (c *clientConn) connect(ctx context.Context, stream quic.Stream, fcs *forwardClients, req *pbc.Request) error {
+func (c *clientConn) connect(ctx context.Context, stream quic.Stream, fcs *forwardClients, req *pbclient.Request) error {
 	dests := fcs.getDestinations()
 	if len(dests) == 0 {
-		err := pb.NewError(pb.Error_DestinationNotFound, "could not find destination")
-		return pb.Write(stream, &pbc.Response{Error: err})
+		err := pbmodel.NewError(pbmodel.Error_DestinationNotFound, "could not find destination")
+		return pbmodel.Write(stream, &pbclient.Response{Error: err})
 	}
 
 	var pberrs []string
 	for _, dest := range dests {
 		if err := c.connectDestination(ctx, stream, dest, req); err != nil {
-			if pberr := pb.GetError(err); pberr != nil {
+			if pberr := pbmodel.GetError(err); pberr != nil {
 				pberrs = append(pberrs, pberr.Error())
 			}
 			c.logger.Debug("could not dial destination", "err", err)
@@ -387,26 +387,26 @@ func (c *clientConn) connect(ctx context.Context, stream quic.Stream, fcs *forwa
 		}
 	}
 
-	err := pb.NewError(pb.Error_DestinationDialFailed, "could not dial destinations: %v", pberrs)
-	return pb.Write(stream, &pbc.Response{Error: err})
+	err := pbmodel.NewError(pbmodel.Error_DestinationDialFailed, "could not dial destinations: %v", pberrs)
+	return pbmodel.Write(stream, &pbclient.Response{Error: err})
 }
 
-func (c *clientConn) connectDestination(ctx context.Context, srcStream quic.Stream, dest *clientConn, req *pbc.Request) error {
+func (c *clientConn) connectDestination(ctx context.Context, srcStream quic.Stream, dest *clientConn, req *pbclient.Request) error {
 	dstStream, err := dest.conn.OpenStreamSync(ctx)
 	if err != nil {
 		return fmt.Errorf("destination open stream: %w", err)
 	}
 
-	if err := pb.Write(dstStream, req); err != nil {
+	if err := pbmodel.Write(dstStream, req); err != nil {
 		return fmt.Errorf("destination write request: %w", err)
 	}
 
-	resp, err := pbc.ReadResponse(dstStream)
+	resp, err := pbclient.ReadResponse(dstStream)
 	if err != nil {
 		return fmt.Errorf("destination read response: %w", err)
 	}
 
-	if err := pb.Write(srcStream, resp); err != nil {
+	if err := pbmodel.Write(srcStream, resp); err != nil {
 		return fmt.Errorf("source write response: %w", err)
 	}
 
@@ -416,8 +416,8 @@ func (c *clientConn) connectDestination(ctx context.Context, srcStream quic.Stre
 	return nil
 }
 
-func (c *clientConn) unknown(_ context.Context, stream quic.Stream, req *pbc.Request) error {
+func (c *clientConn) unknown(_ context.Context, stream quic.Stream, req *pbclient.Request) error {
 	c.logger.Error("unknown request", "req", req)
-	err := pb.NewError(pb.Error_RequestUnknown, "unknown request: %v", req)
-	return pb.Write(stream, &pbc.Response{Error: err})
+	err := pbmodel.NewError(pbmodel.Error_RequestUnknown, "unknown request: %v", req)
+	return pbmodel.Write(stream, &pbclient.Response{Error: err})
 }

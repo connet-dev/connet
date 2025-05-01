@@ -1,7 +1,7 @@
 package model
 
 import (
-	"github.com/connet-dev/connet/pb"
+	"github.com/connet-dev/connet/proto/pbmodel"
 )
 
 type Forward struct{ string }
@@ -10,20 +10,20 @@ func NewForward(s string) Forward {
 	return Forward{s}
 }
 
-func ForwardFromPB(f *pb.Forward) Forward {
+func ForwardFromPB(f *pbmodel.Forward) Forward {
 	return Forward{f.Name}
 }
 
-func (f Forward) PB() *pb.Forward {
-	return &pb.Forward{Name: f.string}
+func (f Forward) PB() *pbmodel.Forward {
+	return &pbmodel.Forward{Name: f.string}
 }
 
 func (f Forward) String() string {
 	return f.string
 }
 
-func PBFromForwards(fwds []Forward) []*pb.Forward {
-	pbs := make([]*pb.Forward, len(fwds))
+func PBFromForwards(fwds []Forward) []*pbmodel.Forward {
+	pbs := make([]*pbmodel.Forward, len(fwds))
 	for i, fwd := range fwds {
 		pbs[i] = fwd.PB()
 	}

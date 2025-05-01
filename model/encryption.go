@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"slices"
 
-	"github.com/connet-dev/connet/pbc"
+	"github.com/connet-dev/connet/proto/pbclient"
 )
 
 type EncryptionScheme struct{ string }
@@ -15,13 +15,13 @@ var (
 	DHXCPEncryption = EncryptionScheme{"dhxcp"}
 )
 
-func EncryptionFromPB(pb pbc.RelayEncryptionScheme) EncryptionScheme {
+func EncryptionFromPB(pb pbclient.RelayEncryptionScheme) EncryptionScheme {
 	switch pb {
-	case pbc.RelayEncryptionScheme_EncryptionNone:
+	case pbclient.RelayEncryptionScheme_EncryptionNone:
 		return NoEncryption
-	case pbc.RelayEncryptionScheme_TLS:
+	case pbclient.RelayEncryptionScheme_TLS:
 		return TLSEncryption
-	case pbc.RelayEncryptionScheme_DHX25519_CHACHAPOLY:
+	case pbclient.RelayEncryptionScheme_DHX25519_CHACHAPOLY:
 		return DHXCPEncryption
 	default:
 		panic(fmt.Sprintf("invalid encryption scheme: %d", pb))
@@ -41,28 +41,28 @@ func ParseEncryptionScheme(s string) (EncryptionScheme, error) {
 	}
 }
 
-func (e EncryptionScheme) PB() pbc.RelayEncryptionScheme {
+func (e EncryptionScheme) PB() pbclient.RelayEncryptionScheme {
 	switch e {
 	case NoEncryption:
-		return pbc.RelayEncryptionScheme_EncryptionNone
+		return pbclient.RelayEncryptionScheme_EncryptionNone
 	case TLSEncryption:
-		return pbc.RelayEncryptionScheme_TLS
+		return pbclient.RelayEncryptionScheme_TLS
 	case DHXCPEncryption:
-		return pbc.RelayEncryptionScheme_DHX25519_CHACHAPOLY
+		return pbclient.RelayEncryptionScheme_DHX25519_CHACHAPOLY
 	default:
 		panic(fmt.Sprintf("invalid encryption scheme: %s", e.string))
 	}
 }
 
-func PBFromEncryptions(schemes []EncryptionScheme) []pbc.RelayEncryptionScheme {
-	pbs := make([]pbc.RelayEncryptionScheme, len(schemes))
+func PBFromEncryptions(schemes []EncryptionScheme) []pbclient.RelayEncryptionScheme {
+	pbs := make([]pbclient.RelayEncryptionScheme, len(schemes))
 	for i, sc := range schemes {
 		pbs[i] = sc.PB()
 	}
 	return pbs
 }
 
-func EncryptionsFromPB(pbs []pbc.RelayEncryptionScheme) []EncryptionScheme {
+func EncryptionsFromPB(pbs []pbclient.RelayEncryptionScheme) []EncryptionScheme {
 	schemes := make([]EncryptionScheme, len(pbs))
 	for i, s := range pbs {
 		schemes[i] = EncryptionFromPB(s)

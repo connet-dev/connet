@@ -18,8 +18,8 @@ import (
 	"github.com/connet-dev/connet/certc"
 	"github.com/connet-dev/connet/cryptoc"
 	"github.com/connet-dev/connet/model"
-	"github.com/connet-dev/connet/pb"
-	"github.com/connet-dev/connet/pbc"
+	"github.com/connet-dev/connet/proto/pbclient"
+	"github.com/connet-dev/connet/proto/pbmodel"
 	"github.com/connet-dev/connet/quicc"
 	"github.com/quic-go/quic-go"
 	"golang.org/x/sync/errgroup"
@@ -203,12 +203,12 @@ func (s *Source) dial(ctx context.Context, dest sourceConn) (net.Conn, error) {
 func (s *Source) dialStream(ctx context.Context, dest sourceConn, stream quic.Stream) (net.Conn, error) {
 	var srcSecret *ecdh.PrivateKey
 
-	connect := &pbc.Request_Connect{}
+	connect := &pbclient.Request_Connect{}
 	if dest.peer.style == peerRelay {
 		connect.SourceEncryption = model.PBFromEncryptions(s.cfg.RelayEncryptions)
 
 		if slices.Contains(s.cfg.RelayEncryptions, model.TLSEncryption) {
-			connect.SourceTls = &pbc.TLSConfiguration{
+			connect.SourceTls = &pbclient.TLSConfiguration{
 				ClientName: s.peer.serverCert.Leaf.DNSNames[0],
 			}
 		}
@@ -224,13 +224,13 @@ func (s *Source) dialStream(ctx context.Context, dest sourceConn, stream quic.St
 		}
 	}
 
-	if err := pb.Write(stream, &pbc.Request{
+	if err := pbmodel.Write(stream, &pbclient.Request{
 		Connect: connect,
 	}); err != nil {
 		return nil, fmt.Errorf("source connect write request: %w", err)
 	}
 
-	resp, err := pbc.ReadResponse(stream)
+	resp, err := pbclient.ReadResponse(stream)
 	if err != nil {
 		return nil, fmt.Errorf("source connect read response: %w", err)
 	}

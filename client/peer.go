@@ -17,18 +17,18 @@ import (
 	"github.com/connet-dev/connet/model"
 	"github.com/connet-dev/connet/netc"
 	"github.com/connet-dev/connet/notify"
-	"github.com/connet-dev/connet/pb"
-	"github.com/connet-dev/connet/pbc"
-	"github.com/connet-dev/connet/pbs"
+	"github.com/connet-dev/connet/proto/pbclient"
+	"github.com/connet-dev/connet/proto/pbcserver"
+	"github.com/connet-dev/connet/proto/pbmodel"
 	"github.com/quic-go/quic-go"
 	"golang.org/x/sync/errgroup"
 )
 
 type peer struct {
-	self       *notify.V[*pbs.ClientPeer]
-	relays     *notify.V[[]*pbs.Relay]
+	self       *notify.V[*pbcserver.ClientPeer]
+	relays     *notify.V[[]*pbcserver.Relay]
 	relayConns *notify.V[map[relayID]relayConn]
-	peers      *notify.V[[]*pbs.ServerPeer]
+	peers      *notify.V[[]*pbcserver.ServerPeer]
 	peerConns  *notify.V[map[peerConnKey]quic.Connection]
 
 	direct     *DirectServer
@@ -90,13 +90,13 @@ func newPeer(direct *DirectServer, root *certc.Cert, logger *slog.Logger) (*peer
 	}
 
 	return &peer{
-		self: notify.New(&pbs.ClientPeer{
+		self: notify.New(&pbcserver.ClientPeer{
 			ServerCertificate: serverTLSCert.Leaf.Raw,
 			ClientCertificate: clientTLSCert.Leaf.Raw,
 		}),
-		relays:     notify.NewEmpty[[]*pbs.Relay](),
+		relays:     notify.NewEmpty[[]*pbcserver.Relay](),
 		relayConns: notify.New(map[relayID]relayConn{}),
-		peers:      notify.NewEmpty[[]*pbs.ServerPeer](),
+		peers:      notify.NewEmpty[[]*pbcserver.ServerPeer](),
 		peerConns:  notify.New(map[peerConnKey]quic.Connection{}),
 
 		direct:     direct,
@@ -115,14 +115,14 @@ func (p *peer) isDirect() bool {
 }
 
 func (p *peer) setDirectAddrs(addrs []netip.AddrPort) {
-	p.self.Update(func(cp *pbs.ClientPeer) *pbs.ClientPeer {
-		return &pbs.ClientPeer{
-			Direct: &pbs.DirectRoute{
-				Addresses:         pb.AsAddrPorts(addrs),
+	p.self.Update(func(cp *pbcserver.ClientPeer) *pbcserver.ClientPeer {
+		return &pbcserver.ClientPeer{
+			Direct: &pbcserver.DirectRoute{
+				Addresses:         pbmodel.AsAddrPorts(addrs),
 				ServerCertificate: p.serverCert.Leaf.Raw,
 				ClientCertificate: p.clientCert.Leaf.Raw,
 			},
-			Directs:           pb.AsAddrPorts(addrs),
+			Directs:           pbmodel.AsAddrPorts(addrs),
 			Relays:            cp.Relays,
 			RelayIds:          cp.RelayIds,
 			ServerCertificate: cp.ServerCertificate,
@@ -131,15 +131,15 @@ func (p *peer) setDirectAddrs(addrs []netip.AddrPort) {
 	})
 }
 
-func (p *peer) setRelays(relays []*pbs.Relay) {
+func (p *peer) setRelays(relays []*pbcserver.Relay) {
 	p.relays.Set(relays)
 }
 
-func (p *peer) selfListen(ctx context.Context, f func(self *pbs.ClientPeer) error) error {
+func (p *peer) selfListen(ctx context.Context, f func(self *pbcserver.ClientPeer) error) error {
 	return p.self.Listen(ctx, f)
 }
 
-func (p *peer) setPeers(peers []*pbs.ServerPeer) {
+func (p *peer) setPeers(peers []*pbcserver.ServerPeer) {
 	p.peers.Set(peers)
 }
 
@@ -155,7 +155,7 @@ func (p *peer) run(ctx context.Context) error {
 
 func (p *peer) runRelays(ctx context.Context) error {
 	relayPeers := map[relayID]*relayPeer{}
-	return p.relays.Listen(ctx, func(relays []*pbs.Relay) error {
+	return p.relays.Listen(ctx, func(relays []*pbcserver.Relay) error {
 		p.logger.Debug("relays updated", "len", len(relays))
 
 		activeRelays := map[relayID]struct{}{}
@@ -199,13 +199,13 @@ func (p *peer) runShareRelays(ctx context.Context) error {
 	return p.relayConns.Listen(ctx, func(conns map[relayID]relayConn) error {
 		p.logger.Debug("relays conns updated", "len", len(conns))
 		var ids []string
-		var hps []*pb.HostPort
+		var hps []*pbmodel.HostPort
 		for id, conn := range conns {
 			ids = append(ids, string(id))
 			hps = append(hps, conn.hp.PB())
 		}
-		p.self.Update(func(cp *pbs.ClientPeer) *pbs.ClientPeer {
-			return &pbs.ClientPeer{
+		p.self.Update(func(cp *pbcserver.ClientPeer) *pbcserver.ClientPeer {
+			return &pbcserver.ClientPeer{
 				Direct:            cp.Direct,
 				Relays:            hps,
 				Directs:           cp.Directs,
@@ -220,7 +220,7 @@ func (p *peer) runShareRelays(ctx context.Context) error {
 
 func (p *peer) runPeers(ctx context.Context) error {
 	peersByID := map[string]*directPeer{}
-	return p.peers.Listen(ctx, func(peers []*pbs.ServerPeer) error {
+	return p.peers.Listen(ctx, func(peers []*pbcserver.ServerPeer) error {
 		p.logger.Debug("peers updated", "len", len(peers))
 
 		activeIDs := map[string]struct{}{}
@@ -302,7 +302,7 @@ func newServerTLSConfig(serverCert []byte) (*serverTLSConfig, error) {
 	}, nil
 }
 
-func (p *peer) newECDHConfig() (*ecdh.PrivateKey, *pbc.ECDHConfiguration, error) {
+func (p *peer) newECDHConfig() (*ecdh.PrivateKey, *pbclient.ECDHConfiguration, error) {
 	sk, err := ecdh.X25519().GenerateKey(rand.Reader)
 	if err != nil {
 		return nil, nil, fmt.Errorf("peer generate key: %w", err)
@@ -318,14 +318,14 @@ func (p *peer) newECDHConfig() (*ecdh.PrivateKey, *pbc.ECDHConfiguration, error)
 		return nil, nil, fmt.Errorf("peer sign: %w", err)
 	}
 
-	return sk, &pbc.ECDHConfiguration{
+	return sk, &pbclient.ECDHConfiguration{
 		ClientName: p.serverCert.Leaf.DNSNames[0],
 		KeyTime:    keyTime,
 		Signature:  signature,
 	}, nil
 }
 
-func (p *peer) getECDHPublicKey(cfg *pbc.ECDHConfiguration) (*ecdh.PublicKey, error) {
+func (p *peer) getECDHPublicKey(cfg *pbclient.ECDHConfiguration) (*ecdh.PublicKey, error) {
 	peers, err := p.peers.Peek()
 	if err != nil {
 		return nil, fmt.Errorf("peers peer: %w", err)

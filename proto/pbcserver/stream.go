@@ -1,15 +1,15 @@
-package pbs
+package pbcserver
 
 import (
 	"fmt"
 	"io"
 
-	"github.com/connet-dev/connet/pb"
+	"github.com/connet-dev/connet/proto/pbmodel"
 )
 
 func ReadRequest(r io.Reader) (*Request, error) {
 	req := &Request{}
-	if err := pb.Read(r, req); err != nil {
+	if err := pbmodel.Read(r, req); err != nil {
 		return nil, fmt.Errorf("server request read: %w", err)
 	}
 	return req, nil
@@ -17,7 +17,7 @@ func ReadRequest(r io.Reader) (*Request, error) {
 
 func ReadResponse(r io.Reader) (*Response, error) {
 	resp := &Response{}
-	if err := pb.Read(r, resp); err != nil {
+	if err := pbmodel.Read(r, resp); err != nil {
 		return nil, fmt.Errorf("server response read: %w", err)
 	}
 	if resp.Error != nil {

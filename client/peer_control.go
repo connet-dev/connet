@@ -5,8 +5,8 @@ import (
 	"fmt"
 
 	"github.com/connet-dev/connet/model"
-	"github.com/connet-dev/connet/pb"
-	"github.com/connet-dev/connet/pbs"
+	"github.com/connet-dev/connet/proto/pbcserver"
+	"github.com/connet-dev/connet/proto/pbmodel"
 	"github.com/quic-go/quic-go"
 	"golang.org/x/sync/errgroup"
 )
@@ -48,10 +48,10 @@ func (d *peerControl) runAnnounce(ctx context.Context) error {
 
 	g.Go(func() error {
 		defer d.local.logger.Debug("completed announce notify")
-		return d.local.selfListen(ctx, func(peer *pbs.ClientPeer) error {
+		return d.local.selfListen(ctx, func(peer *pbcserver.ClientPeer) error {
 			d.local.logger.Debug("updated announce", "direct", len(peer.Directs), "relay", len(peer.Relays), "relayIds", len(peer.RelayIds))
-			return pb.Write(stream, &pbs.Request{
-				Announce: &pbs.Request_Announce{
+			return pbmodel.Write(stream, &pbcserver.Request{
+				Announce: &pbcserver.Request_Announce{
 					Forward: d.fwd.PB(),
 					Role:    d.role.PB(),
 					Peer:    peer,
@@ -62,7 +62,7 @@ func (d *peerControl) runAnnounce(ctx context.Context) error {
 
 	g.Go(func() error {
 		for {
-			resp, err := pbs.ReadResponse(stream)
+			resp, err := pbcserver.ReadResponse(stream)
 			d.notify(err)
 			if err != nil {
 				return err
@@ -87,8 +87,8 @@ func (d *peerControl) runRelay(ctx context.Context) error {
 	}
 	defer stream.Close()
 
-	if err := pb.Write(stream, &pbs.Request{
-		Relay: &pbs.Request_Relay{
+	if err := pbmodel.Write(stream, &pbcserver.Request{
+		Relay: &pbcserver.Request_Relay{
 			Forward:           d.fwd.PB(),
 			Role:              d.role.PB(),
 			ClientCertificate: d.local.clientCert.Leaf.Raw,
@@ -107,7 +107,7 @@ func (d *peerControl) runRelay(ctx context.Context) error {
 
 	g.Go(func() error {
 		for {
-			resp, err := pbs.ReadResponse(stream)
+			resp, err := pbcserver.ReadResponse(stream)
 			if err != nil {
 				d.notify(err)
 				return err

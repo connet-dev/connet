@@ -4,7 +4,7 @@ import (
 	"fmt"
 
 	"github.com/connet-dev/connet/iterc"
-	"github.com/connet-dev/connet/pb"
+	"github.com/connet-dev/connet/proto/pbmodel"
 )
 
 type HostPort struct {
@@ -12,19 +12,19 @@ type HostPort struct {
 	Port uint16 `json:"port"`
 }
 
-func HostPortFromPB(h *pb.HostPort) HostPort {
+func HostPortFromPB(h *pbmodel.HostPort) HostPort {
 	return HostPort{
 		Host: h.Host,
 		Port: uint16(h.Port),
 	}
 }
 
-func HostPortFromPBs(hs []*pb.HostPort) []HostPort {
+func HostPortFromPBs(hs []*pbmodel.HostPort) []HostPort {
 	return iterc.MapSlice(hs, HostPortFromPB)
 }
 
-func (h HostPort) PB() *pb.HostPort {
-	return &pb.HostPort{
+func (h HostPort) PB() *pbmodel.HostPort {
+	return &pbmodel.HostPort{
 		Host: h.Host,
 		Port: uint32(h.Port),
 	}

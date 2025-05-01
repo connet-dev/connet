@@ -17,8 +17,8 @@ import (
 	"github.com/connet-dev/connet/logc"
 	"github.com/connet-dev/connet/model"
 	"github.com/connet-dev/connet/netc"
-	"github.com/connet-dev/connet/pb"
-	"github.com/connet-dev/connet/pbr"
+	"github.com/connet-dev/connet/proto/pbmodel"
+	"github.com/connet-dev/connet/proto/pbrserver"
 	"github.com/connet-dev/connet/quicc"
 	"github.com/connet-dev/connet/statusc"
 	"github.com/klev-dev/klevdb"
@@ -225,7 +225,7 @@ func (s *controlClient) connect(ctx context.Context, tfn TransportsFn) (quic.Con
 		}
 		defer authStream.Close()
 
-		if err := pb.Write(authStream, &pbr.AuthenticateReq{
+		if err := pbmodel.Write(authStream, &pbrserver.AuthenticateReq{
 			Token:          s.controlToken,
 			Addr:           s.hostports[0].PB(),
 			Addresses:      iterc.MapSlice(s.hostports, model.HostPort.PB),
@@ -236,8 +236,8 @@ func (s *controlClient) connect(ctx context.Context, tfn TransportsFn) (quic.Con
 			continue
 		}
 
-		resp := &pbr.AuthenticateResp{}
-		if err := pb.Read(authStream, resp); err != nil {
+		resp := &pbrserver.AuthenticateResp{}
+		if err := pbmodel.Read(authStream, resp); err != nil {
 			s.logger.Debug("relay control server: auth read error", "localAddr", transport.Conn.LocalAddr(), "err", err)
 			continue
 		}
@@ -292,7 +292,7 @@ func (s *controlClient) reconnect(ctx context.Context, tfn TransportsFn) (quic.C
 }
 
 func (s *controlClient) runConnection(ctx context.Context, conn quic.Connection) error {
-	defer conn.CloseWithError(quic.ApplicationErrorCode(pb.Error_Unknown), "connection closed")
+	defer conn.CloseWithError(quic.ApplicationErrorCode(pbmodel.Error_Unknown), "connection closed")
 
 	s.connStatus.Store(statusc.Connected)
 	defer s.connStatus.Store(statusc.Reconnecting)
@@ -324,15 +324,15 @@ func (s *controlClient) runClientsStream(ctx context.Context, conn quic.Connecti
 
 	g.Go(func() error {
 		for {
-			req := &pbr.ClientsReq{
+			req := &pbrserver.ClientsReq{
 				Offset: s.getClientsStreamOffset(),
 			}
-			if err := pb.Write(stream, req); err != nil {
+			if err := pbmodel.Write(stream, req); err != nil {
 				return err
 			}
 
-			resp := &pbr.ClientsResp{}
-			if err := pb.Read(stream, resp); err != nil {
+			resp := &pbrserver.ClientsResp{}
+			if err := pbmodel.Read(stream, resp); err != nil {
 				return err
 			}
 
@@ -344,7 +344,7 @@ func (s *controlClient) runClientsStream(ctx context.Context, conn quic.Connecti
 				}
 
 				switch change.Change {
-				case pbr.ChangeType_ChangePut:
+				case pbrserver.ChangeType_ChangePut:
 					cert, err := x509.ParseCertificate(change.Certificate)
 					if err != nil {
 						return err
@@ -352,7 +352,7 @@ func (s *controlClient) runClientsStream(ctx context.Context, conn quic.Connecti
 					if err := s.clients.Put(key, ClientValue{cert}); err != nil {
 						return err
 					}
-				case pbr.ChangeType_ChangeDel:
+				case pbrserver.ChangeType_ChangeDel:
 					if err := s.clients.Del(key); err != nil {
 						return err
 					}
@@ -439,8 +439,8 @@ func (s *controlClient) runServersStream(ctx context.Context, conn quic.Connecti
 
 	g.Go(func() error {
 		for {
-			req := &pbr.ServersReq{}
-			if err := pb.Read(stream, req); err != nil {
+			req := &pbrserver.ServersReq{}
+			if err := pbmodel.Read(stream, req); err != nil {
 				return err
 			}
 
@@ -457,22 +457,22 @@ func (s *controlClient) runServersStream(ctx context.Context, conn quic.Connecti
 				return err
 			}
 
-			resp := &pbr.ServersResp{Offset: nextOffset}
+			resp := &pbrserver.ServersResp{Offset: nextOffset}
 
 			for _, msg := range msgs {
-				var change = &pbr.ServersResp_Change{
+				var change = &pbrserver.ServersResp_Change{
 					Forward: msg.Key.Forward.PB(),
 				}
 				if msg.Delete {
-					change.Change = pbr.ChangeType_ChangeDel
+					change.Change = pbrserver.ChangeType_ChangeDel
 				} else {
 					change.ServerCertificate = msg.Value.Cert.Raw()
-					change.Change = pbr.ChangeType_ChangePut
+					change.Change = pbrserver.ChangeType_ChangePut
 				}
 				resp.Changes = append(resp.Changes, change)
 			}
 
-			if err := pb.Write(stream, resp); err != nil {
+			if err := pbmodel.Write(stream, resp); err != nil {
 				return err
 			}
 		}

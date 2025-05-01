@@ -14,9 +14,9 @@ import (
 	"github.com/connet-dev/connet/model"
 	"github.com/connet-dev/connet/netc"
 	"github.com/connet-dev/connet/notify"
-	"github.com/connet-dev/connet/pb"
-	"github.com/connet-dev/connet/pbc"
-	"github.com/connet-dev/connet/pbs"
+	"github.com/connet-dev/connet/proto/pbclient"
+	"github.com/connet-dev/connet/proto/pbcserver"
+	"github.com/connet-dev/connet/proto/pbmodel"
 	"github.com/connet-dev/connet/quicc"
 	"github.com/quic-go/quic-go"
 	"golang.org/x/sync/errgroup"
@@ -26,7 +26,7 @@ type directPeer struct {
 	local *peer
 
 	remoteID string
-	remote   *notify.V[*pbs.ServerPeer]
+	remote   *notify.V[*pbcserver.ServerPeer]
 	incoming *directPeerIncoming
 	outgoing *directPeerOutgoing
 	relays   *directPeerRelays
@@ -36,7 +36,7 @@ type directPeer struct {
 	logger *slog.Logger
 }
 
-func newPeering(local *peer, remote *pbs.ServerPeer, logger *slog.Logger) *directPeer {
+func newPeering(local *peer, remote *pbcserver.ServerPeer, logger *slog.Logger) *directPeer {
 	return &directPeer{
 		local: local,
 
@@ -55,7 +55,7 @@ func (p *directPeer) run(ctx context.Context) {
 	defer func() {
 		active := p.local.removeActiveConns(p.remoteID)
 		for _, conn := range active {
-			defer conn.CloseWithError(quic.ApplicationErrorCode(pb.Error_DirectConnectionClosed), "connection closed")
+			defer conn.CloseWithError(quic.ApplicationErrorCode(pbmodel.Error_DirectConnectionClosed), "connection closed")
 		}
 	}()
 
@@ -77,7 +77,7 @@ func (p *directPeer) stop() {
 }
 
 func (p *directPeer) runRemote(ctx context.Context) error {
-	return p.remote.Listen(ctx, func(remote *pbs.ServerPeer) error {
+	return p.remote.Listen(ctx, func(remote *pbcserver.ServerPeer) error {
 		if p.local.isDirect() && (remote.Direct != nil || len(remote.Directs) > 0) {
 			if p.incoming == nil {
 				remoteClientCertBytes := remote.ClientCertificate
@@ -223,9 +223,9 @@ func (p *directPeerIncoming) connect(ctx context.Context) (quic.Connection, erro
 		}
 		defer stream.Close()
 
-		if _, err := pbc.ReadRequest(stream); err != nil {
+		if _, err := pbclient.ReadRequest(stream); err != nil {
 			return nil, err
-		} else if err := pb.Write(stream, &pbc.Response{}); err != nil {
+		} else if err := pbmodel.Write(stream, &pbclient.Response{}); err != nil {
 			return nil, err
 		}
 
@@ -234,7 +234,7 @@ func (p *directPeerIncoming) connect(ctx context.Context) (quic.Connection, erro
 }
 
 func (p *directPeerIncoming) keepalive(ctx context.Context, conn quic.Connection) error {
-	defer conn.CloseWithError(quic.ApplicationErrorCode(pb.Error_DirectKeepaliveClosed), "keepalive closed")
+	defer conn.CloseWithError(quic.ApplicationErrorCode(pbmodel.Error_DirectKeepaliveClosed), "keepalive closed")
 
 	p.parent.local.addActiveConn(p.parent.remoteID, peerIncoming, "", conn)
 	defer p.parent.local.removeActiveConn(p.parent.remoteID, peerIncoming, "")
@@ -332,7 +332,7 @@ func (p *directPeerOutgoing) connect(ctx context.Context) (quic.Connection, erro
 		case errors.Is(err, context.Canceled):
 			return nil, err
 		case err != nil:
-			conn.CloseWithError(quic.ApplicationErrorCode(pb.Error_ConnectionCheckFailed), "connection check failed")
+			conn.CloseWithError(quic.ApplicationErrorCode(pbmodel.Error_ConnectionCheckFailed), "connection check failed")
 			errs = append(errs, err)
 			continue
 		}
@@ -349,10 +349,10 @@ func (p *directPeerOutgoing) check(ctx context.Context, conn quic.Connection) er
 	}
 	defer stream.Close()
 
-	if err := pb.Write(stream, &pbc.Request{}); err != nil {
+	if err := pbmodel.Write(stream, &pbclient.Request{}); err != nil {
 		return err
 	}
-	if _, err := pbc.ReadResponse(stream); err != nil {
+	if _, err := pbclient.ReadResponse(stream); err != nil {
 		return err
 	}
 
@@ -360,7 +360,7 @@ func (p *directPeerOutgoing) check(ctx context.Context, conn quic.Connection) er
 }
 
 func (p *directPeerOutgoing) keepalive(ctx context.Context, conn quic.Connection) error {
-	defer conn.CloseWithError(quic.ApplicationErrorCode(pb.Error_DirectKeepaliveClosed), "keepalive closed")
+	defer conn.CloseWithError(quic.ApplicationErrorCode(pbmodel.Error_DirectKeepaliveClosed), "keepalive closed")
 
 	p.parent.local.addActiveConn(p.parent.remoteID, peerOutgoing, "", conn)
 	defer p.parent.local.removeActiveConn(p.parent.remoteID, peerOutgoing, "")

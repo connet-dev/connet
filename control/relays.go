@@ -15,8 +15,8 @@ import (
 	"github.com/connet-dev/connet/logc"
 	"github.com/connet-dev/connet/model"
 	"github.com/connet-dev/connet/netc"
-	"github.com/connet-dev/connet/pb"
-	"github.com/connet-dev/connet/pbr"
+	"github.com/connet-dev/connet/proto/pbmodel"
+	"github.com/connet-dev/connet/proto/pbrserver"
 	"github.com/connet-dev/connet/quicc"
 	"github.com/quic-go/quic-go"
 	"github.com/segmentio/ksuid"
@@ -365,7 +365,7 @@ type relayConnAuth struct {
 }
 
 func (c *relayConn) run(ctx context.Context) {
-	defer c.conn.CloseWithError(quic.ApplicationErrorCode(pb.Error_Unknown), "connection closed")
+	defer c.conn.CloseWithError(quic.ApplicationErrorCode(pbmodel.Error_Unknown), "connection closed")
 
 	if err := c.runErr(ctx); err != nil {
 		c.logger.Debug("error while running zzz", "err", err)
@@ -374,10 +374,10 @@ func (c *relayConn) run(ctx context.Context) {
 
 func (c *relayConn) runErr(ctx context.Context) error {
 	if rauth, err := c.authenticate(ctx); err != nil {
-		if perr := pb.GetError(err); perr != nil {
+		if perr := pbmodel.GetError(err); perr != nil {
 			c.conn.CloseWithError(quic.ApplicationErrorCode(perr.Code), perr.Message)
 		} else {
-			c.conn.CloseWithError(quic.ApplicationErrorCode(pb.Error_AuthenticationFailed), "Error while authenticating")
+			c.conn.CloseWithError(quic.ApplicationErrorCode(pbmodel.Error_AuthenticationFailed), "Error while authenticating")
 		}
 		return err
 	} else {
@@ -422,8 +422,8 @@ func (c *relayConn) authenticate(ctx context.Context) (*relayConnAuth, error) {
 	}
 	defer authStream.Close()
 
-	req := &pbr.AuthenticateReq{}
-	if err := pb.Read(authStream, req); err != nil {
+	req := &pbrserver.AuthenticateReq{}
+	if err := pbmodel.Read(authStream, req); err != nil {
 		return nil, fmt.Errorf("auth read request: %w", err)
 	}
 
@@ -435,11 +435,11 @@ func (c *relayConn) authenticate(ctx context.Context) (*relayConnAuth, error) {
 		BuildVersion: req.BuildVersion,
 	})
 	if err != nil {
-		perr := pb.GetError(err)
+		perr := pbmodel.GetError(err)
 		if perr == nil {
-			perr = pb.NewError(pb.Error_AuthenticationFailed, "authentication failed: %v", err)
+			perr = pbmodel.NewError(pbmodel.Error_AuthenticationFailed, "authentication failed: %v", err)
 		}
-		if err := pb.Write(authStream, &pbr.AuthenticateResp{Error: perr}); err != nil {
+		if err := pbmodel.Write(authStream, &pbrserver.AuthenticateResp{Error: perr}); err != nil {
 			return nil, fmt.Errorf("relay auth err write: %w", err)
 		}
 		return nil, fmt.Errorf("auth failed: %w", perr)
@@ -458,7 +458,7 @@ func (c *relayConn) authenticate(ctx context.Context) (*relayConnAuth, error) {
 		c.logger.Debug("encrypting failed", "err", err)
 		retoken = nil
 	}
-	if err := pb.Write(authStream, &pbr.AuthenticateResp{
+	if err := pbmodel.Write(authStream, &pbrserver.AuthenticateResp{
 		ControlId:      c.server.id,
 		ReconnectToken: retoken,
 	}); err != nil {
@@ -481,8 +481,8 @@ func (c *relayConn) runRelayClients(ctx context.Context) error {
 	defer stream.Close()
 
 	for {
-		req := &pbr.ClientsReq{}
-		if err := pb.Read(stream, req); err != nil {
+		req := &pbrserver.ClientsReq{}
+		if err := pbmodel.Read(stream, req); err != nil {
 			return err
 		}
 
@@ -503,7 +503,7 @@ func (c *relayConn) runRelayClients(ctx context.Context) error {
 		// TODO we are too far off and potentially have missed messages
 		// }
 
-		resp := &pbr.ClientsResp{Offset: nextOffset}
+		resp := &pbrserver.ClientsResp{Offset: nextOffset}
 
 		for _, msg := range msgs {
 			ok, err := c.server.auth.Allow(c.auth, msg.Value.Authentication, msg.Key.Forward)
@@ -514,23 +514,23 @@ func (c *relayConn) runRelayClients(ctx context.Context) error {
 				continue
 			}
 
-			change := &pbr.ClientsResp_Change{
+			change := &pbrserver.ClientsResp_Change{
 				Forward:        msg.Key.Forward.PB(),
 				Role:           msg.Key.Role.PB(),
 				CertificateKey: msg.Key.Key.String(),
 			}
 
 			if msg.Delete {
-				change.Change = pbr.ChangeType_ChangeDel
+				change.Change = pbrserver.ChangeType_ChangeDel
 			} else {
-				change.Change = pbr.ChangeType_ChangePut
+				change.Change = pbrserver.ChangeType_ChangePut
 				change.Certificate = msg.Value.Cert.Raw
 			}
 
 			resp.Changes = append(resp.Changes, change)
 		}
 
-		if err := pb.Write(stream, resp); err != nil {
+		if err := pbmodel.Write(stream, resp); err != nil {
 			return err
 		}
 	}
@@ -549,15 +549,15 @@ func (c *relayConn) runRelayServers(ctx context.Context) error {
 			return err
 		}
 
-		req := &pbr.ServersReq{
+		req := &pbrserver.ServersReq{
 			Offset: offset,
 		}
-		if err := pb.Write(stream, req); err != nil {
+		if err := pbmodel.Write(stream, req); err != nil {
 			return err
 		}
 
-		resp := &pbr.ServersResp{}
-		if err := pb.Read(stream, resp); err != nil {
+		resp := &pbrserver.ServersResp{}
+		if err := pbmodel.Read(stream, resp); err != nil {
 			return err
 		}
 
@@ -565,7 +565,7 @@ func (c *relayConn) runRelayServers(ctx context.Context) error {
 			key := RelayForwardKey{Forward: model.ForwardFromPB(change.Forward)}
 
 			switch change.Change {
-			case pbr.ChangeType_ChangePut:
+			case pbrserver.ChangeType_ChangePut:
 				cert, err := x509.ParseCertificate(change.ServerCertificate)
 				if err != nil {
 					return err
@@ -574,7 +574,7 @@ func (c *relayConn) runRelayServers(ctx context.Context) error {
 				if err := c.forwards.Put(key, value); err != nil {
 					return err
 				}
-			case pbr.ChangeType_ChangeDel:
+			case pbrserver.ChangeType_ChangeDel:
 				if err := c.forwards.Del(key); err != nil {
 					return err
 				}

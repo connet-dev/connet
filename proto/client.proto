@@ -1,9 +1,9 @@
 syntax = "proto3";
 package client;
 
-import "shared.proto";
+import "model.proto";
 
-option go_package = "github.com/connet-dev/connet/pbc";
+option go_package = "github.com/connet-dev/connet/proto/pbclient";
 
 message Request {
   // Soft one-of
@@ -17,7 +17,7 @@ message Request {
 }
 
 message Response {
-  shared.Error error = 1;
+  model.Error error = 1;
 
   Connect connect = 2;
 

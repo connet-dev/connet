@@ -8,7 +8,7 @@ import (
 	"github.com/connet-dev/connet/certc"
 	"github.com/connet-dev/connet/logc"
 	"github.com/connet-dev/connet/model"
-	"github.com/connet-dev/connet/pbs"
+	"github.com/connet-dev/connet/proto/pbcserver"
 	"github.com/segmentio/ksuid"
 )
 
@@ -97,7 +97,7 @@ type ClientPeerKey struct {
 }
 
 type ClientPeerValue struct {
-	Peer *pbs.ClientPeer `json:"peer"`
+	Peer *pbcserver.ClientPeer `json:"peer"`
 }
 
 type cacheKey struct {

@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"net"
 
-	"github.com/connet-dev/connet/pbc"
+	"github.com/connet-dev/connet/proto/pbclient"
 	"github.com/pires/go-proxyproto"
 )
 
@@ -16,11 +16,11 @@ var (
 	ProxyV2   = ProxyVersion{"v2"}
 )
 
-func ProxyVersionFromPB(r pbc.ProxyProtoVersion) ProxyVersion {
+func ProxyVersionFromPB(r pbclient.ProxyProtoVersion) ProxyVersion {
 	switch r {
-	case pbc.ProxyProtoVersion_V1:
+	case pbclient.ProxyProtoVersion_V1:
 		return ProxyV1
-	case pbc.ProxyProtoVersion_V2:
+	case pbclient.ProxyProtoVersion_V2:
 		return ProxyV2
 	default:
 		return ProxyNone
@@ -37,14 +37,14 @@ func ParseProxyVersion(s string) (ProxyVersion, error) {
 	return ProxyNone, fmt.Errorf("invalid proxy proto version: %s", s)
 }
 
-func (v ProxyVersion) PB() pbc.ProxyProtoVersion {
+func (v ProxyVersion) PB() pbclient.ProxyProtoVersion {
 	switch v {
 	case ProxyV1:
-		return pbc.ProxyProtoVersion_V1
+		return pbclient.ProxyProtoVersion_V1
 	case ProxyV2:
-		return pbc.ProxyProtoVersion_V2
+		return pbclient.ProxyProtoVersion_V2
 	default:
-		return pbc.ProxyProtoVersion_ProxyProtoNone
+		return pbclient.ProxyProtoVersion_ProxyProtoNone
 	}
 }
 
