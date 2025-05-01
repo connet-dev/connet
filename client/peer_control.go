@@ -48,7 +48,7 @@ func (d *peerControl) runAnnounce(ctx context.Context) error {
 
 	g.Go(func() error {
 		defer d.local.logger.Debug("completed announce notify")
-		return d.local.selfListen(ctx, func(peer *pbclient.ClientPeer) error {
+		return d.local.selfListen(ctx, func(peer *pbclient.Peer) error {
 			d.local.logger.Debug("updated announce", "direct", len(peer.Directs), "relay", len(peer.Relays), "relayIds", len(peer.RelayIds))
 			return proto.Write(stream, &pbclient.Request{
 				Announce: &pbclient.Request_Announce{

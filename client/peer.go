@@ -25,7 +25,7 @@ import (
 )
 
 type peer struct {
-	self       *notify.V[*pbclient.ClientPeer]
+	self       *notify.V[*pbclient.Peer]
 	relays     *notify.V[[]*pbclient.Relay]
 	relayConns *notify.V[map[relayID]relayConn]
 	peers      *notify.V[[]*pbclient.RemotePeer]
@@ -90,7 +90,7 @@ func newPeer(direct *DirectServer, root *certc.Cert, logger *slog.Logger) (*peer
 	}
 
 	return &peer{
-		self: notify.New(&pbclient.ClientPeer{
+		self: notify.New(&pbclient.Peer{
 			ServerCertificate: serverTLSCert.Leaf.Raw,
 			ClientCertificate: clientTLSCert.Leaf.Raw,
 		}),
@@ -115,8 +115,8 @@ func (p *peer) isDirect() bool {
 }
 
 func (p *peer) setDirectAddrs(addrs []netip.AddrPort) {
-	p.self.Update(func(cp *pbclient.ClientPeer) *pbclient.ClientPeer {
-		return &pbclient.ClientPeer{
+	p.self.Update(func(cp *pbclient.Peer) *pbclient.Peer {
+		return &pbclient.Peer{
 			Direct: &pbclient.DirectRoute{
 				Addresses:         pbmodel.AsAddrPorts(addrs),
 				ServerCertificate: p.serverCert.Leaf.Raw,
@@ -135,7 +135,7 @@ func (p *peer) setRelays(relays []*pbclient.Relay) {
 	p.relays.Set(relays)
 }
 
-func (p *peer) selfListen(ctx context.Context, f func(self *pbclient.ClientPeer) error) error {
+func (p *peer) selfListen(ctx context.Context, f func(self *pbclient.Peer) error) error {
 	return p.self.Listen(ctx, f)
 }
 
@@ -204,8 +204,8 @@ func (p *peer) runShareRelays(ctx context.Context) error {
 			ids = append(ids, string(id))
 			hps = append(hps, conn.hp.PB())
 		}
-		p.self.Update(func(cp *pbclient.ClientPeer) *pbclient.ClientPeer {
-			return &pbclient.ClientPeer{
+		p.self.Update(func(cp *pbclient.Peer) *pbclient.Peer {
+			return &pbclient.Peer{
 				Direct:            cp.Direct,
 				Relays:            hps,
 				Directs:           cp.Directs,

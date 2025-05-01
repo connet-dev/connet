@@ -27,7 +27,7 @@ message Request {
   message Announce {
     model.Forward forward = 1;
     model.Role role = 2;
-    ClientPeer peer = 3;
+    Peer peer = 3;
   }
   message Relay {
     model.Forward forward = 1;
@@ -51,7 +51,7 @@ message Response {
   }
 }
 
-message ClientPeer {
+message Peer {
   DirectRoute direct = 1; // TODO remove in 0.9.0
   repeated model.HostPort relays = 2; // TODO remove in 0.10.0
   repeated model.AddrPort directs = 3;

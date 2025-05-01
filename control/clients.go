@@ -175,7 +175,7 @@ func (s *clientServer) disconnected(id ksuid.KSUID) error {
 	return s.conns.Del(ClientConnKey{id})
 }
 
-func (s *clientServer) announce(fwd model.Forward, role model.Role, id ksuid.KSUID, peer *pbclient.ClientPeer) error {
+func (s *clientServer) announce(fwd model.Forward, role model.Role, id ksuid.KSUID, peer *pbclient.Peer) error {
 	return s.peers.Put(ClientPeerKey{fwd, role, id}, ClientPeerValue{peer})
 }
 
@@ -563,7 +563,7 @@ func (s *clientStream) runErr(ctx context.Context) error {
 	}
 }
 
-func validatePeerCert(fwd model.Forward, peer *pbclient.ClientPeer) *proto.Error {
+func validatePeerCert(fwd model.Forward, peer *pbclient.Peer) *proto.Error {
 	if peer.Direct != nil {
 		if _, err := x509.ParseCertificate(peer.Direct.ClientCertificate); err != nil {
 			return proto.NewError(proto.Error_AnnounceInvalidClientCertificate, "'%s' client cert is invalid", fwd)
