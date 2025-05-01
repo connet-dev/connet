@@ -88,6 +88,7 @@ func newClientServer(
 				RelayIds:          msg.Value.Peer.RelayIds,
 				ServerCertificate: msg.Value.Peer.ServerCertificate,
 				ClientCertificate: msg.Value.Peer.ClientCertificate,
+				Peer:              msg.Value.Peer,
 			})
 			reactivate[ClientConnKey{msg.Key.ID}] = append(reactivePeers, msg.Key)
 		} else {
@@ -221,6 +222,7 @@ func (s *clientServer) listen(ctx context.Context, fwd model.Forward, role model
 					RelayIds:          msg.Value.Peer.RelayIds,
 					ServerCertificate: msg.Value.Peer.ServerCertificate,
 					ClientCertificate: msg.Value.Peer.ClientCertificate,
+					Peer:              msg.Value.Peer,
 				}
 				idx := slices.IndexFunc(peers, func(peer *pbclient.RemotePeer) bool { return peer.Id == msg.Key.ID.String() })
 				if idx >= 0 {
@@ -330,6 +332,7 @@ func (s *clientServer) runPeerCache(ctx context.Context) error {
 				RelayIds:          msg.Value.Peer.RelayIds,
 				ServerCertificate: msg.Value.Peer.ServerCertificate,
 				ClientCertificate: msg.Value.Peer.ClientCertificate,
+				Peer:              msg.Value.Peer,
 			}
 			idx := slices.IndexFunc(peers, func(peer *pbclient.RemotePeer) bool { return peer.Id == msg.Key.ID.String() })
 			if idx >= 0 {

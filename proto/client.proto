@@ -68,6 +68,7 @@ message RemotePeer {
   repeated string relayIds = 7;
   bytes server_certificate = 5;
   bytes client_certificate = 6;
+  Peer peer = 8; // TODO remove all direct fields in 0.10.0
 }
 
 message DirectRoute {

@@ -326,13 +326,13 @@ func (p *peer) newECDHConfig() (*ecdh.PrivateKey, *pbconnect.ECDHConfiguration, 
 }
 
 func (p *peer) getECDHPublicKey(cfg *pbconnect.ECDHConfiguration) (*ecdh.PublicKey, error) {
-	peers, err := p.peers.Peek()
+	remotes, err := p.peers.Peek()
 	if err != nil {
 		return nil, fmt.Errorf("peers peer: %w", err)
 	}
 	var candidates []*x509.Certificate
-	for _, peer := range peers {
-		cert, err := x509.ParseCertificate(peer.ServerCertificate)
+	for _, remote := range remotes {
+		cert, err := x509.ParseCertificate(remote.Peer.ServerCertificate)
 		if err != nil {
 			return nil, err
 		}

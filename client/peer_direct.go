@@ -78,11 +78,11 @@ func (p *directPeer) stop() {
 
 func (p *directPeer) runRemote(ctx context.Context) error {
 	return p.remote.Listen(ctx, func(remote *pbclient.RemotePeer) error {
-		if p.local.isDirect() && (remote.Direct != nil || len(remote.Directs) > 0) {
+		if p.local.isDirect() && (remote.Peer.Direct != nil || len(remote.Peer.Directs) > 0) {
 			if p.incoming == nil {
-				remoteClientCertBytes := remote.ClientCertificate
+				remoteClientCertBytes := remote.Peer.ClientCertificate
 				if len(remoteClientCertBytes) == 0 {
-					remoteClientCertBytes = remote.Direct.ClientCertificate
+					remoteClientCertBytes = remote.Peer.Direct.ClientCertificate
 				}
 				remoteClientCert, err := x509.ParseCertificate(remoteClientCertBytes)
 				if err != nil {
@@ -92,18 +92,18 @@ func (p *directPeer) runRemote(ctx context.Context) error {
 			}
 
 			if p.outgoing == nil {
-				remoteServerCertBytes := remote.ServerCertificate
+				remoteServerCertBytes := remote.Peer.ServerCertificate
 				if len(remoteServerCertBytes) == 0 {
-					remoteServerCertBytes = remote.Direct.ServerCertificate
+					remoteServerCertBytes = remote.Peer.Direct.ServerCertificate
 				}
 				remoteServerConf, err := newServerTLSConfig(remoteServerCertBytes)
 				if err != nil {
 					return fmt.Errorf("parse server certificate: %w", err)
 				}
 
-				directs := remote.Directs
+				directs := remote.Peer.Directs
 				if len(directs) == 0 {
-					directs = remote.Direct.Addresses
+					directs = remote.Peer.Direct.Addresses
 				}
 				addrs := map[netip.AddrPort]struct{}{}
 				for _, addr := range directs {
@@ -123,13 +123,13 @@ func (p *directPeer) runRemote(ctx context.Context) error {
 		}
 
 		var remotes remoteRelays
-		for _, id := range remote.RelayIds {
+		for _, id := range remote.Peer.RelayIds {
 			if remotes.ids == nil {
 				remotes.ids = map[relayID]struct{}{}
 			}
 			remotes.ids[relayID(id)] = struct{}{}
 		}
-		for _, hp := range remote.Relays {
+		for _, hp := range remote.Peer.Relays {
 			if remotes.hps == nil {
 				remotes.hps = map[model.HostPort]struct{}{}
 			}

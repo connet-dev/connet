@@ -325,17 +325,17 @@ func (d *destinationConn) close() {
 }
 
 func (d *Destination) getSourceTLS(name string) (*tls.Config, error) {
-	peers, err := d.peer.peers.Peek()
+	remotes, err := d.peer.peers.Peek()
 	if err != nil {
 		return nil, fmt.Errorf("source peers list: %w", err)
 	}
 
-	for _, peer := range peers {
-		switch cfg, err := newServerTLSConfig(peer.ServerCertificate); {
+	for _, remote := range remotes {
+		switch cfg, err := newServerTLSConfig(remote.Peer.ServerCertificate); {
 		case err != nil:
 			return nil, fmt.Errorf("source peer server cert: %w", err)
 		case cfg.name == name:
-			clientCert, err := x509.ParseCertificate(peer.ClientCertificate)
+			clientCert, err := x509.ParseCertificate(remote.Peer.ClientCertificate)
 			if err != nil {
 				return nil, fmt.Errorf("source peer client cert: %w", err)
 			}

@@ -71,6 +71,20 @@ func (d *peerControl) runAnnounce(ctx context.Context) error {
 				return fmt.Errorf("announce unexpected response")
 			}
 
+			// compat for moving to peer
+			for _, remote := range resp.Announce.Peers {
+				if remote.Peer == nil {
+					remote.Peer = &pbclient.Peer{
+						Direct:            remote.Direct,
+						Relays:            remote.Relays,
+						Directs:           remote.Directs,
+						RelayIds:          remote.RelayIds,
+						ServerCertificate: remote.ServerCertificate,
+						ClientCertificate: remote.ClientCertificate,
+					}
+				}
+			}
+
 			// TODO on server restart peers is reset and client loses active peers
 			// only for them to come back at the next tick, with different ID
 			d.local.setPeers(resp.Announce.Peers)

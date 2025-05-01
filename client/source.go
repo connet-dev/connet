@@ -282,13 +282,13 @@ func (s *Source) dialStream(ctx context.Context, dest sourceConn, stream quic.St
 }
 
 func (s *Source) getDestinationTLS(name string) (*tls.Config, error) {
-	peers, err := s.peer.peers.Peek()
+	remotes, err := s.peer.peers.Peek()
 	if err != nil {
 		return nil, fmt.Errorf("destination peers list: %w", err)
 	}
 
-	for _, peer := range peers {
-		switch cfg, err := newServerTLSConfig(peer.ServerCertificate); {
+	for _, remote := range remotes {
+		switch cfg, err := newServerTLSConfig(remote.Peer.ServerCertificate); {
 		case err != nil:
 			return nil, fmt.Errorf("destination peer server cert: %w", err)
 		case cfg.name == name:
