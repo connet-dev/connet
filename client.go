@@ -19,7 +19,7 @@ import (
 	"github.com/connet-dev/connet/netc"
 	"github.com/connet-dev/connet/notify"
 	"github.com/connet-dev/connet/proto"
-	"github.com/connet-dev/connet/proto/pbcserver"
+	"github.com/connet-dev/connet/proto/pbclient"
 	"github.com/connet-dev/connet/quicc"
 	"github.com/connet-dev/connet/statusc"
 	"github.com/quic-go/quic-go"
@@ -290,7 +290,7 @@ func (c *Client) connect(ctx context.Context, transport *quic.Transport, retoken
 	}
 	defer authStream.Close()
 
-	if err := proto.Write(authStream, &pbcserver.Authenticate{
+	if err := proto.Write(authStream, &pbclient.Authenticate{
 		Token:          c.token,
 		ReconnectToken: retoken,
 		BuildVersion:   model.BuildVersion(),
@@ -298,7 +298,7 @@ func (c *Client) connect(ctx context.Context, transport *quic.Transport, retoken
 		return nil, fmt.Errorf("write authentication: %w", err)
 	}
 
-	resp := &pbcserver.AuthenticateResp{}
+	resp := &pbclient.AuthenticateResp{}
 	if err := proto.Read(authStream, resp); err != nil {
 		return nil, fmt.Errorf("authentication read failed: %w", err)
 	}

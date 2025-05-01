@@ -16,7 +16,7 @@ import (
 	"github.com/connet-dev/connet/logc"
 	"github.com/connet-dev/connet/model"
 	"github.com/connet-dev/connet/proto"
-	"github.com/connet-dev/connet/proto/pbcserver"
+	"github.com/connet-dev/connet/proto/pbclient"
 	"github.com/connet-dev/connet/proto/pbmodel"
 	"github.com/connet-dev/connet/quicc"
 	"github.com/quic-go/quic-go"
@@ -76,11 +76,11 @@ func newClientServer(
 		return nil, fmt.Errorf("client peers snapshot: %w", err)
 	}
 
-	peersCache := map[cacheKey][]*pbcserver.ServerPeer{}
+	peersCache := map[cacheKey][]*pbclient.ServerPeer{}
 	for _, msg := range peersMsgs {
 		if reactivePeers, ok := reactivate[ClientConnKey{msg.Key.ID}]; ok {
 			key := cacheKey{msg.Key.Forward, msg.Key.Role}
-			peersCache[key] = append(peersCache[key], &pbcserver.ServerPeer{
+			peersCache[key] = append(peersCache[key], &pbclient.ServerPeer{
 				Id:                msg.Key.ID.String(),
 				Direct:            msg.Value.Peer.Direct,
 				Relays:            msg.Value.Peer.Relays,
@@ -155,7 +155,7 @@ type clientServer struct {
 	conns logc.KV[ClientConnKey, ClientConnValue]
 	peers logc.KV[ClientPeerKey, ClientPeerValue]
 
-	peersCache  map[cacheKey][]*pbcserver.ServerPeer
+	peersCache  map[cacheKey][]*pbclient.ServerPeer
 	peersOffset int64
 	peersMu     sync.RWMutex
 
@@ -175,7 +175,7 @@ func (s *clientServer) disconnected(id ksuid.KSUID) error {
 	return s.conns.Del(ClientConnKey{id})
 }
 
-func (s *clientServer) announce(fwd model.Forward, role model.Role, id ksuid.KSUID, peer *pbcserver.ClientPeer) error {
+func (s *clientServer) announce(fwd model.Forward, role model.Role, id ksuid.KSUID, peer *pbclient.ClientPeer) error {
 	return s.peers.Put(ClientPeerKey{fwd, role, id}, ClientPeerValue{peer})
 }
 
@@ -183,14 +183,14 @@ func (s *clientServer) revoke(fwd model.Forward, role model.Role, id ksuid.KSUID
 	return s.peers.Del(ClientPeerKey{fwd, role, id})
 }
 
-func (s *clientServer) announcements(fwd model.Forward, role model.Role) ([]*pbcserver.ServerPeer, int64) {
+func (s *clientServer) announcements(fwd model.Forward, role model.Role) ([]*pbclient.ServerPeer, int64) {
 	s.peersMu.RLock()
 	defer s.peersMu.RUnlock()
 
 	return slices.Clone(s.peersCache[cacheKey{fwd, role}]), s.peersOffset
 }
 
-func (s *clientServer) listen(ctx context.Context, fwd model.Forward, role model.Role, notify func(peers []*pbcserver.ServerPeer) error) error {
+func (s *clientServer) listen(ctx context.Context, fwd model.Forward, role model.Role, notify func(peers []*pbclient.ServerPeer) error) error {
 	peers, offset := s.announcements(fwd, role)
 	if err := notify(peers); err != nil {
 		return err
@@ -209,11 +209,11 @@ func (s *clientServer) listen(ctx context.Context, fwd model.Forward, role model
 			}
 
 			if msg.Delete {
-				peers = slices.DeleteFunc(peers, func(peer *pbcserver.ServerPeer) bool {
+				peers = slices.DeleteFunc(peers, func(peer *pbclient.ServerPeer) bool {
 					return peer.Id == msg.Key.ID.String()
 				})
 			} else {
-				npeer := &pbcserver.ServerPeer{
+				npeer := &pbclient.ServerPeer{
 					Id:                msg.Key.ID.String(),
 					Direct:            msg.Value.Peer.Direct,
 					Relays:            msg.Value.Peer.Relays,
@@ -222,7 +222,7 @@ func (s *clientServer) listen(ctx context.Context, fwd model.Forward, role model
 					ServerCertificate: msg.Value.Peer.ServerCertificate,
 					ClientCertificate: msg.Value.Peer.ClientCertificate,
 				}
-				idx := slices.IndexFunc(peers, func(peer *pbcserver.ServerPeer) bool { return peer.Id == msg.Key.ID.String() })
+				idx := slices.IndexFunc(peers, func(peer *pbclient.ServerPeer) bool { return peer.Id == msg.Key.ID.String() })
 				if idx >= 0 {
 					peers[idx] = npeer
 				} else {
@@ -313,7 +313,7 @@ func (s *clientServer) runPeerCache(ctx context.Context) error {
 		key := cacheKey{msg.Key.Forward, msg.Key.Role}
 		peers := s.peersCache[key]
 		if msg.Delete {
-			peers = slices.DeleteFunc(peers, func(peer *pbcserver.ServerPeer) bool {
+			peers = slices.DeleteFunc(peers, func(peer *pbclient.ServerPeer) bool {
 				return peer.Id == msg.Key.ID.String()
 			})
 			if len(peers) == 0 {
@@ -322,7 +322,7 @@ func (s *clientServer) runPeerCache(ctx context.Context) error {
 				s.peersCache[key] = peers
 			}
 		} else {
-			npeer := &pbcserver.ServerPeer{
+			npeer := &pbclient.ServerPeer{
 				Id:                msg.Key.ID.String(),
 				Direct:            msg.Value.Peer.Direct,
 				Relays:            msg.Value.Peer.Relays,
@@ -331,7 +331,7 @@ func (s *clientServer) runPeerCache(ctx context.Context) error {
 				ServerCertificate: msg.Value.Peer.ServerCertificate,
 				ClientCertificate: msg.Value.Peer.ClientCertificate,
 			}
-			idx := slices.IndexFunc(peers, func(peer *pbcserver.ServerPeer) bool { return peer.Id == msg.Key.ID.String() })
+			idx := slices.IndexFunc(peers, func(peer *pbclient.ServerPeer) bool { return peer.Id == msg.Key.ID.String() })
 			if idx >= 0 {
 				peers[idx] = npeer
 			} else {
@@ -478,7 +478,7 @@ func (c *clientConn) authenticate(ctx context.Context) (ClientAuthentication, ks
 	}
 	defer authStream.Close()
 
-	req := &pbcserver.Authenticate{}
+	req := &pbclient.Authenticate{}
 	if err := proto.Read(authStream, req); err != nil {
 		return nil, ksuid.Nil, fmt.Errorf("client auth read: %w", err)
 	}
@@ -495,7 +495,7 @@ func (c *clientConn) authenticate(ctx context.Context) (ClientAuthentication, ks
 		if perr == nil {
 			perr = proto.NewError(proto.Error_AuthenticationFailed, "authentication failed: %v", err)
 		}
-		if err := proto.Write(authStream, &pbcserver.AuthenticateResp{Error: perr}); err != nil {
+		if err := proto.Write(authStream, &pbclient.AuthenticateResp{Error: perr}); err != nil {
 			return nil, ksuid.Nil, fmt.Errorf("client auth err write: %w", err)
 		}
 		return nil, ksuid.Nil, fmt.Errorf("auth failed: %w", perr)
@@ -512,7 +512,7 @@ func (c *clientConn) authenticate(ctx context.Context) (ClientAuthentication, ks
 	origin, err := pbmodel.AddrPortFromNet(c.conn.RemoteAddr())
 	if err != nil {
 		err := proto.NewError(proto.Error_AuthenticationFailed, "cannot resolve origin: %v", err)
-		if err := proto.Write(authStream, &pbcserver.AuthenticateResp{Error: err}); err != nil {
+		if err := proto.Write(authStream, &pbclient.AuthenticateResp{Error: err}); err != nil {
 			return nil, ksuid.Nil, fmt.Errorf("client auth err write: %w", err)
 		}
 		return nil, ksuid.Nil, fmt.Errorf("client addr port from net: %w", err)
@@ -523,7 +523,7 @@ func (c *clientConn) authenticate(ctx context.Context) (ClientAuthentication, ks
 		c.logger.Debug("encrypting failed", "err", err)
 		retoken = nil
 	}
-	if err := proto.Write(authStream, &pbcserver.AuthenticateResp{
+	if err := proto.Write(authStream, &pbclient.AuthenticateResp{
 		Public:         origin,
 		ReconnectToken: retoken,
 	}); err != nil {
@@ -548,7 +548,7 @@ func (s *clientStream) run(ctx context.Context) {
 }
 
 func (s *clientStream) runErr(ctx context.Context) error {
-	req, err := pbcserver.ReadRequest(s.stream)
+	req, err := pbclient.ReadRequest(s.stream)
 	if err != nil {
 		return err
 	}
@@ -563,7 +563,7 @@ func (s *clientStream) runErr(ctx context.Context) error {
 	}
 }
 
-func validatePeerCert(fwd model.Forward, peer *pbcserver.ClientPeer) *proto.Error {
+func validatePeerCert(fwd model.Forward, peer *pbclient.ClientPeer) *proto.Error {
 	if peer.Direct != nil {
 		if _, err := x509.ParseCertificate(peer.Direct.ClientCertificate); err != nil {
 			return proto.NewError(proto.Error_AnnounceInvalidClientCertificate, "'%s' client cert is invalid", fwd)
@@ -592,7 +592,7 @@ func validatePeerCert(fwd model.Forward, peer *pbcserver.ClientPeer) *proto.Erro
 	return nil
 }
 
-func (s *clientStream) announce(ctx context.Context, req *pbcserver.Request_Announce) error {
+func (s *clientStream) announce(ctx context.Context, req *pbclient.Request_Announce) error {
 	fwd := model.ForwardFromPB(req.Forward)
 	role := model.RoleFromPB(req.Role)
 	if newFwd, err := s.conn.server.auth.Validate(s.conn.auth, fwd, role); err != nil {
@@ -600,7 +600,7 @@ func (s *clientStream) announce(ctx context.Context, req *pbcserver.Request_Anno
 		if perr == nil {
 			perr = proto.NewError(proto.Error_AnnounceValidationFailed, "failed to validate forward '%s': %v", fwd, err)
 		}
-		if err := proto.Write(s.stream, &pbcserver.Response{Error: perr}); err != nil {
+		if err := proto.Write(s.stream, &pbclient.Response{Error: perr}); err != nil {
 			return fmt.Errorf("client write auth err: %w", err)
 		}
 		return perr
@@ -609,7 +609,7 @@ func (s *clientStream) announce(ctx context.Context, req *pbcserver.Request_Anno
 	}
 
 	if err := validatePeerCert(fwd, req.Peer); err != nil {
-		if err := proto.Write(s.stream, &pbcserver.Response{Error: err}); err != nil {
+		if err := proto.Write(s.stream, &pbclient.Response{Error: err}); err != nil {
 			return fmt.Errorf("client write cert err: %w", err)
 		}
 		return err
@@ -628,20 +628,20 @@ func (s *clientStream) announce(ctx context.Context, req *pbcserver.Request_Anno
 
 	g.Go(func() error {
 		for {
-			req, err := pbcserver.ReadRequest(s.stream)
+			req, err := pbclient.ReadRequest(s.stream)
 			if err != nil {
 				return err
 			}
 			if req.Announce == nil {
 				respErr := proto.NewError(proto.Error_RequestUnknown, "unexpected request")
-				if err := proto.Write(s.stream, &pbcserver.Response{Error: respErr}); err != nil {
+				if err := proto.Write(s.stream, &pbclient.Response{Error: respErr}); err != nil {
 					return fmt.Errorf("client write protocol err: %w", err)
 				}
 				return err
 			}
 
 			if err := validatePeerCert(fwd, req.Announce.Peer); err != nil {
-				if err := proto.Write(s.stream, &pbcserver.Response{Error: err}); err != nil {
+				if err := proto.Write(s.stream, &pbclient.Response{Error: err}); err != nil {
 					return fmt.Errorf("client write cert err: %w", err)
 				}
 				return err
@@ -655,11 +655,11 @@ func (s *clientStream) announce(ctx context.Context, req *pbcserver.Request_Anno
 
 	g.Go(func() error {
 		defer s.conn.logger.Debug("completed sources notify")
-		return s.conn.server.listen(ctx, fwd, role.Invert(), func(peers []*pbcserver.ServerPeer) error {
+		return s.conn.server.listen(ctx, fwd, role.Invert(), func(peers []*pbclient.ServerPeer) error {
 			s.conn.logger.Debug("updated sources list", "peers", len(peers))
 
-			if err := proto.Write(s.stream, &pbcserver.Response{
-				Announce: &pbcserver.Response_Announce{
+			if err := proto.Write(s.stream, &pbclient.Response{
+				Announce: &pbclient.Response_Announce{
 					Peers: peers,
 				},
 			}); err != nil {
@@ -673,7 +673,7 @@ func (s *clientStream) announce(ctx context.Context, req *pbcserver.Request_Anno
 	return g.Wait()
 }
 
-func (s *clientStream) relay(ctx context.Context, req *pbcserver.Request_Relay) error {
+func (s *clientStream) relay(ctx context.Context, req *pbclient.Request_Relay) error {
 	fwd := model.ForwardFromPB(req.Forward)
 	role := model.RoleFromPB(req.Role)
 	if newFwd, err := s.conn.server.auth.Validate(s.conn.auth, fwd, role); err != nil {
@@ -681,7 +681,7 @@ func (s *clientStream) relay(ctx context.Context, req *pbcserver.Request_Relay) 
 		if perr == nil {
 			perr = proto.NewError(proto.Error_RelayValidationFailed, "failed to validate desination '%s': %v", fwd, err)
 		}
-		if err := proto.Write(s.stream, &pbcserver.Response{Error: perr}); err != nil {
+		if err := proto.Write(s.stream, &pbclient.Response{Error: perr}); err != nil {
 			return fmt.Errorf("client relay auth err response: %w", err)
 		}
 		return perr
@@ -692,7 +692,7 @@ func (s *clientStream) relay(ctx context.Context, req *pbcserver.Request_Relay) 
 	clientCert, err := x509.ParseCertificate(req.ClientCertificate)
 	if err != nil {
 		err := proto.NewError(proto.Error_RelayInvalidCertificate, "invalid certificate: %v", err)
-		if err := proto.Write(s.stream, &pbcserver.Response{Error: err}); err != nil {
+		if err := proto.Write(s.stream, &pbclient.Response{Error: err}); err != nil {
 			return fmt.Errorf("client relay cert err response: %w", err)
 		}
 		return err
@@ -711,9 +711,9 @@ func (s *clientStream) relay(ctx context.Context, req *pbcserver.Request_Relay) 
 		return s.conn.server.relays.Client(ctx, fwd, role, clientCert, s.conn.auth, func(relays map[ksuid.KSUID]relayCacheValue) error {
 			s.conn.logger.Debug("updated relay list", "relays", len(relays))
 
-			var addrs []*pbcserver.Relay
+			var addrs []*pbclient.Relay
 			for id, value := range relays {
-				addrs = append(addrs, &pbcserver.Relay{
+				addrs = append(addrs, &pbclient.Relay{
 					Id:                id.String(),
 					Address:           value.Hostports[0].PB(),
 					Addresses:         iterc.MapSlice(value.Hostports, model.HostPort.PB),
@@ -721,8 +721,8 @@ func (s *clientStream) relay(ctx context.Context, req *pbcserver.Request_Relay) 
 				})
 			}
 
-			if err := proto.Write(s.stream, &pbcserver.Response{
-				Relay: &pbcserver.Response_Relays{
+			if err := proto.Write(s.stream, &pbclient.Response{
+				Relay: &pbclient.Response_Relays{
 					Relays: addrs,
 				},
 			}); err != nil {
@@ -735,8 +735,8 @@ func (s *clientStream) relay(ctx context.Context, req *pbcserver.Request_Relay) 
 	return g.Wait()
 }
 
-func (s *clientStream) unknown(_ context.Context, req *pbcserver.Request) error {
+func (s *clientStream) unknown(_ context.Context, req *pbclient.Request) error {
 	s.conn.logger.Error("unknown request", "req", req)
 	err := proto.NewError(proto.Error_RequestUnknown, "unknown request: %v", req)
-	return proto.Write(s.stream, &pbcserver.Response{Error: err})
+	return proto.Write(s.stream, &pbclient.Response{Error: err})
 }

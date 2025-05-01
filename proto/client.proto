@@ -1,10 +1,10 @@
 syntax = "proto3";
-package clients_server;
+package client;
 
 import "proto.proto";
 import "model.proto";
 
-option go_package = "github.com/connet-dev/connet/proto/pbcserver";
+option go_package = "github.com/connet-dev/connet/proto/pbclient";
 
 message Authenticate {
   string token = 1;

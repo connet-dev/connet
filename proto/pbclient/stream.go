@@ -1,4 +1,4 @@
-package pbcserver
+package pbclient
 
 import (
 	"fmt"
