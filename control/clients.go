@@ -76,11 +76,11 @@ func newClientServer(
 		return nil, fmt.Errorf("client peers snapshot: %w", err)
 	}
 
-	peersCache := map[cacheKey][]*pbclient.ServerPeer{}
+	peersCache := map[cacheKey][]*pbclient.RemotePeer{}
 	for _, msg := range peersMsgs {
 		if reactivePeers, ok := reactivate[ClientConnKey{msg.Key.ID}]; ok {
 			key := cacheKey{msg.Key.Forward, msg.Key.Role}
-			peersCache[key] = append(peersCache[key], &pbclient.ServerPeer{
+			peersCache[key] = append(peersCache[key], &pbclient.RemotePeer{
 				Id:                msg.Key.ID.String(),
 				Direct:            msg.Value.Peer.Direct,
 				Relays:            msg.Value.Peer.Relays,
@@ -155,7 +155,7 @@ type clientServer struct {
 	conns logc.KV[ClientConnKey, ClientConnValue]
 	peers logc.KV[ClientPeerKey, ClientPeerValue]
 
-	peersCache  map[cacheKey][]*pbclient.ServerPeer
+	peersCache  map[cacheKey][]*pbclient.RemotePeer
 	peersOffset int64
 	peersMu     sync.RWMutex
 
@@ -183,14 +183,14 @@ func (s *clientServer) revoke(fwd model.Forward, role model.Role, id ksuid.KSUID
 	return s.peers.Del(ClientPeerKey{fwd, role, id})
 }
 
-func (s *clientServer) announcements(fwd model.Forward, role model.Role) ([]*pbclient.ServerPeer, int64) {
+func (s *clientServer) announcements(fwd model.Forward, role model.Role) ([]*pbclient.RemotePeer, int64) {
 	s.peersMu.RLock()
 	defer s.peersMu.RUnlock()
 
 	return slices.Clone(s.peersCache[cacheKey{fwd, role}]), s.peersOffset
 }
 
-func (s *clientServer) listen(ctx context.Context, fwd model.Forward, role model.Role, notify func(peers []*pbclient.ServerPeer) error) error {
+func (s *clientServer) listen(ctx context.Context, fwd model.Forward, role model.Role, notify func(peers []*pbclient.RemotePeer) error) error {
 	peers, offset := s.announcements(fwd, role)
 	if err := notify(peers); err != nil {
 		return err
@@ -209,11 +209,11 @@ func (s *clientServer) listen(ctx context.Context, fwd model.Forward, role model
 			}
 
 			if msg.Delete {
-				peers = slices.DeleteFunc(peers, func(peer *pbclient.ServerPeer) bool {
+				peers = slices.DeleteFunc(peers, func(peer *pbclient.RemotePeer) bool {
 					return peer.Id == msg.Key.ID.String()
 				})
 			} else {
-				npeer := &pbclient.ServerPeer{
+				npeer := &pbclient.RemotePeer{
 					Id:                msg.Key.ID.String(),
 					Direct:            msg.Value.Peer.Direct,
 					Relays:            msg.Value.Peer.Relays,
@@ -222,7 +222,7 @@ func (s *clientServer) listen(ctx context.Context, fwd model.Forward, role model
 					ServerCertificate: msg.Value.Peer.ServerCertificate,
 					ClientCertificate: msg.Value.Peer.ClientCertificate,
 				}
-				idx := slices.IndexFunc(peers, func(peer *pbclient.ServerPeer) bool { return peer.Id == msg.Key.ID.String() })
+				idx := slices.IndexFunc(peers, func(peer *pbclient.RemotePeer) bool { return peer.Id == msg.Key.ID.String() })
 				if idx >= 0 {
 					peers[idx] = npeer
 				} else {
@@ -313,7 +313,7 @@ func (s *clientServer) runPeerCache(ctx context.Context) error {
 		key := cacheKey{msg.Key.Forward, msg.Key.Role}
 		peers := s.peersCache[key]
 		if msg.Delete {
-			peers = slices.DeleteFunc(peers, func(peer *pbclient.ServerPeer) bool {
+			peers = slices.DeleteFunc(peers, func(peer *pbclient.RemotePeer) bool {
 				return peer.Id == msg.Key.ID.String()
 			})
 			if len(peers) == 0 {
@@ -322,7 +322,7 @@ func (s *clientServer) runPeerCache(ctx context.Context) error {
 				s.peersCache[key] = peers
 			}
 		} else {
-			npeer := &pbclient.ServerPeer{
+			npeer := &pbclient.RemotePeer{
 				Id:                msg.Key.ID.String(),
 				Direct:            msg.Value.Peer.Direct,
 				Relays:            msg.Value.Peer.Relays,
@@ -331,7 +331,7 @@ func (s *clientServer) runPeerCache(ctx context.Context) error {
 				ServerCertificate: msg.Value.Peer.ServerCertificate,
 				ClientCertificate: msg.Value.Peer.ClientCertificate,
 			}
-			idx := slices.IndexFunc(peers, func(peer *pbclient.ServerPeer) bool { return peer.Id == msg.Key.ID.String() })
+			idx := slices.IndexFunc(peers, func(peer *pbclient.RemotePeer) bool { return peer.Id == msg.Key.ID.String() })
 			if idx >= 0 {
 				peers[idx] = npeer
 			} else {
@@ -655,7 +655,7 @@ func (s *clientStream) announce(ctx context.Context, req *pbclient.Request_Annou
 
 	g.Go(func() error {
 		defer s.conn.logger.Debug("completed sources notify")
-		return s.conn.server.listen(ctx, fwd, role.Invert(), func(peers []*pbclient.ServerPeer) error {
+		return s.conn.server.listen(ctx, fwd, role.Invert(), func(peers []*pbclient.RemotePeer) error {
 			s.conn.logger.Debug("updated sources list", "peers", len(peers))
 
 			if err := proto.Write(s.stream, &pbclient.Response{

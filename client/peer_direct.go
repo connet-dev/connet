@@ -26,7 +26,7 @@ type directPeer struct {
 	local *peer
 
 	remoteID string
-	remote   *notify.V[*pbclient.ServerPeer]
+	remote   *notify.V[*pbclient.RemotePeer]
 	incoming *directPeerIncoming
 	outgoing *directPeerOutgoing
 	relays   *directPeerRelays
@@ -36,7 +36,7 @@ type directPeer struct {
 	logger *slog.Logger
 }
 
-func newPeering(local *peer, remote *pbclient.ServerPeer, logger *slog.Logger) *directPeer {
+func newPeering(local *peer, remote *pbclient.RemotePeer, logger *slog.Logger) *directPeer {
 	return &directPeer{
 		local: local,
 
@@ -77,7 +77,7 @@ func (p *directPeer) stop() {
 }
 
 func (p *directPeer) runRemote(ctx context.Context) error {
-	return p.remote.Listen(ctx, func(remote *pbclient.ServerPeer) error {
+	return p.remote.Listen(ctx, func(remote *pbclient.RemotePeer) error {
 		if p.local.isDirect() && (remote.Direct != nil || len(remote.Directs) > 0) {
 			if p.incoming == nil {
 				remoteClientCertBytes := remote.ClientCertificate

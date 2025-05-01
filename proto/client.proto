@@ -44,7 +44,7 @@ message Response {
   Relays relay = 3;
 
   message Announce {
-    repeated ServerPeer peers = 1;
+    repeated RemotePeer peers = 1;
   }
   message Relays {
     repeated Relay relays = 1;
@@ -60,7 +60,7 @@ message ClientPeer {
   bytes client_certificate = 5;
 }
 
-message ServerPeer {
+message RemotePeer {
   string id = 1;
   DirectRoute direct = 2; // TODO remove in 0.9.0
   repeated model.HostPort relays = 3; // TODO remove in 0.10.0

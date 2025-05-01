@@ -28,7 +28,7 @@ type peer struct {
 	self       *notify.V[*pbclient.ClientPeer]
 	relays     *notify.V[[]*pbclient.Relay]
 	relayConns *notify.V[map[relayID]relayConn]
-	peers      *notify.V[[]*pbclient.ServerPeer]
+	peers      *notify.V[[]*pbclient.RemotePeer]
 	peerConns  *notify.V[map[peerConnKey]quic.Connection]
 
 	direct     *DirectServer
@@ -96,7 +96,7 @@ func newPeer(direct *DirectServer, root *certc.Cert, logger *slog.Logger) (*peer
 		}),
 		relays:     notify.NewEmpty[[]*pbclient.Relay](),
 		relayConns: notify.New(map[relayID]relayConn{}),
-		peers:      notify.NewEmpty[[]*pbclient.ServerPeer](),
+		peers:      notify.NewEmpty[[]*pbclient.RemotePeer](),
 		peerConns:  notify.New(map[peerConnKey]quic.Connection{}),
 
 		direct:     direct,
@@ -139,7 +139,7 @@ func (p *peer) selfListen(ctx context.Context, f func(self *pbclient.ClientPeer)
 	return p.self.Listen(ctx, f)
 }
 
-func (p *peer) setPeers(peers []*pbclient.ServerPeer) {
+func (p *peer) setPeers(peers []*pbclient.RemotePeer) {
 	p.peers.Set(peers)
 }
 
@@ -220,7 +220,7 @@ func (p *peer) runShareRelays(ctx context.Context) error {
 
 func (p *peer) runPeers(ctx context.Context) error {
 	peersByID := map[string]*directPeer{}
-	return p.peers.Listen(ctx, func(peers []*pbclient.ServerPeer) error {
+	return p.peers.Listen(ctx, func(peers []*pbclient.RemotePeer) error {
 		p.logger.Debug("peers updated", "len", len(peers))
 
 		activeIDs := map[string]struct{}{}

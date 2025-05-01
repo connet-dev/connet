@@ -340,7 +340,7 @@ func (x *ClientPeer) GetClientCertificate() []byte {
 	return nil
 }
 
-type ServerPeer struct {
+type RemotePeer struct {
 	state             protoimpl.MessageState `protogen:"open.v1"`
 	Id                string                 `protobuf:"bytes,1,opt,name=id,proto3" json:"id,omitempty"`
 	Direct            *DirectRoute           `protobuf:"bytes,2,opt,name=direct,proto3" json:"direct,omitempty"` // TODO remove in 0.9.0
@@ -353,20 +353,20 @@ type ServerPeer struct {
 	sizeCache         protoimpl.SizeCache
 }
 
-func (x *ServerPeer) Reset() {
-	*x = ServerPeer{}
+func (x *RemotePeer) Reset() {
+	*x = RemotePeer{}
 	mi := &file_client_proto_msgTypes[5]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
 
-func (x *ServerPeer) String() string {
+func (x *RemotePeer) String() string {
 	return protoimpl.X.MessageStringOf(x)
 }
 
-func (*ServerPeer) ProtoMessage() {}
+func (*RemotePeer) ProtoMessage() {}
 
-func (x *ServerPeer) ProtoReflect() protoreflect.Message {
+func (x *RemotePeer) ProtoReflect() protoreflect.Message {
 	mi := &file_client_proto_msgTypes[5]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
@@ -378,54 +378,54 @@ func (x *ServerPeer) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use ServerPeer.ProtoReflect.Descriptor instead.
-func (*ServerPeer) Descriptor() ([]byte, []int) {
+// Deprecated: Use RemotePeer.ProtoReflect.Descriptor instead.
+func (*RemotePeer) Descriptor() ([]byte, []int) {
 	return file_client_proto_rawDescGZIP(), []int{5}
 }
 
-func (x *ServerPeer) GetId() string {
+func (x *RemotePeer) GetId() string {
 	if x != nil {
 		return x.Id
 	}
 	return ""
 }
 
-func (x *ServerPeer) GetDirect() *DirectRoute {
+func (x *RemotePeer) GetDirect() *DirectRoute {
 	if x != nil {
 		return x.Direct
 	}
 	return nil
 }
 
-func (x *ServerPeer) GetRelays() []*pbmodel.HostPort {
+func (x *RemotePeer) GetRelays() []*pbmodel.HostPort {
 	if x != nil {
 		return x.Relays
 	}
 	return nil
 }
 
-func (x *ServerPeer) GetDirects() []*pbmodel.AddrPort {
+func (x *RemotePeer) GetDirects() []*pbmodel.AddrPort {
 	if x != nil {
 		return x.Directs
 	}
 	return nil
 }
 
-func (x *ServerPeer) GetRelayIds() []string {
+func (x *RemotePeer) GetRelayIds() []string {
 	if x != nil {
 		return x.RelayIds
 	}
 	return nil
 }
 
-func (x *ServerPeer) GetServerCertificate() []byte {
+func (x *RemotePeer) GetServerCertificate() []byte {
 	if x != nil {
 		return x.ServerCertificate
 	}
 	return nil
 }
 
-func (x *ServerPeer) GetClientCertificate() []byte {
+func (x *RemotePeer) GetClientCertificate() []byte {
 	if x != nil {
 		return x.ClientCertificate
 	}
@@ -682,7 +682,7 @@ func (x *Request_Relay) GetClientCertificate() []byte {
 
 type Response_Announce struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
-	Peers         []*ServerPeer          `protobuf:"bytes,1,rep,name=peers,proto3" json:"peers,omitempty"`
+	Peers         []*RemotePeer          `protobuf:"bytes,1,rep,name=peers,proto3" json:"peers,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -717,7 +717,7 @@ func (*Response_Announce) Descriptor() ([]byte, []int) {
 	return file_client_proto_rawDescGZIP(), []int{3, 0}
 }
 
-func (x *Response_Announce) GetPeers() []*ServerPeer {
+func (x *Response_Announce) GetPeers() []*RemotePeer {
 	if x != nil {
 		return x.Peers
 	}
@@ -824,8 +824,8 @@ var file_client_proto_rawDesc = []byte{
 	0x74, 0x2e, 0x52, 0x65, 0x73, 0x70, 0x6f, 0x6e, 0x73, 0x65, 0x2e, 0x52, 0x65, 0x6c, 0x61, 0x79,
 	0x73, 0x52, 0x05, 0x72, 0x65, 0x6c, 0x61, 0x79, 0x1a, 0x34, 0x0a, 0x08, 0x41, 0x6e, 0x6e, 0x6f,
 	0x75, 0x6e, 0x63, 0x65, 0x12, 0x28, 0x0a, 0x05, 0x70, 0x65, 0x65, 0x72, 0x73, 0x18, 0x01, 0x20,
-	0x03, 0x28, 0x0b, 0x32, 0x12, 0x2e, 0x63, 0x6c, 0x69, 0x65, 0x6e, 0x74, 0x2e, 0x53, 0x65, 0x72,
-	0x76, 0x65, 0x72, 0x50, 0x65, 0x65, 0x72, 0x52, 0x05, 0x70, 0x65, 0x65, 0x72, 0x73, 0x1a, 0x2f,
+	0x03, 0x28, 0x0b, 0x32, 0x12, 0x2e, 0x63, 0x6c, 0x69, 0x65, 0x6e, 0x74, 0x2e, 0x52, 0x65, 0x6d,
+	0x6f, 0x74, 0x65, 0x50, 0x65, 0x65, 0x72, 0x52, 0x05, 0x70, 0x65, 0x65, 0x72, 0x73, 0x1a, 0x2f,
 	0x0a, 0x06, 0x52, 0x65, 0x6c, 0x61, 0x79, 0x73, 0x12, 0x25, 0x0a, 0x06, 0x72, 0x65, 0x6c, 0x61,
 	0x79, 0x73, 0x18, 0x01, 0x20, 0x03, 0x28, 0x0b, 0x32, 0x0d, 0x2e, 0x63, 0x6c, 0x69, 0x65, 0x6e,
 	0x74, 0x2e, 0x52, 0x65, 0x6c, 0x61, 0x79, 0x52, 0x06, 0x72, 0x65, 0x6c, 0x61, 0x79, 0x73, 0x22,
@@ -845,8 +845,8 @@ var file_client_proto_rawDesc = []byte{
 	0x65, 0x72, 0x74, 0x69, 0x66, 0x69, 0x63, 0x61, 0x74, 0x65, 0x12, 0x2d, 0x0a, 0x12, 0x63, 0x6c,
 	0x69, 0x65, 0x6e, 0x74, 0x5f, 0x63, 0x65, 0x72, 0x74, 0x69, 0x66, 0x69, 0x63, 0x61, 0x74, 0x65,
 	0x18, 0x05, 0x20, 0x01, 0x28, 0x0c, 0x52, 0x11, 0x63, 0x6c, 0x69, 0x65, 0x6e, 0x74, 0x43, 0x65,
-	0x72, 0x74, 0x69, 0x66, 0x69, 0x63, 0x61, 0x74, 0x65, 0x22, 0x97, 0x02, 0x0a, 0x0a, 0x53, 0x65,
-	0x72, 0x76, 0x65, 0x72, 0x50, 0x65, 0x65, 0x72, 0x12, 0x0e, 0x0a, 0x02, 0x69, 0x64, 0x18, 0x01,
+	0x72, 0x74, 0x69, 0x66, 0x69, 0x63, 0x61, 0x74, 0x65, 0x22, 0x97, 0x02, 0x0a, 0x0a, 0x52, 0x65,
+	0x6d, 0x6f, 0x74, 0x65, 0x50, 0x65, 0x65, 0x72, 0x12, 0x0e, 0x0a, 0x02, 0x69, 0x64, 0x18, 0x01,
 	0x20, 0x01, 0x28, 0x09, 0x52, 0x02, 0x69, 0x64, 0x12, 0x2b, 0x0a, 0x06, 0x64, 0x69, 0x72, 0x65,
 	0x63, 0x74, 0x18, 0x02, 0x20, 0x01, 0x28, 0x0b, 0x32, 0x13, 0x2e, 0x63, 0x6c, 0x69, 0x65, 0x6e,
 	0x74, 0x2e, 0x44, 0x69, 0x72, 0x65, 0x63, 0x74, 0x52, 0x6f, 0x75, 0x74, 0x65, 0x52, 0x06, 0x64,
@@ -908,7 +908,7 @@ var file_client_proto_goTypes = []any{
 	(*Request)(nil),           // 2: client.Request
 	(*Response)(nil),          // 3: client.Response
 	(*ClientPeer)(nil),        // 4: client.ClientPeer
-	(*ServerPeer)(nil),        // 5: client.ServerPeer
+	(*RemotePeer)(nil),        // 5: client.RemotePeer
 	(*DirectRoute)(nil),       // 6: client.DirectRoute
 	(*Relay)(nil),             // 7: client.Relay
 	(*Request_Announce)(nil),  // 8: client.Request.Announce
@@ -932,9 +932,9 @@ var file_client_proto_depIdxs = []int32{
 	6,  // 7: client.ClientPeer.direct:type_name -> client.DirectRoute
 	14, // 8: client.ClientPeer.relays:type_name -> model.HostPort
 	13, // 9: client.ClientPeer.directs:type_name -> model.AddrPort
-	6,  // 10: client.ServerPeer.direct:type_name -> client.DirectRoute
-	14, // 11: client.ServerPeer.relays:type_name -> model.HostPort
-	13, // 12: client.ServerPeer.directs:type_name -> model.AddrPort
+	6,  // 10: client.RemotePeer.direct:type_name -> client.DirectRoute
+	14, // 11: client.RemotePeer.relays:type_name -> model.HostPort
+	13, // 12: client.RemotePeer.directs:type_name -> model.AddrPort
 	13, // 13: client.DirectRoute.addresses:type_name -> model.AddrPort
 	14, // 14: client.Relay.address:type_name -> model.HostPort
 	14, // 15: client.Relay.addresses:type_name -> model.HostPort
@@ -943,7 +943,7 @@ var file_client_proto_depIdxs = []int32{
 	4,  // 18: client.Request.Announce.peer:type_name -> client.ClientPeer
 	15, // 19: client.Request.Relay.forward:type_name -> model.Forward
 	16, // 20: client.Request.Relay.role:type_name -> model.Role
-	5,  // 21: client.Response.Announce.peers:type_name -> client.ServerPeer
+	5,  // 21: client.Response.Announce.peers:type_name -> client.RemotePeer
 	7,  // 22: client.Response.Relays.relays:type_name -> client.Relay
 	23, // [23:23] is the sub-list for method output_type
 	23, // [23:23] is the sub-list for method input_type
