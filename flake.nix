@@ -74,8 +74,16 @@
                     token-file = "/etc/tokens";
                     server-addr = "192.168.1.2:19190";
                     server-cas = "/etc/server.cert";
-                    destinations.files = {
-                      url = "file:.";
+                    destinations = {
+                      files.url = "file:.";
+                      filesd = {
+                        url = "file:.";
+                        route = "direct";
+                      };
+                      filesr = {
+                        url = "file:.";
+                        route = "relay";
+                      };
                     };
                   };
                 };
@@ -99,8 +107,16 @@
                     token-file = "/etc/tokens";
                     server-addr = "192.168.1.2:19190";
                     server-cas = "/etc/server.cert";
-                    sources.files = {
-                      url = "tcp://:3000";
+                    sources = {
+                      files.url = "tcp://:3000";
+                      filesd = {
+                        url = "tcp://:3001";
+                        route = "direct";
+                      };
+                      filesr = {
+                        url = "tcp://:3002";
+                        route = "relay";
+                      };
                     };
                   };
                 };
@@ -144,6 +160,10 @@
               source.wait_for_unit("connet-client.service")
               source.wait_for_open_port(3000)
               source.succeed("${pkgs.curl}/bin/curl http://localhost:3000")
+              source.wait_for_open_port(3001)
+              source.succeed("${pkgs.curl}/bin/curl http://localhost:3001")
+              source.wait_for_open_port(3002)
+              source.succeed("${pkgs.curl}/bin/curl http://localhost:3002")
             '';
           };
         };
