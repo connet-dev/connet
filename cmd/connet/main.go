@@ -12,6 +12,7 @@ import (
 	"strings"
 	"syscall"
 
+	"github.com/connet-dev/connet/model"
 	"github.com/connet-dev/connet/statusc"
 	"github.com/pelletier/go-toml/v2"
 	"github.com/spf13/cobra"
@@ -39,6 +40,7 @@ func main() {
 	rootCmd.AddCommand(controlCmd())
 	rootCmd.AddCommand(relayCmd())
 	rootCmd.AddCommand(checkCmd())
+	rootCmd.AddCommand(versionCmd())
 
 	if err := rootCmd.ExecuteContext(ctx); err != nil {
 		if cerr := context.Cause(ctx); errors.Is(cerr, context.Canceled) {
@@ -92,6 +94,20 @@ func checkCmd() *cobra.Command {
 			return err
 		}
 
+		return nil
+	})
+
+	return cmd
+}
+
+func versionCmd() *cobra.Command {
+	cmd := &cobra.Command{
+		Use:   "version",
+		Short: "print version information",
+	}
+
+	cmd.RunE = wrapErr("run configuration check", func(_ *cobra.Command, args []string) error {
+		fmt.Println(model.BuildVersion())
 		return nil
 	})
 
