@@ -36,7 +36,7 @@ type clientAuthenticator func(serverName string, certs []*x509.Certificate) *cli
 func newClientsServer(cfg Config, tlsAuth tlsAuthenticator, clAuth clientAuthenticator) *clientsServer {
 	tlsConf := &tls.Config{
 		ClientAuth: tls.RequireAndVerifyClientCert,
-		NextProtos: model.ClientToRelayNextProtos,
+		NextProtos: model.ConnectRelayNextProtos,
 	}
 	tlsConf.GetConfigForClient = func(chi *tls.ClientHelloInfo) (*tls.Config, error) {
 		return tlsAuth(chi, tlsConf)

@@ -24,7 +24,7 @@ import (
 )
 
 type RelayAuthenticateRequest struct {
-	Proto        model.RelayToControlProto
+	Proto        model.RelayNextProto
 	Token        string
 	Addr         net.Addr
 	BuildVersion string
@@ -247,7 +247,7 @@ func (s *relayServer) runListener(ctx context.Context, ingress Ingress) error {
 
 	tlsConf := ingress.TLS.Clone()
 	if len(tlsConf.NextProtos) == 0 {
-		tlsConf.NextProtos = model.RelayToControlNextProtos
+		tlsConf.NextProtos = model.RelayNextProtos
 	}
 
 	quicConf := quicc.StdConfig
@@ -427,7 +427,7 @@ func (c *relayConn) authenticate(ctx context.Context) (*relayConnAuth, error) {
 		return nil, fmt.Errorf("auth read request: %w", err)
 	}
 
-	protocol := model.GetRelayToControlProto(c.conn)
+	protocol := model.GetRelayNextProto(c.conn)
 	auth, err := c.server.auth.Authenticate(RelayAuthenticateRequest{
 		Proto:        protocol,
 		Token:        req.Token,

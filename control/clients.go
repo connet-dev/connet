@@ -25,7 +25,7 @@ import (
 )
 
 type ClientAuthenticateRequest struct {
-	Proto        model.ClientToControlProto
+	Proto        model.ClientNextProto
 	Token        string
 	Addr         net.Addr
 	BuildVersion string
@@ -270,7 +270,7 @@ func (s *clientServer) runListener(ctx context.Context, ingress Ingress) error {
 
 	tlsConf := ingress.TLS.Clone()
 	if len(tlsConf.NextProtos) == 0 {
-		tlsConf.NextProtos = model.ClientToControlNextProtos
+		tlsConf.NextProtos = model.ClientNextProtos
 	}
 
 	quicConf := quicc.StdConfig
@@ -486,7 +486,7 @@ func (c *clientConn) authenticate(ctx context.Context) (ClientAuthentication, ks
 		return nil, ksuid.Nil, fmt.Errorf("client auth read: %w", err)
 	}
 
-	protocol := model.GetClientToControlProto(c.conn)
+	protocol := model.GetClientNextProto(c.conn)
 	auth, err := c.server.auth.Authenticate(ClientAuthenticateRequest{
 		Proto:        protocol,
 		Token:        req.Token,

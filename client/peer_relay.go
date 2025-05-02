@@ -109,7 +109,7 @@ func (r *relayPeer) connect(ctx context.Context, hp model.HostPort) (quic.Connec
 		Certificates: []tls.Certificate{r.local.clientCert},
 		RootCAs:      cfg.cas,
 		ServerName:   cfg.name,
-		NextProtos:   model.ClientToRelayNextProtos,
+		NextProtos:   model.ConnectRelayNextProtos,
 	}, quicc.StdConfig)
 	if err != nil {
 		return nil, err
