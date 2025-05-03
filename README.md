@@ -283,7 +283,7 @@ You can restrict clients and relays to connect only from specific IPs using diff
 They accept allow/deny list of strings in CIDR format, as defined by [RFC 4632](https://www.rfc-editor.org/rfc/rfc4632.html) and 
 [RFC 4291](https://www.rfc-editor.org/rfc/rfc4291.html), for example (to restrict the set of client IPs that can connect to the server):
 ```toml
-[server.ip-restriction]
+[[server.ingress]]
 allow-cidrs = ["192.0.2.0/24"]
 deny-cidrs = ["198.51.100.0/24"]
 ```
@@ -546,13 +546,14 @@ by adding account management and it is one of the easiest way to start.
  - [x] websocket join as a func
  - [x] info log on client connecting
  - [x] multiple ingress addrs
- - [ ] protos in single folder, subpackages
+ - [x] protos in single folder, subpackages
 
 ### v0.9.0
  - [ ] api to control client/control/relay
  - [ ] remove expired protocol fields
  - [ ] remove expired protocols
  - [ ] from forward to endpoint
+ - [ ] preshared clients - controless p2p
 
 ## Future
  - [ ] UDP support
@@ -564,3 +565,4 @@ by adding account management and it is one of the easiest way to start.
  - [ ] mininet testing
  - [ ] gen config
  - [ ] swift/ios/mac and java/android client libraries
+ - [ ] relay-to-relay forwarding
