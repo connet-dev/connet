@@ -14,6 +14,7 @@ import (
 	"github.com/connet-dev/connet/model"
 	"github.com/connet-dev/connet/proto"
 	"github.com/connet-dev/connet/proto/pbconnect"
+	"github.com/connet-dev/connet/proto/pberror"
 	"github.com/connet-dev/connet/quicc"
 	"github.com/quic-go/quic-go"
 	"golang.org/x/sync/errgroup"
@@ -222,7 +223,7 @@ func (d *destinationConn) runDestinationErr(ctx context.Context, stream quic.Str
 	case req.Connect != nil:
 		return d.runConnect(ctx, stream, req)
 	default:
-		return pbconnect.WriteError(stream, proto.Error_RequestUnknown, "unknown request: %v", req)
+		return pbconnect.WriteError(stream, pberror.Error_RequestUnknown, "unknown request: %v", req)
 	}
 }
 
@@ -244,11 +245,11 @@ func (d *destinationConn) runConnect(ctx context.Context, stream quic.Stream, re
 		encryption, err := model.SelectEncryptionScheme(d.dst.cfg.RelayEncryptions, srcEncryptions)
 		switch {
 		case err != nil:
-			return pbconnect.WriteError(stream, proto.Error_DestinationRelayEncryptionError, "select encryption scheme: %v", err)
+			return pbconnect.WriteError(stream, pberror.Error_DestinationRelayEncryptionError, "select encryption scheme: %v", err)
 		case encryption == model.TLSEncryption:
 			scfg, err := d.dst.getSourceTLS(req.Connect.SourceTls.ClientName)
 			if err != nil {
-				return pbconnect.WriteError(stream, proto.Error_DestinationRelayEncryptionError, "destination tls: %v", err)
+				return pbconnect.WriteError(stream, pberror.Error_DestinationRelayEncryptionError, "destination tls: %v", err)
 			}
 			srcConfig = scfg
 
@@ -260,12 +261,12 @@ func (d *destinationConn) runConnect(ctx context.Context, stream quic.Stream, re
 			// get check peer public key
 			srcPublic, err := d.dst.peer.getECDHPublicKey(req.Connect.SourceDhX25519)
 			if err != nil {
-				return pbconnect.WriteError(stream, proto.Error_DestinationRelayEncryptionError, "destination public key: %v", err)
+				return pbconnect.WriteError(stream, pberror.Error_DestinationRelayEncryptionError, "destination public key: %v", err)
 			}
 
 			dstSecret, ecdhCfg, err := d.dst.peer.newECDHConfig()
 			if err != nil {
-				return pbconnect.WriteError(stream, proto.Error_DestinationRelayEncryptionError, "new ecdh config: %v", err)
+				return pbconnect.WriteError(stream, pberror.Error_DestinationRelayEncryptionError, "new ecdh config: %v", err)
 			}
 
 			connect.DestinationEncryption = pbconnect.RelayEncryptionScheme_DHX25519_CHACHAPOLY
@@ -273,13 +274,13 @@ func (d *destinationConn) runConnect(ctx context.Context, stream quic.Stream, re
 
 			streamer, err := cryptoc.NewStreamer(dstSecret, srcPublic, false)
 			if err != nil {
-				return pbconnect.WriteError(stream, proto.Error_DestinationRelayEncryptionError, "new streamer: %v", err)
+				return pbconnect.WriteError(stream, pberror.Error_DestinationRelayEncryptionError, "new streamer: %v", err)
 			}
 			srcStreamer = streamer
 		case encryption == model.NoEncryption:
 			// do nothing
 		default:
-			return pbconnect.WriteError(stream, proto.Error_DestinationRelayEncryptionError, "unknown encryption scheme: %s", encryption)
+			return pbconnect.WriteError(stream, pberror.Error_DestinationRelayEncryptionError, "unknown encryption scheme: %s", encryption)
 		}
 	}
 

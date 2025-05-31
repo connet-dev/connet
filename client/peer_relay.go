@@ -14,6 +14,7 @@ import (
 	"github.com/connet-dev/connet/netc"
 	"github.com/connet-dev/connet/proto"
 	"github.com/connet-dev/connet/proto/pbconnect"
+	"github.com/connet-dev/connet/proto/pberror"
 	"github.com/connet-dev/connet/quicc"
 	"github.com/quic-go/quic-go"
 	"golang.org/x/sync/errgroup"
@@ -85,16 +86,15 @@ func (r *relayPeer) runConn(ctx context.Context) error {
 	}
 }
 
-func (r *relayPeer) connectAny(ctx context.Context) (relayConn, error) {
+func (r *relayPeer) connectAny(ctx context.Context) (quic.Connection, error) {
 	for _, hp := range r.serverHostports {
 		if conn, err := r.connect(ctx, hp); err != nil {
 			r.logger.Debug("cannot connet relay", "hostport", hp, "err", err)
 		} else {
-			// compat: use the first one as "connected relay" since old peers will only look at it anyways
-			return relayConn{conn, r.serverHostports[0]}, nil
+			return conn, nil
 		}
 	}
-	return relayConn{}, fmt.Errorf("cannot connect to relay: %s", r.serverID)
+	return nil, fmt.Errorf("cannot connect to relay: %s", r.serverID)
 }
 
 func (r *relayPeer) connect(ctx context.Context, hp model.HostPort) (quic.Connection, error) {
@@ -116,7 +116,7 @@ func (r *relayPeer) connect(ctx context.Context, hp model.HostPort) (quic.Connec
 	}
 
 	if err := r.check(ctx, conn); err != nil {
-		conn.CloseWithError(quic.ApplicationErrorCode(proto.Error_ConnectionCheckFailed), "connection check failed")
+		conn.CloseWithError(quic.ApplicationErrorCode(pberror.Error_ConnectionCheckFailed), "connection check failed")
 		return nil, err
 	}
 	return conn, nil
@@ -139,21 +139,21 @@ func (r *relayPeer) check(ctx context.Context, conn quic.Connection) error {
 	return nil
 }
 
-func (r *relayPeer) keepalive(ctx context.Context, conn relayConn) error {
-	defer conn.conn.CloseWithError(quic.ApplicationErrorCode(proto.Error_RelayKeepaliveClosed), "keepalive closed")
+func (r *relayPeer) keepalive(ctx context.Context, conn quic.Connection) error {
+	defer conn.CloseWithError(quic.ApplicationErrorCode(pberror.Error_RelayKeepaliveClosed), "keepalive closed")
 
 	r.local.addRelayConn(r.serverID, conn)
 	defer r.local.removeRelayConn(r.serverID)
 
-	quicc.RTTLogStats(conn.conn, r.logger)
+	quicc.RTTLogStats(conn, r.logger)
 	for {
 		select {
 		case <-ctx.Done():
 			return context.Cause(ctx)
-		case <-conn.conn.Context().Done():
-			return context.Cause(conn.conn.Context())
+		case <-conn.Context().Done():
+			return context.Cause(conn.Context())
 		case <-time.After(30 * time.Second):
-			quicc.RTTLogStats(conn.conn, r.logger)
+			quicc.RTTLogStats(conn, r.logger)
 		}
 	}
 }

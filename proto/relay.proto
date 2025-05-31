@@ -1,21 +1,20 @@
 syntax = "proto3";
 package relay;
 
-import "proto.proto";
 import "model.proto";
+import "error.proto";
 
 option go_package = "github.com/connet-dev/connet/proto/pbrelay";
 
 message AuthenticateReq {
   string token = 1;
-  model.HostPort addr = 2; // TODO remove in 0.9.0
   repeated model.HostPort addresses = 5;
   bytes reconnect_token = 3;
   string build_version = 4;
 }
 
 message AuthenticateResp {
-  proto.Error error = 1;
+  error.Error error = 1;
   string control_id = 2;
   bytes reconnect_token = 3;
 }

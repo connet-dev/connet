@@ -27,7 +27,7 @@ import (
 type peer struct {
 	self       *notify.V[*pbclient.Peer]
 	relays     *notify.V[[]*pbclient.Relay]
-	relayConns *notify.V[map[relayID]relayConn]
+	relayConns *notify.V[map[relayID]quic.Connection]
 	peers      *notify.V[[]*pbclient.RemotePeer]
 	peerConns  *notify.V[map[peerConnKey]quic.Connection]
 
@@ -64,11 +64,6 @@ func (s peerStyle) String() string {
 	}
 }
 
-type relayConn struct { // TODO remove in 0.10.0
-	conn quic.Connection
-	hp   model.HostPort
-}
-
 func newPeer(direct *DirectServer, root *certc.Cert, logger *slog.Logger) (*peer, error) {
 	serverCert, err := root.NewServer(certc.CertOpts{
 		Domains: []string{netc.GenServerName("connet-direct")},
@@ -95,7 +90,7 @@ func newPeer(direct *DirectServer, root *certc.Cert, logger *slog.Logger) (*peer
 			ClientCertificate: clientTLSCert.Leaf.Raw,
 		}),
 		relays:     notify.NewEmpty[[]*pbclient.Relay](),
-		relayConns: notify.New(map[relayID]relayConn{}),
+		relayConns: notify.New(map[relayID]quic.Connection{}),
 		peers:      notify.NewEmpty[[]*pbclient.RemotePeer](),
 		peerConns:  notify.New(map[peerConnKey]quic.Connection{}),
 
@@ -117,13 +112,7 @@ func (p *peer) isDirect() bool {
 func (p *peer) setDirectAddrs(addrs []netip.AddrPort) {
 	p.self.Update(func(cp *pbclient.Peer) *pbclient.Peer {
 		return &pbclient.Peer{
-			Direct: &pbclient.DirectRoute{
-				Addresses:         pbmodel.AsAddrPorts(addrs),
-				ServerCertificate: p.serverCert.Leaf.Raw,
-				ClientCertificate: p.clientCert.Leaf.Raw,
-			},
 			Directs:           pbmodel.AsAddrPorts(addrs),
-			Relays:            cp.Relays,
 			RelayIds:          cp.RelayIds,
 			ServerCertificate: cp.ServerCertificate,
 			ClientCertificate: cp.ClientCertificate,
@@ -162,12 +151,6 @@ func (p *peer) runRelays(ctx context.Context) error {
 		for _, relay := range relays {
 			id := relayID(relay.Id)
 			hps := model.HostPortFromPBs(relay.Addresses)
-			if id == "" {
-				// TODO remove in 0.10.0: if id is missing, client is connected to an old server, use the hostport as id
-				hp := model.HostPortFromPB(relay.Address)
-				id = relayID(hp.String())
-				hps = append(hps, hp)
-			}
 
 			activeRelays[id] = struct{}{}
 
@@ -196,18 +179,14 @@ func (p *peer) runRelays(ctx context.Context) error {
 }
 
 func (p *peer) runShareRelays(ctx context.Context) error {
-	return p.relayConns.Listen(ctx, func(conns map[relayID]relayConn) error {
+	return p.relayConns.Listen(ctx, func(conns map[relayID]quic.Connection) error {
 		p.logger.Debug("relays conns updated", "len", len(conns))
 		var ids []string
-		var hps []*pbmodel.HostPort
-		for id, conn := range conns {
+		for id := range conns {
 			ids = append(ids, string(id))
-			hps = append(hps, conn.hp.PB())
 		}
 		p.self.Update(func(cp *pbclient.Peer) *pbclient.Peer {
 			return &pbclient.Peer{
-				Direct:            cp.Direct,
-				Relays:            hps,
 				Directs:           cp.Directs,
 				RelayIds:          ids,
 				ServerCertificate: cp.ServerCertificate,
@@ -247,7 +226,7 @@ func (p *peer) runPeers(ctx context.Context) error {
 	})
 }
 
-func (p *peer) addRelayConn(id relayID, conn relayConn) {
+func (p *peer) addRelayConn(id relayID, conn quic.Connection) {
 	notify.MapPut(p.relayConns, id, conn)
 }
 

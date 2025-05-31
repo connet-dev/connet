@@ -1,7 +1,7 @@
 syntax = "proto3";
-package proto;
+package error;
 
-option go_package = "github.com/connet-dev/connet/proto";
+option go_package = "github.com/connet-dev/connet/proto/pberror";
 
 message Error {
   Code code = 1;
