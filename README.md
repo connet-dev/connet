@@ -549,9 +549,10 @@ by adding account management and it is one of the easiest way to start.
  - [x] protos in single folder, subpackages
 
 ### v0.9.0
+ - [x] remove expired protocol fields
+ - [x] remove expired protocols
+ - [ ] refactor protocol errors
  - [ ] api to control client/control/relay
- - [ ] remove expired protocol fields
- - [ ] remove expired protocols
  - [ ] from forward to endpoint
  - [ ] preshared clients - controless p2p
 

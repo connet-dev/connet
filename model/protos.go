@@ -23,12 +23,10 @@ func GetClientNextProto(conn quic.Connection) ClientNextProto {
 
 var (
 	CNUnknown = ClientNextProto{}
-	CNv00     = ClientNextProto{"connet"}            // before 0.7.0
-	CNv01     = ClientNextProto{"connet-client/0.1"} // 0.7.0
 	CNv02     = ClientNextProto{"connet-client/0.2"} // 0.8.0
 )
 
-var AllClientNextProtos = []ClientNextProto{CNv02, CNv01, CNv00}
+var AllClientNextProtos = []ClientNextProto{CNv02}
 
 var ClientNextProtos = iterc.MapSliceStrings(AllClientNextProtos)
 
@@ -39,11 +37,10 @@ func (v ConnectDirectNextProto) String() string {
 }
 
 var (
-	CCv00 = ConnectDirectNextProto{"connet-direct"}   // pre 0.7.0
 	CCv01 = ConnectDirectNextProto{"connet-peer/0.1"} // 0.7.0
 )
 
-var AllConnectDirectNextProtos = []ConnectDirectNextProto{CCv00, CCv01}
+var AllConnectDirectNextProtos = []ConnectDirectNextProto{CCv01}
 
 var ConnectDirectNextProtos = iterc.MapSlice(AllConnectDirectNextProtos, ConnectDirectNextProto.String)
 
@@ -54,11 +51,10 @@ func (v ConnectRelayNextProto) String() string {
 }
 
 var (
-	CRv00 = ConnectRelayNextProto{"connet-relay"}          // pre 0.7.0
 	CRv01 = ConnectRelayNextProto{"connet-peer-relay/0.1"} // 0.7.0
 )
 
-var AllConnectRelayNextProtos = []ConnectRelayNextProto{CRv01, CRv00}
+var AllConnectRelayNextProtos = []ConnectRelayNextProto{CRv01}
 
 var ConnectRelayNextProtos = iterc.MapSlice(AllConnectRelayNextProtos, ConnectRelayNextProto.String)
 
@@ -80,11 +76,9 @@ func GetRelayNextProto(conn quic.Connection) RelayNextProto {
 
 var (
 	RNUnknown = RelayNextProto{}
-	RNv00     = RelayNextProto{"connet-relays"}    // pre 0.7.0
-	RNv01     = RelayNextProto{"connet-relay/0.1"} // 0.7.0
 	RNv02     = RelayNextProto{"connet-relay/0.2"} // 0.8.0
 )
 
-var AllRelayNextProtos = []RelayNextProto{RNv02, RNv01, RNv00}
+var AllRelayNextProtos = []RelayNextProto{RNv02}
 
 var RelayNextProtos = iterc.MapSliceStrings(AllRelayNextProtos)
