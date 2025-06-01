@@ -78,13 +78,9 @@ func (p *directPeer) stop() {
 
 func (p *directPeer) runRemote(ctx context.Context) error {
 	return p.remote.Listen(ctx, func(remote *pbclient.RemotePeer) error {
-		if p.local.isDirect() && (remote.Peer.Direct != nil || len(remote.Peer.Directs) > 0) {
+		if p.local.isDirect() && len(remote.Peer.Directs) > 0 {
 			if p.incoming == nil {
-				remoteClientCertBytes := remote.Peer.ClientCertificate
-				if len(remoteClientCertBytes) == 0 {
-					remoteClientCertBytes = remote.Peer.Direct.ClientCertificate
-				}
-				remoteClientCert, err := x509.ParseCertificate(remoteClientCertBytes)
+				remoteClientCert, err := x509.ParseCertificate(remote.Peer.ClientCertificate)
 				if err != nil {
 					return fmt.Errorf("parse client certificate: %w", err)
 				}
@@ -92,21 +88,13 @@ func (p *directPeer) runRemote(ctx context.Context) error {
 			}
 
 			if p.outgoing == nil {
-				remoteServerCertBytes := remote.Peer.ServerCertificate
-				if len(remoteServerCertBytes) == 0 {
-					remoteServerCertBytes = remote.Peer.Direct.ServerCertificate
-				}
-				remoteServerConf, err := newServerTLSConfig(remoteServerCertBytes)
+				remoteServerConf, err := newServerTLSConfig(remote.Peer.ServerCertificate)
 				if err != nil {
 					return fmt.Errorf("parse server certificate: %w", err)
 				}
 
-				directs := remote.Peer.Directs
-				if len(directs) == 0 {
-					directs = remote.Peer.Direct.Addresses
-				}
 				addrs := map[netip.AddrPort]struct{}{}
-				for _, addr := range directs {
+				for _, addr := range remote.Peer.Directs {
 					addrs[addr.AsNetip()] = struct{}{}
 				}
 				p.outgoing = newDirectPeerOutgoing(ctx, p, remoteServerConf, addrs)
@@ -122,24 +110,15 @@ func (p *directPeer) runRemote(ctx context.Context) error {
 			}
 		}
 
-		var remotes remoteRelays
+		remotes := map[relayID]struct{}{}
 		for _, id := range remote.Peer.RelayIds {
-			if remotes.ids == nil {
-				remotes.ids = map[relayID]struct{}{}
-			}
-			remotes.ids[relayID(id)] = struct{}{}
-		}
-		for _, hp := range remote.Peer.Relays {
-			if remotes.hps == nil {
-				remotes.hps = map[model.HostPort]struct{}{}
-			}
-			remotes.hps[model.HostPortFromPB(hp)] = struct{}{}
+			remotes[relayID(id)] = struct{}{}
 		}
 
 		switch {
 		case p.relays == nil:
 			p.relays = newDirectPeerRelays(ctx, p, remotes)
-		case remotes.isEmpty():
+		case len(remotes) == 0:
 			close(p.relays.closerCh)
 			p.relays = nil
 		default:
@@ -382,21 +361,11 @@ func (p *directPeerOutgoing) keepalive(ctx context.Context, conn quic.Connection
 
 type directPeerRelays struct {
 	parent   *directPeer
-	remotes  *notify.V[remoteRelays]
+	remotes  *notify.V[map[relayID]struct{}]
 	closerCh chan struct{}
 }
 
-type remoteRelays struct { // TODO remove 0.10.0
-	ids map[relayID]struct{}        // new remotes send relay ids
-	hps map[model.HostPort]struct{} // old relays send hostports
-}
-
-func (r remoteRelays) isEmpty() bool { return len(r.ids) == 0 && len(r.hps) == 0 }
-
-func newDirectPeerRelays(ctx context.Context, parent *directPeer, remotes remoteRelays) *directPeerRelays {
-	if remotes.isEmpty() {
-		return nil
-	}
+func newDirectPeerRelays(ctx context.Context, parent *directPeer, remotes map[relayID]struct{}) *directPeerRelays {
 	p := &directPeerRelays{
 		parent:   parent,
 		remotes:  notify.New(remotes),
@@ -408,8 +377,8 @@ func newDirectPeerRelays(ctx context.Context, parent *directPeer, remotes remote
 
 func (p *directPeerRelays) run(ctx context.Context) {
 	var (
-		locals  map[relayID]relayConn
-		remotes remoteRelays
+		locals  map[relayID]quic.Connection
+		remotes map[relayID]struct{}
 	)
 
 	active := map[relayID]model.HostPort{}
@@ -420,32 +389,19 @@ func (p *directPeerRelays) run(ctx context.Context) {
 	}()
 
 	update := func() {
-		for id, hp := range active {
+		for id := range active {
 			_, relayed := locals[id]
-			_, remoteByID := remotes.ids[id]
-			_, remoteByHP := remotes.hps[hp]
-			if !(relayed && (remoteByID || remoteByHP)) {
+			_, remoteByID := remotes[id]
+			if !(relayed && remoteByID) {
 				p.parent.local.removeActiveConn(p.parent.remoteID, peerRelay, string(id))
 				delete(active, id)
 			}
 		}
 
-		for id := range remotes.ids {
+		for id := range remotes {
 			if conn, ok := locals[id]; ok {
 				if _, ok := active[id]; !ok {
-					p.parent.local.addActiveConn(p.parent.remoteID, peerRelay, string(id), conn.conn)
-					active[id] = conn.hp
-				}
-			}
-		}
-
-		for hp := range remotes.hps {
-			for id, conn := range locals {
-				if conn.hp == hp {
-					if _, ok := active[id]; !ok {
-						p.parent.local.addActiveConn(p.parent.remoteID, peerRelay, string(id), conn.conn)
-						active[id] = conn.hp
-					}
+					p.parent.local.addActiveConn(p.parent.remoteID, peerRelay, string(id), conn)
 				}
 			}
 		}

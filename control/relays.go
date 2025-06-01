@@ -467,9 +467,6 @@ func (c *relayConn) authenticate(ctx context.Context) (*relayConnAuth, error) {
 
 	c.logger.Debug("authentication completed", "local", c.conn.LocalAddr(), "remote", c.conn.RemoteAddr(), "proto", protocol, "build", req.BuildVersion)
 	hostports := model.HostPortFromPBs(req.Addresses)
-	if len(hostports) == 0 { // compat: old relays only send a single one
-		hostports = append(hostports, model.HostPortFromPB(req.Addr))
-	}
 	return &relayConnAuth{id, auth, hostports}, nil
 }
 

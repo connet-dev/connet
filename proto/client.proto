@@ -52,34 +52,19 @@ message Response {
 }
 
 message Peer {
-  DirectRoute direct = 1; // TODO remove in 0.9.0
-  repeated model.HostPort relays = 2; // TODO remove in 0.10.0
   repeated model.AddrPort directs = 3;
   repeated string relayIds = 6;
-  bytes server_certificate = 4;
-  bytes client_certificate = 5;
+  bytes server_certificate = 4; // certificate to use when connecting to this client
+  bytes client_certificate = 5; // certificate that this client uses when connecting
 }
 
 message RemotePeer {
   string id = 1;
-  DirectRoute direct = 2; // TODO remove in 0.9.0
-  repeated model.HostPort relays = 3; // TODO remove in 0.10.0
-  repeated model.AddrPort directs = 4;
-  repeated string relayIds = 7;
-  bytes server_certificate = 5;
-  bytes client_certificate = 6;
-  Peer peer = 8; // TODO remove all direct fields in 0.10.0
-}
-
-message DirectRoute {
-  repeated model.AddrPort addresses = 1;
-  bytes server_certificate = 2;
-  bytes client_certificate = 3;
+  Peer peer = 8;
 }
 
 message Relay {
   string id = 3;
-  model.HostPort address = 1; // TODO remove in 0.10.0
   repeated model.HostPort addresses = 4;
   bytes server_certificate = 2;
 }

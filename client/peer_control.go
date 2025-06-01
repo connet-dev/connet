@@ -49,7 +49,7 @@ func (d *peerControl) runAnnounce(ctx context.Context) error {
 	g.Go(func() error {
 		defer d.local.logger.Debug("completed announce notify")
 		return d.local.selfListen(ctx, func(peer *pbclient.Peer) error {
-			d.local.logger.Debug("updated announce", "direct", len(peer.Directs), "relay", len(peer.Relays), "relayIds", len(peer.RelayIds))
+			d.local.logger.Debug("updated announce", "direct", len(peer.Directs), "relays", len(peer.RelayIds))
 			return proto.Write(stream, &pbclient.Request{
 				Announce: &pbclient.Request_Announce{
 					Forward: d.fwd.PB(),
@@ -69,20 +69,6 @@ func (d *peerControl) runAnnounce(ctx context.Context) error {
 			}
 			if resp.Announce == nil {
 				return fmt.Errorf("announce unexpected response")
-			}
-
-			// compat for moving to peer
-			for _, remote := range resp.Announce.Peers {
-				if remote.Peer == nil {
-					remote.Peer = &pbclient.Peer{
-						Direct:            remote.Direct,
-						Relays:            remote.Relays,
-						Directs:           remote.Directs,
-						RelayIds:          remote.RelayIds,
-						ServerCertificate: remote.ServerCertificate,
-						ClientCertificate: remote.ClientCertificate,
-					}
-				}
 			}
 
 			// TODO on server restart peers is reset and client loses active peers

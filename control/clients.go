@@ -81,14 +81,8 @@ func newClientServer(
 		if reactivePeers, ok := reactivate[ClientConnKey{msg.Key.ID}]; ok {
 			key := cacheKey{msg.Key.Forward, msg.Key.Role}
 			peersCache[key] = append(peersCache[key], &pbclient.RemotePeer{
-				Id:                msg.Key.ID.String(),
-				Direct:            msg.Value.Peer.Direct,
-				Relays:            msg.Value.Peer.Relays,
-				Directs:           msg.Value.Peer.Directs,
-				RelayIds:          msg.Value.Peer.RelayIds,
-				ServerCertificate: msg.Value.Peer.ServerCertificate,
-				ClientCertificate: msg.Value.Peer.ClientCertificate,
-				Peer:              msg.Value.Peer,
+				Id:   msg.Key.ID.String(),
+				Peer: msg.Value.Peer,
 			})
 			reactivate[ClientConnKey{msg.Key.ID}] = append(reactivePeers, msg.Key)
 		} else {
@@ -215,14 +209,8 @@ func (s *clientServer) listen(ctx context.Context, fwd model.Forward, role model
 				})
 			} else {
 				npeer := &pbclient.RemotePeer{
-					Id:                msg.Key.ID.String(),
-					Direct:            msg.Value.Peer.Direct,
-					Relays:            msg.Value.Peer.Relays,
-					Directs:           msg.Value.Peer.Directs,
-					RelayIds:          msg.Value.Peer.RelayIds,
-					ServerCertificate: msg.Value.Peer.ServerCertificate,
-					ClientCertificate: msg.Value.Peer.ClientCertificate,
-					Peer:              msg.Value.Peer,
+					Id:   msg.Key.ID.String(),
+					Peer: msg.Value.Peer,
 				}
 				idx := slices.IndexFunc(peers, func(peer *pbclient.RemotePeer) bool { return peer.Id == msg.Key.ID.String() })
 				if idx >= 0 {
@@ -325,14 +313,8 @@ func (s *clientServer) runPeerCache(ctx context.Context) error {
 			}
 		} else {
 			npeer := &pbclient.RemotePeer{
-				Id:                msg.Key.ID.String(),
-				Direct:            msg.Value.Peer.Direct,
-				Relays:            msg.Value.Peer.Relays,
-				Directs:           msg.Value.Peer.Directs,
-				RelayIds:          msg.Value.Peer.RelayIds,
-				ServerCertificate: msg.Value.Peer.ServerCertificate,
-				ClientCertificate: msg.Value.Peer.ClientCertificate,
-				Peer:              msg.Value.Peer,
+				Id:   msg.Key.ID.String(),
+				Peer: msg.Value.Peer,
 			}
 			idx := slices.IndexFunc(peers, func(peer *pbclient.RemotePeer) bool { return peer.Id == msg.Key.ID.String() })
 			if idx >= 0 {
@@ -567,30 +549,11 @@ func (s *clientStream) runErr(ctx context.Context) error {
 }
 
 func validatePeerCert(fwd model.Forward, peer *pbclient.Peer) *proto.Error {
-	if peer.Direct != nil {
-		if _, err := x509.ParseCertificate(peer.Direct.ClientCertificate); err != nil {
-			return proto.NewError(proto.Error_AnnounceInvalidClientCertificate, "'%s' client cert is invalid", fwd)
-		}
-		if _, err := x509.ParseCertificate(peer.Direct.ServerCertificate); err != nil {
-			return proto.NewError(proto.Error_AnnounceInvalidServerCertificate, "'%s' server cert is invalid", fwd)
-		}
-		if len(peer.Directs) == 0 {
-			peer.Directs = peer.Direct.Addresses
-		}
+	if _, err := x509.ParseCertificate(peer.ClientCertificate); err != nil {
+		return proto.NewError(proto.Error_AnnounceInvalidClientCertificate, "'%s' client cert is invalid", fwd)
 	}
-	if len(peer.ClientCertificate) > 0 {
-		if _, err := x509.ParseCertificate(peer.ClientCertificate); err != nil {
-			return proto.NewError(proto.Error_AnnounceInvalidClientCertificate, "'%s' client cert is invalid", fwd)
-		}
-	} else if peer.Direct != nil {
-		peer.ClientCertificate = peer.Direct.ClientCertificate
-	}
-	if len(peer.ServerCertificate) > 0 {
-		if _, err := x509.ParseCertificate(peer.ServerCertificate); err != nil {
-			return proto.NewError(proto.Error_AnnounceInvalidServerCertificate, "'%s' server cert is invalid", fwd)
-		}
-	} else if peer.Direct != nil {
-		peer.ServerCertificate = peer.Direct.ServerCertificate
+	if _, err := x509.ParseCertificate(peer.ServerCertificate); err != nil {
+		return proto.NewError(proto.Error_AnnounceInvalidServerCertificate, "'%s' server cert is invalid", fwd)
 	}
 	return nil
 }
@@ -718,7 +681,6 @@ func (s *clientStream) relay(ctx context.Context, req *pbclient.Request_Relay) e
 			for id, value := range relays {
 				addrs = append(addrs, &pbclient.Relay{
 					Id:                id.String(),
-					Address:           value.Hostports[0].PB(),
 					Addresses:         iterc.MapSlice(value.Hostports, model.HostPort.PB),
 					ServerCertificate: value.Cert.Raw,
 				})

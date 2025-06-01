@@ -6,8 +6,8 @@ type PeerStatus struct {
 }
 
 type RelayConnection struct {
-	ID       string `json:"id"`
-	Hostport string `json:"hostport"`
+	ID   string `json:"id"`
+	Addr string `json:"addr"`
 }
 
 type PeerConnection struct {
@@ -25,8 +25,8 @@ func (p *peer) status() (PeerStatus, error) {
 	}
 	for id, conn := range relays {
 		stat.Relays = append(stat.Relays, RelayConnection{
-			ID:       string(id),
-			Hostport: conn.hp.String(),
+			ID:   string(id),
+			Addr: conn.RemoteAddr().String(),
 		})
 	}
 
