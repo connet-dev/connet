@@ -19,6 +19,7 @@ import (
 	"github.com/connet-dev/connet/netc"
 	"github.com/connet-dev/connet/proto"
 	"github.com/connet-dev/connet/proto/pbconnect"
+	"github.com/connet-dev/connet/proto/pberror"
 	"github.com/connet-dev/connet/quicc"
 	"github.com/quic-go/quic-go"
 	"golang.org/x/sync/errgroup"
@@ -246,7 +247,7 @@ type clientConn struct {
 
 func (c *clientConn) run(ctx context.Context) {
 	c.logger.Info("new client connected", "proto", c.conn.ConnectionState().TLS.NegotiatedProtocol, "remote", c.conn.RemoteAddr())
-	defer c.conn.CloseWithError(quic.ApplicationErrorCode(proto.Error_Unknown), "connection closed")
+	defer c.conn.CloseWithError(quic.ApplicationErrorCode(pberror.Code_Unknown), "connection closed")
 
 	if err := c.runErr(ctx); err != nil {
 		c.logger.Debug("error while running client conn", "err", err)
@@ -259,7 +260,7 @@ func (c *clientConn) runErr(ctx context.Context) error {
 	serverName := c.conn.ConnectionState().TLS.ServerName
 	certs := c.conn.ConnectionState().TLS.PeerCertificates
 	if auth := c.server.auth(serverName, certs); auth == nil {
-		return c.conn.CloseWithError(quic.ApplicationErrorCode(proto.Error_AuthenticationFailed), "authentication missing")
+		return c.conn.CloseWithError(quic.ApplicationErrorCode(pberror.Code_AuthenticationFailed), "authentication missing")
 	} else {
 		c.auth = auth
 		c.logger = c.logger.With("fwd", auth.fwd, "role", auth.role, "key", auth.key)
@@ -370,14 +371,14 @@ func (c *clientConn) runSourceStreamErr(ctx context.Context, stream quic.Stream,
 func (c *clientConn) connect(ctx context.Context, stream quic.Stream, fcs *forwardClients, req *pbconnect.Request) error {
 	dests := fcs.getDestinations()
 	if len(dests) == 0 {
-		err := proto.NewError(proto.Error_DestinationNotFound, "could not find destination")
+		err := pberror.NewError(pberror.Code_DestinationNotFound, "could not find destination")
 		return proto.Write(stream, &pbconnect.Response{Error: err})
 	}
 
 	var pberrs []string
 	for _, dest := range dests {
 		if err := c.connectDestination(ctx, stream, dest, req); err != nil {
-			if pberr := proto.GetError(err); pberr != nil {
+			if pberr := pberror.GetError(err); pberr != nil {
 				pberrs = append(pberrs, pberr.Error())
 			}
 			c.logger.Debug("could not dial destination", "err", err)
@@ -387,7 +388,7 @@ func (c *clientConn) connect(ctx context.Context, stream quic.Stream, fcs *forwa
 		}
 	}
 
-	err := proto.NewError(proto.Error_DestinationDialFailed, "could not dial destinations: %v", pberrs)
+	err := pberror.NewError(pberror.Code_DestinationDialFailed, "could not dial destinations: %v", pberrs)
 	return proto.Write(stream, &pbconnect.Response{Error: err})
 }
 
@@ -418,6 +419,6 @@ func (c *clientConn) connectDestination(ctx context.Context, srcStream quic.Stre
 
 func (c *clientConn) unknown(_ context.Context, stream quic.Stream, req *pbconnect.Request) error {
 	c.logger.Error("unknown request", "req", req)
-	err := proto.NewError(proto.Error_RequestUnknown, "unknown request: %v", req)
+	err := pberror.NewError(pberror.Code_RequestUnknown, "unknown request: %v", req)
 	return proto.Write(stream, &pbconnect.Response{Error: err})
 }

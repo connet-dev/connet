@@ -14,6 +14,7 @@ import (
 	"github.com/connet-dev/connet/netc"
 	"github.com/connet-dev/connet/proto"
 	"github.com/connet-dev/connet/proto/pbconnect"
+	"github.com/connet-dev/connet/proto/pberror"
 	"github.com/connet-dev/connet/quicc"
 	"github.com/quic-go/quic-go"
 	"golang.org/x/sync/errgroup"
@@ -115,7 +116,7 @@ func (r *relayPeer) connect(ctx context.Context, hp model.HostPort) (quic.Connec
 	}
 
 	if err := r.check(ctx, conn); err != nil {
-		conn.CloseWithError(quic.ApplicationErrorCode(proto.Error_ConnectionCheckFailed), "connection check failed")
+		conn.CloseWithError(quic.ApplicationErrorCode(pberror.Code_ConnectionCheckFailed), "connection check failed")
 		return nil, err
 	}
 	return conn, nil
@@ -139,7 +140,7 @@ func (r *relayPeer) check(ctx context.Context, conn quic.Connection) error {
 }
 
 func (r *relayPeer) keepalive(ctx context.Context, conn quic.Connection) error {
-	defer conn.CloseWithError(quic.ApplicationErrorCode(proto.Error_RelayKeepaliveClosed), "keepalive closed")
+	defer conn.CloseWithError(quic.ApplicationErrorCode(pberror.Code_RelayKeepaliveClosed), "keepalive closed")
 
 	r.local.addRelayConn(r.serverID, conn)
 	defer r.local.removeRelayConn(r.serverID)

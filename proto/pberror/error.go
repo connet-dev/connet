@@ -1,4 +1,4 @@
-package proto
+package pberror
 
 import (
 	"errors"
@@ -7,7 +7,7 @@ import (
 	"github.com/quic-go/quic-go"
 )
 
-func NewError(code Error_Code, msg string, args ...any) *Error {
+func NewError(code Code, msg string, args ...any) *Error {
 	return &Error{
 		Code:    code,
 		Message: fmt.Sprintf(msg, args...),

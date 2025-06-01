@@ -10,7 +10,7 @@ import (
 	"sync/atomic"
 
 	"github.com/connet-dev/connet/model"
-	"github.com/connet-dev/connet/proto"
+	"github.com/connet-dev/connet/proto/pberror"
 	"github.com/connet-dev/connet/quicc"
 	"github.com/quic-go/quic-go"
 )
@@ -148,7 +148,7 @@ func (s *DirectServer) Run(ctx context.Context) error {
 func (s *DirectServer) runConn(conn quic.Connection) {
 	srv := s.getServer(conn.ConnectionState().TLS.ServerName)
 	if srv == nil {
-		conn.CloseWithError(quic.ApplicationErrorCode(proto.Error_AuthenticationFailed), "unknown server")
+		conn.CloseWithError(quic.ApplicationErrorCode(pberror.Code_AuthenticationFailed), "unknown server")
 		return
 	}
 
@@ -158,7 +158,7 @@ func (s *DirectServer) runConn(conn quic.Connection) {
 
 	exp := srv.dequeue(key, cert)
 	if exp == nil {
-		conn.CloseWithError(quic.ApplicationErrorCode(proto.Error_AuthenticationFailed), "unknown client")
+		conn.CloseWithError(quic.ApplicationErrorCode(pberror.Code_AuthenticationFailed), "unknown client")
 		return
 	}
 

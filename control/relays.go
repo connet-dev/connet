@@ -16,6 +16,7 @@ import (
 	"github.com/connet-dev/connet/model"
 	"github.com/connet-dev/connet/netc"
 	"github.com/connet-dev/connet/proto"
+	"github.com/connet-dev/connet/proto/pberror"
 	"github.com/connet-dev/connet/proto/pbrelay"
 	"github.com/connet-dev/connet/quicc"
 	"github.com/quic-go/quic-go"
@@ -365,7 +366,7 @@ type relayConnAuth struct {
 }
 
 func (c *relayConn) run(ctx context.Context) {
-	defer c.conn.CloseWithError(quic.ApplicationErrorCode(proto.Error_Unknown), "connection closed")
+	defer c.conn.CloseWithError(quic.ApplicationErrorCode(pberror.Code_Unknown), "connection closed")
 
 	if err := c.runErr(ctx); err != nil {
 		c.logger.Debug("error while running zzz", "err", err)
@@ -374,10 +375,10 @@ func (c *relayConn) run(ctx context.Context) {
 
 func (c *relayConn) runErr(ctx context.Context) error {
 	if rauth, err := c.authenticate(ctx); err != nil {
-		if perr := proto.GetError(err); perr != nil {
+		if perr := pberror.GetError(err); perr != nil {
 			c.conn.CloseWithError(quic.ApplicationErrorCode(perr.Code), perr.Message)
 		} else {
-			c.conn.CloseWithError(quic.ApplicationErrorCode(proto.Error_AuthenticationFailed), "Error while authenticating")
+			c.conn.CloseWithError(quic.ApplicationErrorCode(pberror.Code_AuthenticationFailed), "Error while authenticating")
 		}
 		return err
 	} else {
@@ -435,9 +436,9 @@ func (c *relayConn) authenticate(ctx context.Context) (*relayConnAuth, error) {
 		BuildVersion: req.BuildVersion,
 	})
 	if err != nil {
-		perr := proto.GetError(err)
+		perr := pberror.GetError(err)
 		if perr == nil {
-			perr = proto.NewError(proto.Error_AuthenticationFailed, "authentication failed: %v", err)
+			perr = pberror.NewError(pberror.Code_AuthenticationFailed, "authentication failed: %v", err)
 		}
 		if err := proto.Write(authStream, &pbrelay.AuthenticateResp{Error: perr}); err != nil {
 			return nil, fmt.Errorf("relay auth err write: %w", err)

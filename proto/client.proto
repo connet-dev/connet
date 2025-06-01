@@ -1,7 +1,7 @@
 syntax = "proto3";
 package client;
 
-import "proto.proto";
+import "error.proto";
 import "model.proto";
 
 option go_package = "github.com/connet-dev/connet/proto/pbclient";
@@ -13,7 +13,7 @@ message Authenticate {
 }
 
 message AuthenticateResp {
-  proto.Error error = 1;
+  error.Error error = 1;
 
   model.AddrPort public = 2;
   bytes reconnect_token = 3;
@@ -37,7 +37,7 @@ message Request {
 }
 
 message Response {
-  proto.Error error = 1;
+  error.Error error = 1;
 
   // Soft one-of if error is nil
   Announce announce = 2;

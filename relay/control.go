@@ -18,6 +18,7 @@ import (
 	"github.com/connet-dev/connet/model"
 	"github.com/connet-dev/connet/netc"
 	"github.com/connet-dev/connet/proto"
+	"github.com/connet-dev/connet/proto/pberror"
 	"github.com/connet-dev/connet/proto/pbrelay"
 	"github.com/connet-dev/connet/quicc"
 	"github.com/connet-dev/connet/statusc"
@@ -291,7 +292,7 @@ func (s *controlClient) reconnect(ctx context.Context, tfn TransportsFn) (quic.C
 }
 
 func (s *controlClient) runConnection(ctx context.Context, conn quic.Connection) error {
-	defer conn.CloseWithError(quic.ApplicationErrorCode(proto.Error_Unknown), "connection closed")
+	defer conn.CloseWithError(quic.ApplicationErrorCode(pberror.Code_Unknown), "connection closed")
 
 	s.connStatus.Store(statusc.Connected)
 	defer s.connStatus.Store(statusc.Reconnecting)

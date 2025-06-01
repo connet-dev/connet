@@ -20,6 +20,7 @@ import (
 	"github.com/connet-dev/connet/notify"
 	"github.com/connet-dev/connet/proto"
 	"github.com/connet-dev/connet/proto/pbclient"
+	"github.com/connet-dev/connet/proto/pberror"
 	"github.com/connet-dev/connet/quicc"
 	"github.com/connet-dev/connet/statusc"
 	"github.com/quic-go/quic-go"
@@ -345,7 +346,7 @@ func (c *Client) reconnect(ctx context.Context, transport *quic.Transport, retok
 }
 
 func (c *Client) runSession(ctx context.Context, sess *session) error {
-	defer sess.conn.CloseWithError(quic.ApplicationErrorCode(proto.Error_Unknown), "connection closed")
+	defer sess.conn.CloseWithError(quic.ApplicationErrorCode(pberror.Code_Unknown), "connection closed")
 
 	c.currentSession.Set(sess)
 	defer c.currentSession.Set(nil)
