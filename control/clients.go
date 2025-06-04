@@ -560,7 +560,7 @@ func validatePeerCert(endpoint model.Endpoint, peer *pbclient.Peer) *pberror.Err
 }
 
 func (s *clientStream) announce(ctx context.Context, req *pbclient.Request_Announce) error {
-	endpoint := model.EndpointFromPB(req.Forward)
+	endpoint := model.EndpointFromPB(req.Endpoint)
 	role := model.RoleFromPB(req.Role)
 	if newEp, err := s.conn.server.auth.Validate(s.conn.auth, endpoint, role); err != nil {
 		perr := pberror.GetError(err)
@@ -641,7 +641,7 @@ func (s *clientStream) announce(ctx context.Context, req *pbclient.Request_Annou
 }
 
 func (s *clientStream) relay(ctx context.Context, req *pbclient.Request_Relay) error {
-	endpoint := model.EndpointFromPB(req.Forward)
+	endpoint := model.EndpointFromPB(req.Endpoint)
 	role := model.RoleFromPB(req.Role)
 	if newEp, err := s.conn.server.auth.Validate(s.conn.auth, endpoint, role); err != nil {
 		perr := pberror.GetError(err)

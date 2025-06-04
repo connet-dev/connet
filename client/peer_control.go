@@ -52,9 +52,9 @@ func (d *peerControl) runAnnounce(ctx context.Context) error {
 			d.local.logger.Debug("updated announce", "direct", len(peer.Directs), "relays", len(peer.RelayIds))
 			return proto.Write(stream, &pbclient.Request{
 				Announce: &pbclient.Request_Announce{
-					Forward: d.endpoint.PB(),
-					Role:    d.role.PB(),
-					Peer:    peer,
+					Endpoint: d.endpoint.PB(),
+					Role:     d.role.PB(),
+					Peer:     peer,
 				},
 			})
 		})
@@ -89,7 +89,7 @@ func (d *peerControl) runRelay(ctx context.Context) error {
 
 	if err := proto.Write(stream, &pbclient.Request{
 		Relay: &pbclient.Request_Relay{
-			Forward:           d.endpoint.PB(),
+			Endpoint:          d.endpoint.PB(),
 			Role:              d.role.PB(),
 			ClientCertificate: d.local.clientCert.Leaf.Raw,
 		},

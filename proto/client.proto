@@ -25,12 +25,12 @@ message Request {
   Relay relay = 2;
 
   message Announce {
-    model.Endpoint forward = 1;
+    model.Endpoint endpoint = 1;
     model.Role role = 2;
     Peer peer = 3;
   }
   message Relay {
-    model.Endpoint forward = 1;
+    model.Endpoint endpoint = 1;
     model.Role role = 2;
     bytes client_certificate = 3; // certificate to use when connecting to a relay
   }
