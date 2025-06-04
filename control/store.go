@@ -101,8 +101,8 @@ type ClientPeerValue struct {
 }
 
 type cacheKey struct {
-	forward model.Endpoint
-	role    model.Role
+	endpoint model.Endpoint
+	role     model.Role
 }
 
 type RelayConnKey struct {

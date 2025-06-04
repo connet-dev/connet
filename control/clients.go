@@ -87,7 +87,7 @@ func newClientServer(
 			})
 			reactivate[ClientConnKey{msg.Key.ID}] = append(reactivePeers, msg.Key)
 		} else {
-			logger.Warn("peer without corresponding client, deleting", "fwd", msg.Key.Forward, "role", msg.Key.Role, "id", msg.Key.ID)
+			logger.Warn("peer without corresponding client, deleting", "endpoint", msg.Key.Forward, "role", msg.Key.Role, "id", msg.Key.ID)
 			if err := peers.Del(msg.Key); err != nil {
 				return nil, fmt.Errorf("delete unowned peer: %w", err)
 			}
@@ -171,23 +171,23 @@ func (s *clientServer) disconnected(id ksuid.KSUID) error {
 	return s.conns.Del(ClientConnKey{id})
 }
 
-func (s *clientServer) announce(fwd model.Endpoint, role model.Role, id ksuid.KSUID, peer *pbclient.Peer) error {
-	return s.peers.Put(ClientPeerKey{fwd, role, id}, ClientPeerValue{peer})
+func (s *clientServer) announce(endpoint model.Endpoint, role model.Role, id ksuid.KSUID, peer *pbclient.Peer) error {
+	return s.peers.Put(ClientPeerKey{endpoint, role, id}, ClientPeerValue{peer})
 }
 
-func (s *clientServer) revoke(fwd model.Endpoint, role model.Role, id ksuid.KSUID) error {
-	return s.peers.Del(ClientPeerKey{fwd, role, id})
+func (s *clientServer) revoke(endpoint model.Endpoint, role model.Role, id ksuid.KSUID) error {
+	return s.peers.Del(ClientPeerKey{endpoint, role, id})
 }
 
-func (s *clientServer) announcements(fwd model.Endpoint, role model.Role) ([]*pbclient.RemotePeer, int64) {
+func (s *clientServer) announcements(endpoint model.Endpoint, role model.Role) ([]*pbclient.RemotePeer, int64) {
 	s.peersMu.RLock()
 	defer s.peersMu.RUnlock()
 
-	return slices.Clone(s.peersCache[cacheKey{fwd, role}]), s.peersOffset
+	return slices.Clone(s.peersCache[cacheKey{endpoint, role}]), s.peersOffset
 }
 
-func (s *clientServer) listen(ctx context.Context, fwd model.Endpoint, role model.Role, notify func(peers []*pbclient.RemotePeer) error) error {
-	peers, offset := s.announcements(fwd, role)
+func (s *clientServer) listen(ctx context.Context, endpoint model.Endpoint, role model.Role, notify func(peers []*pbclient.RemotePeer) error) error {
+	peers, offset := s.announcements(endpoint, role)
 	if err := notify(peers); err != nil {
 		return err
 	}
@@ -200,7 +200,7 @@ func (s *clientServer) listen(ctx context.Context, fwd model.Endpoint, role mode
 
 		var changed bool
 		for _, msg := range msgs {
-			if msg.Key.Forward != fwd || msg.Key.Role != role {
+			if msg.Key.Forward != endpoint || msg.Key.Role != role {
 				continue
 			}
 
@@ -549,44 +549,44 @@ func (s *clientStream) runErr(ctx context.Context) error {
 	}
 }
 
-func validatePeerCert(fwd model.Endpoint, peer *pbclient.Peer) *pberror.Error {
+func validatePeerCert(endpoint model.Endpoint, peer *pbclient.Peer) *pberror.Error {
 	if _, err := x509.ParseCertificate(peer.ClientCertificate); err != nil {
-		return pberror.NewError(pberror.Code_AnnounceInvalidClientCertificate, "'%s' client cert is invalid", fwd)
+		return pberror.NewError(pberror.Code_AnnounceInvalidClientCertificate, "'%s' client cert is invalid", endpoint)
 	}
 	if _, err := x509.ParseCertificate(peer.ServerCertificate); err != nil {
-		return pberror.NewError(pberror.Code_AnnounceInvalidServerCertificate, "'%s' server cert is invalid", fwd)
+		return pberror.NewError(pberror.Code_AnnounceInvalidServerCertificate, "'%s' server cert is invalid", endpoint)
 	}
 	return nil
 }
 
 func (s *clientStream) announce(ctx context.Context, req *pbclient.Request_Announce) error {
-	fwd := model.EndpointFromPB(req.Forward)
+	endpoint := model.EndpointFromPB(req.Forward)
 	role := model.RoleFromPB(req.Role)
-	if newFwd, err := s.conn.server.auth.Validate(s.conn.auth, fwd, role); err != nil {
+	if newEp, err := s.conn.server.auth.Validate(s.conn.auth, endpoint, role); err != nil {
 		perr := pberror.GetError(err)
 		if perr == nil {
-			perr = pberror.NewError(pberror.Code_AnnounceValidationFailed, "failed to validate forward '%s': %v", fwd, err)
+			perr = pberror.NewError(pberror.Code_AnnounceValidationFailed, "failed to validate forward '%s': %v", endpoint, err)
 		}
 		if err := proto.Write(s.stream, &pbclient.Response{Error: perr}); err != nil {
 			return fmt.Errorf("client write auth err: %w", err)
 		}
 		return perr
 	} else {
-		fwd = newFwd
+		endpoint = newEp
 	}
 
-	if err := validatePeerCert(fwd, req.Peer); err != nil {
+	if err := validatePeerCert(endpoint, req.Peer); err != nil {
 		if err := proto.Write(s.stream, &pbclient.Response{Error: err}); err != nil {
 			return fmt.Errorf("client write cert err: %w", err)
 		}
 		return err
 	}
 
-	if err := s.conn.server.announce(fwd, role, s.conn.id, req.Peer); err != nil {
+	if err := s.conn.server.announce(endpoint, role, s.conn.id, req.Peer); err != nil {
 		return err
 	}
 	defer func() {
-		if err := s.conn.server.revoke(fwd, role, s.conn.id); err != nil {
+		if err := s.conn.server.revoke(endpoint, role, s.conn.id); err != nil {
 			s.conn.logger.Warn("failed to revoke client", "id", s.conn.id, "err", err)
 		}
 	}()
@@ -607,14 +607,14 @@ func (s *clientStream) announce(ctx context.Context, req *pbclient.Request_Annou
 				return err
 			}
 
-			if err := validatePeerCert(fwd, req.Announce.Peer); err != nil {
+			if err := validatePeerCert(endpoint, req.Announce.Peer); err != nil {
 				if err := proto.Write(s.stream, &pbclient.Response{Error: err}); err != nil {
 					return fmt.Errorf("client write cert err: %w", err)
 				}
 				return err
 			}
 
-			if err := s.conn.server.announce(fwd, role, s.conn.id, req.Announce.Peer); err != nil {
+			if err := s.conn.server.announce(endpoint, role, s.conn.id, req.Announce.Peer); err != nil {
 				return err
 			}
 		}
@@ -622,7 +622,7 @@ func (s *clientStream) announce(ctx context.Context, req *pbclient.Request_Annou
 
 	g.Go(func() error {
 		defer s.conn.logger.Debug("completed sources notify")
-		return s.conn.server.listen(ctx, fwd, role.Invert(), func(peers []*pbclient.RemotePeer) error {
+		return s.conn.server.listen(ctx, endpoint, role.Invert(), func(peers []*pbclient.RemotePeer) error {
 			s.conn.logger.Debug("updated sources list", "peers", len(peers))
 
 			if err := proto.Write(s.stream, &pbclient.Response{
@@ -641,19 +641,19 @@ func (s *clientStream) announce(ctx context.Context, req *pbclient.Request_Annou
 }
 
 func (s *clientStream) relay(ctx context.Context, req *pbclient.Request_Relay) error {
-	fwd := model.EndpointFromPB(req.Forward)
+	endpoint := model.EndpointFromPB(req.Forward)
 	role := model.RoleFromPB(req.Role)
-	if newFwd, err := s.conn.server.auth.Validate(s.conn.auth, fwd, role); err != nil {
+	if newEp, err := s.conn.server.auth.Validate(s.conn.auth, endpoint, role); err != nil {
 		perr := pberror.GetError(err)
 		if perr == nil {
-			perr = pberror.NewError(pberror.Code_RelayValidationFailed, "failed to validate desination '%s': %v", fwd, err)
+			perr = pberror.NewError(pberror.Code_RelayValidationFailed, "failed to validate desination '%s': %v", endpoint, err)
 		}
 		if err := proto.Write(s.stream, &pbclient.Response{Error: perr}); err != nil {
 			return fmt.Errorf("client relay auth err response: %w", err)
 		}
 		return perr
 	} else {
-		fwd = newFwd
+		endpoint = newEp
 	}
 
 	clientCert, err := x509.ParseCertificate(req.ClientCertificate)
@@ -675,7 +675,7 @@ func (s *clientStream) relay(ctx context.Context, req *pbclient.Request_Relay) e
 
 	g.Go(func() error {
 		defer s.conn.logger.Debug("completed relay notify")
-		return s.conn.server.relays.Client(ctx, fwd, role, clientCert, s.conn.auth, func(relays map[ksuid.KSUID]relayCacheValue) error {
+		return s.conn.server.relays.Client(ctx, endpoint, role, clientCert, s.conn.auth, func(relays map[ksuid.KSUID]relayCacheValue) error {
 			s.conn.logger.Debug("updated relay list", "relays", len(relays))
 
 			var addrs []*pbclient.Relay

@@ -26,9 +26,9 @@ import (
 )
 
 type clientAuth struct {
-	fwd  model.Endpoint
-	role model.Role
-	key  model.Key
+	endpoint model.Endpoint
+	role     model.Role
+	key      model.Key
 }
 
 type tlsAuthenticator func(chi *tls.ClientHelloInfo, base *tls.Config) (*tls.Config, error)
@@ -47,7 +47,7 @@ func newClientsServer(cfg Config, tlsAuth tlsAuthenticator, clAuth clientAuthent
 		tlsConf: tlsConf,
 		auth:    clAuth,
 
-		forwards: map[model.Endpoint]*forwardClients{},
+		endpoints: map[model.Endpoint]*endpointClients{},
 
 		logger: cfg.Logger.With("server", "relay-clients"),
 	}
@@ -57,20 +57,20 @@ type clientsServer struct {
 	tlsConf *tls.Config
 	auth    clientAuthenticator
 
-	forwards  map[model.Endpoint]*forwardClients
-	forwardMu sync.RWMutex
+	endpoints   map[model.Endpoint]*endpointClients
+	endpointsMu sync.RWMutex
 
 	logger *slog.Logger
 }
 
-type forwardClients struct {
-	fwd          model.Endpoint
+type endpointClients struct {
+	endpoint     model.Endpoint
 	destinations map[model.Key]*clientConn
 	sources      map[model.Key]*clientConn
 	mu           sync.RWMutex
 }
 
-func (d *forwardClients) getDestinations() []*clientConn {
+func (d *endpointClients) getDestinations() []*clientConn {
 	d.mu.RLock()
 	defer d.mu.RUnlock()
 
@@ -88,7 +88,7 @@ func (d *forwardClients) getDestinations() []*clientConn {
 	})
 }
 
-func (d *forwardClients) removeDestination(conn *clientConn) bool {
+func (d *endpointClients) removeDestination(conn *clientConn) bool {
 	d.mu.Lock()
 	defer d.mu.Unlock()
 
@@ -97,7 +97,7 @@ func (d *forwardClients) removeDestination(conn *clientConn) bool {
 	return d.empty()
 }
 
-func (d *forwardClients) removeSource(conn *clientConn) bool {
+func (d *endpointClients) removeSource(conn *clientConn) bool {
 	d.mu.Lock()
 	defer d.mu.Unlock()
 
@@ -106,49 +106,49 @@ func (d *forwardClients) removeSource(conn *clientConn) bool {
 	return d.empty()
 }
 
-func (d *forwardClients) empty() bool {
+func (d *endpointClients) empty() bool {
 	return (len(d.destinations) + len(d.sources)) == 0
 }
 
-func (s *clientsServer) getByForward(fwd model.Endpoint) *forwardClients {
-	s.forwardMu.RLock()
-	dst := s.forwards[fwd]
-	s.forwardMu.RUnlock()
+func (s *clientsServer) getByEndpoint(endpoint model.Endpoint) *endpointClients {
+	s.endpointsMu.RLock()
+	dst := s.endpoints[endpoint]
+	s.endpointsMu.RUnlock()
 	if dst != nil {
 		return dst
 	}
 
-	s.forwardMu.Lock()
-	defer s.forwardMu.Unlock()
+	s.endpointsMu.Lock()
+	defer s.endpointsMu.Unlock()
 
-	dst = s.forwards[fwd]
+	dst = s.endpoints[endpoint]
 	if dst != nil {
 		return dst
 	}
 
-	dst = &forwardClients{
-		fwd:          fwd,
+	dst = &endpointClients{
+		endpoint:     endpoint,
 		destinations: map[model.Key]*clientConn{},
 		sources:      map[model.Key]*clientConn{},
 	}
-	s.forwards[fwd] = dst
+	s.endpoints[endpoint] = dst
 	return dst
 }
 
-func (s *clientsServer) removeByClients(fcs *forwardClients) {
-	s.forwardMu.Lock()
-	defer s.forwardMu.Unlock()
+func (s *clientsServer) removeByClients(fcs *endpointClients) {
+	s.endpointsMu.Lock()
+	defer s.endpointsMu.Unlock()
 
 	fcs.mu.Lock()
 	defer fcs.mu.Unlock()
 
 	if fcs.empty() {
-		delete(s.forwards, fcs.fwd)
+		delete(s.endpoints, fcs.endpoint)
 	}
 }
 
-func (s *clientsServer) addDestination(conn *clientConn) *forwardClients {
-	dst := s.getByForward(conn.auth.fwd)
+func (s *clientsServer) addDestination(conn *clientConn) *endpointClients {
+	dst := s.getByEndpoint(conn.auth.endpoint)
 
 	dst.mu.Lock()
 	defer dst.mu.Unlock()
@@ -158,14 +158,14 @@ func (s *clientsServer) addDestination(conn *clientConn) *forwardClients {
 	return dst
 }
 
-func (s *clientsServer) removeDestination(fcs *forwardClients, conn *clientConn) {
+func (s *clientsServer) removeDestination(fcs *endpointClients, conn *clientConn) {
 	if fcs.removeDestination(conn) {
 		s.removeByClients(fcs)
 	}
 }
 
-func (s *clientsServer) addSource(conn *clientConn) *forwardClients {
-	target := s.getByForward(conn.auth.fwd)
+func (s *clientsServer) addSource(conn *clientConn) *endpointClients {
+	target := s.getByEndpoint(conn.auth.endpoint)
 
 	target.mu.Lock()
 	defer target.mu.Unlock()
@@ -175,7 +175,7 @@ func (s *clientsServer) addSource(conn *clientConn) *forwardClients {
 	return target
 }
 
-func (s *clientsServer) removeSource(fcs *forwardClients, conn *clientConn) {
+func (s *clientsServer) removeSource(fcs *endpointClients, conn *clientConn) {
 	if fcs.removeSource(conn) {
 		s.removeByClients(fcs)
 	}
@@ -263,7 +263,7 @@ func (c *clientConn) runErr(ctx context.Context) error {
 		return c.conn.CloseWithError(quic.ApplicationErrorCode(pberror.Code_AuthenticationFailed), "authentication missing")
 	} else {
 		c.auth = auth
-		c.logger = c.logger.With("fwd", auth.fwd, "role", auth.role, "key", auth.key)
+		c.logger = c.logger.With("endpoint", auth.endpoint, "role", auth.role, "key", auth.key)
 	}
 
 	if err := c.check(ctx); err != nil {
@@ -346,7 +346,7 @@ func (c *clientConn) runSource(ctx context.Context) error {
 	return g.Wait()
 }
 
-func (c *clientConn) runSourceStream(ctx context.Context, stream quic.Stream, fcs *forwardClients) {
+func (c *clientConn) runSourceStream(ctx context.Context, stream quic.Stream, fcs *endpointClients) {
 	defer stream.Close()
 
 	if err := c.runSourceStreamErr(ctx, stream, fcs); err != nil {
@@ -354,7 +354,7 @@ func (c *clientConn) runSourceStream(ctx context.Context, stream quic.Stream, fc
 	}
 }
 
-func (c *clientConn) runSourceStreamErr(ctx context.Context, stream quic.Stream, fcs *forwardClients) error {
+func (c *clientConn) runSourceStreamErr(ctx context.Context, stream quic.Stream, fcs *endpointClients) error {
 	req, err := pbconnect.ReadRequest(stream)
 	if err != nil {
 		return fmt.Errorf("source stream read: %w", err)
@@ -368,7 +368,7 @@ func (c *clientConn) runSourceStreamErr(ctx context.Context, stream quic.Stream,
 	}
 }
 
-func (c *clientConn) connect(ctx context.Context, stream quic.Stream, fcs *forwardClients, req *pbconnect.Request) error {
+func (c *clientConn) connect(ctx context.Context, stream quic.Stream, fcs *endpointClients, req *pbconnect.Request) error {
 	dests := fcs.getDestinations()
 	if len(dests) == 0 {
 		err := pberror.NewError(pberror.Code_DestinationNotFound, "could not find destination")

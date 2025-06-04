@@ -541,8 +541,8 @@ func (s *controlClient) runServersLog(ctx context.Context) error {
 }
 
 type relayServer struct {
-	fwd  model.Endpoint
-	name string
+	endpoint model.Endpoint
+	name     string
 
 	tls []tls.Certificate
 	cas atomic.Pointer[x509.CertPool]
@@ -558,8 +558,8 @@ func newRelayServer(msg logc.Message[ServerKey, ServerValue]) (*relayServer, err
 	}
 
 	srv := &relayServer{
-		fwd:  msg.Key.Forward,
-		name: srvCert.Leaf.DNSNames[0],
+		endpoint: msg.Key.Forward,
+		name:     srvCert.Leaf.DNSNames[0],
 
 		tls: []tls.Certificate{srvCert},
 
@@ -611,10 +611,10 @@ func (s *relayServer) authenticate(certs []*x509.Certificate) *clientAuth {
 	key := model.NewKey(cert)
 
 	if dst, ok := s.clients[serverClientKey{model.Destination, key}]; ok && dst.Equal(cert) {
-		return &clientAuth{s.fwd, model.Destination, key}
+		return &clientAuth{s.endpoint, model.Destination, key}
 	}
 	if src, ok := s.clients[serverClientKey{model.Source, key}]; ok && src.Equal(cert) {
-		return &clientAuth{s.fwd, model.Source, key}
+		return &clientAuth{s.endpoint, model.Source, key}
 	}
 
 	return nil

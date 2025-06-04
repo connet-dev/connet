@@ -33,7 +33,7 @@ type RelayAuthenticateRequest struct {
 
 type RelayAuthenticator interface {
 	Authenticate(req RelayAuthenticateRequest) (RelayAuthentication, error)
-	Allow(reAuth RelayAuthentication, clAuth ClientAuthentication, fwd model.Endpoint) (bool, error)
+	Allow(reAuth RelayAuthentication, clAuth ClientAuthentication, endpoint model.Endpoint) (bool, error)
 }
 
 type RelayAuthentication []byte
@@ -158,17 +158,17 @@ type relayServer struct {
 	forwardsMu     sync.RWMutex
 }
 
-func (s *relayServer) getForward(fwd model.Endpoint) (map[ksuid.KSUID]relayCacheValue, int64) {
+func (s *relayServer) getEndpoint(endpoint model.Endpoint) (map[ksuid.KSUID]relayCacheValue, int64) {
 	s.forwardsMu.RLock()
 	defer s.forwardsMu.RUnlock()
 
-	return maps.Clone(s.forwardsCache[fwd]), s.forwardsOffset
+	return maps.Clone(s.forwardsCache[endpoint]), s.forwardsOffset
 }
 
-func (s *relayServer) Client(ctx context.Context, fwd model.Endpoint, role model.Role, cert *x509.Certificate, auth ClientAuthentication,
+func (s *relayServer) Client(ctx context.Context, endpoint model.Endpoint, role model.Role, cert *x509.Certificate, auth ClientAuthentication,
 	notifyFn func(map[ksuid.KSUID]relayCacheValue) error) error {
 
-	key := RelayClientKey{Forward: fwd, Role: role, Key: model.NewKey(cert)}
+	key := RelayClientKey{Forward: endpoint, Role: role, Key: model.NewKey(cert)}
 	val := RelayClientValue{Cert: cert, Authentication: auth}
 	if err := s.clients.Put(key, val); err != nil {
 		return err
@@ -179,13 +179,13 @@ func (s *relayServer) Client(ctx context.Context, fwd model.Endpoint, role model
 		}
 	}()
 
-	return s.listen(ctx, fwd, notifyFn)
+	return s.listen(ctx, endpoint, notifyFn)
 }
 
-func (s *relayServer) listen(ctx context.Context, fwd model.Endpoint,
+func (s *relayServer) listen(ctx context.Context, endpoint model.Endpoint,
 	notifyFn func(map[ksuid.KSUID]relayCacheValue) error) error {
 
-	servers, offset := s.getForward(fwd)
+	servers, offset := s.getEndpoint(endpoint)
 	if err := notifyFn(servers); err != nil {
 		return err
 	}
@@ -198,7 +198,7 @@ func (s *relayServer) listen(ctx context.Context, fwd model.Endpoint,
 
 		var changed bool
 		for _, msg := range msgs {
-			if msg.Key.Forward != fwd {
+			if msg.Key.Forward != endpoint {
 				continue
 			}
 

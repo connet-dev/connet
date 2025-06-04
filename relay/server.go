@@ -117,14 +117,14 @@ func (s *Server) Status(ctx context.Context) (Status, error) {
 		return Status{}, err
 	}
 
-	fwds := s.getForwards()
+	eps := s.getEndpoints()
 
 	return Status{
 		Status:            stat,
 		Hostports:         iterc.MapSliceStrings(s.control.hostports),
 		ControlServerAddr: s.control.controlAddr.String(),
 		ControlServerID:   controlID,
-		Forwards:          fwds,
+		Endpoints:         eps,
 	}, nil
 }
 
@@ -136,11 +136,11 @@ func (s *Server) getControlID() (string, error) {
 	return controlIDConfig.String, nil
 }
 
-func (s *Server) getForwards() []model.Endpoint {
-	s.clients.forwardMu.RLock()
-	defer s.clients.forwardMu.RUnlock()
+func (s *Server) getEndpoints() []model.Endpoint {
+	s.clients.endpointsMu.RLock()
+	defer s.clients.endpointsMu.RUnlock()
 
-	return slices.Collect(maps.Keys(s.clients.forwards))
+	return slices.Collect(maps.Keys(s.clients.endpoints))
 }
 
 type Status struct {
@@ -148,5 +148,5 @@ type Status struct {
 	Hostports         []string         `json:"hostports"`
 	ControlServerAddr string           `json:"control_server_addr"`
 	ControlServerID   string           `json:"control_server_id"`
-	Forwards          []model.Endpoint `json:"forwards"`
+	Endpoints         []model.Endpoint `json:"endpoints"`
 }
