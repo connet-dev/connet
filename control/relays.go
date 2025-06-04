@@ -513,7 +513,7 @@ func (c *relayConn) runRelayClients(ctx context.Context) error {
 			}
 
 			change := &pbrelay.ClientsResp_Change{
-				Forward:        msg.Key.Endpoint.PB(),
+				Endpoint:       msg.Key.Endpoint.PB(),
 				Role:           msg.Key.Role.PB(),
 				CertificateKey: msg.Key.Key.String(),
 			}
@@ -560,7 +560,7 @@ func (c *relayConn) runRelayServers(ctx context.Context) error {
 		}
 
 		for _, change := range resp.Changes {
-			key := RelayEndpointKey{Endpoint: model.EndpointFromPB(change.Forward)}
+			key := RelayEndpointKey{Endpoint: model.EndpointFromPB(change.Endpoint)}
 
 			switch change.Change {
 			case pbrelay.ChangeType_ChangePut:

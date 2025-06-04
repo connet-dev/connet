@@ -338,7 +338,7 @@ func (s *controlClient) runClientsStream(ctx context.Context, conn quic.Connecti
 
 			for _, change := range resp.Changes {
 				key := ClientKey{
-					Endpoint: model.EndpointFromPB(change.Forward),
+					Endpoint: model.EndpointFromPB(change.Endpoint),
 					Role:     model.RoleFromPB(change.Role),
 					Key:      model.NewKeyString(change.CertificateKey),
 				}
@@ -461,7 +461,7 @@ func (s *controlClient) runServersStream(ctx context.Context, conn quic.Connecti
 
 			for _, msg := range msgs {
 				var change = &pbrelay.ServersResp_Change{
-					Forward: msg.Key.Endpoint.PB(),
+					Endpoint: msg.Key.Endpoint.PB(),
 				}
 				if msg.Delete {
 					change.Change = pbrelay.ChangeType_ChangeDel

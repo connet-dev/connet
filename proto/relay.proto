@@ -36,7 +36,7 @@ message ClientsResp {
 
   message Change {
     ChangeType change = 1;
-    model.Endpoint forward = 2;
+    model.Endpoint endpoint = 2;
     model.Role role = 3;
     string certificate_key = 4;
     bytes certificate = 5;
@@ -54,7 +54,7 @@ message ServersResp {
 
   message Change {
     ChangeType change = 1;
-    model.Endpoint forward = 2;
+    model.Endpoint endpoint = 2;
     bytes server_certificate = 3;
   }
 }
