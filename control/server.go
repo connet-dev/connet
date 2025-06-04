@@ -109,9 +109,9 @@ func (s *Server) getPeers() ([]StatusPeer, error) {
 	var peers []StatusPeer
 	for _, msg := range peerMsgs {
 		peers = append(peers, StatusPeer{
-			ID:      msg.Key.ID,
-			Role:    msg.Key.Role,
-			Forward: msg.Key.Forward,
+			ID:       msg.Key.ID,
+			Role:     msg.Key.Role,
+			Endpoint: msg.Key.Endpoint,
 		})
 	}
 
@@ -148,9 +148,9 @@ type StatusClient struct {
 }
 
 type StatusPeer struct {
-	ID      ksuid.KSUID    `json:"id"`
-	Role    model.Role     `json:"role"`
-	Forward model.Endpoint `json:"forward"`
+	ID       ksuid.KSUID    `json:"id"`
+	Role     model.Role     `json:"role"`
+	Endpoint model.Endpoint `json:"endpoint"`
 }
 
 type StatusRelay struct {

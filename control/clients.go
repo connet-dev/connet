@@ -80,14 +80,14 @@ func newClientServer(
 	peersCache := map[cacheKey][]*pbclient.RemotePeer{}
 	for _, msg := range peersMsgs {
 		if reactivePeers, ok := reactivate[ClientConnKey{msg.Key.ID}]; ok {
-			key := cacheKey{msg.Key.Forward, msg.Key.Role}
+			key := cacheKey{msg.Key.Endpoint, msg.Key.Role}
 			peersCache[key] = append(peersCache[key], &pbclient.RemotePeer{
 				Id:   msg.Key.ID.String(),
 				Peer: msg.Value.Peer,
 			})
 			reactivate[ClientConnKey{msg.Key.ID}] = append(reactivePeers, msg.Key)
 		} else {
-			logger.Warn("peer without corresponding client, deleting", "endpoint", msg.Key.Forward, "role", msg.Key.Role, "id", msg.Key.ID)
+			logger.Warn("peer without corresponding client, deleting", "endpoint", msg.Key.Endpoint, "role", msg.Key.Role, "id", msg.Key.ID)
 			if err := peers.Del(msg.Key); err != nil {
 				return nil, fmt.Errorf("delete unowned peer: %w", err)
 			}
@@ -200,7 +200,7 @@ func (s *clientServer) listen(ctx context.Context, endpoint model.Endpoint, role
 
 		var changed bool
 		for _, msg := range msgs {
-			if msg.Key.Forward != endpoint || msg.Key.Role != role {
+			if msg.Key.Endpoint != endpoint || msg.Key.Role != role {
 				continue
 			}
 
@@ -301,7 +301,7 @@ func (s *clientServer) runPeerCache(ctx context.Context) error {
 		s.peersMu.Lock()
 		defer s.peersMu.Unlock()
 
-		key := cacheKey{msg.Key.Forward, msg.Key.Role}
+		key := cacheKey{msg.Key.Endpoint, msg.Key.Role}
 		peers := s.peersCache[key]
 		if msg.Delete {
 			peers = slices.DeleteFunc(peers, func(peer *pbclient.RemotePeer) bool {
@@ -370,7 +370,7 @@ func (s *clientServer) runCleaner(ctx context.Context) error {
 			return err
 		}
 		for _, peer := range peers {
-			if err := s.revoke(peer.Forward, peer.Role, peer.ID); err != nil {
+			if err := s.revoke(peer.Endpoint, peer.Role, peer.ID); err != nil {
 				return err
 			}
 		}
@@ -565,7 +565,7 @@ func (s *clientStream) announce(ctx context.Context, req *pbclient.Request_Annou
 	if newEp, err := s.conn.server.auth.Validate(s.conn.auth, endpoint, role); err != nil {
 		perr := pberror.GetError(err)
 		if perr == nil {
-			perr = pberror.NewError(pberror.Code_AnnounceValidationFailed, "failed to validate forward '%s': %v", endpoint, err)
+			perr = pberror.NewError(pberror.Code_AnnounceValidationFailed, "failed to validate endpoint '%s': %v", endpoint, err)
 		}
 		if err := proto.Write(s.stream, &pbclient.Response{Error: perr}); err != nil {
 			return fmt.Errorf("client write auth err: %w", err)

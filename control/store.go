@@ -20,7 +20,7 @@ type Stores interface {
 
 	RelayConns() (logc.KV[RelayConnKey, RelayConnValue], error)
 	RelayClients() (logc.KV[RelayClientKey, RelayClientValue], error)
-	RelayForwards(id ksuid.KSUID) (logc.KV[RelayForwardKey, RelayForwardValue], error)
+	RelayEndpoints(id ksuid.KSUID) (logc.KV[RelayEndpointKey, RelayEndpointValue], error)
 	RelayServers() (logc.KV[RelayServerKey, RelayServerValue], error)
 	RelayServerOffsets() (logc.KV[RelayConnKey, int64], error)
 }
@@ -53,8 +53,8 @@ func (f *fileStores) RelayClients() (logc.KV[RelayClientKey, RelayClientValue], 
 	return logc.NewKV[RelayClientKey, RelayClientValue](filepath.Join(f.dir, "relay-clients"))
 }
 
-func (f *fileStores) RelayForwards(id ksuid.KSUID) (logc.KV[RelayForwardKey, RelayForwardValue], error) {
-	return logc.NewKV[RelayForwardKey, RelayForwardValue](filepath.Join(f.dir, "relay-forwards", id.String()))
+func (f *fileStores) RelayEndpoints(id ksuid.KSUID) (logc.KV[RelayEndpointKey, RelayEndpointValue], error) {
+	return logc.NewKV[RelayEndpointKey, RelayEndpointValue](filepath.Join(f.dir, "relay-forwards", id.String()))
 }
 
 func (f *fileStores) RelayServers() (logc.KV[RelayServerKey, RelayServerValue], error) {
@@ -91,9 +91,9 @@ type ClientConnValue struct {
 }
 
 type ClientPeerKey struct {
-	Forward model.Endpoint `json:"forward"`
-	Role    model.Role     `json:"role"`
-	ID      ksuid.KSUID    `json:"id"` // TODO consider using the server cert key
+	Endpoint model.Endpoint `json:"forward"`
+	Role     model.Role     `json:"role"`
+	ID       ksuid.KSUID    `json:"id"` // TODO consider using the server cert key
 }
 
 type ClientPeerValue struct {
@@ -116,9 +116,9 @@ type RelayConnValue struct {
 }
 
 type RelayClientKey struct {
-	Forward model.Endpoint `json:"forward"`
-	Role    model.Role     `json:"role"`
-	Key     model.Key      `json:"key"`
+	Endpoint model.Endpoint `json:"forward"`
+	Role     model.Role     `json:"role"`
+	Key      model.Key      `json:"key"`
 }
 
 type RelayClientValue struct {
@@ -156,31 +156,31 @@ func (v *RelayClientValue) UnmarshalJSON(b []byte) error {
 	return nil
 }
 
-type RelayForwardKey struct {
-	Forward model.Endpoint `json:"forward"`
+type RelayEndpointKey struct {
+	Endpoint model.Endpoint `json:"forward"`
 }
 
-type RelayForwardValue struct {
+type RelayEndpointValue struct {
 	Cert *x509.Certificate `json:"cert"`
 }
 
-func (v RelayForwardValue) MarshalJSON() ([]byte, error) {
+func (v RelayEndpointValue) MarshalJSON() ([]byte, error) {
 	return certc.MarshalJSONCert(v.Cert)
 }
 
-func (v *RelayForwardValue) UnmarshalJSON(b []byte) error {
+func (v *RelayEndpointValue) UnmarshalJSON(b []byte) error {
 	cert, err := certc.UnmarshalJSONCert(b)
 	if err != nil {
 		return err
 	}
 
-	*v = RelayForwardValue{cert}
+	*v = RelayEndpointValue{cert}
 	return nil
 }
 
 type RelayServerKey struct {
-	Forward model.Endpoint `json:"forward"`
-	RelayID ksuid.KSUID    `json:"relay_id"`
+	Endpoint model.Endpoint `json:"forward"`
+	RelayID  ksuid.KSUID    `json:"relay_id"`
 }
 
 type RelayServerValue struct {

@@ -53,9 +53,9 @@ type ConfigValue struct {
 }
 
 type ClientKey struct {
-	Forward model.Endpoint `json:"forward"`
-	Role    model.Role     `json:"role"`
-	Key     model.Key      `json:"key"`
+	Endpoint model.Endpoint `json:"forward"`
+	Role     model.Role     `json:"role"`
+	Key      model.Key      `json:"key"`
 }
 
 type ClientValue struct {
@@ -77,7 +77,7 @@ func (v *ClientValue) UnmarshalJSON(b []byte) error {
 }
 
 type ServerKey struct {
-	Forward model.Endpoint `json:"forward"`
+	Endpoint model.Endpoint `json:"forward"`
 }
 
 type ServerValue struct {

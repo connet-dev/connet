@@ -338,9 +338,9 @@ func (s *controlClient) runClientsStream(ctx context.Context, conn quic.Connecti
 
 			for _, change := range resp.Changes {
 				key := ClientKey{
-					Forward: model.EndpointFromPB(change.Forward),
-					Role:    model.RoleFromPB(change.Role),
-					Key:     model.NewKeyString(change.CertificateKey),
+					Endpoint: model.EndpointFromPB(change.Forward),
+					Role:     model.RoleFromPB(change.Role),
+					Key:      model.NewKeyString(change.CertificateKey),
 				}
 
 				switch change.Change {
@@ -378,7 +378,7 @@ func (s *controlClient) runClientsLog(ctx context.Context) error {
 		}
 
 		for _, msg := range msgs {
-			srvKey := ServerKey{msg.Key.Forward}
+			srvKey := ServerKey{msg.Key.Endpoint}
 			clKey := serverClientKey{msg.Key.Role, msg.Key.Key}
 			sv, err := s.servers.Get(srvKey)
 
@@ -461,7 +461,7 @@ func (s *controlClient) runServersStream(ctx context.Context, conn quic.Connecti
 
 			for _, msg := range msgs {
 				var change = &pbrelay.ServersResp_Change{
-					Forward: msg.Key.Forward.PB(),
+					Forward: msg.Key.Endpoint.PB(),
 				}
 				if msg.Delete {
 					change.Change = pbrelay.ChangeType_ChangeDel
@@ -558,7 +558,7 @@ func newRelayServer(msg logc.Message[ServerKey, ServerValue]) (*relayServer, err
 	}
 
 	srv := &relayServer{
-		endpoint: msg.Key.Forward,
+		endpoint: msg.Key.Endpoint,
 		name:     srvCert.Leaf.DNSNames[0],
 
 		tls: []tls.Certificate{srvCert},
