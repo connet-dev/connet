@@ -13,7 +13,7 @@ import (
 
 type peerControl struct {
 	local  *peer
-	fwd    model.Forward
+	fwd    model.Endpoint
 	role   model.Role
 	opt    model.RouteOption
 	conn   quic.Connection

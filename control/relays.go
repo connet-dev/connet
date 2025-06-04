@@ -33,7 +33,7 @@ type RelayAuthenticateRequest struct {
 
 type RelayAuthenticator interface {
 	Authenticate(req RelayAuthenticateRequest) (RelayAuthentication, error)
-	Allow(reAuth RelayAuthentication, clAuth ClientAuthentication, fwd model.Forward) (bool, error)
+	Allow(reAuth RelayAuthentication, clAuth ClientAuthentication, fwd model.Endpoint) (bool, error)
 }
 
 type RelayAuthentication []byte
@@ -70,7 +70,7 @@ func newRelayServer(
 		return nil, fmt.Errorf("relay servers snapshot: %w", err)
 	}
 
-	forwardsCache := map[model.Forward]map[ksuid.KSUID]relayCacheValue{}
+	forwardsCache := map[model.Endpoint]map[ksuid.KSUID]relayCacheValue{}
 	for _, msg := range forwardsMsgs {
 		srv := forwardsCache[msg.Key.Forward]
 		if srv == nil {
@@ -153,19 +153,19 @@ type relayServer struct {
 	servers       logc.KV[RelayServerKey, RelayServerValue]
 	serverOffsets logc.KV[RelayConnKey, int64]
 
-	forwardsCache  map[model.Forward]map[ksuid.KSUID]relayCacheValue
+	forwardsCache  map[model.Endpoint]map[ksuid.KSUID]relayCacheValue
 	forwardsOffset int64
 	forwardsMu     sync.RWMutex
 }
 
-func (s *relayServer) getForward(fwd model.Forward) (map[ksuid.KSUID]relayCacheValue, int64) {
+func (s *relayServer) getForward(fwd model.Endpoint) (map[ksuid.KSUID]relayCacheValue, int64) {
 	s.forwardsMu.RLock()
 	defer s.forwardsMu.RUnlock()
 
 	return maps.Clone(s.forwardsCache[fwd]), s.forwardsOffset
 }
 
-func (s *relayServer) Client(ctx context.Context, fwd model.Forward, role model.Role, cert *x509.Certificate, auth ClientAuthentication,
+func (s *relayServer) Client(ctx context.Context, fwd model.Endpoint, role model.Role, cert *x509.Certificate, auth ClientAuthentication,
 	notifyFn func(map[ksuid.KSUID]relayCacheValue) error) error {
 
 	key := RelayClientKey{Forward: fwd, Role: role, Key: model.NewKey(cert)}
@@ -182,7 +182,7 @@ func (s *relayServer) Client(ctx context.Context, fwd model.Forward, role model.
 	return s.listen(ctx, fwd, notifyFn)
 }
 
-func (s *relayServer) listen(ctx context.Context, fwd model.Forward,
+func (s *relayServer) listen(ctx context.Context, fwd model.Endpoint,
 	notifyFn func(map[ksuid.KSUID]relayCacheValue) error) error {
 
 	servers, offset := s.getForward(fwd)
@@ -560,7 +560,7 @@ func (c *relayConn) runRelayServers(ctx context.Context) error {
 		}
 
 		for _, change := range resp.Changes {
-			key := RelayForwardKey{Forward: model.ForwardFromPB(change.Forward)}
+			key := RelayForwardKey{Forward: model.EndpointFromPB(change.Forward)}
 
 			switch change.Change {
 			case pbrelay.ChangeType_ChangePut:

@@ -18,7 +18,7 @@ message HostPort {
   uint32 port = 2;
 }
 
-message Forward {
+message Endpoint {
   string name = 1;
 }
 

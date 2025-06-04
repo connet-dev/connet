@@ -37,16 +37,16 @@ func (s *clientsAuthenticator) Authenticate(req control.ClientAuthenticateReques
 	return []byte(req.Token), nil
 }
 
-func (s *clientsAuthenticator) Validate(auth control.ClientAuthentication, fwd model.Forward, role model.Role) (model.Forward, error) {
+func (s *clientsAuthenticator) Validate(auth control.ClientAuthentication, fwd model.Endpoint, role model.Role) (model.Endpoint, error) {
 	r, ok := s.tokens[string(auth)]
 	if !ok {
-		return model.Forward{}, pberror.NewError(pberror.Code_AuthenticationFailed, "token not found")
+		return model.Endpoint{}, pberror.NewError(pberror.Code_AuthenticationFailed, "token not found")
 	}
 	if !r.Names.IsAllowed(fwd.String()) {
-		return model.Forward{}, pberror.NewError(pberror.Code_ForwardNotAllowed, "forward not allowed: %s", fwd)
+		return model.Endpoint{}, pberror.NewError(pberror.Code_EndpointNotAllowed, "endpoint not allowed: %s", fwd)
 	}
 	if r.Role != model.UnknownRole && r.Role != role {
-		return model.Forward{}, pberror.NewError(pberror.Code_RoleNotAllowed, "role not allowed: %s", role)
+		return model.Endpoint{}, pberror.NewError(pberror.Code_RoleNotAllowed, "role not allowed: %s", role)
 	}
 	return fwd, nil
 }

@@ -76,8 +76,8 @@ func newClientDestination(ctx context.Context, cl *Client, cfg DestinationConfig
 		return nil, err
 	}
 
-	ep, err := newClientEndpoint(ctx, cl, dst, cl.logger.With("destination", cfg.Forward), func() {
-		cl.removeDestination(cfg.Forward)
+	ep, err := newClientEndpoint(ctx, cl, dst, cl.logger.With("destination", cfg.Endpoint), func() {
+		cl.removeDestination(cfg.Endpoint)
 	})
 	if err != nil {
 		return nil, err
@@ -97,8 +97,8 @@ func newClientSource(ctx context.Context, cl *Client, cfg SourceConfig) (*client
 		return nil, err
 	}
 
-	ep, err := newClientEndpoint(ctx, cl, src, cl.logger.With("source", cfg.Forward), func() {
-		cl.removeSource(cfg.Forward)
+	ep, err := newClientEndpoint(ctx, cl, src, cl.logger.With("source", cfg.Endpoint), func() {
+		cl.removeSource(cfg.Endpoint)
 	})
 	if err != nil {
 		return nil, err

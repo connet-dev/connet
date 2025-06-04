@@ -35,6 +35,6 @@ func (s *relayAuthenticator) Authenticate(req control.RelayAuthenticateRequest) 
 	return []byte(r.Token), nil
 }
 
-func (s *relayAuthenticator) Allow(_ control.RelayAuthentication, _ control.ClientAuthentication, _ model.Forward) (bool, error) {
+func (s *relayAuthenticator) Allow(_ control.RelayAuthentication, _ control.ClientAuthentication, _ model.Endpoint) (bool, error) {
 	return true, nil
 }

@@ -91,7 +91,7 @@ func NewTCPSource(src Source, addr string, logger *slog.Logger) *TCPSource {
 		bind: func(ctx context.Context) (net.Listener, error) {
 			return net.Listen("tcp", addr)
 		},
-		logger: logger.With("source", src.Config().Forward, "addr", addr),
+		logger: logger.With("source", src.Config().Endpoint, "addr", addr),
 	}
 }
 
@@ -101,7 +101,7 @@ func NewTLSSource(src Source, addr string, cfg *tls.Config, logger *slog.Logger)
 		bind: func(ctx context.Context) (net.Listener, error) {
 			return tls.Listen("tcp", addr, cfg)
 		},
-		logger: logger.With("source", src.Config().Forward, "addr", addr),
+		logger: logger.With("source", src.Config().Endpoint, "addr", addr),
 	}
 }
 
@@ -155,7 +155,7 @@ func NewHTTPSource(src Source, srcURL *url.URL, cfg *tls.Config) *HTTPSource {
 }
 
 func (s *HTTPSource) Run(ctx context.Context) error {
-	fwd := s.src.Config().Forward.String()
+	fwd := s.src.Config().Endpoint.String()
 	var targetURL url.URL = *s.srcURL
 	targetURL.Scheme = "http"
 	targetURL.Host = fwd

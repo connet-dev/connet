@@ -148,9 +148,9 @@ type StatusClient struct {
 }
 
 type StatusPeer struct {
-	ID      ksuid.KSUID   `json:"id"`
-	Role    model.Role    `json:"role"`
-	Forward model.Forward `json:"forward"`
+	ID      ksuid.KSUID    `json:"id"`
+	Role    model.Role     `json:"role"`
+	Forward model.Endpoint `json:"forward"`
 }
 
 type StatusRelay struct {

@@ -22,7 +22,7 @@ import (
 
 // DestinationConfig structure represents destination configuration.
 type DestinationConfig struct {
-	Forward          model.Forward
+	Endpoint         model.Endpoint
 	Route            model.RouteOption
 	Proxy            model.ProxyVersion
 	RelayEncryptions []model.EncryptionScheme
@@ -31,7 +31,7 @@ type DestinationConfig struct {
 // NewDestinationConfig creates a destination config for a given name
 func NewDestinationConfig(name string) DestinationConfig {
 	return DestinationConfig{
-		Forward:          model.NewForward(name),
+		Endpoint:         model.NewEndpoint(name),
 		Route:            model.RouteAny,
 		Proxy:            model.ProxyNone,
 		RelayEncryptions: []model.EncryptionScheme{model.NoEncryption},
@@ -67,7 +67,7 @@ type Destination struct {
 }
 
 func NewDestination(cfg DestinationConfig, direct *DirectServer, root *certc.Cert, logger *slog.Logger) (*Destination, error) {
-	logger = logger.With("destination", cfg.Forward)
+	logger = logger.With("destination", cfg.Endpoint)
 	p, err := newPeer(direct, root, logger)
 	if err != nil {
 		return nil, err
@@ -109,7 +109,7 @@ func (d *Destination) RunAnnounce(ctx context.Context, conn quic.Connection, dir
 
 	return (&peerControl{
 		local:  d.peer,
-		fwd:    d.cfg.Forward,
+		fwd:    d.cfg.Endpoint,
 		role:   model.Destination,
 		opt:    d.cfg.Route,
 		conn:   conn,
@@ -127,7 +127,7 @@ func (d *Destination) AcceptContext(ctx context.Context) (net.Conn, error) {
 		return nil, ctx.Err()
 	case conn, ok := <-d.acceptCh:
 		if !ok {
-			return nil, fmt.Errorf("destination %s is closed: %w", d.cfg.Forward, net.ErrClosed)
+			return nil, fmt.Errorf("destination %s is closed: %w", d.cfg.Endpoint, net.ErrClosed)
 		}
 		return conn, nil
 	}

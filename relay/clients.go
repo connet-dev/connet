@@ -26,7 +26,7 @@ import (
 )
 
 type clientAuth struct {
-	fwd  model.Forward
+	fwd  model.Endpoint
 	role model.Role
 	key  model.Key
 }
@@ -47,7 +47,7 @@ func newClientsServer(cfg Config, tlsAuth tlsAuthenticator, clAuth clientAuthent
 		tlsConf: tlsConf,
 		auth:    clAuth,
 
-		forwards: map[model.Forward]*forwardClients{},
+		forwards: map[model.Endpoint]*forwardClients{},
 
 		logger: cfg.Logger.With("server", "relay-clients"),
 	}
@@ -57,14 +57,14 @@ type clientsServer struct {
 	tlsConf *tls.Config
 	auth    clientAuthenticator
 
-	forwards  map[model.Forward]*forwardClients
+	forwards  map[model.Endpoint]*forwardClients
 	forwardMu sync.RWMutex
 
 	logger *slog.Logger
 }
 
 type forwardClients struct {
-	fwd          model.Forward
+	fwd          model.Endpoint
 	destinations map[model.Key]*clientConn
 	sources      map[model.Key]*clientConn
 	mu           sync.RWMutex
@@ -110,7 +110,7 @@ func (d *forwardClients) empty() bool {
 	return (len(d.destinations) + len(d.sources)) == 0
 }
 
-func (s *clientsServer) getByForward(fwd model.Forward) *forwardClients {
+func (s *clientsServer) getByForward(fwd model.Endpoint) *forwardClients {
 	s.forwardMu.RLock()
 	dst := s.forwards[fwd]
 	s.forwardMu.RUnlock()

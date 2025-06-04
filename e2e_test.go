@@ -239,7 +239,7 @@ func TestE2E(t *testing.T) {
 		defer clNameDeny.Close()
 
 		dst, err := clNameDeny.Destination(ctx, NewDestinationConfig("direct"))
-		require.ErrorContains(t, err, "forward not allowed")
+		require.ErrorContains(t, err, "endpoint not allowed")
 		require.Nil(t, dst)
 	})
 	t.Run("deny-role", func(t *testing.T) {
@@ -415,8 +415,8 @@ func TestE2E(t *testing.T) {
 	require.NoError(t, err)
 
 	for name, tc := range connectedTests {
-		require.Equal(t, name, tc.d.Forward.String())
-		require.Equal(t, name, tc.s.Forward.String())
+		require.Equal(t, name, tc.d.Endpoint.String())
+		require.Equal(t, name, tc.s.Endpoint.String())
 
 		dst, err := clDst.Destination(ctx, tc.d)
 		require.NoError(t, err)

@@ -91,9 +91,9 @@ type ClientConnValue struct {
 }
 
 type ClientPeerKey struct {
-	Forward model.Forward `json:"forward"`
-	Role    model.Role    `json:"role"`
-	ID      ksuid.KSUID   `json:"id"` // TODO consider using the server cert key
+	Forward model.Endpoint `json:"forward"`
+	Role    model.Role     `json:"role"`
+	ID      ksuid.KSUID    `json:"id"` // TODO consider using the server cert key
 }
 
 type ClientPeerValue struct {
@@ -101,7 +101,7 @@ type ClientPeerValue struct {
 }
 
 type cacheKey struct {
-	forward model.Forward
+	forward model.Endpoint
 	role    model.Role
 }
 
@@ -116,9 +116,9 @@ type RelayConnValue struct {
 }
 
 type RelayClientKey struct {
-	Forward model.Forward `json:"forward"`
-	Role    model.Role    `json:"role"`
-	Key     model.Key     `json:"key"`
+	Forward model.Endpoint `json:"forward"`
+	Role    model.Role     `json:"role"`
+	Key     model.Key      `json:"key"`
 }
 
 type RelayClientValue struct {
@@ -157,7 +157,7 @@ func (v *RelayClientValue) UnmarshalJSON(b []byte) error {
 }
 
 type RelayForwardKey struct {
-	Forward model.Forward `json:"forward"`
+	Forward model.Endpoint `json:"forward"`
 }
 
 type RelayForwardValue struct {
@@ -179,8 +179,8 @@ func (v *RelayForwardValue) UnmarshalJSON(b []byte) error {
 }
 
 type RelayServerKey struct {
-	Forward model.Forward `json:"forward"`
-	RelayID ksuid.KSUID   `json:"relay_id"`
+	Forward model.Endpoint `json:"forward"`
+	RelayID ksuid.KSUID    `json:"relay_id"`
 }
 
 type RelayServerValue struct {

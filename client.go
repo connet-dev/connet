@@ -33,9 +33,9 @@ type Client struct {
 	rootCert     *certc.Cert
 	directServer *client.DirectServer
 
-	destinations   map[model.Forward]*clientDestination
+	destinations   map[model.Endpoint]*clientDestination
 	destinationsMu sync.RWMutex
-	sources        map[model.Forward]*clientSource
+	sources        map[model.Endpoint]*clientSource
 	sourcesMu      sync.RWMutex
 
 	connStatus     atomic.Value
@@ -65,8 +65,8 @@ func Connect(ctx context.Context, opts ...ClientOption) (*Client, error) {
 
 		rootCert: rootCert,
 
-		destinations: map[model.Forward]*clientDestination{},
-		sources:      map[model.Forward]*clientSource{},
+		destinations: map[model.Endpoint]*clientDestination{},
+		sources:      map[model.Endpoint]*clientSource{},
 
 		currentSession: notify.New[*session](nil),
 		closer:         make(chan struct{}),
@@ -126,7 +126,7 @@ func (c *Client) Destinations() []string {
 	c.destinationsMu.RLock()
 	defer c.destinationsMu.RUnlock()
 
-	return model.ForwardNames(slices.Collect(maps.Keys(c.destinations)))
+	return model.EndpointNames(slices.Collect(maps.Keys(c.destinations)))
 }
 
 // GetDestination returns a destination by its name. Returns an error if the destination was not found.
@@ -134,7 +134,7 @@ func (c *Client) GetDestination(name string) (Destination, error) {
 	c.destinationsMu.RLock()
 	defer c.destinationsMu.RUnlock()
 
-	dst, ok := c.destinations[model.NewForward(name)]
+	dst, ok := c.destinations[model.NewEndpoint(name)]
 	if !ok {
 		return nil, fmt.Errorf("destination %s: not found", name)
 	}
@@ -148,8 +148,8 @@ func (c *Client) Destination(ctx context.Context, cfg DestinationConfig) (Destin
 	c.destinationsMu.Lock()
 	defer c.destinationsMu.Unlock()
 
-	if _, ok := c.destinations[cfg.Forward]; ok {
-		return nil, fmt.Errorf("destination %s already exists, remove old one first", cfg.Forward)
+	if _, ok := c.destinations[cfg.Endpoint]; ok {
+		return nil, fmt.Errorf("destination %s already exists, remove old one first", cfg.Endpoint)
 	}
 
 	clDst, err := newClientDestination(ctx, c, cfg)
@@ -157,12 +157,12 @@ func (c *Client) Destination(ctx context.Context, cfg DestinationConfig) (Destin
 		return nil, err
 	}
 
-	c.destinations[cfg.Forward] = clDst
-	c.logger.Info("added destination", "fwd", cfg.Forward)
+	c.destinations[cfg.Endpoint] = clDst
+	c.logger.Info("added destination", "fwd", cfg.Endpoint)
 	return clDst, nil
 }
 
-func (c *Client) removeDestination(fwd model.Forward) {
+func (c *Client) removeDestination(fwd model.Endpoint) {
 	c.destinationsMu.Lock()
 	defer c.destinationsMu.Unlock()
 
@@ -175,7 +175,7 @@ func (c *Client) Sources() []string {
 	c.sourcesMu.RLock()
 	defer c.sourcesMu.RUnlock()
 
-	return model.ForwardNames(slices.Collect(maps.Keys(c.sources)))
+	return model.EndpointNames(slices.Collect(maps.Keys(c.sources)))
 }
 
 // GetSource returns a source by its name. Returns an error if the source was not found.
@@ -183,7 +183,7 @@ func (c *Client) GetSource(name string) (Source, error) {
 	c.sourcesMu.RLock()
 	defer c.sourcesMu.RUnlock()
 
-	src, ok := c.sources[model.NewForward(name)]
+	src, ok := c.sources[model.NewEndpoint(name)]
 	if !ok {
 		return nil, fmt.Errorf("source %s: not found", name)
 	}
@@ -197,8 +197,8 @@ func (c *Client) Source(ctx context.Context, cfg SourceConfig) (Source, error) {
 	c.sourcesMu.Lock()
 	defer c.sourcesMu.Unlock()
 
-	if _, ok := c.sources[cfg.Forward]; ok {
-		return nil, fmt.Errorf("source %s already exists, remove old one first", cfg.Forward)
+	if _, ok := c.sources[cfg.Endpoint]; ok {
+		return nil, fmt.Errorf("source %s already exists, remove old one first", cfg.Endpoint)
 	}
 
 	clSrc, err := newClientSource(ctx, c, cfg)
@@ -206,12 +206,12 @@ func (c *Client) Source(ctx context.Context, cfg SourceConfig) (Source, error) {
 		return nil, err
 	}
 
-	c.sources[cfg.Forward] = clSrc
-	c.logger.Info("added source", "fwd", cfg.Forward)
+	c.sources[cfg.Endpoint] = clSrc
+	c.logger.Info("added source", "fwd", cfg.Endpoint)
 	return clSrc, nil
 }
 
-func (c *Client) removeSource(fwd model.Forward) {
+func (c *Client) removeSource(fwd model.Endpoint) {
 	c.sourcesMu.Lock()
 	defer c.sourcesMu.Unlock()
 
@@ -363,9 +363,9 @@ func (c *Client) runSession(ctx context.Context, sess *session) error {
 }
 
 type ClientStatus struct {
-	Status       statusc.Status                   `json:"status"`
-	Destinations map[model.Forward]EndpointStatus `json:"destinations"`
-	Sources      map[model.Forward]EndpointStatus `json:"sources"`
+	Status       statusc.Status                    `json:"status"`
+	Destinations map[model.Endpoint]EndpointStatus `json:"destinations"`
+	Sources      map[model.Endpoint]EndpointStatus `json:"sources"`
 }
 
 // Status returns the client and all added peers statuses
@@ -389,9 +389,9 @@ func (c *Client) Status(ctx context.Context) (ClientStatus, error) {
 	}, nil
 }
 
-func (c *Client) destinationsStatus(ctx context.Context) (map[model.Forward]EndpointStatus, error) {
+func (c *Client) destinationsStatus(ctx context.Context) (map[model.Endpoint]EndpointStatus, error) {
 	var err error
-	statuses := map[model.Forward]EndpointStatus{}
+	statuses := map[model.Endpoint]EndpointStatus{}
 
 	c.destinationsMu.RLock()
 	defer c.destinationsMu.RUnlock()
@@ -406,9 +406,9 @@ func (c *Client) destinationsStatus(ctx context.Context) (map[model.Forward]Endp
 	return statuses, nil
 }
 
-func (c *Client) sourcesStatus(ctx context.Context) (map[model.Forward]EndpointStatus, error) {
+func (c *Client) sourcesStatus(ctx context.Context) (map[model.Endpoint]EndpointStatus, error) {
 	var err error
-	statuses := map[model.Forward]EndpointStatus{}
+	statuses := map[model.Endpoint]EndpointStatus{}
 
 	c.sourcesMu.RLock()
 	defer c.sourcesMu.RUnlock()

@@ -34,13 +34,13 @@ type ClientAuthenticateRequest struct {
 
 type ClientAuthenticator interface {
 	Authenticate(req ClientAuthenticateRequest) (ClientAuthentication, error)
-	Validate(auth ClientAuthentication, fwd model.Forward, role model.Role) (model.Forward, error)
+	Validate(auth ClientAuthentication, fwd model.Endpoint, role model.Role) (model.Endpoint, error)
 }
 
 type ClientAuthentication []byte
 
 type ClientRelays interface {
-	Client(ctx context.Context, fwd model.Forward, role model.Role, cert *x509.Certificate, auth ClientAuthentication,
+	Client(ctx context.Context, fwd model.Endpoint, role model.Role, cert *x509.Certificate, auth ClientAuthentication,
 		notify func(map[ksuid.KSUID]relayCacheValue) error) error
 }
 
@@ -171,22 +171,22 @@ func (s *clientServer) disconnected(id ksuid.KSUID) error {
 	return s.conns.Del(ClientConnKey{id})
 }
 
-func (s *clientServer) announce(fwd model.Forward, role model.Role, id ksuid.KSUID, peer *pbclient.Peer) error {
+func (s *clientServer) announce(fwd model.Endpoint, role model.Role, id ksuid.KSUID, peer *pbclient.Peer) error {
 	return s.peers.Put(ClientPeerKey{fwd, role, id}, ClientPeerValue{peer})
 }
 
-func (s *clientServer) revoke(fwd model.Forward, role model.Role, id ksuid.KSUID) error {
+func (s *clientServer) revoke(fwd model.Endpoint, role model.Role, id ksuid.KSUID) error {
 	return s.peers.Del(ClientPeerKey{fwd, role, id})
 }
 
-func (s *clientServer) announcements(fwd model.Forward, role model.Role) ([]*pbclient.RemotePeer, int64) {
+func (s *clientServer) announcements(fwd model.Endpoint, role model.Role) ([]*pbclient.RemotePeer, int64) {
 	s.peersMu.RLock()
 	defer s.peersMu.RUnlock()
 
 	return slices.Clone(s.peersCache[cacheKey{fwd, role}]), s.peersOffset
 }
 
-func (s *clientServer) listen(ctx context.Context, fwd model.Forward, role model.Role, notify func(peers []*pbclient.RemotePeer) error) error {
+func (s *clientServer) listen(ctx context.Context, fwd model.Endpoint, role model.Role, notify func(peers []*pbclient.RemotePeer) error) error {
 	peers, offset := s.announcements(fwd, role)
 	if err := notify(peers); err != nil {
 		return err
@@ -549,7 +549,7 @@ func (s *clientStream) runErr(ctx context.Context) error {
 	}
 }
 
-func validatePeerCert(fwd model.Forward, peer *pbclient.Peer) *pberror.Error {
+func validatePeerCert(fwd model.Endpoint, peer *pbclient.Peer) *pberror.Error {
 	if _, err := x509.ParseCertificate(peer.ClientCertificate); err != nil {
 		return pberror.NewError(pberror.Code_AnnounceInvalidClientCertificate, "'%s' client cert is invalid", fwd)
 	}
@@ -560,7 +560,7 @@ func validatePeerCert(fwd model.Forward, peer *pbclient.Peer) *pberror.Error {
 }
 
 func (s *clientStream) announce(ctx context.Context, req *pbclient.Request_Announce) error {
-	fwd := model.ForwardFromPB(req.Forward)
+	fwd := model.EndpointFromPB(req.Forward)
 	role := model.RoleFromPB(req.Role)
 	if newFwd, err := s.conn.server.auth.Validate(s.conn.auth, fwd, role); err != nil {
 		perr := pberror.GetError(err)
@@ -641,7 +641,7 @@ func (s *clientStream) announce(ctx context.Context, req *pbclient.Request_Annou
 }
 
 func (s *clientStream) relay(ctx context.Context, req *pbclient.Request_Relay) error {
-	fwd := model.ForwardFromPB(req.Forward)
+	fwd := model.EndpointFromPB(req.Forward)
 	role := model.RoleFromPB(req.Role)
 	if newFwd, err := s.conn.server.auth.Validate(s.conn.auth, fwd, role); err != nil {
 		perr := pberror.GetError(err)

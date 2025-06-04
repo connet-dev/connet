@@ -11,7 +11,7 @@ enum Code {
 
   // Authentication
   AuthenticationFailed = 100;
-  ForwardNotAllowed = 101;
+  EndpointNotAllowed = 101;
   RoleNotAllowed = 102;
 
   // Announce

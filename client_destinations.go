@@ -104,7 +104,7 @@ func newTCPDestination(dst Destination, d dialer, addr string, logger *slog.Logg
 		dst:    dst,
 		addr:   addr,
 		dialer: d,
-		logger: logger.With("destination", dst.Config().Forward, "addr", addr),
+		logger: logger.With("destination", dst.Config().Endpoint, "addr", addr),
 	}
 }
 

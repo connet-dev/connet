@@ -136,7 +136,7 @@ func (s *Server) getControlID() (string, error) {
 	return controlIDConfig.String, nil
 }
 
-func (s *Server) getForwards() []model.Forward {
+func (s *Server) getForwards() []model.Endpoint {
 	s.clients.forwardMu.RLock()
 	defer s.clients.forwardMu.RUnlock()
 
@@ -144,9 +144,9 @@ func (s *Server) getForwards() []model.Forward {
 }
 
 type Status struct {
-	Status            statusc.Status  `json:"status"`
-	Hostports         []string        `json:"hostports"`
-	ControlServerAddr string          `json:"control_server_addr"`
-	ControlServerID   string          `json:"control_server_id"`
-	Forwards          []model.Forward `json:"forwards"`
+	Status            statusc.Status   `json:"status"`
+	Hostports         []string         `json:"hostports"`
+	ControlServerAddr string           `json:"control_server_addr"`
+	ControlServerID   string           `json:"control_server_id"`
+	Forwards          []model.Endpoint `json:"forwards"`
 }

@@ -338,7 +338,7 @@ func (s *controlClient) runClientsStream(ctx context.Context, conn quic.Connecti
 
 			for _, change := range resp.Changes {
 				key := ClientKey{
-					Forward: model.ForwardFromPB(change.Forward),
+					Forward: model.EndpointFromPB(change.Forward),
 					Role:    model.RoleFromPB(change.Role),
 					Key:     model.NewKeyString(change.CertificateKey),
 				}
@@ -541,7 +541,7 @@ func (s *controlClient) runServersLog(ctx context.Context) error {
 }
 
 type relayServer struct {
-	fwd  model.Forward
+	fwd  model.Endpoint
 	name string
 
 	tls []tls.Certificate

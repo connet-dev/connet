@@ -27,7 +27,7 @@ import (
 
 // SourceConfig structure represents source configuration.
 type SourceConfig struct {
-	Forward          model.Forward
+	Endpoint         model.Endpoint
 	Route            model.RouteOption
 	RelayEncryptions []model.EncryptionScheme
 }
@@ -35,7 +35,7 @@ type SourceConfig struct {
 // NewSourceConfig creates a source config for a given name.
 func NewSourceConfig(name string) SourceConfig {
 	return SourceConfig{
-		Forward:          model.NewForward(name),
+		Endpoint:         model.NewEndpoint(name),
 		Route:            model.RouteAny,
 		RelayEncryptions: []model.EncryptionScheme{model.NoEncryption},
 	}
@@ -67,7 +67,7 @@ type sourceConn struct {
 }
 
 func NewSource(cfg SourceConfig, direct *DirectServer, root *certc.Cert, logger *slog.Logger) (*Source, error) {
-	logger = logger.With("source", cfg.Forward)
+	logger = logger.With("source", cfg.Endpoint)
 	p, err := newPeer(direct, root, logger)
 	if err != nil {
 		return nil, err
@@ -104,7 +104,7 @@ func (s *Source) RunAnnounce(ctx context.Context, conn quic.Connection, directAd
 
 	return (&peerControl{
 		local:  s.peer,
-		fwd:    s.cfg.Forward,
+		fwd:    s.cfg.Endpoint,
 		role:   model.Source,
 		opt:    s.cfg.Route,
 		conn:   conn,
