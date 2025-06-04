@@ -108,12 +108,12 @@ func (d *Destination) RunAnnounce(ctx context.Context, conn quic.Connection, dir
 	}
 
 	return (&peerControl{
-		local:  d.peer,
-		fwd:    d.cfg.Endpoint,
-		role:   model.Destination,
-		opt:    d.cfg.Route,
-		conn:   conn,
-		notify: notifyResponse,
+		local:    d.peer,
+		endpoint: d.cfg.Endpoint,
+		role:     model.Destination,
+		opt:      d.cfg.Route,
+		conn:     conn,
+		notify:   notifyResponse,
 	}).run(ctx)
 }
 

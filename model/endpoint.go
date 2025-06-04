@@ -22,10 +22,10 @@ func (f Endpoint) String() string {
 	return f.string
 }
 
-func PBFromEndpoints(fwds []Endpoint) []*pbmodel.Endpoint {
-	pbs := make([]*pbmodel.Endpoint, len(fwds))
-	for i, fwd := range fwds {
-		pbs[i] = fwd.PB()
+func PBFromEndpoints(eps []Endpoint) []*pbmodel.Endpoint {
+	pbs := make([]*pbmodel.Endpoint, len(eps))
+	for i, ep := range eps {
+		pbs[i] = ep.PB()
 	}
 	return pbs
 }
@@ -39,10 +39,10 @@ func (f *Endpoint) UnmarshalText(b []byte) error {
 	return nil
 }
 
-func EndpointNames(fwds []Endpoint) []string {
-	var strs = make([]string, len(fwds))
-	for i, fwd := range fwds {
-		strs[i] = fwd.string
+func EndpointNames(eps []Endpoint) []string {
+	var strs = make([]string, len(eps))
+	for i, ep := range eps {
+		strs[i] = ep.string
 	}
 	return strs
 }

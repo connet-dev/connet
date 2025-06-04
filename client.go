@@ -158,16 +158,16 @@ func (c *Client) Destination(ctx context.Context, cfg DestinationConfig) (Destin
 	}
 
 	c.destinations[cfg.Endpoint] = clDst
-	c.logger.Info("added destination", "fwd", cfg.Endpoint)
+	c.logger.Info("added destination", "endpoint", cfg.Endpoint)
 	return clDst, nil
 }
 
-func (c *Client) removeDestination(fwd model.Endpoint) {
+func (c *Client) removeDestination(endpoint model.Endpoint) {
 	c.destinationsMu.Lock()
 	defer c.destinationsMu.Unlock()
 
-	delete(c.destinations, fwd)
-	c.logger.Info("removed destination", "fwd", fwd)
+	delete(c.destinations, endpoint)
+	c.logger.Info("removed destination", "endpoint", endpoint)
 }
 
 // Sources returns the set of currently active sources
@@ -207,16 +207,16 @@ func (c *Client) Source(ctx context.Context, cfg SourceConfig) (Source, error) {
 	}
 
 	c.sources[cfg.Endpoint] = clSrc
-	c.logger.Info("added source", "fwd", cfg.Endpoint)
+	c.logger.Info("added source", "endpoint", cfg.Endpoint)
 	return clSrc, nil
 }
 
-func (c *Client) removeSource(fwd model.Endpoint) {
+func (c *Client) removeSource(endpoint model.Endpoint) {
 	c.sourcesMu.Lock()
 	defer c.sourcesMu.Unlock()
 
-	delete(c.sources, fwd)
-	c.logger.Info("removed source", "fwd", fwd)
+	delete(c.sources, endpoint)
+	c.logger.Info("removed source", "endpoint", endpoint)
 }
 
 // Close closes this client. It disconnects the client and all endpoints (destinations and sources) associated with it.
@@ -396,8 +396,8 @@ func (c *Client) destinationsStatus(ctx context.Context) (map[model.Endpoint]End
 	c.destinationsMu.RLock()
 	defer c.destinationsMu.RUnlock()
 
-	for fwd, dst := range c.destinations {
-		statuses[fwd], err = dst.Status(ctx)
+	for ep, dst := range c.destinations {
+		statuses[ep], err = dst.Status(ctx)
 		if err != nil {
 			return nil, err
 		}
@@ -413,8 +413,8 @@ func (c *Client) sourcesStatus(ctx context.Context) (map[model.Endpoint]Endpoint
 	c.sourcesMu.RLock()
 	defer c.sourcesMu.RUnlock()
 
-	for fwd, src := range c.sources {
-		statuses[fwd], err = src.Status(ctx)
+	for ep, src := range c.sources {
+		statuses[ep], err = src.Status(ctx)
 		if err != nil {
 			return nil, err
 		}

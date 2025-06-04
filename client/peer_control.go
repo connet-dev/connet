@@ -12,12 +12,12 @@ import (
 )
 
 type peerControl struct {
-	local  *peer
-	fwd    model.Endpoint
-	role   model.Role
-	opt    model.RouteOption
-	conn   quic.Connection
-	notify func(error)
+	local    *peer
+	endpoint model.Endpoint
+	role     model.Role
+	opt      model.RouteOption
+	conn     quic.Connection
+	notify   func(error)
 }
 
 func (d *peerControl) run(ctx context.Context) error {
@@ -52,7 +52,7 @@ func (d *peerControl) runAnnounce(ctx context.Context) error {
 			d.local.logger.Debug("updated announce", "direct", len(peer.Directs), "relays", len(peer.RelayIds))
 			return proto.Write(stream, &pbclient.Request{
 				Announce: &pbclient.Request_Announce{
-					Forward: d.fwd.PB(),
+					Forward: d.endpoint.PB(),
 					Role:    d.role.PB(),
 					Peer:    peer,
 				},
@@ -89,7 +89,7 @@ func (d *peerControl) runRelay(ctx context.Context) error {
 
 	if err := proto.Write(stream, &pbclient.Request{
 		Relay: &pbclient.Request_Relay{
-			Forward:           d.fwd.PB(),
+			Forward:           d.endpoint.PB(),
 			Role:              d.role.PB(),
 			ClientCertificate: d.local.clientCert.Leaf.Raw,
 		},

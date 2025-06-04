@@ -155,10 +155,10 @@ func NewHTTPSource(src Source, srcURL *url.URL, cfg *tls.Config) *HTTPSource {
 }
 
 func (s *HTTPSource) Run(ctx context.Context) error {
-	fwd := s.src.Config().Endpoint.String()
+	endpoint := s.src.Config().Endpoint.String()
 	var targetURL url.URL = *s.srcURL
 	targetURL.Scheme = "http"
-	targetURL.Host = fwd
+	targetURL.Host = endpoint
 
 	srv := &http.Server{
 		Addr:      s.srcURL.Host,
@@ -175,11 +175,11 @@ func (s *HTTPSource) Run(ctx context.Context) error {
 				w.WriteHeader(http.StatusBadGateway)
 				switch {
 				case errors.Is(err, ErrNoActiveDestinations):
-					fmt.Fprintf(w, "[source %s] no active destinations found", fwd)
+					fmt.Fprintf(w, "[source %s] no active destinations found", endpoint)
 				case errors.Is(err, ErrNoDialedDestinations):
-					fmt.Fprintf(w, "[source %s] cannot dial active destinations", fwd)
+					fmt.Fprintf(w, "[source %s] cannot dial active destinations", endpoint)
 				default:
-					fmt.Fprintf(w, "[source %s] %v", fwd, err)
+					fmt.Fprintf(w, "[source %s] %v", endpoint, err)
 				}
 			},
 		},

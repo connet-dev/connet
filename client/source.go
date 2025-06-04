@@ -103,12 +103,12 @@ func (s *Source) RunAnnounce(ctx context.Context, conn quic.Connection, directAd
 	}
 
 	return (&peerControl{
-		local:  s.peer,
-		fwd:    s.cfg.Endpoint,
-		role:   model.Source,
-		opt:    s.cfg.Route,
-		conn:   conn,
-		notify: notifyResponse,
+		local:    s.peer,
+		endpoint: s.cfg.Endpoint,
+		role:     model.Source,
+		opt:      s.cfg.Route,
+		conn:     conn,
+		notify:   notifyResponse,
 	}).run(ctx)
 }
 

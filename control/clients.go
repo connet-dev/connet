@@ -34,13 +34,13 @@ type ClientAuthenticateRequest struct {
 
 type ClientAuthenticator interface {
 	Authenticate(req ClientAuthenticateRequest) (ClientAuthentication, error)
-	Validate(auth ClientAuthentication, fwd model.Endpoint, role model.Role) (model.Endpoint, error)
+	Validate(auth ClientAuthentication, endpoint model.Endpoint, role model.Role) (model.Endpoint, error)
 }
 
 type ClientAuthentication []byte
 
 type ClientRelays interface {
-	Client(ctx context.Context, fwd model.Endpoint, role model.Role, cert *x509.Certificate, auth ClientAuthentication,
+	Client(ctx context.Context, endpoint model.Endpoint, role model.Role, cert *x509.Certificate, auth ClientAuthentication,
 		notify func(map[ksuid.KSUID]relayCacheValue) error) error
 }
 
