@@ -3,6 +3,9 @@ package control
 import (
 	"crypto/x509"
 	"encoding/json"
+	"errors"
+	"io/fs"
+	"os"
 	"path/filepath"
 
 	"github.com/connet-dev/connet/certc"
@@ -54,7 +57,11 @@ func (f *fileStores) RelayClients() (logc.KV[RelayClientKey, RelayClientValue], 
 }
 
 func (f *fileStores) RelayEndpoints(id ksuid.KSUID) (logc.KV[RelayEndpointKey, RelayEndpointValue], error) {
-	return logc.NewKV[RelayEndpointKey, RelayEndpointValue](filepath.Join(f.dir, "relay-forwards", id.String()))
+	dir := filepath.Join(f.dir, "relay-forwards", id.String())
+	if _, err := os.Stat(dir); errors.Is(err, fs.ErrNotExist) {
+		return logc.NewKV[RelayEndpointKey, RelayEndpointValue](filepath.Join(f.dir, "relay-endpoints", id.String()))
+	}
+	return logc.NewKV[RelayEndpointKey, RelayEndpointValue](dir)
 }
 
 func (f *fileStores) RelayServers() (logc.KV[RelayServerKey, RelayServerValue], error) {
@@ -91,9 +98,32 @@ type ClientConnValue struct {
 }
 
 type ClientPeerKey struct {
-	Endpoint model.Endpoint `json:"forward"`
+	Endpoint model.Endpoint `json:"endpoint"`
 	Role     model.Role     `json:"role"`
 	ID       ksuid.KSUID    `json:"id"` // TODO consider using the server cert key
+}
+
+// TODO remove in 0.10.0
+func (v *ClientPeerKey) UnmarshalJSON(b []byte) error {
+	s := struct {
+		Forward  model.Endpoint `json:"forward"`
+		Endpoint model.Endpoint `json:"endpoint"`
+		Role     model.Role     `json:"role"`
+		ID       ksuid.KSUID    `json:"id"`
+	}{}
+
+	if err := json.Unmarshal(b, &s); err != nil {
+		return err
+	}
+
+	v.Endpoint = s.Endpoint
+	v.Role = s.Role
+	v.ID = s.ID
+	if v.Endpoint.String() == "" && s.Forward.String() != "" {
+		v.Endpoint = s.Forward
+	}
+
+	return nil
 }
 
 type ClientPeerValue struct {
@@ -116,9 +146,32 @@ type RelayConnValue struct {
 }
 
 type RelayClientKey struct {
-	Endpoint model.Endpoint `json:"forward"`
+	Endpoint model.Endpoint `json:"endpoint"`
 	Role     model.Role     `json:"role"`
 	Key      model.Key      `json:"key"`
+}
+
+// TODO remove in 0.10.0
+func (v *RelayClientKey) UnmarshalJSON(b []byte) error {
+	s := struct {
+		Forward  model.Endpoint `json:"forward"`
+		Endpoint model.Endpoint `json:"endpoint"`
+		Role     model.Role     `json:"role"`
+		Key      model.Key      `json:"key"`
+	}{}
+
+	if err := json.Unmarshal(b, &s); err != nil {
+		return err
+	}
+
+	v.Endpoint = s.Endpoint
+	v.Role = s.Role
+	v.Key = s.Key
+	if v.Endpoint.String() == "" && s.Forward.String() != "" {
+		v.Endpoint = s.Forward
+	}
+
+	return nil
 }
 
 type RelayClientValue struct {
@@ -157,7 +210,26 @@ func (v *RelayClientValue) UnmarshalJSON(b []byte) error {
 }
 
 type RelayEndpointKey struct {
-	Endpoint model.Endpoint `json:"forward"`
+	Endpoint model.Endpoint `json:"endpoint"`
+}
+
+// TODO remove in 0.10.0
+func (v *RelayEndpointKey) UnmarshalJSON(b []byte) error {
+	s := struct {
+		Forward  model.Endpoint `json:"forward"`
+		Endpoint model.Endpoint `json:"endpoint"`
+	}{}
+
+	if err := json.Unmarshal(b, &s); err != nil {
+		return err
+	}
+
+	v.Endpoint = s.Endpoint
+	if v.Endpoint.String() == "" && s.Forward.String() != "" {
+		v.Endpoint = s.Forward
+	}
+
+	return nil
 }
 
 type RelayEndpointValue struct {
@@ -179,8 +251,29 @@ func (v *RelayEndpointValue) UnmarshalJSON(b []byte) error {
 }
 
 type RelayServerKey struct {
-	Endpoint model.Endpoint `json:"forward"`
+	Endpoint model.Endpoint `json:"endpoint"`
 	RelayID  ksuid.KSUID    `json:"relay_id"`
+}
+
+// TODO remove in 0.10.0
+func (v *RelayServerKey) UnmarshalJSON(b []byte) error {
+	s := struct {
+		Forward  model.Endpoint `json:"forward"`
+		Endpoint model.Endpoint `json:"endpoint"`
+		RelayID  ksuid.KSUID    `json:"relay_id"`
+	}{}
+
+	if err := json.Unmarshal(b, &s); err != nil {
+		return err
+	}
+
+	v.Endpoint = s.Endpoint
+	v.RelayID = s.RelayID
+	if v.Endpoint.String() == "" && s.Forward.String() != "" {
+		v.Endpoint = s.Forward
+	}
+
+	return nil
 }
 
 type RelayServerValue struct {
