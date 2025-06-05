@@ -552,9 +552,10 @@ by adding account management and it is one of the easiest way to start.
  - [x] remove expired protocol fields
  - [x] remove expired protocols
  - [x] refactor protocol errors
+ - [x] from forward to endpoint
  - [ ] api to control client/control/relay
- - [ ] from forward to endpoint
  - [ ] preshared clients - controless p2p
+ - [ ] destination load balance
 
 ## Future
  - [ ] UDP support
