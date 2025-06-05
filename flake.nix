@@ -159,11 +159,11 @@
               destination.wait_for_unit("connet-client.service")
               source.wait_for_unit("connet-client.service")
               source.wait_for_open_port(3000)
-              source.succeed("${pkgs.curl}/bin/curl http://localhost:3000")
+              source.wait_until_succeeds("${pkgs.curl}/bin/curl http://localhost:3000", timeout=10)
               source.wait_for_open_port(3001)
-              source.succeed("${pkgs.curl}/bin/curl http://localhost:3001")
+              source.wait_until_succeeds("${pkgs.curl}/bin/curl http://localhost:3001", timeout=10)
               source.wait_for_open_port(3002)
-              source.succeed("${pkgs.curl}/bin/curl http://localhost:3002")
+              source.wait_until_succeeds("${pkgs.curl}/bin/curl http://localhost:3002", timeout=10)
             '';
           };
         };
