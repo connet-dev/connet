@@ -11,6 +11,7 @@ import (
 	"fmt"
 	"log/slog"
 	"net/netip"
+	"slices"
 	"time"
 
 	"github.com/connet-dev/connet/certc"
@@ -28,7 +29,7 @@ type peer struct {
 	self       *notify.V[*pbclient.Peer]
 	relays     *notify.V[[]*pbclient.Relay]
 	relayConns *notify.V[map[relayID]quic.Connection]
-	peers      *notify.V[[]*pbclient.RemotePeer]
+	peers      *notify.V[remotePeers]
 	peerConns  *notify.V[map[peerConnKey]quic.Connection]
 
 	direct     *DirectServer
@@ -64,6 +65,15 @@ func (s peerStyle) String() string {
 	}
 }
 
+type remotePeers struct {
+	dynamic []*pbclient.RemotePeer
+	static  []*pbclient.RemotePeer
+}
+
+func (r remotePeers) all() []*pbclient.RemotePeer {
+	return append(r.dynamic, r.static...)
+}
+
 func newPeer(direct *DirectServer, root *certc.Cert, logger *slog.Logger) (*peer, error) {
 	serverCert, err := root.NewServer(certc.CertOpts{
 		Domains: []string{netc.GenServerName("connet-direct")},
@@ -91,7 +101,7 @@ func newPeer(direct *DirectServer, root *certc.Cert, logger *slog.Logger) (*peer
 		}),
 		relays:     notify.NewEmpty[[]*pbclient.Relay](),
 		relayConns: notify.New(map[relayID]quic.Connection{}),
-		peers:      notify.NewEmpty[[]*pbclient.RemotePeer](),
+		peers:      notify.NewEmpty[remotePeers](),
 		peerConns:  notify.New(map[peerConnKey]quic.Connection{}),
 
 		direct:     direct,
@@ -128,8 +138,33 @@ func (p *peer) selfListen(ctx context.Context, f func(self *pbclient.Peer) error
 	return p.self.Listen(ctx, f)
 }
 
-func (p *peer) setPeers(peers []*pbclient.RemotePeer) {
-	p.peers.Set(peers)
+func (p *peer) setDynamicPeers(dyn []*pbclient.RemotePeer) {
+	p.peers.Update(func(t remotePeers) remotePeers {
+		return remotePeers{
+			dynamic: dyn,
+			static:  t.static,
+		}
+	})
+}
+
+func (p *peer) addStaticPeer(rp *pbclient.RemotePeer) {
+	p.peers.Update(func(t remotePeers) remotePeers {
+		return remotePeers{
+			dynamic: t.dynamic,
+			static:  append(t.static, rp),
+		}
+	})
+}
+
+func (p *peer) removeStaticPeer(id string) {
+	p.peers.Update(func(t remotePeers) remotePeers {
+		return remotePeers{
+			dynamic: t.dynamic,
+			static: slices.DeleteFunc(t.static, func(pr *pbclient.RemotePeer) bool {
+				return pr.Id == id
+			}),
+		}
+	})
 }
 
 func (p *peer) run(ctx context.Context) error {
@@ -199,7 +234,8 @@ func (p *peer) runShareRelays(ctx context.Context) error {
 
 func (p *peer) runPeers(ctx context.Context) error {
 	peersByID := map[string]*directPeer{}
-	return p.peers.Listen(ctx, func(peers []*pbclient.RemotePeer) error {
+	return p.peers.Listen(ctx, func(rp remotePeers) error {
+		peers := rp.all()
 		p.logger.Debug("peers updated", "len", len(peers))
 
 		activeIDs := map[string]struct{}{}
@@ -209,7 +245,7 @@ func (p *peer) runPeers(ctx context.Context) error {
 			if prg != nil {
 				prg.remote.Set(sp)
 			} else {
-				prg = newPeering(p, sp, p.logger)
+				prg = newDirectPeer(p, sp, p.logger)
 				peersByID[sp.Id] = prg
 				go prg.run(ctx)
 			}
@@ -310,7 +346,7 @@ func (p *peer) getECDHPublicKey(cfg *pbconnect.ECDHConfiguration) (*ecdh.PublicK
 		return nil, fmt.Errorf("peers peer: %w", err)
 	}
 	var candidates []*x509.Certificate
-	for _, remote := range remotes {
+	for _, remote := range remotes.all() {
 		cert, err := x509.ParseCertificate(remote.Peer.ServerCertificate)
 		if err != nil {
 			return nil, err

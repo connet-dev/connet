@@ -1,0 +1,12 @@
+syntax = "proto3";
+package static;
+
+// import "error.proto";
+// import "model.proto";
+
+option go_package = "github.com/connet-dev/connet/proto/pbstatic";
+
+message Message {
+  bytes target = 1;
+  bytes data = 2;
+}

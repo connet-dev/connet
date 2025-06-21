@@ -21,6 +21,7 @@ import (
 	"github.com/connet-dev/connet/proto"
 	"github.com/connet-dev/connet/proto/pbconnect"
 	"github.com/connet-dev/connet/quicc"
+	"github.com/mr-tron/base58"
 	"github.com/quic-go/quic-go"
 	"golang.org/x/sync/errgroup"
 )
@@ -30,6 +31,7 @@ type SourceConfig struct {
 	Endpoint         model.Endpoint
 	Route            model.RouteOption
 	RelayEncryptions []model.EncryptionScheme
+	StaticPeers      []StaticConfig
 }
 
 // NewSourceConfig creates a source config for a given name.
@@ -53,18 +55,27 @@ func (cfg SourceConfig) WithRelayEncryptions(schemes ...model.EncryptionScheme) 
 	return cfg
 }
 
+func (cfg SourceConfig) WithStaticPeers(peers ...StaticConfig) SourceConfig {
+	cfg.StaticPeers = peers
+	return cfg
+}
+
 type Source struct {
 	cfg    SourceConfig
 	logger *slog.Logger
 
-	peer  *peer
-	conns atomic.Pointer[[]sourceConn]
+	peer   *peer
+	static *staticPeer
+	conns  atomic.Pointer[[]sourceConn]
 }
 
 type sourceConn struct {
 	peer peerConnKey
 	conn quic.Connection
 }
+
+const srcPriv = "DJh81ynfiPzchK4BgCVCS6E8FxoNRP5KhmD5cPGoXRP5"
+const srcPub = "HtzzsovDyKAZC9iZZxQefau8emUccrCXPqSzXAoYredP"
 
 func NewSource(cfg SourceConfig, direct *DirectServer, root *certc.Cert, logger *slog.Logger) (*Source, error) {
 	logger = logger.With("source", cfg.Endpoint)
@@ -75,12 +86,30 @@ func NewSource(cfg SourceConfig, direct *DirectServer, root *certc.Cert, logger 
 	if cfg.Route.AllowDirect() {
 		p.expectDirect()
 	}
+	static := newStaticPeer(cfg.Endpoint, StaticConfig{
+		Addrs: []string{":19192"},
+		LocalPrivateKey: func() [32]byte {
+			k, err := base58.Decode(srcPriv)
+			if err != nil {
+				panic(err)
+			}
+			return [32]byte(k)
+		}(),
+		RemotePublicKey: func() [32]byte {
+			k, err := base58.Decode(dstPub)
+			if err != nil {
+				panic(err)
+			}
+			return [32]byte(k)
+		}(),
+	}, p, logger)
 
 	return &Source{
 		cfg:    cfg,
 		logger: logger,
 
-		peer: p,
+		peer:   p,
+		static: static,
 	}, nil
 }
 
@@ -93,6 +122,7 @@ func (s *Source) RunPeer(ctx context.Context) error {
 
 	g.Go(func() error { return s.peer.run(ctx) })
 	g.Go(func() error { return s.runActive(ctx) })
+	g.Go(func() error { return s.static.run(ctx) })
 
 	return g.Wait()
 }
@@ -287,7 +317,7 @@ func (s *Source) getDestinationTLS(name string) (*tls.Config, error) {
 		return nil, fmt.Errorf("destination peers list: %w", err)
 	}
 
-	for _, remote := range remotes {
+	for _, remote := range remotes.all() {
 		switch cfg, err := newServerTLSConfig(remote.Peer.ServerCertificate); {
 		case err != nil:
 			return nil, fmt.Errorf("destination peer server cert: %w", err)

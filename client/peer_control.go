@@ -73,7 +73,7 @@ func (d *peerControl) runAnnounce(ctx context.Context) error {
 
 			// TODO on server restart peers is reset and client loses active peers
 			// only for them to come back at the next tick, with different ID
-			d.local.setPeers(resp.Announce.Peers)
+			d.local.setDynamicPeers(resp.Announce.Peers)
 		}
 	})
 

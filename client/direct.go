@@ -6,13 +6,18 @@ import (
 	"crypto/x509"
 	"fmt"
 	"log/slog"
+	"net"
 	"sync"
 	"sync/atomic"
 
 	"github.com/connet-dev/connet/model"
 	"github.com/connet-dev/connet/proto/pberror"
+	"github.com/connet-dev/connet/proto/pbstatic"
 	"github.com/connet-dev/connet/quicc"
+	"github.com/mr-tron/base58"
 	"github.com/quic-go/quic-go"
+	"golang.org/x/sync/errgroup"
+	"google.golang.org/protobuf/proto"
 )
 
 type DirectServer struct {
@@ -21,6 +26,9 @@ type DirectServer struct {
 
 	servers   map[string]*vServer
 	serversMu sync.RWMutex
+
+	statics   map[string]chan speer
+	staticsMu sync.RWMutex
 }
 
 func NewDirectServer(transport *quic.Transport, logger *slog.Logger) (*DirectServer, error) {
@@ -29,6 +37,7 @@ func NewDirectServer(transport *quic.Transport, logger *slog.Logger) (*DirectSer
 		logger:    logger.With("component", "direct-server"),
 
 		servers: map[string]*vServer{},
+		statics: map[string]chan speer{},
 	}, nil
 }
 
@@ -66,6 +75,11 @@ func (s *vServer) updateClientCA() {
 		clientCA.AddCert(exp.cert)
 	}
 	s.clientCA.Store(clientCA)
+}
+
+type speer struct {
+	addr net.Addr
+	peer []byte
 }
 
 func (s *DirectServer) addServerCert(cert tls.Certificate) {
@@ -114,6 +128,64 @@ func (s *DirectServer) expect(serverCert tls.Certificate, cert *x509.Certificate
 }
 
 func (s *DirectServer) Run(ctx context.Context) error {
+	g, ctx := errgroup.WithContext(ctx)
+	g.Go(func() error { return s.runServer(ctx) })
+	g.Go(func() error { return s.runStatic(ctx) })
+	return g.Wait()
+}
+
+func (s *DirectServer) runStatic(ctx context.Context) error {
+	buff := make([]byte, 2*1024)
+	for {
+		n, addr, err := s.transport.ReadNonQUICPacket(ctx, buff)
+		if err != nil {
+			return fmt.Errorf("error reading non quic: %w", err)
+		}
+		fmt.Printf("received packet from %s: %d\n", addr, n)
+		if buff[0] != 0x0c {
+			continue
+		}
+
+		msg := &pbstatic.Message{}
+		if err := proto.Unmarshal(buff[1:n], msg); err != nil {
+			s.logger.Debug("static unmarshal", "err", err)
+			continue
+		}
+		s.receivedStatic(addr, msg)
+	}
+}
+
+func (s *DirectServer) receivedStatic(addr net.Addr, msg *pbstatic.Message) {
+	id := base58.Encode(msg.Target) // TODO do we just use string in proto?
+
+	s.staticsMu.RLock()
+	defer s.staticsMu.RUnlock()
+
+	if ch, ok := s.statics[id]; ok {
+		ch <- speer{addr, msg.Data}
+	}
+}
+
+func (s *DirectServer) expectStatic(idhash string) <-chan speer {
+	s.staticsMu.Lock()
+	defer s.staticsMu.Unlock()
+
+	ch := make(chan speer, 1)
+	s.statics[idhash] = ch
+	return ch
+}
+
+func (s *DirectServer) unexpectStatic(idhash string) {
+	s.staticsMu.Lock()
+	defer s.staticsMu.Unlock()
+
+	if ch, ok := s.statics[idhash]; ok {
+		close(ch)
+		delete(s.statics, idhash)
+	}
+}
+
+func (s *DirectServer) runServer(ctx context.Context) error {
 	tlsConf := &tls.Config{
 		ClientAuth: tls.RequireAndVerifyClientCert,
 		NextProtos: model.ConnectDirectNextProtos,
