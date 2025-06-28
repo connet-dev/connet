@@ -63,7 +63,7 @@ type Source struct {
 
 type sourceConn struct {
 	peer peerConnKey
-	conn quic.Connection
+	conn *quic.Conn
 }
 
 func NewSource(cfg SourceConfig, direct *DirectServer, root *certc.Cert, logger *slog.Logger) (*Source, error) {
@@ -97,7 +97,7 @@ func (s *Source) RunPeer(ctx context.Context) error {
 	return g.Wait()
 }
 
-func (s *Source) RunAnnounce(ctx context.Context, conn quic.Connection, directAddrs []netip.AddrPort, notifyResponse func(error)) error {
+func (s *Source) RunAnnounce(ctx context.Context, conn *quic.Conn, directAddrs []netip.AddrPort, notifyResponse func(error)) error {
 	if s.cfg.Route.AllowDirect() {
 		s.peer.setDirectAddrs(directAddrs)
 	}
@@ -117,7 +117,7 @@ func (s *Source) PeerStatus() (PeerStatus, error) {
 }
 
 func (s *Source) runActive(ctx context.Context) error {
-	return s.peer.activeConnsListen(ctx, func(active map[peerConnKey]quic.Connection) error {
+	return s.peer.activeConnsListen(ctx, func(active map[peerConnKey]*quic.Conn) error {
 		s.logger.Debug("active conns", "len", len(active))
 
 		var conns = make([]sourceConn, 0, len(active))
@@ -200,7 +200,7 @@ func (s *Source) dial(ctx context.Context, dest sourceConn) (net.Conn, error) {
 	return conn, nil
 }
 
-func (s *Source) dialStream(ctx context.Context, dest sourceConn, stream quic.Stream) (net.Conn, error) {
+func (s *Source) dialStream(ctx context.Context, dest sourceConn, stream *quic.Stream) (net.Conn, error) {
 	var srcSecret *ecdh.PrivateKey
 
 	connect := &pbconnect.Request_Connect{}
@@ -235,7 +235,7 @@ func (s *Source) dialStream(ctx context.Context, dest sourceConn, stream quic.St
 		return nil, fmt.Errorf("source connect read response: %w", err)
 	}
 
-	var encStream net.Conn = quicc.StreamConn(stream, dest.conn)
+	var encStream = quicc.StreamConn(stream, dest.conn)
 	if dest.peer.style == peerRelay {
 		destinationEncryption := model.EncryptionFromPB(resp.Connect.DestinationEncryption)
 		if !slices.Contains(s.cfg.RelayEncryptions, destinationEncryption) {

@@ -20,6 +20,7 @@ func Run[T any](ctx context.Context, addr *net.TCPAddr, f func(ctx context.Conte
 			}
 			if err != nil {
 				w.WriteHeader(http.StatusInternalServerError)
+				//nolint:errcheck
 				fmt.Fprintf(w, "server error: %v", err.Error())
 			}
 		}),
@@ -27,7 +28,7 @@ func Run[T any](ctx context.Context, addr *net.TCPAddr, f func(ctx context.Conte
 
 	go func() {
 		<-ctx.Done()
-		srv.Close()
+		_ = srv.Close()
 	}()
 
 	return srv.ListenAndServe()

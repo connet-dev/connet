@@ -67,8 +67,8 @@ func controlCmd() *cobra.Command {
 	cmd.Flags().StringVar(&clientIngress.Addr, "clients-addr", "", "control client server addr to use")
 	cmd.Flags().StringVar(&clientIngress.Cert, "clients-cert-file", "", "control server cert to use for clients")
 	cmd.Flags().StringVar(&clientIngress.Key, "clients-key-file", "", "control server key to use for clients")
-	cmd.Flags().StringArrayVar(&clientIngress.IPRestriction.AllowCIDRs, "clients-allow-cidr", nil, "cidr to allow client connections from")
-	cmd.Flags().StringArrayVar(&clientIngress.IPRestriction.DenyCIDRs, "clients-deny-cidr", nil, "cidr to deny client connections from")
+	cmd.Flags().StringArrayVar(&clientIngress.AllowCIDRs, "clients-allow-cidr", nil, "cidr to allow client connections from")
+	cmd.Flags().StringArrayVar(&clientIngress.DenyCIDRs, "clients-deny-cidr", nil, "cidr to deny client connections from")
 
 	cmd.Flags().StringArrayVar(&flagsConfig.Control.ClientsTokens, "clients-tokens", nil, "client tokens for clients to connect")
 	cmd.Flags().StringVar(&flagsConfig.Control.ClientsTokensFile, "clients-tokens-file", "", "client tokens file to load")
@@ -77,8 +77,8 @@ func controlCmd() *cobra.Command {
 	cmd.Flags().StringVar(&relayIngress.Addr, "relays-addr", "", "control relay server addr to use")
 	cmd.Flags().StringVar(&relayIngress.Cert, "relays-cert-file", "", "control server cert to use for relays")
 	cmd.Flags().StringVar(&relayIngress.Key, "relays-key-file", "", "control server key to use for relays")
-	cmd.Flags().StringArrayVar(&relayIngress.IPRestriction.AllowCIDRs, "relays-allow-cidr", nil, "cidr to allow relay connections from")
-	cmd.Flags().StringArrayVar(&relayIngress.IPRestriction.DenyCIDRs, "relays-deny-cidr", nil, "cidr to deny relay connections from")
+	cmd.Flags().StringArrayVar(&relayIngress.AllowCIDRs, "relays-allow-cidr", nil, "cidr to allow relay connections from")
+	cmd.Flags().StringArrayVar(&relayIngress.DenyCIDRs, "relays-deny-cidr", nil, "cidr to deny relay connections from")
 
 	cmd.Flags().StringArrayVar(&flagsConfig.Control.RelaysTokens, "relays-tokens", nil, "relay tokens for clients to connect")
 	cmd.Flags().StringVar(&flagsConfig.Control.RelaysTokensFile, "relays-tokens-file", "", "relay tokens file to load")
@@ -305,7 +305,7 @@ func (c IPRestriction) merge(o IPRestriction) IPRestriction {
 }
 
 func (s ControlIngress) isZero() bool {
-	return s.Addr == "" && s.Cert == "" && s.Key == "" && len(s.IPRestriction.AllowCIDRs) == 0 && len(s.IPRestriction.DenyCIDRs) == 0
+	return s.Addr == "" && s.Cert == "" && s.Key == "" && len(s.AllowCIDRs) == 0 && len(s.DenyCIDRs) == 0
 }
 
 var _ = TokenRestriction.merge

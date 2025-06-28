@@ -240,6 +240,7 @@ func (s *relayServer) runListener(ctx context.Context, ingress Ingress) error {
 	if err != nil {
 		return fmt.Errorf("relay server udp listen: %w", err)
 	}
+	//nolint:errcheck
 	defer udpConn.Close()
 
 	s.logger.Debug("start quic listener", "addr", ingress.Addr)
@@ -254,7 +255,7 @@ func (s *relayServer) runListener(ctx context.Context, ingress Ingress) error {
 	quicConf := quicc.StdConfig
 	if ingress.Restr.IsNotEmpty() {
 		quicConf = quicConf.Clone()
-		quicConf.GetConfigForClient = func(info *quic.ClientHelloInfo) (*quic.Config, error) {
+		quicConf.GetConfigForClient = func(info *quic.ClientInfo) (*quic.Config, error) {
 			if ingress.Restr.IsAllowedAddr(info.RemoteAddr) {
 				return quicConf, nil
 			}
@@ -350,7 +351,7 @@ func (s *relayServer) setRelayServerOffset(id ksuid.KSUID, offset int64) error {
 
 type relayConn struct {
 	server *relayServer
-	conn   quic.Connection
+	conn   *quic.Conn
 	logger *slog.Logger
 
 	endpoints logc.KV[RelayEndpointKey, RelayEndpointValue]
@@ -392,7 +393,11 @@ func (c *relayConn) runErr(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
-	defer endpoints.Close()
+	defer func() {
+		if err := endpoints.Close(); err != nil {
+			c.logger.Warn("failed to close endpoints store", "id", c.id, "err", err)
+		}
+	}()
 	c.endpoints = endpoints
 
 	key := RelayConnKey{ID: c.id}

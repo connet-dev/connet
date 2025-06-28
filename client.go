@@ -80,7 +80,9 @@ func Connect(ctx context.Context, opts ...ClientOption) (*Client, error) {
 	go c.runClient(ctx, errCh)
 
 	if err := <-errCh; err != nil {
-		c.Close()
+		if cerr := c.Close(); cerr != nil {
+			err = errors.Join(err, cerr)
+		}
 		return nil, err
 	}
 
@@ -98,6 +100,7 @@ func (c *Client) runClient(ctx context.Context, errCh chan error) {
 		errCh <- fmt.Errorf("listen direct address: %w", err)
 		return
 	}
+	//nolint:errcheck
 	defer udpConn.Close()
 
 	c.logger.Debug("start quic listener")
@@ -229,12 +232,16 @@ func (c *Client) Close() error {
 func (c *Client) closeEndpoints() {
 	for _, dstName := range c.Destinations() {
 		if dst, err := c.GetDestination(dstName); err == nil {
-			dst.Close()
+			if err := dst.Close(); err != nil {
+				c.logger.Debug("error closing destination", "dst", dstName, "err", err)
+			}
 		}
 	}
 	for _, srcName := range c.Sources() {
 		if src, err := c.GetSource(srcName); err == nil {
-			src.Close()
+			if err := src.Close(); err != nil {
+				c.logger.Debug("error closing source", "src", srcName, "err", err)
+			}
 		}
 	}
 }
@@ -267,14 +274,14 @@ func (c *Client) run(ctx context.Context, transport *quic.Transport, errCh chan 
 }
 
 type session struct {
-	conn    quic.Connection
+	conn    *quic.Conn
 	addrs   []netip.AddrPort
 	retoken []byte
 }
 
 func (c *Client) connect(ctx context.Context, transport *quic.Transport, retoken []byte) (*session, error) {
 	c.logger.Debug("dialing target", "addr", c.controlAddr)
-	conn, err := transport.Dial(quicc.RTTContext(ctx), c.controlAddr, &tls.Config{
+	conn, err := transport.Dial(ctx, c.controlAddr, &tls.Config{
 		ServerName: c.controlHost,
 		RootCAs:    c.controlCAs,
 		NextProtos: model.ClientNextProtos,

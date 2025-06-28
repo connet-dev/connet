@@ -215,6 +215,7 @@ func testConnectivityDyn(t *testing.T, serverCert tls.Certificate, clientCA *x50
 	testConnectivityTLS(t, serverConf, clientConf)
 }
 
+//nolint:errcheck
 func testConnectivityTLS(t *testing.T, serverConf *tls.Config, clientConf *tls.Config) {
 	udpConn, err := net.ListenUDP("udp4", &net.UDPAddr{Port: 12345})
 	require.NoError(t, err)

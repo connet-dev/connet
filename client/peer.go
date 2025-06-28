@@ -27,9 +27,9 @@ import (
 type peer struct {
 	self       *notify.V[*pbclient.Peer]
 	relays     *notify.V[[]*pbclient.Relay]
-	relayConns *notify.V[map[relayID]quic.Connection]
+	relayConns *notify.V[map[relayID]*quic.Conn]
 	peers      *notify.V[[]*pbclient.RemotePeer]
-	peerConns  *notify.V[map[peerConnKey]quic.Connection]
+	peerConns  *notify.V[map[peerConnKey]*quic.Conn]
 
 	direct     *DirectServer
 	serverCert tls.Certificate
@@ -90,9 +90,9 @@ func newPeer(direct *DirectServer, root *certc.Cert, logger *slog.Logger) (*peer
 			ClientCertificate: clientTLSCert.Leaf.Raw,
 		}),
 		relays:     notify.NewEmpty[[]*pbclient.Relay](),
-		relayConns: notify.New(map[relayID]quic.Connection{}),
+		relayConns: notify.New(map[relayID]*quic.Conn{}),
 		peers:      notify.NewEmpty[[]*pbclient.RemotePeer](),
-		peerConns:  notify.New(map[peerConnKey]quic.Connection{}),
+		peerConns:  notify.New(map[peerConnKey]*quic.Conn{}),
 
 		direct:     direct,
 		serverCert: serverTLSCert,
@@ -179,7 +179,7 @@ func (p *peer) runRelays(ctx context.Context) error {
 }
 
 func (p *peer) runShareRelays(ctx context.Context) error {
-	return p.relayConns.Listen(ctx, func(conns map[relayID]quic.Connection) error {
+	return p.relayConns.Listen(ctx, func(conns map[relayID]*quic.Conn) error {
 		p.logger.Debug("relays conns updated", "len", len(conns))
 		var ids []string
 		for id := range conns {
@@ -226,7 +226,7 @@ func (p *peer) runPeers(ctx context.Context) error {
 	})
 }
 
-func (p *peer) addRelayConn(id relayID, conn quic.Connection) {
+func (p *peer) addRelayConn(id relayID, conn *quic.Conn) {
 	notify.MapPut(p.relayConns, id, conn)
 }
 
@@ -234,7 +234,7 @@ func (p *peer) removeRelayConn(id relayID) {
 	notify.MapDelete(p.relayConns, id)
 }
 
-func (p *peer) addActiveConn(id string, style peerStyle, key string, conn quic.Connection) {
+func (p *peer) addActiveConn(id string, style peerStyle, key string, conn *quic.Conn) {
 	p.logger.Debug("add active connection", "peer", id, "style", style, "addr", conn.RemoteAddr())
 	notify.MapPut(p.peerConns, peerConnKey{id, style, key}, conn)
 }
@@ -244,10 +244,10 @@ func (p *peer) removeActiveConn(id string, style peerStyle, key string) {
 	notify.MapDelete(p.peerConns, peerConnKey{id, style, key})
 }
 
-func (p *peer) removeActiveConns(id string) map[peerConnKey]quic.Connection {
+func (p *peer) removeActiveConns(id string) map[peerConnKey]*quic.Conn {
 	p.logger.Debug("remove active peer", "peer", id)
-	removed := map[peerConnKey]quic.Connection{}
-	notify.MapDeleteFunc(p.peerConns, func(k peerConnKey, conn quic.Connection) bool {
+	removed := map[peerConnKey]*quic.Conn{}
+	notify.MapDeleteFunc(p.peerConns, func(k peerConnKey, conn *quic.Conn) bool {
 		if k.id == id {
 			removed[k] = conn
 			return true
@@ -257,7 +257,7 @@ func (p *peer) removeActiveConns(id string) map[peerConnKey]quic.Connection {
 	return removed
 }
 
-func (p *peer) activeConnsListen(ctx context.Context, f func(map[peerConnKey]quic.Connection) error) error {
+func (p *peer) activeConnsListen(ctx context.Context, f func(map[peerConnKey]*quic.Conn) error) error {
 	return p.peerConns.Listen(ctx, f)
 }
 

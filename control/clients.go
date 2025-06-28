@@ -251,6 +251,7 @@ func (s *clientServer) runListener(ctx context.Context, ingress Ingress) error {
 	if err != nil {
 		return fmt.Errorf("client server udp listen: %w", err)
 	}
+	//nolint:errcheck
 	defer udpConn.Close()
 
 	s.logger.Debug("start quic listener", "addr", ingress.Addr)
@@ -265,7 +266,7 @@ func (s *clientServer) runListener(ctx context.Context, ingress Ingress) error {
 	quicConf := quicc.StdConfig
 	if ingress.Restr.IsNotEmpty() {
 		quicConf = quicConf.Clone()
-		quicConf.GetConfigForClient = func(info *quic.ClientHelloInfo) (*quic.Config, error) {
+		quicConf.GetConfigForClient = func(info *quic.ClientInfo) (*quic.Config, error) {
 			if ingress.Restr.IsAllowedAddr(info.RemoteAddr) {
 				return quicConf, nil
 			}
@@ -401,7 +402,7 @@ func (s *clientServer) waitToReactivate(ctx context.Context) (int, error) {
 
 type clientConn struct {
 	server *clientServer
-	conn   quic.Connection
+	conn   *quic.Conn
 	logger *slog.Logger
 
 	auth ClientAuthentication
@@ -522,7 +523,7 @@ func (c *clientConn) authenticate(ctx context.Context) (ClientAuthentication, ks
 
 type clientStream struct {
 	conn   *clientConn
-	stream quic.Stream
+	stream *quic.Stream
 }
 
 func (s *clientStream) run(ctx context.Context) {

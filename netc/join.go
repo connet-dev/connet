@@ -11,11 +11,13 @@ import (
 func Join(l io.ReadWriteCloser, r io.ReadWriteCloser) error {
 	var g errgroup.Group
 	g.Go(func() error {
+		//nolint:errcheck
 		defer l.Close()
 		_, err := io.Copy(l, r)
 		return err
 	})
 	g.Go(func() error {
+		//nolint:errcheck
 		defer r.Close()
 		_, err := io.Copy(r, l)
 		return err

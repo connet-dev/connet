@@ -169,6 +169,7 @@ func (d *HTTPDestination) Run(ctx context.Context) error {
 
 	go func() {
 		<-ctx.Done()
+		//nolint:errcheck
 		srv.Close()
 	}()
 

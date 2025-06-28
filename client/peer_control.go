@@ -16,7 +16,7 @@ type peerControl struct {
 	endpoint model.Endpoint
 	role     model.Role
 	opt      model.RouteOption
-	conn     quic.Connection
+	conn     *quic.Conn
 	notify   func(error)
 }
 

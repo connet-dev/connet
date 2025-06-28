@@ -6,7 +6,7 @@ import (
 	"github.com/quic-go/quic-go"
 )
 
-func StreamConn(s quic.Stream, c quic.Connection) net.Conn {
+func StreamConn(s *quic.Stream, c *quic.Conn) net.Conn {
 	return &streamConn{
 		Stream: s,
 		Local:  c.LocalAddr(),
@@ -15,7 +15,7 @@ func StreamConn(s quic.Stream, c quic.Connection) net.Conn {
 }
 
 type streamConn struct {
-	quic.Stream
+	*quic.Stream
 	Local  net.Addr
 	Remote net.Addr
 }
@@ -29,6 +29,6 @@ func (s *streamConn) RemoteAddr() net.Addr {
 }
 
 func (s *streamConn) Close() error {
-	s.Stream.CancelRead(0)
+	s.CancelRead(0)
 	return s.Stream.Close()
 }

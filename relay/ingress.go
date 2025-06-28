@@ -74,7 +74,7 @@ func (b *IngressBuilder) WithHostportFrom(hostport string) *IngressBuilder {
 		colonPort := hostport[closeBracket+1:]
 		if len(colonPort) > 0 {
 			if colonPort[0] != ':' {
-				b.err = fmt.Errorf("cannot parse hostport, missing :")
+				b.err = fmt.Errorf("cannot parse hostport, missing ':'")
 				return b
 			}
 			portStr := hostport[1:]

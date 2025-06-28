@@ -102,7 +102,7 @@ func (d *Destination) RunPeer(ctx context.Context) error {
 	return g.Wait()
 }
 
-func (d *Destination) RunAnnounce(ctx context.Context, conn quic.Connection, directAddrs []netip.AddrPort, notifyResponse func(error)) error {
+func (d *Destination) RunAnnounce(ctx context.Context, conn *quic.Conn, directAddrs []netip.AddrPort, notifyResponse func(error)) error {
 	if d.cfg.Route.AllowDirect() {
 		d.peer.setDirectAddrs(directAddrs)
 	}
@@ -138,7 +138,7 @@ func (d *Destination) PeerStatus() (PeerStatus, error) {
 }
 
 func (d *Destination) runActive(ctx context.Context) error {
-	return d.peer.activeConnsListen(ctx, func(active map[peerConnKey]quic.Connection) error {
+	return d.peer.activeConnsListen(ctx, func(active map[peerConnKey]*quic.Conn) error {
 		d.logger.Debug("active conns", "len", len(active))
 		for peer, conn := range active {
 			if dc := d.conns[peer]; dc != nil {
@@ -167,13 +167,13 @@ func (d *Destination) runActive(ctx context.Context) error {
 type destinationConn struct {
 	dst    *Destination
 	peer   peerConnKey
-	conn   quic.Connection
+	conn   *quic.Conn
 	logger *slog.Logger
 
 	closer chan struct{}
 }
 
-func newDestinationConn(dst *Destination, peer peerConnKey, conn quic.Connection, logger *slog.Logger) *destinationConn {
+func newDestinationConn(dst *Destination, peer peerConnKey, conn *quic.Conn, logger *slog.Logger) *destinationConn {
 	return &destinationConn{
 		dst, peer, conn,
 		logger.With("peer", peer.id, "style", peer.style),
@@ -204,7 +204,7 @@ func (d *destinationConn) run(ctx context.Context) {
 	}
 }
 
-func (d *destinationConn) runDestination(ctx context.Context, stream quic.Stream) {
+func (d *destinationConn) runDestination(ctx context.Context, stream *quic.Stream) {
 	if err := d.runDestinationErr(ctx, stream); err != nil {
 		if err := stream.Close(); err != nil {
 			d.logger.Debug("could not close stream on error", "err", err)
@@ -213,7 +213,7 @@ func (d *destinationConn) runDestination(ctx context.Context, stream quic.Stream
 	}
 }
 
-func (d *destinationConn) runDestinationErr(ctx context.Context, stream quic.Stream) error {
+func (d *destinationConn) runDestinationErr(ctx context.Context, stream *quic.Stream) error {
 	req, err := pbconnect.ReadRequest(stream)
 	if err != nil {
 		return fmt.Errorf("destination read request: %w", err)
@@ -227,7 +227,7 @@ func (d *destinationConn) runDestinationErr(ctx context.Context, stream quic.Str
 	}
 }
 
-func (d *destinationConn) runConnect(ctx context.Context, stream quic.Stream, req *pbconnect.Request) error {
+func (d *destinationConn) runConnect(ctx context.Context, stream *quic.Stream, req *pbconnect.Request) error {
 	var srcConfig *tls.Config
 	var srcStreamer cryptoc.Streamer
 
@@ -290,7 +290,7 @@ func (d *destinationConn) runConnect(ctx context.Context, stream quic.Stream, re
 		return fmt.Errorf("destination connect write response: %w", err)
 	}
 
-	var encStream net.Conn = quicc.StreamConn(stream, d.conn)
+	var encStream = quicc.StreamConn(stream, d.conn)
 	if d.peer.style == peerRelay {
 		switch connect.DestinationEncryption {
 		case pbconnect.RelayEncryptionScheme_TLS:

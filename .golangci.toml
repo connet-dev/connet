@@ -1,3 +1,14 @@
-[linters-settings.errcheck]
-exclude-functions = ["(github.com/quic-go/quic-go.Connection).CloseWithError"]
+version = "2"
+
+[linters.settings.errcheck]
+exclude-functions = [
+  "(*github.com/quic-go/quic-go.Conn).CloseWithError",
+  "(*github.com/quic-go/quic-go.Stream).Close",
+  "(*github.com/quic-go/quic-go.Transport).Close",
+  "(*github.com/quic-go/quic-go.Listener).Close",
+  "(net.Conn).Close",
+  "(*net.UDPConn).Close",
+  "(net.Listener).Close",
+  "(*github.com/gorilla/websocket.Conn).Close"
+]
 
