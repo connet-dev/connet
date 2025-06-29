@@ -100,12 +100,19 @@ func (c *Client) runClient(ctx context.Context, errCh chan error) {
 		errCh <- fmt.Errorf("listen direct address: %w", err)
 		return
 	}
-	//nolint:errcheck
-	defer udpConn.Close()
+	defer func() {
+		if err := udpConn.Close(); err != nil {
+			c.logger.Debug("error closing udp listener", "err", err)
+		}
+	}()
 
 	c.logger.Debug("start quic listener")
 	transport := quicc.ClientTransport(udpConn, c.directResetKey)
-	defer transport.Close()
+	defer func() {
+		if err := transport.Close(); err != nil {
+			c.logger.Debug("error closing transport", "err", err)
+		}
+	}()
 
 	ds, err := client.NewDirectServer(transport, c.logger)
 	if err != nil {

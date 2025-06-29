@@ -251,12 +251,19 @@ func (s *clientServer) runListener(ctx context.Context, ingress Ingress) error {
 	if err != nil {
 		return fmt.Errorf("client server udp listen: %w", err)
 	}
-	//nolint:errcheck
-	defer udpConn.Close()
+	defer func() {
+		if err := udpConn.Close(); err != nil {
+			s.logger.Debug("error closing udp listener", "err", err)
+		}
+	}()
 
 	s.logger.Debug("start quic listener", "addr", ingress.Addr)
 	transport := quicc.ServerTransport(udpConn, s.statelessResetKey)
-	defer transport.Close()
+	defer func() {
+		if err := transport.Close(); err != nil {
+			s.logger.Debug("error closing transport", "err", err)
+		}
+	}()
 
 	tlsConf := ingress.TLS.Clone()
 	if len(tlsConf.NextProtos) == 0 {

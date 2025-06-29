@@ -194,12 +194,19 @@ func (s *clientsServer) run(ctx context.Context, cfg clientsServerCfg) error {
 	if err != nil {
 		return fmt.Errorf("relay server listen: %w", err)
 	}
-	//nolint:errcheck
-	defer udpConn.Close()
+	defer func() {
+		if err := udpConn.Close(); err != nil {
+			s.logger.Debug("error closing udp listener", "err", err)
+		}
+	}()
 
 	s.logger.Debug("start quic listener", "addr", cfg.ingress.Addr)
 	transport := quicc.ServerTransport(udpConn, cfg.statelessResetKey)
-	defer transport.Close()
+	defer func() {
+		if err := transport.Close(); err != nil {
+			s.logger.Debug("error closing transport", "err", err)
+		}
+	}()
 
 	cfg.addedTransport(transport)
 	defer cfg.removeTransport(transport)
