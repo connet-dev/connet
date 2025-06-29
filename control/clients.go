@@ -278,7 +278,11 @@ func (s *clientServer) runListener(ctx context.Context, ingress Ingress) error {
 	if err != nil {
 		return fmt.Errorf("client server quic listen: %w", err)
 	}
-	defer l.Close()
+	defer func() {
+		if err := l.Close(); err != nil {
+			s.logger.Debug("error closing clients listener", "err", err)
+		}
+	}()
 
 	s.logger.Info("accepting client connections", "addr", transport.Conn.LocalAddr())
 	for {

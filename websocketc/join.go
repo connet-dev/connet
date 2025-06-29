@@ -25,6 +25,7 @@ func Join(nc net.Conn, wc *websocket.Conn) error {
 	})
 
 	g.Go(func() error {
+		//nolint:errcheck
 		defer wc.Close()
 		var buf = make([]byte, 4096)
 		for {

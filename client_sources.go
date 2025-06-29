@@ -111,11 +111,17 @@ func (s *TCPSource) Run(ctx context.Context) error {
 	if err != nil {
 		return fmt.Errorf("source server listen: %w", err)
 	}
-	defer l.Close()
+	defer func() {
+		if err := l.Close(); err != nil {
+			s.logger.Debug("error defer close listener", "err", err)
+		}
+	}()
 
 	go func() {
 		<-ctx.Done()
-		l.Close()
+		if err := l.Close(); err != nil {
+			s.logger.Debug("error close listener", "err", err)
+		}
 	}()
 
 	s.logger.Info("listening for conns", "local", l.Addr())
@@ -220,6 +226,7 @@ func (s *WSSource) handle(w http.ResponseWriter, r *http.Request) {
 		s.logger.Debug("could upgrade connection", "err", err)
 		return
 	}
+	//nolint:errcheck
 	defer hconn.Close()
 
 	sconn, err := s.src.DialContext(r.Context(), "", "")

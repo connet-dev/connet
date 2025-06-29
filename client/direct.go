@@ -133,6 +133,11 @@ func (s *DirectServer) Run(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
+	defer func() {
+		if err := l.Close(); err != nil {
+			s.logger.Debug("close listener error", "err", err)
+		}
+	}()
 
 	s.logger.Debug("listening for conns")
 	for {

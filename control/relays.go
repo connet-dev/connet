@@ -267,7 +267,11 @@ func (s *relayServer) runListener(ctx context.Context, ingress Ingress) error {
 	if err != nil {
 		return fmt.Errorf("relay server quic listen: %w", err)
 	}
-	defer l.Close()
+	defer func() {
+		if err := l.Close(); err != nil {
+			s.logger.Debug("error closing relays listener", "err", err)
+		}
+	}()
 
 	s.logger.Info("accepting relay connections", "addr", transport.Conn.LocalAddr())
 	for {

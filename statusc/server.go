@@ -28,7 +28,8 @@ func Run[T any](ctx context.Context, addr *net.TCPAddr, f func(ctx context.Conte
 
 	go func() {
 		<-ctx.Done()
-		_ = srv.Close()
+		//nolint:errcheck
+		srv.Close()
 	}()
 
 	return srv.ListenAndServe()
