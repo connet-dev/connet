@@ -39,12 +39,14 @@ func (j *Joiner) Run(ctx context.Context) error {
 		}
 
 		go func() {
+			//nolint:errcheck
 			defer acceptConn.Close()
 
 			dialConn, err := j.Dial(ctx)
 			if err != nil {
 				return
 			}
+			//nolint:errcheck
 			defer dialConn.Close()
 
 			j.Join(ctx, acceptConn, dialConn)

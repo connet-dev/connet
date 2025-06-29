@@ -12,6 +12,7 @@ func Join(nc net.Conn, wc *websocket.Conn) error {
 	var g errgroup.Group
 
 	g.Go(func() error {
+		//nolint:errcheck
 		defer nc.Close()
 		for {
 			_, data, err := wc.ReadMessage()

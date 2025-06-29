@@ -234,6 +234,7 @@ func (s *WSSource) handle(w http.ResponseWriter, r *http.Request) {
 		s.logger.Debug("could not dial destination", "err", err)
 		return
 	}
+	//nolint:errcheck
 	defer sconn.Close()
 
 	err = websocketc.Join(sconn, hconn)
