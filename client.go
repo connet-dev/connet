@@ -360,7 +360,11 @@ func (c *Client) reconnect(ctx context.Context, transport *quic.Transport, retok
 }
 
 func (c *Client) runSession(ctx context.Context, sess *session) error {
-	defer sess.conn.CloseWithError(quic.ApplicationErrorCode(pberror.Code_Unknown), "connection closed")
+	defer func() {
+		if err := sess.conn.CloseWithError(quic.ApplicationErrorCode(pberror.Code_Unknown), "connection closed"); err != nil {
+			c.logger.Debug("error closing connection", "err", err)
+		}
+	}()
 
 	c.currentSession.Set(sess)
 	defer c.currentSession.Set(nil)

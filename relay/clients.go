@@ -259,7 +259,11 @@ type clientConn struct {
 
 func (c *clientConn) run(ctx context.Context) {
 	c.logger.Info("new client connected", "proto", c.conn.ConnectionState().TLS.NegotiatedProtocol, "remote", c.conn.RemoteAddr())
-	defer c.conn.CloseWithError(quic.ApplicationErrorCode(pberror.Code_Unknown), "connection closed")
+	defer func() {
+		if err := c.conn.CloseWithError(quic.ApplicationErrorCode(pberror.Code_Unknown), "connection closed"); err != nil {
+			c.logger.Debug("error closing connection", "err", err)
+		}
+	}()
 
 	if err := c.runErr(ctx); err != nil {
 		c.logger.Debug("error while running client conn", "err", err)

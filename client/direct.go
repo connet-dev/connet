@@ -153,7 +153,9 @@ func (s *DirectServer) Run(ctx context.Context) error {
 func (s *DirectServer) runConn(conn *quic.Conn) {
 	srv := s.getServer(conn.ConnectionState().TLS.ServerName)
 	if srv == nil {
-		conn.CloseWithError(quic.ApplicationErrorCode(pberror.Code_AuthenticationFailed), "unknown server")
+		if err := conn.CloseWithError(quic.ApplicationErrorCode(pberror.Code_AuthenticationFailed), "unknown server"); err != nil {
+			s.logger.Debug("error closing connection", "err", err)
+		}
 		return
 	}
 
@@ -163,7 +165,9 @@ func (s *DirectServer) runConn(conn *quic.Conn) {
 
 	exp := srv.dequeue(key, cert)
 	if exp == nil {
-		conn.CloseWithError(quic.ApplicationErrorCode(pberror.Code_AuthenticationFailed), "unknown client")
+		if err := conn.CloseWithError(quic.ApplicationErrorCode(pberror.Code_AuthenticationFailed), "unknown client"); err != nil {
+			s.logger.Debug("error closing connection", "err", err)
+		}
 		return
 	}
 

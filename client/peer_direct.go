@@ -56,7 +56,9 @@ func (p *directPeer) run(ctx context.Context) {
 	defer func() {
 		active := p.local.removeActiveConns(p.remoteID)
 		for _, conn := range active {
-			defer conn.CloseWithError(quic.ApplicationErrorCode(pberror.Code_DirectConnectionClosed), "connection closed")
+			if err := conn.CloseWithError(quic.ApplicationErrorCode(pberror.Code_DirectConnectionClosed), "connection closed"); err != nil {
+				p.logger.Debug("error closing connection", "err", err)
+			}
 		}
 	}()
 
@@ -214,7 +216,11 @@ func (p *directPeerIncoming) connect(ctx context.Context) (*quic.Conn, error) {
 }
 
 func (p *directPeerIncoming) keepalive(ctx context.Context, conn *quic.Conn) error {
-	defer conn.CloseWithError(quic.ApplicationErrorCode(pberror.Code_DirectKeepaliveClosed), "keepalive closed")
+	defer func() {
+		if err := conn.CloseWithError(quic.ApplicationErrorCode(pberror.Code_DirectKeepaliveClosed), "keepalive closed"); err != nil {
+			p.logger.Debug("error closing connection", "err", err)
+		}
+	}()
 
 	p.parent.local.addActiveConn(p.parent.remoteID, peerIncoming, "", conn)
 	defer p.parent.local.removeActiveConn(p.parent.remoteID, peerIncoming, "")
@@ -312,8 +318,9 @@ func (p *directPeerOutgoing) connect(ctx context.Context) (*quic.Conn, error) {
 		case errors.Is(err, context.Canceled):
 			return nil, err
 		case err != nil:
-			conn.CloseWithError(quic.ApplicationErrorCode(pberror.Code_ConnectionCheckFailed), "connection check failed")
 			errs = append(errs, err)
+			cerr := conn.CloseWithError(quic.ApplicationErrorCode(pberror.Code_ConnectionCheckFailed), "connection check failed")
+			errs = append(errs, cerr)
 			continue
 		}
 
@@ -340,7 +347,11 @@ func (p *directPeerOutgoing) check(ctx context.Context, conn *quic.Conn) error {
 }
 
 func (p *directPeerOutgoing) keepalive(ctx context.Context, conn *quic.Conn) error {
-	defer conn.CloseWithError(quic.ApplicationErrorCode(pberror.Code_DirectKeepaliveClosed), "keepalive closed")
+	defer func() {
+		if err := conn.CloseWithError(quic.ApplicationErrorCode(pberror.Code_DirectKeepaliveClosed), "keepalive closed"); err != nil {
+			p.logger.Debug("error closing connection", "err", err)
+		}
+	}()
 
 	p.parent.local.addActiveConn(p.parent.remoteID, peerOutgoing, "", conn)
 	defer p.parent.local.removeActiveConn(p.parent.remoteID, peerOutgoing, "")

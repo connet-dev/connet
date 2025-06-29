@@ -2,7 +2,6 @@ version = "2"
 
 [linters.settings.errcheck]
 exclude-functions = [
-  "(*github.com/quic-go/quic-go.Conn).CloseWithError",
   "(*github.com/quic-go/quic-go.Stream).Close",
 ]
 

@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/rand"
 	"crypto/x509"
+	"errors"
 	"fmt"
 	"io"
 	"log/slog"
@@ -422,7 +423,11 @@ type clientConn struct {
 
 func (c *clientConn) run(ctx context.Context) {
 	c.logger.Info("new client connected", "proto", c.conn.ConnectionState().TLS.NegotiatedProtocol, "remote", c.conn.RemoteAddr())
-	defer c.conn.CloseWithError(quic.ApplicationErrorCode(pberror.Code_Unknown), "connection closed")
+	defer func() {
+		if err := c.conn.CloseWithError(quic.ApplicationErrorCode(pberror.Code_Unknown), "connection closed"); err != nil {
+			c.logger.Debug("error closing connection", "err", err)
+		}
+	}()
 
 	if err := c.runErr(ctx); err != nil {
 		c.logger.Debug("error while running client conn", "err", err)
@@ -432,11 +437,11 @@ func (c *clientConn) run(ctx context.Context) {
 func (c *clientConn) runErr(ctx context.Context) error {
 	if auth, id, err := c.authenticate(ctx); err != nil {
 		if perr := pberror.GetError(err); perr != nil {
-			// TODO handle err
-			c.conn.CloseWithError(quic.ApplicationErrorCode(perr.Code), perr.Message)
+			cerr := c.conn.CloseWithError(quic.ApplicationErrorCode(perr.Code), perr.Message)
+			err = errors.Join(perr, cerr)
 		} else {
-			// TODO handle err
-			c.conn.CloseWithError(quic.ApplicationErrorCode(pberror.Code_AuthenticationFailed), "Error while authenticating")
+			cerr := c.conn.CloseWithError(quic.ApplicationErrorCode(pberror.Code_AuthenticationFailed), "Error while authenticating")
+			err = errors.Join(err, cerr)
 		}
 		return err
 	} else {

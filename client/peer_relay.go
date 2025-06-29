@@ -116,8 +116,8 @@ func (r *relayPeer) connect(ctx context.Context, hp model.HostPort) (*quic.Conn,
 	}
 
 	if err := r.check(ctx, conn); err != nil {
-		conn.CloseWithError(quic.ApplicationErrorCode(pberror.Code_ConnectionCheckFailed), "connection check failed")
-		return nil, err
+		cerr := conn.CloseWithError(quic.ApplicationErrorCode(pberror.Code_ConnectionCheckFailed), "connection check failed")
+		return nil, errors.Join(err, cerr)
 	}
 	return conn, nil
 }
@@ -140,7 +140,11 @@ func (r *relayPeer) check(ctx context.Context, conn *quic.Conn) error {
 }
 
 func (r *relayPeer) keepalive(ctx context.Context, conn *quic.Conn) error {
-	defer conn.CloseWithError(quic.ApplicationErrorCode(pberror.Code_RelayKeepaliveClosed), "keepalive closed")
+	defer func() {
+		if err := conn.CloseWithError(quic.ApplicationErrorCode(pberror.Code_RelayKeepaliveClosed), "keepalive closed"); err != nil {
+			r.logger.Debug("error closing connection", "err", err)
+		}
+	}()
 
 	r.local.addRelayConn(r.serverID, conn)
 	defer r.local.removeRelayConn(r.serverID)

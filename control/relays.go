@@ -378,7 +378,11 @@ type relayConnAuth struct {
 }
 
 func (c *relayConn) run(ctx context.Context) {
-	defer c.conn.CloseWithError(quic.ApplicationErrorCode(pberror.Code_Unknown), "connection closed")
+	defer func() {
+		if err := c.conn.CloseWithError(quic.ApplicationErrorCode(pberror.Code_Unknown), "connection closed"); err != nil {
+			c.logger.Debug("error closing connection", "err", err)
+		}
+	}()
 
 	if err := c.runErr(ctx); err != nil {
 		c.logger.Debug("error while running zzz", "err", err)
@@ -388,9 +392,11 @@ func (c *relayConn) run(ctx context.Context) {
 func (c *relayConn) runErr(ctx context.Context) error {
 	if rauth, err := c.authenticate(ctx); err != nil {
 		if perr := pberror.GetError(err); perr != nil {
-			c.conn.CloseWithError(quic.ApplicationErrorCode(perr.Code), perr.Message)
+			cerr := c.conn.CloseWithError(quic.ApplicationErrorCode(perr.Code), perr.Message)
+			err = errors.Join(perr, cerr)
 		} else {
-			c.conn.CloseWithError(quic.ApplicationErrorCode(pberror.Code_AuthenticationFailed), "Error while authenticating")
+			cerr := c.conn.CloseWithError(quic.ApplicationErrorCode(pberror.Code_AuthenticationFailed), "Error while authenticating")
+			err = errors.Join(err, cerr)
 		}
 		return err
 	} else {
