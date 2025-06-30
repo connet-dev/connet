@@ -479,6 +479,7 @@ func (c *clientConn) authenticate(ctx context.Context) (ClientAuthentication, ks
 	if err != nil {
 		return nil, ksuid.Nil, fmt.Errorf("client auth stream: %w", err)
 	}
+	//nolint:errcheck
 	defer authStream.Close()
 
 	req := &pbclient.Authenticate{}
@@ -543,7 +544,11 @@ type clientStream struct {
 }
 
 func (s *clientStream) run(ctx context.Context) {
-	defer s.stream.Close()
+	defer func() {
+		if err := s.stream.Close(); err != nil {
+			s.conn.logger.Debug("error closing client stream", "err", err)
+		}
+	}()
 
 	if err := s.runErr(ctx); err != nil {
 		s.conn.logger.Debug("error while running client stream", "err", err)

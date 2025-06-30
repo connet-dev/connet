@@ -301,7 +301,11 @@ func (c *clientConn) check(ctx context.Context) error {
 	if err != nil {
 		return fmt.Errorf("accept client stream: %w", err)
 	}
-	defer stream.Close()
+	defer func() {
+		if err := stream.Close(); err != nil {
+			c.logger.Debug("error closing check client stream", "err", err)
+		}
+	}()
 
 	if _, err := pbconnect.ReadRequest(stream); err != nil {
 		return fmt.Errorf("read client stream: %w", err)
@@ -363,7 +367,11 @@ func (c *clientConn) runSource(ctx context.Context) error {
 }
 
 func (c *clientConn) runSourceStream(ctx context.Context, stream *quic.Stream, fcs *endpointClients) {
-	defer stream.Close()
+	defer func() {
+		if err := stream.Close(); err != nil {
+			c.logger.Debug("error closing source stream", "err", err)
+		}
+	}()
 
 	if err := c.runSourceStreamErr(ctx, stream, fcs); err != nil {
 		c.logger.Debug("error while running source", "err", err)

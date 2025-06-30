@@ -224,7 +224,11 @@ func (s *controlClient) connect(ctx context.Context, tfn TransportsFn) (*quic.Co
 			s.logger.Debug("relay control server: open stream error", "localAddr", transport.Conn.LocalAddr(), "err", err)
 			continue
 		}
-		defer authStream.Close()
+		defer func() {
+			if err := authStream.Close(); err != nil {
+				s.logger.Debug("relay control server: close stream error", "localAddr", transport.Conn.LocalAddr(), "err", err)
+			}
+		}()
 
 		if err := proto.Write(authStream, &pbrelay.AuthenticateReq{
 			Token:          s.controlToken,
@@ -316,7 +320,11 @@ func (s *controlClient) runClientsStream(ctx context.Context, conn *quic.Conn) e
 	if err != nil {
 		return err
 	}
-	defer stream.Close()
+	defer func() {
+		if err := stream.Close(); err != nil {
+			s.logger.Debug("error closing clients stream", "err", err)
+		}
+	}()
 
 	g, ctx := errgroup.WithContext(ctx)
 
@@ -431,7 +439,11 @@ func (s *controlClient) runServersStream(ctx context.Context, conn *quic.Conn) e
 	if err != nil {
 		return err
 	}
-	defer stream.Close()
+	defer func() {
+		if err := stream.Close(); err != nil {
+			s.logger.Debug("error closing servers stream", "err", err)
+		}
+	}()
 
 	g, ctx := errgroup.WithContext(ctx)
 

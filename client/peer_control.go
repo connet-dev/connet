@@ -36,7 +36,11 @@ func (d *peerControl) runAnnounce(ctx context.Context) error {
 	if err != nil {
 		return fmt.Errorf("announce open stream: %w", err)
 	}
-	defer stream.Close()
+	defer func() {
+		if err := stream.Close(); err != nil {
+			d.local.logger.Debug("error closing announce stream", "err", err)
+		}
+	}()
 
 	g, ctx := errgroup.WithContext(ctx)
 
@@ -85,7 +89,11 @@ func (d *peerControl) runRelay(ctx context.Context) error {
 	if err != nil {
 		return fmt.Errorf("relay open stream: %w", err)
 	}
-	defer stream.Close()
+	defer func() {
+		if err := stream.Close(); err != nil {
+			d.local.logger.Debug("error closing relay stream", "err", err)
+		}
+	}()
 
 	if err := proto.Write(stream, &pbclient.Request{
 		Relay: &pbclient.Request_Relay{

@@ -443,7 +443,11 @@ func (c *relayConn) authenticate(ctx context.Context) (*relayConnAuth, error) {
 	if err != nil {
 		return nil, fmt.Errorf("auth accept stream: %w", err)
 	}
-	defer authStream.Close()
+	defer func() {
+		if err := authStream.Close(); err != nil {
+			c.logger.Debug("error closing relay auth", "err", err)
+		}
+	}()
 
 	req := &pbrelay.AuthenticateReq{}
 	if err := proto.Read(authStream, req); err != nil {
@@ -498,7 +502,11 @@ func (c *relayConn) runRelayClients(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
-	defer stream.Close()
+	defer func() {
+		if err := stream.Close(); err != nil {
+			c.logger.Debug("error closing relay clients", "err", err)
+		}
+	}()
 
 	for {
 		req := &pbrelay.ClientsReq{}
@@ -561,7 +569,11 @@ func (c *relayConn) runRelayServers(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
-	defer stream.Close()
+	defer func() {
+		if err := stream.Close(); err != nil {
+			c.logger.Debug("error closing relay servers", "err", err)
+		}
+	}()
 
 	for {
 		offset, err := c.server.getRelayServerOffset(c.id)

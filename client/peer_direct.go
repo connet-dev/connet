@@ -203,7 +203,11 @@ func (p *directPeerIncoming) connect(ctx context.Context) (*quic.Conn, error) {
 		if err != nil {
 			return nil, err
 		}
-		defer stream.Close()
+		defer func() {
+			if err := stream.Close(); err != nil {
+				p.logger.Debug("error closing check stream", "err", err)
+			}
+		}()
 
 		if _, err := pbconnect.ReadRequest(stream); err != nil {
 			return nil, err
@@ -334,7 +338,11 @@ func (p *directPeerOutgoing) check(ctx context.Context, conn *quic.Conn) error {
 	if err != nil {
 		return err
 	}
-	defer stream.Close()
+	defer func() {
+		if err := stream.Close(); err != nil {
+			p.logger.Debug("error closing check stream", "err", err)
+		}
+	}()
 
 	if err := proto.Write(stream, &pbconnect.Request{}); err != nil {
 		return err

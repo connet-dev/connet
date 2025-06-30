@@ -127,7 +127,11 @@ func (r *relayPeer) check(ctx context.Context, conn *quic.Conn) error {
 	if err != nil {
 		return err
 	}
-	defer stream.Close()
+	defer func() {
+		if err := stream.Close(); err != nil {
+			r.logger.Debug("error closing check stream", "err", err)
+		}
+	}()
 
 	if err := proto.Write(stream, &pbconnect.Request{}); err != nil {
 		return err

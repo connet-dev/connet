@@ -80,10 +80,8 @@ func Connect(ctx context.Context, opts ...ClientOption) (*Client, error) {
 	go c.runClient(ctx, errCh)
 
 	if err := <-errCh; err != nil {
-		if cerr := c.Close(); cerr != nil {
-			err = errors.Join(err, cerr)
-		}
-		return nil, err
+		cerr := c.Close()
+		return nil, errors.Join(err, cerr)
 	}
 
 	return c, nil
@@ -303,7 +301,11 @@ func (c *Client) connect(ctx context.Context, transport *quic.Transport, retoken
 	if err != nil {
 		return nil, fmt.Errorf("open authentication stream: %w", err)
 	}
-	defer authStream.Close()
+	defer func() {
+		if err := authStream.Close(); err != nil {
+			c.logger.Debug("error closing auth stream", "err", err)
+		}
+	}()
 
 	if err := proto.Write(authStream, &pbclient.Authenticate{
 		Token:          c.token,
