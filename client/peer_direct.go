@@ -19,6 +19,7 @@ import (
 	"github.com/connet-dev/connet/proto/pbconnect"
 	"github.com/connet-dev/connet/proto/pberror"
 	"github.com/connet-dev/connet/quicc"
+	"github.com/connet-dev/connet/slogc"
 	"github.com/quic-go/quic-go"
 	"golang.org/x/sync/errgroup"
 )
@@ -57,7 +58,7 @@ func (p *directPeer) run(ctx context.Context) {
 		active := p.local.removeActiveConns(p.remoteID)
 		for _, conn := range active {
 			if err := conn.CloseWithError(quic.ApplicationErrorCode(pberror.Code_DirectConnectionClosed), "connection closed"); err != nil {
-				p.logger.Debug("error closing connection", "err", err)
+				slogc.Fine(p.logger, "error closing connection", "err", err)
 			}
 		}
 	}()
@@ -205,7 +206,7 @@ func (p *directPeerIncoming) connect(ctx context.Context) (*quic.Conn, error) {
 		}
 		defer func() {
 			if err := stream.Close(); err != nil {
-				p.logger.Debug("error closing check stream", "err", err)
+				slogc.Fine(p.logger, "error closing check stream", "err", err)
 			}
 		}()
 
@@ -222,7 +223,7 @@ func (p *directPeerIncoming) connect(ctx context.Context) (*quic.Conn, error) {
 func (p *directPeerIncoming) keepalive(ctx context.Context, conn *quic.Conn) error {
 	defer func() {
 		if err := conn.CloseWithError(quic.ApplicationErrorCode(pberror.Code_DirectKeepaliveClosed), "keepalive closed"); err != nil {
-			p.logger.Debug("error closing connection", "err", err)
+			slogc.Fine(p.logger, "error closing connection", "err", err)
 		}
 	}()
 
@@ -340,7 +341,7 @@ func (p *directPeerOutgoing) check(ctx context.Context, conn *quic.Conn) error {
 	}
 	defer func() {
 		if err := stream.Close(); err != nil {
-			p.logger.Debug("error closing check stream", "err", err)
+			slogc.Fine(p.logger, "error closing check stream", "err", err)
 		}
 	}()
 
@@ -357,7 +358,7 @@ func (p *directPeerOutgoing) check(ctx context.Context, conn *quic.Conn) error {
 func (p *directPeerOutgoing) keepalive(ctx context.Context, conn *quic.Conn) error {
 	defer func() {
 		if err := conn.CloseWithError(quic.ApplicationErrorCode(pberror.Code_DirectKeepaliveClosed), "keepalive closed"); err != nil {
-			p.logger.Debug("error closing connection", "err", err)
+			slogc.Fine(p.logger, "error closing connection", "err", err)
 		}
 	}()
 

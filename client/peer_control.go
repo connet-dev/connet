@@ -7,6 +7,7 @@ import (
 	"github.com/connet-dev/connet/model"
 	"github.com/connet-dev/connet/proto"
 	"github.com/connet-dev/connet/proto/pbclient"
+	"github.com/connet-dev/connet/slogc"
 	"github.com/quic-go/quic-go"
 	"golang.org/x/sync/errgroup"
 )
@@ -38,7 +39,7 @@ func (d *peerControl) runAnnounce(ctx context.Context) error {
 	}
 	defer func() {
 		if err := stream.Close(); err != nil {
-			d.local.logger.Debug("error closing announce stream", "err", err)
+			slogc.Fine(d.local.logger, "error closing announce stream", "err", err)
 		}
 	}()
 
@@ -91,7 +92,7 @@ func (d *peerControl) runRelay(ctx context.Context) error {
 	}
 	defer func() {
 		if err := stream.Close(); err != nil {
-			d.local.logger.Debug("error closing relay stream", "err", err)
+			slogc.Fine(d.local.logger, "error closing relay stream", "err", err)
 		}
 	}()
 

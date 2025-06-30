@@ -13,6 +13,7 @@ import (
 
 	"github.com/connet-dev/connet/model"
 	"github.com/connet-dev/connet/netc"
+	"github.com/connet-dev/connet/slogc"
 	"github.com/connet-dev/connet/websocketc"
 	"github.com/gorilla/websocket"
 )
@@ -113,14 +114,14 @@ func (s *TCPSource) Run(ctx context.Context) error {
 	}
 	defer func() {
 		if err := l.Close(); err != nil {
-			s.logger.Debug("error defer close listener", "err", err)
+			slogc.Fine(s.logger, "error defer close listener", "err", err)
 		}
 	}()
 
 	go func() {
 		<-ctx.Done()
 		if err := l.Close(); err != nil {
-			s.logger.Debug("error close listener", "err", err)
+			slogc.Fine(s.logger, "error close listener", "err", err)
 		}
 	}()
 

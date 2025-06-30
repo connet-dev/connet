@@ -12,6 +12,7 @@ import (
 	"github.com/connet-dev/connet/model"
 	"github.com/connet-dev/connet/proto/pberror"
 	"github.com/connet-dev/connet/quicc"
+	"github.com/connet-dev/connet/slogc"
 	"github.com/quic-go/quic-go"
 )
 
@@ -135,7 +136,7 @@ func (s *DirectServer) Run(ctx context.Context) error {
 	}
 	defer func() {
 		if err := l.Close(); err != nil {
-			s.logger.Debug("close listener error", "err", err)
+			slogc.Fine(s.logger, "close listener error", "err", err)
 		}
 	}()
 
@@ -154,7 +155,7 @@ func (s *DirectServer) runConn(conn *quic.Conn) {
 	srv := s.getServer(conn.ConnectionState().TLS.ServerName)
 	if srv == nil {
 		if err := conn.CloseWithError(quic.ApplicationErrorCode(pberror.Code_AuthenticationFailed), "unknown server"); err != nil {
-			s.logger.Debug("error closing connection", "err", err)
+			slogc.Fine(s.logger, "error closing connection", "err", err)
 		}
 		return
 	}
@@ -166,7 +167,7 @@ func (s *DirectServer) runConn(conn *quic.Conn) {
 	exp := srv.dequeue(key, cert)
 	if exp == nil {
 		if err := conn.CloseWithError(quic.ApplicationErrorCode(pberror.Code_AuthenticationFailed), "unknown client"); err != nil {
-			s.logger.Debug("error closing connection", "err", err)
+			slogc.Fine(s.logger, "error closing connection", "err", err)
 		}
 		return
 	}

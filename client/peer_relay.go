@@ -16,6 +16,7 @@ import (
 	"github.com/connet-dev/connet/proto/pbconnect"
 	"github.com/connet-dev/connet/proto/pberror"
 	"github.com/connet-dev/connet/quicc"
+	"github.com/connet-dev/connet/slogc"
 	"github.com/quic-go/quic-go"
 	"golang.org/x/sync/errgroup"
 )
@@ -129,7 +130,7 @@ func (r *relayPeer) check(ctx context.Context, conn *quic.Conn) error {
 	}
 	defer func() {
 		if err := stream.Close(); err != nil {
-			r.logger.Debug("error closing check stream", "err", err)
+			slogc.Fine(r.logger, "error closing check stream", "err", err)
 		}
 	}()
 
@@ -146,7 +147,7 @@ func (r *relayPeer) check(ctx context.Context, conn *quic.Conn) error {
 func (r *relayPeer) keepalive(ctx context.Context, conn *quic.Conn) error {
 	defer func() {
 		if err := conn.CloseWithError(quic.ApplicationErrorCode(pberror.Code_RelayKeepaliveClosed), "keepalive closed"); err != nil {
-			r.logger.Debug("error closing connection", "err", err)
+			slogc.Fine(r.logger, "error closing connection", "err", err)
 		}
 	}()
 

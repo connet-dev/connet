@@ -22,6 +22,7 @@ import (
 	"github.com/connet-dev/connet/proto/pbclient"
 	"github.com/connet-dev/connet/proto/pberror"
 	"github.com/connet-dev/connet/quicc"
+	"github.com/connet-dev/connet/slogc"
 	"github.com/connet-dev/connet/statusc"
 	"github.com/quic-go/quic-go"
 	"golang.org/x/sync/errgroup"
@@ -100,7 +101,7 @@ func (c *Client) runClient(ctx context.Context, errCh chan error) {
 	}
 	defer func() {
 		if err := udpConn.Close(); err != nil {
-			c.logger.Debug("error closing udp listener", "err", err)
+			slogc.Fine(c.logger, "error closing udp listener", "err", err)
 		}
 	}()
 
@@ -108,7 +109,7 @@ func (c *Client) runClient(ctx context.Context, errCh chan error) {
 	transport := quicc.ClientTransport(udpConn, c.directResetKey)
 	defer func() {
 		if err := transport.Close(); err != nil {
-			c.logger.Debug("error closing transport", "err", err)
+			slogc.Fine(c.logger, "error closing transport", "err", err)
 		}
 	}()
 
@@ -238,14 +239,14 @@ func (c *Client) closeEndpoints() {
 	for _, dstName := range c.Destinations() {
 		if dst, err := c.GetDestination(dstName); err == nil {
 			if err := dst.Close(); err != nil {
-				c.logger.Debug("error closing destination", "dst", dstName, "err", err)
+				slogc.Fine(c.logger, "error closing destination", "dst", dstName, "err", err)
 			}
 		}
 	}
 	for _, srcName := range c.Sources() {
 		if src, err := c.GetSource(srcName); err == nil {
 			if err := src.Close(); err != nil {
-				c.logger.Debug("error closing source", "src", srcName, "err", err)
+				slogc.Fine(c.logger, "error closing source", "src", srcName, "err", err)
 			}
 		}
 	}
@@ -303,7 +304,7 @@ func (c *Client) connect(ctx context.Context, transport *quic.Transport, retoken
 	}
 	defer func() {
 		if err := authStream.Close(); err != nil {
-			c.logger.Debug("error closing auth stream", "err", err)
+			slogc.Fine(c.logger, "error closing auth stream", "err", err)
 		}
 	}()
 
@@ -364,7 +365,7 @@ func (c *Client) reconnect(ctx context.Context, transport *quic.Transport, retok
 func (c *Client) runSession(ctx context.Context, sess *session) error {
 	defer func() {
 		if err := sess.conn.CloseWithError(quic.ApplicationErrorCode(pberror.Code_Unknown), "connection closed"); err != nil {
-			c.logger.Debug("error closing connection", "err", err)
+			slogc.Fine(c.logger, "error closing connection", "err", err)
 		}
 	}()
 
