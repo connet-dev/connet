@@ -19,6 +19,7 @@ import (
 	"github.com/connet-dev/connet/proto/pberror"
 	"github.com/connet-dev/connet/proto/pbrelay"
 	"github.com/connet-dev/connet/quicc"
+	"github.com/connet-dev/connet/slogc"
 	"github.com/quic-go/quic-go"
 	"github.com/segmentio/ksuid"
 	"golang.org/x/sync/errgroup"
@@ -242,7 +243,7 @@ func (s *relayServer) runListener(ctx context.Context, ingress Ingress) error {
 	}
 	defer func() {
 		if err := udpConn.Close(); err != nil {
-			s.logger.Debug("error closing udp listener", "err", err)
+			slogc.Fine(s.logger, "error closing udp listener", "err", err)
 		}
 	}()
 
@@ -250,7 +251,7 @@ func (s *relayServer) runListener(ctx context.Context, ingress Ingress) error {
 	transport := quicc.ServerTransport(udpConn, s.statelessResetKey)
 	defer func() {
 		if err := transport.Close(); err != nil {
-			s.logger.Debug("error closing transport", "err", err)
+			slogc.Fine(s.logger, "error closing transport", "err", err)
 		}
 	}()
 
@@ -276,7 +277,7 @@ func (s *relayServer) runListener(ctx context.Context, ingress Ingress) error {
 	}
 	defer func() {
 		if err := l.Close(); err != nil {
-			s.logger.Debug("error closing relays listener", "err", err)
+			slogc.Fine(s.logger, "error closing relays listener", "err", err)
 		}
 	}()
 
@@ -284,7 +285,7 @@ func (s *relayServer) runListener(ctx context.Context, ingress Ingress) error {
 	for {
 		conn, err := l.Accept(ctx)
 		if err != nil {
-			s.logger.Debug("accept error", "err", err)
+			slogc.Fine(s.logger, "accept error", "err", err)
 			return fmt.Errorf("relay server quic accept: %w", err)
 		}
 
@@ -380,7 +381,7 @@ type relayConnAuth struct {
 func (c *relayConn) run(ctx context.Context) {
 	defer func() {
 		if err := c.conn.CloseWithError(quic.ApplicationErrorCode(pberror.Code_Unknown), "connection closed"); err != nil {
-			c.logger.Debug("error closing connection", "err", err)
+			slogc.Fine(c.logger, "error closing connection", "err", err)
 		}
 	}()
 
@@ -445,7 +446,7 @@ func (c *relayConn) authenticate(ctx context.Context) (*relayConnAuth, error) {
 	}
 	defer func() {
 		if err := authStream.Close(); err != nil {
-			c.logger.Debug("error closing relay auth", "err", err)
+			slogc.Fine(c.logger, "error closing relay auth", "err", err)
 		}
 	}()
 
@@ -504,7 +505,7 @@ func (c *relayConn) runRelayClients(ctx context.Context) error {
 	}
 	defer func() {
 		if err := stream.Close(); err != nil {
-			c.logger.Debug("error closing relay clients", "err", err)
+			slogc.Fine(c.logger, "error closing relay clients", "err", err)
 		}
 	}()
 
@@ -571,7 +572,7 @@ func (c *relayConn) runRelayServers(ctx context.Context) error {
 	}
 	defer func() {
 		if err := stream.Close(); err != nil {
-			c.logger.Debug("error closing relay servers", "err", err)
+			slogc.Fine(c.logger, "error closing relay servers", "err", err)
 		}
 	}()
 

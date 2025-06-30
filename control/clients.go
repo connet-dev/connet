@@ -21,6 +21,7 @@ import (
 	"github.com/connet-dev/connet/proto/pberror"
 	"github.com/connet-dev/connet/proto/pbmodel"
 	"github.com/connet-dev/connet/quicc"
+	"github.com/connet-dev/connet/slogc"
 	"github.com/quic-go/quic-go"
 	"github.com/segmentio/ksuid"
 	"golang.org/x/sync/errgroup"
@@ -254,7 +255,7 @@ func (s *clientServer) runListener(ctx context.Context, ingress Ingress) error {
 	}
 	defer func() {
 		if err := udpConn.Close(); err != nil {
-			s.logger.Debug("error closing udp listener", "err", err)
+			slogc.Fine(s.logger, "error closing udp listener", "err", err)
 		}
 	}()
 
@@ -262,7 +263,7 @@ func (s *clientServer) runListener(ctx context.Context, ingress Ingress) error {
 	transport := quicc.ServerTransport(udpConn, s.statelessResetKey)
 	defer func() {
 		if err := transport.Close(); err != nil {
-			s.logger.Debug("error closing transport", "err", err)
+			slogc.Fine(s.logger, "error closing transport", "err", err)
 		}
 	}()
 
@@ -288,7 +289,7 @@ func (s *clientServer) runListener(ctx context.Context, ingress Ingress) error {
 	}
 	defer func() {
 		if err := l.Close(); err != nil {
-			s.logger.Debug("error closing clients listener", "err", err)
+			slogc.Fine(s.logger, "error closing clients listener", "err", err)
 		}
 	}()
 
@@ -296,7 +297,7 @@ func (s *clientServer) runListener(ctx context.Context, ingress Ingress) error {
 	for {
 		conn, err := l.Accept(ctx)
 		if err != nil {
-			s.logger.Debug("accept error", "err", err)
+			slogc.Fine(s.logger, "accept error", "err", err)
 			return fmt.Errorf("client server quic accept: %w", err)
 		}
 
@@ -425,7 +426,7 @@ func (c *clientConn) run(ctx context.Context) {
 	c.logger.Info("new client connected", "proto", c.conn.ConnectionState().TLS.NegotiatedProtocol, "remote", c.conn.RemoteAddr())
 	defer func() {
 		if err := c.conn.CloseWithError(quic.ApplicationErrorCode(pberror.Code_Unknown), "connection closed"); err != nil {
-			c.logger.Debug("error closing connection", "err", err)
+			slogc.Fine(c.logger, "error closing connection", "err", err)
 		}
 	}()
 
@@ -479,8 +480,11 @@ func (c *clientConn) authenticate(ctx context.Context) (ClientAuthentication, ks
 	if err != nil {
 		return nil, ksuid.Nil, fmt.Errorf("client auth stream: %w", err)
 	}
-	//nolint:errcheck
-	defer authStream.Close()
+	defer func() {
+		if err := authStream.Close(); err != nil {
+			slogc.Fine(c.logger, "error closing auth stream", "err", err)
+		}
+	}()
 
 	req := &pbclient.Authenticate{}
 	if err := proto.Read(authStream, req); err != nil {
@@ -546,7 +550,7 @@ type clientStream struct {
 func (s *clientStream) run(ctx context.Context) {
 	defer func() {
 		if err := s.stream.Close(); err != nil {
-			s.conn.logger.Debug("error closing client stream", "err", err)
+			slogc.Fine(s.conn.logger, "error closing client stream", "err", err)
 		}
 	}()
 

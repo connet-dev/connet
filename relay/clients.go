@@ -21,6 +21,7 @@ import (
 	"github.com/connet-dev/connet/proto/pbconnect"
 	"github.com/connet-dev/connet/proto/pberror"
 	"github.com/connet-dev/connet/quicc"
+	"github.com/connet-dev/connet/slogc"
 	"github.com/quic-go/quic-go"
 	"golang.org/x/sync/errgroup"
 )
@@ -196,7 +197,7 @@ func (s *clientsServer) run(ctx context.Context, cfg clientsServerCfg) error {
 	}
 	defer func() {
 		if err := udpConn.Close(); err != nil {
-			s.logger.Debug("error closing udp listener", "err", err)
+			slogc.Fine(s.logger, "error closing udp listener", "err", err)
 		}
 	}()
 
@@ -204,7 +205,7 @@ func (s *clientsServer) run(ctx context.Context, cfg clientsServerCfg) error {
 	transport := quicc.ServerTransport(udpConn, cfg.statelessResetKey)
 	defer func() {
 		if err := transport.Close(); err != nil {
-			s.logger.Debug("error closing transport", "err", err)
+			slogc.Fine(s.logger, "error closing transport", "err", err)
 		}
 	}()
 
@@ -228,7 +229,7 @@ func (s *clientsServer) run(ctx context.Context, cfg clientsServerCfg) error {
 	}
 	defer func() {
 		if err := l.Close(); err != nil {
-			s.logger.Debug("error closing clients listener", "err", err)
+			slogc.Fine(s.logger, "error closing clients listener", "err", err)
 		}
 	}()
 
@@ -236,7 +237,7 @@ func (s *clientsServer) run(ctx context.Context, cfg clientsServerCfg) error {
 	for {
 		conn, err := l.Accept(ctx)
 		if err != nil {
-			s.logger.Debug("accept error", "err", err)
+			slogc.Fine(s.logger, "accept error", "err", err)
 			return fmt.Errorf("client server quic accept: %w", err)
 		}
 
@@ -261,7 +262,7 @@ func (c *clientConn) run(ctx context.Context) {
 	c.logger.Info("new client connected", "proto", c.conn.ConnectionState().TLS.NegotiatedProtocol, "remote", c.conn.RemoteAddr())
 	defer func() {
 		if err := c.conn.CloseWithError(quic.ApplicationErrorCode(pberror.Code_Unknown), "connection closed"); err != nil {
-			c.logger.Debug("error closing connection", "err", err)
+			slogc.Fine(c.logger, "error closing connection", "err", err)
 		}
 	}()
 
@@ -303,7 +304,7 @@ func (c *clientConn) check(ctx context.Context) error {
 	}
 	defer func() {
 		if err := stream.Close(); err != nil {
-			c.logger.Debug("error closing check client stream", "err", err)
+			slogc.Fine(c.logger, "error closing check client stream", "err", err)
 		}
 	}()
 
@@ -369,7 +370,7 @@ func (c *clientConn) runSource(ctx context.Context) error {
 func (c *clientConn) runSourceStream(ctx context.Context, stream *quic.Stream, fcs *endpointClients) {
 	defer func() {
 		if err := stream.Close(); err != nil {
-			c.logger.Debug("error closing source stream", "err", err)
+			slogc.Fine(c.logger, "error closing source stream", "err", err)
 		}
 	}()
 

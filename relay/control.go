@@ -21,6 +21,7 @@ import (
 	"github.com/connet-dev/connet/proto/pberror"
 	"github.com/connet-dev/connet/proto/pbrelay"
 	"github.com/connet-dev/connet/quicc"
+	"github.com/connet-dev/connet/slogc"
 	"github.com/connet-dev/connet/statusc"
 	"github.com/klev-dev/klevdb"
 	"github.com/quic-go/quic-go"
@@ -226,7 +227,7 @@ func (s *controlClient) connect(ctx context.Context, tfn TransportsFn) (*quic.Co
 		}
 		defer func() {
 			if err := authStream.Close(); err != nil {
-				s.logger.Debug("relay control server: close stream error", "localAddr", transport.Conn.LocalAddr(), "err", err)
+				slogc.Fine(s.logger, "relay control server: close stream error", "localAddr", transport.Conn.LocalAddr(), "err", err)
 			}
 		}()
 
@@ -298,7 +299,7 @@ func (s *controlClient) reconnect(ctx context.Context, tfn TransportsFn) (*quic.
 func (s *controlClient) runConnection(ctx context.Context, conn *quic.Conn) error {
 	defer func() {
 		if err := conn.CloseWithError(quic.ApplicationErrorCode(pberror.Code_Unknown), "connection closed"); err != nil {
-			s.logger.Debug("error closing connection", "err", err)
+			slogc.Fine(s.logger, "error closing connection", "err", err)
 		}
 	}()
 
@@ -322,7 +323,7 @@ func (s *controlClient) runClientsStream(ctx context.Context, conn *quic.Conn) e
 	}
 	defer func() {
 		if err := stream.Close(); err != nil {
-			s.logger.Debug("error closing clients stream", "err", err)
+			slogc.Fine(s.logger, "error closing clients stream", "err", err)
 		}
 	}()
 
@@ -441,7 +442,7 @@ func (s *controlClient) runServersStream(ctx context.Context, conn *quic.Conn) e
 	}
 	defer func() {
 		if err := stream.Close(); err != nil {
-			s.logger.Debug("error closing servers stream", "err", err)
+			slogc.Fine(s.logger, "error closing servers stream", "err", err)
 		}
 	}()
 
