@@ -52,3 +52,7 @@ func levelReplacer(_ []string, attr slog.Attr) slog.Attr {
 func Fine(logger *slog.Logger, msg string, args ...any) {
 	logger.Log(context.Background(), LevelFine, msg, args...)
 }
+
+func FineDefault(msg string, args ...any) {
+	slog.Log(context.Background(), LevelFine, msg, args...)
+}

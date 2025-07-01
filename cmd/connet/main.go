@@ -153,7 +153,12 @@ func loadConfigFrom(file string) (Config, error) {
 }
 
 func logger(cfg Config) (*slog.Logger, error) {
-	return slogc.New(cfg.LogLevel, cfg.LogFormat)
+	logger, err := slogc.New(cfg.LogLevel, cfg.LogFormat)
+	if err != nil {
+		return nil, err
+	}
+	slog.SetDefault(logger)
+	return logger, nil
 }
 
 func loadTokens(tokensFile string) ([]string, error) {
