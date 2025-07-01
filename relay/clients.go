@@ -21,6 +21,7 @@ import (
 	"github.com/connet-dev/connet/proto/pbconnect"
 	"github.com/connet-dev/connet/proto/pberror"
 	"github.com/connet-dev/connet/quicc"
+	"github.com/connet-dev/connet/slogc"
 	"github.com/quic-go/quic-go"
 	"golang.org/x/sync/errgroup"
 )
@@ -194,11 +195,19 @@ func (s *clientsServer) run(ctx context.Context, cfg clientsServerCfg) error {
 	if err != nil {
 		return fmt.Errorf("relay server listen: %w", err)
 	}
-	defer udpConn.Close()
+	defer func() {
+		if err := udpConn.Close(); err != nil {
+			slogc.Fine(s.logger, "error closing udp listener", "err", err)
+		}
+	}()
 
 	s.logger.Debug("start quic listener", "addr", cfg.ingress.Addr)
 	transport := quicc.ServerTransport(udpConn, cfg.statelessResetKey)
-	defer transport.Close()
+	defer func() {
+		if err := transport.Close(); err != nil {
+			slogc.Fine(s.logger, "error closing transport", "err", err)
+		}
+	}()
 
 	cfg.addedTransport(transport)
 	defer cfg.removeTransport(transport)
@@ -206,7 +215,7 @@ func (s *clientsServer) run(ctx context.Context, cfg clientsServerCfg) error {
 	quicConf := quicc.StdConfig
 	if cfg.ingress.Restr.IsNotEmpty() {
 		quicConf = quicConf.Clone()
-		quicConf.GetConfigForClient = func(info *quic.ClientHelloInfo) (*quic.Config, error) {
+		quicConf.GetConfigForClient = func(info *quic.ClientInfo) (*quic.Config, error) {
 			if cfg.ingress.Restr.IsAllowedAddr(info.RemoteAddr) {
 				return quicConf, nil
 			}
@@ -218,13 +227,17 @@ func (s *clientsServer) run(ctx context.Context, cfg clientsServerCfg) error {
 	if err != nil {
 		return fmt.Errorf("client server udp listen: %w", err)
 	}
-	defer l.Close()
+	defer func() {
+		if err := l.Close(); err != nil {
+			slogc.Fine(s.logger, "error closing clients listener", "err", err)
+		}
+	}()
 
 	s.logger.Info("accepting client connections", "addr", transport.Conn.LocalAddr())
 	for {
 		conn, err := l.Accept(ctx)
 		if err != nil {
-			s.logger.Debug("accept error", "err", err)
+			slogc.Fine(s.logger, "accept error", "err", err)
 			return fmt.Errorf("client server quic accept: %w", err)
 		}
 
@@ -239,7 +252,7 @@ func (s *clientsServer) run(ctx context.Context, cfg clientsServerCfg) error {
 
 type clientConn struct {
 	server *clientsServer
-	conn   quic.Connection
+	conn   *quic.Conn
 	logger *slog.Logger
 
 	auth *clientAuth
@@ -247,7 +260,11 @@ type clientConn struct {
 
 func (c *clientConn) run(ctx context.Context) {
 	c.logger.Info("new client connected", "proto", c.conn.ConnectionState().TLS.NegotiatedProtocol, "remote", c.conn.RemoteAddr())
-	defer c.conn.CloseWithError(quic.ApplicationErrorCode(pberror.Code_Unknown), "connection closed")
+	defer func() {
+		if err := c.conn.CloseWithError(quic.ApplicationErrorCode(pberror.Code_Unknown), "connection closed"); err != nil {
+			slogc.Fine(c.logger, "error closing connection", "err", err)
+		}
+	}()
 
 	if err := c.runErr(ctx); err != nil {
 		c.logger.Debug("error while running client conn", "err", err)
@@ -285,7 +302,11 @@ func (c *clientConn) check(ctx context.Context) error {
 	if err != nil {
 		return fmt.Errorf("accept client stream: %w", err)
 	}
-	defer stream.Close()
+	defer func() {
+		if err := stream.Close(); err != nil {
+			slogc.Fine(c.logger, "error closing check client stream", "err", err)
+		}
+	}()
 
 	if _, err := pbconnect.ReadRequest(stream); err != nil {
 		return fmt.Errorf("read client stream: %w", err)
@@ -346,15 +367,19 @@ func (c *clientConn) runSource(ctx context.Context) error {
 	return g.Wait()
 }
 
-func (c *clientConn) runSourceStream(ctx context.Context, stream quic.Stream, fcs *endpointClients) {
-	defer stream.Close()
+func (c *clientConn) runSourceStream(ctx context.Context, stream *quic.Stream, fcs *endpointClients) {
+	defer func() {
+		if err := stream.Close(); err != nil {
+			slogc.Fine(c.logger, "error closing source stream", "err", err)
+		}
+	}()
 
 	if err := c.runSourceStreamErr(ctx, stream, fcs); err != nil {
 		c.logger.Debug("error while running source", "err", err)
 	}
 }
 
-func (c *clientConn) runSourceStreamErr(ctx context.Context, stream quic.Stream, fcs *endpointClients) error {
+func (c *clientConn) runSourceStreamErr(ctx context.Context, stream *quic.Stream, fcs *endpointClients) error {
 	req, err := pbconnect.ReadRequest(stream)
 	if err != nil {
 		return fmt.Errorf("source stream read: %w", err)
@@ -368,7 +393,7 @@ func (c *clientConn) runSourceStreamErr(ctx context.Context, stream quic.Stream,
 	}
 }
 
-func (c *clientConn) connect(ctx context.Context, stream quic.Stream, fcs *endpointClients, req *pbconnect.Request) error {
+func (c *clientConn) connect(ctx context.Context, stream *quic.Stream, fcs *endpointClients, req *pbconnect.Request) error {
 	dests := fcs.getDestinations()
 	if len(dests) == 0 {
 		err := pberror.NewError(pberror.Code_DestinationNotFound, "could not find destination")
@@ -392,7 +417,7 @@ func (c *clientConn) connect(ctx context.Context, stream quic.Stream, fcs *endpo
 	return proto.Write(stream, &pbconnect.Response{Error: err})
 }
 
-func (c *clientConn) connectDestination(ctx context.Context, srcStream quic.Stream, dest *clientConn, req *pbconnect.Request) error {
+func (c *clientConn) connectDestination(ctx context.Context, srcStream *quic.Stream, dest *clientConn, req *pbconnect.Request) error {
 	dstStream, err := dest.conn.OpenStreamSync(ctx)
 	if err != nil {
 		return fmt.Errorf("destination open stream: %w", err)
@@ -417,7 +442,7 @@ func (c *clientConn) connectDestination(ctx context.Context, srcStream quic.Stre
 	return nil
 }
 
-func (c *clientConn) unknown(_ context.Context, stream quic.Stream, req *pbconnect.Request) error {
+func (c *clientConn) unknown(_ context.Context, stream *quic.Stream, req *pbconnect.Request) error {
 	c.logger.Error("unknown request", "req", req)
 	err := pberror.NewError(pberror.Code_RequestUnknown, "unknown request: %v", req)
 	return proto.Write(stream, &pbconnect.Response{Error: err})

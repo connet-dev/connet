@@ -13,6 +13,7 @@ import (
 	"syscall"
 
 	"github.com/connet-dev/connet/model"
+	"github.com/connet-dev/connet/slogc"
 	"github.com/connet-dev/connet/statusc"
 	"github.com/pelletier/go-toml/v2"
 	"github.com/spf13/cobra"
@@ -152,32 +153,12 @@ func loadConfigFrom(file string) (Config, error) {
 }
 
 func logger(cfg Config) (*slog.Logger, error) {
-	var logLevel slog.Level
-	switch cfg.LogLevel {
-	case "debug":
-		logLevel = slog.LevelDebug
-	case "warn":
-		logLevel = slog.LevelWarn
-	case "error":
-		logLevel = slog.LevelError
-	case "info", "":
-		logLevel = slog.LevelInfo
-	default:
-		return nil, fmt.Errorf("invalid level '%s' (debug|info|warn|error)", cfg.LogLevel)
+	logger, err := slogc.New(cfg.LogLevel, cfg.LogFormat)
+	if err != nil {
+		return nil, err
 	}
-
-	switch cfg.LogFormat {
-	case "json":
-		return slog.New(slog.NewJSONHandler(os.Stderr, &slog.HandlerOptions{
-			Level: logLevel,
-		})), nil
-	case "text", "":
-		return slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{
-			Level: logLevel,
-		})), nil
-	default:
-		return nil, fmt.Errorf("invalid format '%s' (json|text)", cfg.LogFormat)
-	}
+	slog.SetDefault(logger)
+	return logger, nil
 }
 
 func loadTokens(tokensFile string) ([]string, error) {

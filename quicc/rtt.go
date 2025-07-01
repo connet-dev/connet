@@ -17,8 +17,8 @@ type rttStats struct {
 	stats atomic.Pointer[logging.RTTStats]
 }
 
-func RTTContext(ctx context.Context) context.Context {
-	return context.WithValue(ctx, rttContextKey, &rttStats{})
+func RTTContext(ctx context.Context, info *quic.ClientInfo) (context.Context, error) {
+	return context.WithValue(ctx, rttContextKey, &rttStats{}), nil
 }
 
 func RTTTracer(ctx context.Context, pers logging.Perspective, ci quic.ConnectionID) *logging.ConnectionTracer {
@@ -35,7 +35,7 @@ func RTTTracer(ctx context.Context, pers logging.Perspective, ci quic.Connection
 	}
 }
 
-func RTTStats(conn quic.Connection) *logging.RTTStats {
+func RTTStats(conn *quic.Conn) *logging.RTTStats {
 	v, ok := conn.Context().Value(rttContextKey).(*rttStats)
 	if !ok {
 		return nil
@@ -43,7 +43,7 @@ func RTTStats(conn quic.Connection) *logging.RTTStats {
 	return v.stats.Load()
 }
 
-func RTTLogStats(conn quic.Connection, logger *slog.Logger) {
+func RTTLogStats(conn *quic.Conn, logger *slog.Logger) {
 	if rttStats := RTTStats(conn); rttStats != nil {
 		logger.Debug("rtt stats", "last", rttStats.LatestRTT(), "smoothed", rttStats.SmoothedRTT())
 	}

@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"net"
 
+	"github.com/connet-dev/connet/slogc"
 	"github.com/gorilla/websocket"
 	"golang.org/x/sync/errgroup"
 )
@@ -12,7 +13,11 @@ func Join(nc net.Conn, wc *websocket.Conn) error {
 	var g errgroup.Group
 
 	g.Go(func() error {
-		defer nc.Close()
+		defer func() {
+			if err := nc.Close(); err != nil {
+				slogc.FineDefault("error closing source connection", "err", err)
+			}
+		}()
 		for {
 			_, data, err := wc.ReadMessage()
 			if err != nil {
@@ -25,7 +30,11 @@ func Join(nc net.Conn, wc *websocket.Conn) error {
 	})
 
 	g.Go(func() error {
-		defer wc.Close()
+		defer func() {
+			if err := wc.Close(); err != nil {
+				slogc.FineDefault("error closing websocket connection", "err", err)
+			}
+		}()
 		var buf = make([]byte, 4096)
 		for {
 			n, err := nc.Read(buf)

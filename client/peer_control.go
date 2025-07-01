@@ -7,6 +7,7 @@ import (
 	"github.com/connet-dev/connet/model"
 	"github.com/connet-dev/connet/proto"
 	"github.com/connet-dev/connet/proto/pbclient"
+	"github.com/connet-dev/connet/slogc"
 	"github.com/quic-go/quic-go"
 	"golang.org/x/sync/errgroup"
 )
@@ -16,7 +17,7 @@ type peerControl struct {
 	endpoint model.Endpoint
 	role     model.Role
 	opt      model.RouteOption
-	conn     quic.Connection
+	conn     *quic.Conn
 	notify   func(error)
 }
 
@@ -36,7 +37,11 @@ func (d *peerControl) runAnnounce(ctx context.Context) error {
 	if err != nil {
 		return fmt.Errorf("announce open stream: %w", err)
 	}
-	defer stream.Close()
+	defer func() {
+		if err := stream.Close(); err != nil {
+			slogc.Fine(d.local.logger, "error closing announce stream", "err", err)
+		}
+	}()
 
 	g, ctx := errgroup.WithContext(ctx)
 
@@ -85,7 +90,11 @@ func (d *peerControl) runRelay(ctx context.Context) error {
 	if err != nil {
 		return fmt.Errorf("relay open stream: %w", err)
 	}
-	defer stream.Close()
+	defer func() {
+		if err := stream.Close(); err != nil {
+			slogc.Fine(d.local.logger, "error closing relay stream", "err", err)
+		}
+	}()
 
 	if err := proto.Write(stream, &pbclient.Request{
 		Relay: &pbclient.Request_Relay{

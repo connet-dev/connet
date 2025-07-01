@@ -21,6 +21,7 @@ import (
 	"github.com/connet-dev/connet/proto/pberror"
 	"github.com/connet-dev/connet/proto/pbrelay"
 	"github.com/connet-dev/connet/quicc"
+	"github.com/connet-dev/connet/slogc"
 	"github.com/connet-dev/connet/statusc"
 	"github.com/klev-dev/klevdb"
 	"github.com/quic-go/quic-go"
@@ -201,7 +202,7 @@ func (s *controlClient) run(ctx context.Context, tfn TransportsFn) error {
 	}
 }
 
-func (s *controlClient) connect(ctx context.Context, tfn TransportsFn) (quic.Connection, error) {
+func (s *controlClient) connect(ctx context.Context, tfn TransportsFn) (*quic.Conn, error) {
 	transports, err := tfn(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("cannot get transports: %w", err)
@@ -213,7 +214,7 @@ func (s *controlClient) connect(ctx context.Context, tfn TransportsFn) (quic.Con
 	}
 
 	for _, transport := range transports {
-		conn, err := transport.Dial(quicc.RTTContext(ctx), s.controlAddr, s.controlTLSConf, quicc.StdConfig)
+		conn, err := transport.Dial(ctx, s.controlAddr, s.controlTLSConf, quicc.StdConfig)
 		if err != nil {
 			s.logger.Debug("relay control server: dial error", "localAddr", transport.Conn.LocalAddr(), "err", err)
 			continue
@@ -224,7 +225,11 @@ func (s *controlClient) connect(ctx context.Context, tfn TransportsFn) (quic.Con
 			s.logger.Debug("relay control server: open stream error", "localAddr", transport.Conn.LocalAddr(), "err", err)
 			continue
 		}
-		defer authStream.Close()
+		defer func() {
+			if err := authStream.Close(); err != nil {
+				slogc.Fine(s.logger, "relay control server: close stream error", "localAddr", transport.Conn.LocalAddr(), "err", err)
+			}
+		}()
 
 		if err := proto.Write(authStream, &pbrelay.AuthenticateReq{
 			Token:          s.controlToken,
@@ -268,7 +273,7 @@ func (s *controlClient) connect(ctx context.Context, tfn TransportsFn) (quic.Con
 	return nil, fmt.Errorf("could not reach the control server on any of the transports")
 }
 
-func (s *controlClient) reconnect(ctx context.Context, tfn TransportsFn) (quic.Connection, error) {
+func (s *controlClient) reconnect(ctx context.Context, tfn TransportsFn) (*quic.Conn, error) {
 	d := netc.MinBackoff
 	t := time.NewTimer(d)
 	defer t.Stop()
@@ -291,8 +296,12 @@ func (s *controlClient) reconnect(ctx context.Context, tfn TransportsFn) (quic.C
 	}
 }
 
-func (s *controlClient) runConnection(ctx context.Context, conn quic.Connection) error {
-	defer conn.CloseWithError(quic.ApplicationErrorCode(pberror.Code_Unknown), "connection closed")
+func (s *controlClient) runConnection(ctx context.Context, conn *quic.Conn) error {
+	defer func() {
+		if err := conn.CloseWithError(quic.ApplicationErrorCode(pberror.Code_Unknown), "connection closed"); err != nil {
+			slogc.Fine(s.logger, "error closing connection", "err", err)
+		}
+	}()
 
 	s.connStatus.Store(statusc.Connected)
 	defer s.connStatus.Store(statusc.Reconnecting)
@@ -307,12 +316,16 @@ func (s *controlClient) runConnection(ctx context.Context, conn quic.Connection)
 	return g.Wait()
 }
 
-func (s *controlClient) runClientsStream(ctx context.Context, conn quic.Connection) error {
+func (s *controlClient) runClientsStream(ctx context.Context, conn *quic.Conn) error {
 	stream, err := conn.OpenStreamSync(ctx)
 	if err != nil {
 		return err
 	}
-	defer stream.Close()
+	defer func() {
+		if err := stream.Close(); err != nil {
+			slogc.Fine(s.logger, "error closing clients stream", "err", err)
+		}
+	}()
 
 	g, ctx := errgroup.WithContext(ctx)
 
@@ -422,12 +435,16 @@ func (s *controlClient) runClientsLog(ctx context.Context) error {
 	}
 }
 
-func (s *controlClient) runServersStream(ctx context.Context, conn quic.Connection) error {
+func (s *controlClient) runServersStream(ctx context.Context, conn *quic.Conn) error {
 	stream, err := conn.AcceptStream(ctx)
 	if err != nil {
 		return err
 	}
-	defer stream.Close()
+	defer func() {
+		if err := stream.Close(); err != nil {
+			slogc.Fine(s.logger, "error closing servers stream", "err", err)
+		}
+	}()
 
 	g, ctx := errgroup.WithContext(ctx)
 

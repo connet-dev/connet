@@ -5,18 +5,27 @@ import (
 	"io"
 	"net"
 
+	"github.com/connet-dev/connet/slogc"
 	"golang.org/x/sync/errgroup"
 )
 
 func Join(l io.ReadWriteCloser, r io.ReadWriteCloser) error {
 	var g errgroup.Group
 	g.Go(func() error {
-		defer l.Close()
+		defer func() {
+			if err := l.Close(); err != nil {
+				slogc.FineDefault("error closing lconn", "err", err)
+			}
+		}()
 		_, err := io.Copy(l, r)
 		return err
 	})
 	g.Go(func() error {
-		defer r.Close()
+		defer func() {
+			if err := r.Close(); err != nil {
+				slogc.FineDefault("error closing rconn", "err", err)
+			}
+		}()
 		_, err := io.Copy(r, l)
 		return err
 	})
@@ -37,13 +46,21 @@ func (j *Joiner) Run(ctx context.Context) error {
 		}
 
 		go func() {
-			defer acceptConn.Close()
+			defer func() {
+				if err := acceptConn.Close(); err != nil {
+					slogc.FineDefault("error closing accepted conn", "err", err)
+				}
+			}()
 
 			dialConn, err := j.Dial(ctx)
 			if err != nil {
 				return
 			}
-			defer dialConn.Close()
+			defer func() {
+				if err := dialConn.Close(); err != nil {
+					slogc.FineDefault("error closing dial conn", "err", err)
+				}
+			}()
 
 			j.Join(ctx, acceptConn, dialConn)
 		}()

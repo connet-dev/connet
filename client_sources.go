@@ -13,6 +13,7 @@ import (
 
 	"github.com/connet-dev/connet/model"
 	"github.com/connet-dev/connet/netc"
+	"github.com/connet-dev/connet/slogc"
 	"github.com/connet-dev/connet/websocketc"
 	"github.com/gorilla/websocket"
 )
@@ -111,11 +112,17 @@ func (s *TCPSource) Run(ctx context.Context) error {
 	if err != nil {
 		return fmt.Errorf("source server listen: %w", err)
 	}
-	defer l.Close()
+	defer func() {
+		if err := l.Close(); err != nil {
+			slogc.Fine(s.logger, "error defer close listener", "err", err)
+		}
+	}()
 
 	go func() {
 		<-ctx.Done()
-		l.Close()
+		if err := l.Close(); err != nil {
+			slogc.Fine(s.logger, "error close listener", "err", err)
+		}
 	}()
 
 	s.logger.Info("listening for conns", "local", l.Addr())
@@ -156,7 +163,7 @@ func NewHTTPSource(src Source, srcURL *url.URL, cfg *tls.Config) *HTTPSource {
 
 func (s *HTTPSource) Run(ctx context.Context) error {
 	endpoint := s.src.Config().Endpoint.String()
-	var targetURL url.URL = *s.srcURL
+	var targetURL = *s.srcURL
 	targetURL.Scheme = "http"
 	targetURL.Host = endpoint
 
@@ -175,11 +182,17 @@ func (s *HTTPSource) Run(ctx context.Context) error {
 				w.WriteHeader(http.StatusBadGateway)
 				switch {
 				case errors.Is(err, ErrNoActiveDestinations):
-					fmt.Fprintf(w, "[source %s] no active destinations found", endpoint)
+					if _, err := fmt.Fprintf(w, "[source %s] no active destinations found", endpoint); err != nil {
+						slogc.FineDefault("error writing proxy server error", "err", err)
+					}
 				case errors.Is(err, ErrNoDialedDestinations):
-					fmt.Fprintf(w, "[source %s] cannot dial active destinations", endpoint)
+					if _, err := fmt.Fprintf(w, "[source %s] cannot dial active destinations", endpoint); err != nil {
+						slogc.FineDefault("error writing proxy server error", "err", err)
+					}
 				default:
-					fmt.Fprintf(w, "[source %s] %v", endpoint, err)
+					if _, err := fmt.Fprintf(w, "[source %s] %v", endpoint, err); err != nil {
+						slogc.FineDefault("error writing proxy server error", "err", err)
+					}
 				}
 			},
 		},
@@ -187,7 +200,9 @@ func (s *HTTPSource) Run(ctx context.Context) error {
 
 	go func() {
 		<-ctx.Done()
-		srv.Close()
+		if err := srv.Close(); err != nil {
+			slogc.FineDefault("error closing source http server", "err", err)
+		}
 	}()
 
 	if s.cfg != nil {
@@ -216,14 +231,22 @@ func (s *WSSource) handle(w http.ResponseWriter, r *http.Request) {
 		s.logger.Debug("could upgrade connection", "err", err)
 		return
 	}
-	defer hconn.Close()
+	defer func() {
+		if err := hconn.Close(); err != nil {
+			slogc.Fine(s.logger, "error closing websocket conn", "err", err)
+		}
+	}()
 
 	sconn, err := s.src.DialContext(r.Context(), "", "")
 	if err != nil {
 		s.logger.Debug("could not dial destination", "err", err)
 		return
 	}
-	defer sconn.Close()
+	defer func() {
+		if err := sconn.Close(); err != nil {
+			slogc.Fine(s.logger, "error closing source conn", "err", err)
+		}
+	}()
 
 	err = websocketc.Join(sconn, hconn)
 	s.logger.Debug("completed websocket connection", "err", err)
@@ -245,7 +268,9 @@ func (s *WSSource) Run(ctx context.Context) error {
 
 	go func() {
 		<-ctx.Done()
-		srv.Close()
+		if err := srv.Close(); err != nil {
+			slogc.FineDefault("error closing source ws server", "err", err)
+		}
 	}()
 
 	if s.cfg != nil {

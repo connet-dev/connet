@@ -22,6 +22,7 @@ import (
 	"github.com/connet-dev/connet/proto/pbclient"
 	"github.com/connet-dev/connet/proto/pberror"
 	"github.com/connet-dev/connet/quicc"
+	"github.com/connet-dev/connet/slogc"
 	"github.com/connet-dev/connet/statusc"
 	"github.com/quic-go/quic-go"
 	"golang.org/x/sync/errgroup"
@@ -80,8 +81,8 @@ func Connect(ctx context.Context, opts ...ClientOption) (*Client, error) {
 	go c.runClient(ctx, errCh)
 
 	if err := <-errCh; err != nil {
-		c.Close()
-		return nil, err
+		cerr := c.Close()
+		return nil, errors.Join(err, cerr)
 	}
 
 	return c, nil
@@ -98,11 +99,19 @@ func (c *Client) runClient(ctx context.Context, errCh chan error) {
 		errCh <- fmt.Errorf("listen direct address: %w", err)
 		return
 	}
-	defer udpConn.Close()
+	defer func() {
+		if err := udpConn.Close(); err != nil {
+			slogc.Fine(c.logger, "error closing udp listener", "err", err)
+		}
+	}()
 
 	c.logger.Debug("start quic listener")
 	transport := quicc.ClientTransport(udpConn, c.directResetKey)
-	defer transport.Close()
+	defer func() {
+		if err := transport.Close(); err != nil {
+			slogc.Fine(c.logger, "error closing transport", "err", err)
+		}
+	}()
 
 	ds, err := client.NewDirectServer(transport, c.logger)
 	if err != nil {
@@ -229,12 +238,16 @@ func (c *Client) Close() error {
 func (c *Client) closeEndpoints() {
 	for _, dstName := range c.Destinations() {
 		if dst, err := c.GetDestination(dstName); err == nil {
-			dst.Close()
+			if err := dst.Close(); err != nil {
+				slogc.Fine(c.logger, "error closing destination", "dst", dstName, "err", err)
+			}
 		}
 	}
 	for _, srcName := range c.Sources() {
 		if src, err := c.GetSource(srcName); err == nil {
-			src.Close()
+			if err := src.Close(); err != nil {
+				slogc.Fine(c.logger, "error closing source", "src", srcName, "err", err)
+			}
 		}
 	}
 }
@@ -267,14 +280,14 @@ func (c *Client) run(ctx context.Context, transport *quic.Transport, errCh chan 
 }
 
 type session struct {
-	conn    quic.Connection
+	conn    *quic.Conn
 	addrs   []netip.AddrPort
 	retoken []byte
 }
 
 func (c *Client) connect(ctx context.Context, transport *quic.Transport, retoken []byte) (*session, error) {
 	c.logger.Debug("dialing target", "addr", c.controlAddr)
-	conn, err := transport.Dial(quicc.RTTContext(ctx), c.controlAddr, &tls.Config{
+	conn, err := transport.Dial(ctx, c.controlAddr, &tls.Config{
 		ServerName: c.controlHost,
 		RootCAs:    c.controlCAs,
 		NextProtos: model.ClientNextProtos,
@@ -289,7 +302,11 @@ func (c *Client) connect(ctx context.Context, transport *quic.Transport, retoken
 	if err != nil {
 		return nil, fmt.Errorf("open authentication stream: %w", err)
 	}
-	defer authStream.Close()
+	defer func() {
+		if err := authStream.Close(); err != nil {
+			slogc.Fine(c.logger, "error closing auth stream", "err", err)
+		}
+	}()
 
 	if err := proto.Write(authStream, &pbclient.Authenticate{
 		Token:          c.token,
@@ -346,7 +363,11 @@ func (c *Client) reconnect(ctx context.Context, transport *quic.Transport, retok
 }
 
 func (c *Client) runSession(ctx context.Context, sess *session) error {
-	defer sess.conn.CloseWithError(quic.ApplicationErrorCode(pberror.Code_Unknown), "connection closed")
+	defer func() {
+		if err := sess.conn.CloseWithError(quic.ApplicationErrorCode(pberror.Code_Unknown), "connection closed"); err != nil {
+			slogc.Fine(c.logger, "error closing connection", "err", err)
+		}
+	}()
 
 	c.currentSession.Set(sess)
 	defer c.currentSession.Set(nil)

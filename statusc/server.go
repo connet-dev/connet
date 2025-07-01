@@ -6,6 +6,8 @@ import (
 	"fmt"
 	"net"
 	"net/http"
+
+	"github.com/connet-dev/connet/slogc"
 )
 
 func Run[T any](ctx context.Context, addr *net.TCPAddr, f func(ctx context.Context) (T, error)) error {
@@ -20,14 +22,18 @@ func Run[T any](ctx context.Context, addr *net.TCPAddr, f func(ctx context.Conte
 			}
 			if err != nil {
 				w.WriteHeader(http.StatusInternalServerError)
-				fmt.Fprintf(w, "server error: %v", err.Error())
+				if _, err := fmt.Fprintf(w, "server error: %v", err.Error()); err != nil {
+					slogc.FineDefault("error writing server error", "err", err)
+				}
 			}
 		}),
 	}
 
 	go func() {
 		<-ctx.Done()
-		srv.Close()
+		if err := srv.Close(); err != nil {
+			slogc.FineDefault("error closing status server", "err", err)
+		}
 	}()
 
 	return srv.ListenAndServe()

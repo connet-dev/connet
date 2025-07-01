@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/rand"
 	"crypto/x509"
+	"errors"
 	"fmt"
 	"io"
 	"log/slog"
@@ -20,6 +21,7 @@ import (
 	"github.com/connet-dev/connet/proto/pberror"
 	"github.com/connet-dev/connet/proto/pbmodel"
 	"github.com/connet-dev/connet/quicc"
+	"github.com/connet-dev/connet/slogc"
 	"github.com/quic-go/quic-go"
 	"github.com/segmentio/ksuid"
 	"golang.org/x/sync/errgroup"
@@ -251,11 +253,19 @@ func (s *clientServer) runListener(ctx context.Context, ingress Ingress) error {
 	if err != nil {
 		return fmt.Errorf("client server udp listen: %w", err)
 	}
-	defer udpConn.Close()
+	defer func() {
+		if err := udpConn.Close(); err != nil {
+			slogc.Fine(s.logger, "error closing udp listener", "err", err)
+		}
+	}()
 
 	s.logger.Debug("start quic listener", "addr", ingress.Addr)
 	transport := quicc.ServerTransport(udpConn, s.statelessResetKey)
-	defer transport.Close()
+	defer func() {
+		if err := transport.Close(); err != nil {
+			slogc.Fine(s.logger, "error closing transport", "err", err)
+		}
+	}()
 
 	tlsConf := ingress.TLS.Clone()
 	if len(tlsConf.NextProtos) == 0 {
@@ -265,7 +275,7 @@ func (s *clientServer) runListener(ctx context.Context, ingress Ingress) error {
 	quicConf := quicc.StdConfig
 	if ingress.Restr.IsNotEmpty() {
 		quicConf = quicConf.Clone()
-		quicConf.GetConfigForClient = func(info *quic.ClientHelloInfo) (*quic.Config, error) {
+		quicConf.GetConfigForClient = func(info *quic.ClientInfo) (*quic.Config, error) {
 			if ingress.Restr.IsAllowedAddr(info.RemoteAddr) {
 				return quicConf, nil
 			}
@@ -277,13 +287,17 @@ func (s *clientServer) runListener(ctx context.Context, ingress Ingress) error {
 	if err != nil {
 		return fmt.Errorf("client server quic listen: %w", err)
 	}
-	defer l.Close()
+	defer func() {
+		if err := l.Close(); err != nil {
+			slogc.Fine(s.logger, "error closing clients listener", "err", err)
+		}
+	}()
 
 	s.logger.Info("accepting client connections", "addr", transport.Conn.LocalAddr())
 	for {
 		conn, err := l.Accept(ctx)
 		if err != nil {
-			s.logger.Debug("accept error", "err", err)
+			slogc.Fine(s.logger, "accept error", "err", err)
 			return fmt.Errorf("client server quic accept: %w", err)
 		}
 
@@ -401,7 +415,7 @@ func (s *clientServer) waitToReactivate(ctx context.Context) (int, error) {
 
 type clientConn struct {
 	server *clientServer
-	conn   quic.Connection
+	conn   *quic.Conn
 	logger *slog.Logger
 
 	auth ClientAuthentication
@@ -410,7 +424,11 @@ type clientConn struct {
 
 func (c *clientConn) run(ctx context.Context) {
 	c.logger.Info("new client connected", "proto", c.conn.ConnectionState().TLS.NegotiatedProtocol, "remote", c.conn.RemoteAddr())
-	defer c.conn.CloseWithError(quic.ApplicationErrorCode(pberror.Code_Unknown), "connection closed")
+	defer func() {
+		if err := c.conn.CloseWithError(quic.ApplicationErrorCode(pberror.Code_Unknown), "connection closed"); err != nil {
+			slogc.Fine(c.logger, "error closing connection", "err", err)
+		}
+	}()
 
 	if err := c.runErr(ctx); err != nil {
 		c.logger.Debug("error while running client conn", "err", err)
@@ -420,11 +438,11 @@ func (c *clientConn) run(ctx context.Context) {
 func (c *clientConn) runErr(ctx context.Context) error {
 	if auth, id, err := c.authenticate(ctx); err != nil {
 		if perr := pberror.GetError(err); perr != nil {
-			// TODO handle err
-			c.conn.CloseWithError(quic.ApplicationErrorCode(perr.Code), perr.Message)
+			cerr := c.conn.CloseWithError(quic.ApplicationErrorCode(perr.Code), perr.Message)
+			err = errors.Join(perr, cerr)
 		} else {
-			// TODO handle err
-			c.conn.CloseWithError(quic.ApplicationErrorCode(pberror.Code_AuthenticationFailed), "Error while authenticating")
+			cerr := c.conn.CloseWithError(quic.ApplicationErrorCode(pberror.Code_AuthenticationFailed), "Error while authenticating")
+			err = errors.Join(err, cerr)
 		}
 		return err
 	} else {
@@ -462,7 +480,11 @@ func (c *clientConn) authenticate(ctx context.Context) (ClientAuthentication, ks
 	if err != nil {
 		return nil, ksuid.Nil, fmt.Errorf("client auth stream: %w", err)
 	}
-	defer authStream.Close()
+	defer func() {
+		if err := authStream.Close(); err != nil {
+			slogc.Fine(c.logger, "error closing auth stream", "err", err)
+		}
+	}()
 
 	req := &pbclient.Authenticate{}
 	if err := proto.Read(authStream, req); err != nil {
@@ -522,11 +544,15 @@ func (c *clientConn) authenticate(ctx context.Context) (ClientAuthentication, ks
 
 type clientStream struct {
 	conn   *clientConn
-	stream quic.Stream
+	stream *quic.Stream
 }
 
 func (s *clientStream) run(ctx context.Context) {
-	defer s.stream.Close()
+	defer func() {
+		if err := s.stream.Close(); err != nil {
+			slogc.Fine(s.conn.logger, "error closing client stream", "err", err)
+		}
+	}()
 
 	if err := s.runErr(ctx); err != nil {
 		s.conn.logger.Debug("error while running client stream", "err", err)

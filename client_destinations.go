@@ -11,6 +11,7 @@ import (
 	"net/url"
 
 	"github.com/connet-dev/connet/netc"
+	"github.com/connet-dev/connet/slogc"
 )
 
 // DestinationTCP creates a new destination which connects to a downstream TCP server
@@ -169,7 +170,9 @@ func (d *HTTPDestination) Run(ctx context.Context) error {
 
 	go func() {
 		<-ctx.Done()
-		srv.Close()
+		if err := srv.Close(); err != nil {
+			slogc.FineDefault("error closing destination http server", "err", err)
+		}
 	}()
 
 	return srv.Serve(d.dst)

@@ -40,8 +40,8 @@ func serverCmd() *cobra.Command {
 	cmd.Flags().StringVar(&clientIngress.Addr, "addr", "", "control server addr to use")
 	cmd.Flags().StringVar(&clientIngress.Cert, "cert-file", "", "control server cert to use")
 	cmd.Flags().StringVar(&clientIngress.Key, "key-file", "", "control server key to use")
-	cmd.Flags().StringArrayVar(&clientIngress.IPRestriction.AllowCIDRs, "allow-cidr", nil, "cidr to allow client connections from")
-	cmd.Flags().StringArrayVar(&clientIngress.IPRestriction.DenyCIDRs, "deny-cidr", nil, "cidr to deny client connections from")
+	cmd.Flags().StringArrayVar(&clientIngress.AllowCIDRs, "allow-cidr", nil, "cidr to allow client connections from")
+	cmd.Flags().StringArrayVar(&clientIngress.DenyCIDRs, "deny-cidr", nil, "cidr to deny client connections from")
 
 	cmd.Flags().StringArrayVar(&flagsConfig.Server.Tokens, "tokens", nil, "tokens for clients to connect")
 	cmd.Flags().StringVar(&flagsConfig.Server.TokensFile, "tokens-file", "", "tokens file to load")
@@ -49,8 +49,8 @@ func serverCmd() *cobra.Command {
 	var relayIngress RelayIngress
 	cmd.Flags().StringVar(&relayIngress.Addr, "relay-addr", "", "relay server addr to use")
 	cmd.Flags().StringArrayVar(&relayIngress.Hostports, "relay-hostport", nil, "relay server public host[:port] to use (if port is missing will use addr's port)")
-	cmd.Flags().StringArrayVar(&relayIngress.IPRestriction.AllowCIDRs, "relay-allow-cidr", nil, "cidr to allow client relay connections from")
-	cmd.Flags().StringArrayVar(&relayIngress.IPRestriction.DenyCIDRs, "relay-deny-cidr", nil, "cidr to deny client relay connections from")
+	cmd.Flags().StringArrayVar(&relayIngress.AllowCIDRs, "relay-allow-cidr", nil, "cidr to allow client relay connections from")
+	cmd.Flags().StringArrayVar(&relayIngress.DenyCIDRs, "relay-deny-cidr", nil, "cidr to deny client relay connections from")
 
 	cmd.Flags().StringVar(&flagsConfig.Server.StatusAddr, "status-addr", "", "status server address to listen")
 	cmd.Flags().StringVar(&flagsConfig.Server.StoreDir, "store-dir", "", "storage dir, /tmp subdirectory if empty")

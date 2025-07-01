@@ -19,6 +19,7 @@ import (
 	"github.com/connet-dev/connet/proto/pbconnect"
 	"github.com/connet-dev/connet/proto/pberror"
 	"github.com/connet-dev/connet/quicc"
+	"github.com/connet-dev/connet/slogc"
 	"github.com/quic-go/quic-go"
 	"golang.org/x/sync/errgroup"
 )
@@ -56,7 +57,9 @@ func (p *directPeer) run(ctx context.Context) {
 	defer func() {
 		active := p.local.removeActiveConns(p.remoteID)
 		for _, conn := range active {
-			defer conn.CloseWithError(quic.ApplicationErrorCode(pberror.Code_DirectConnectionClosed), "connection closed")
+			if err := conn.CloseWithError(quic.ApplicationErrorCode(pberror.Code_DirectConnectionClosed), "connection closed"); err != nil {
+				slogc.Fine(p.logger, "error closing connection", "err", err)
+			}
 		}
 	}()
 
@@ -187,7 +190,7 @@ func (p *directPeerIncoming) run(ctx context.Context) {
 	}
 }
 
-func (p *directPeerIncoming) connect(ctx context.Context) (quic.Connection, error) {
+func (p *directPeerIncoming) connect(ctx context.Context) (*quic.Conn, error) {
 	ch, cancel := p.parent.local.direct.expect(p.parent.local.serverCert, p.clientCert)
 	select {
 	case <-p.closer:
@@ -201,7 +204,11 @@ func (p *directPeerIncoming) connect(ctx context.Context) (quic.Connection, erro
 		if err != nil {
 			return nil, err
 		}
-		defer stream.Close()
+		defer func() {
+			if err := stream.Close(); err != nil {
+				slogc.Fine(p.logger, "error closing check stream", "err", err)
+			}
+		}()
 
 		if _, err := pbconnect.ReadRequest(stream); err != nil {
 			return nil, err
@@ -213,8 +220,12 @@ func (p *directPeerIncoming) connect(ctx context.Context) (quic.Connection, erro
 	}
 }
 
-func (p *directPeerIncoming) keepalive(ctx context.Context, conn quic.Connection) error {
-	defer conn.CloseWithError(quic.ApplicationErrorCode(pberror.Code_DirectKeepaliveClosed), "keepalive closed")
+func (p *directPeerIncoming) keepalive(ctx context.Context, conn *quic.Conn) error {
+	defer func() {
+		if err := conn.CloseWithError(quic.ApplicationErrorCode(pberror.Code_DirectKeepaliveClosed), "keepalive closed"); err != nil {
+			slogc.Fine(p.logger, "error closing connection", "err", err)
+		}
+	}()
 
 	p.parent.local.addActiveConn(p.parent.remoteID, peerIncoming, "", conn)
 	defer p.parent.local.removeActiveConn(p.parent.remoteID, peerIncoming, "")
@@ -288,13 +299,13 @@ func (p *directPeerOutgoing) run(ctx context.Context) {
 	}
 }
 
-func (p *directPeerOutgoing) connect(ctx context.Context) (quic.Connection, error) {
+func (p *directPeerOutgoing) connect(ctx context.Context) (*quic.Conn, error) {
 	var errs []error
 	for paddr := range p.addrs {
 		addr := net.UDPAddrFromAddrPort(paddr)
 
 		p.logger.Debug("dialing direct", "addr", addr, "server", p.serverConf.name, "cert", p.serverConf.key)
-		conn, err := p.parent.local.direct.transport.Dial(quicc.RTTContext(ctx), addr, &tls.Config{
+		conn, err := p.parent.local.direct.transport.Dial(ctx, addr, &tls.Config{
 			Certificates: []tls.Certificate{p.parent.local.clientCert},
 			RootCAs:      p.serverConf.cas,
 			ServerName:   p.serverConf.name,
@@ -312,8 +323,9 @@ func (p *directPeerOutgoing) connect(ctx context.Context) (quic.Connection, erro
 		case errors.Is(err, context.Canceled):
 			return nil, err
 		case err != nil:
-			conn.CloseWithError(quic.ApplicationErrorCode(pberror.Code_ConnectionCheckFailed), "connection check failed")
 			errs = append(errs, err)
+			cerr := conn.CloseWithError(quic.ApplicationErrorCode(pberror.Code_ConnectionCheckFailed), "connection check failed")
+			errs = append(errs, cerr)
 			continue
 		}
 
@@ -322,12 +334,16 @@ func (p *directPeerOutgoing) connect(ctx context.Context) (quic.Connection, erro
 	return nil, errors.Join(errs...)
 }
 
-func (p *directPeerOutgoing) check(ctx context.Context, conn quic.Connection) error {
+func (p *directPeerOutgoing) check(ctx context.Context, conn *quic.Conn) error {
 	stream, err := conn.OpenStreamSync(ctx)
 	if err != nil {
 		return err
 	}
-	defer stream.Close()
+	defer func() {
+		if err := stream.Close(); err != nil {
+			slogc.Fine(p.logger, "error closing check stream", "err", err)
+		}
+	}()
 
 	if err := proto.Write(stream, &pbconnect.Request{}); err != nil {
 		return err
@@ -339,8 +355,12 @@ func (p *directPeerOutgoing) check(ctx context.Context, conn quic.Connection) er
 	return nil
 }
 
-func (p *directPeerOutgoing) keepalive(ctx context.Context, conn quic.Connection) error {
-	defer conn.CloseWithError(quic.ApplicationErrorCode(pberror.Code_DirectKeepaliveClosed), "keepalive closed")
+func (p *directPeerOutgoing) keepalive(ctx context.Context, conn *quic.Conn) error {
+	defer func() {
+		if err := conn.CloseWithError(quic.ApplicationErrorCode(pberror.Code_DirectKeepaliveClosed), "keepalive closed"); err != nil {
+			slogc.Fine(p.logger, "error closing connection", "err", err)
+		}
+	}()
 
 	p.parent.local.addActiveConn(p.parent.remoteID, peerOutgoing, "", conn)
 	defer p.parent.local.removeActiveConn(p.parent.remoteID, peerOutgoing, "")
@@ -378,7 +398,7 @@ func newDirectPeerRelays(ctx context.Context, parent *directPeer, remotes map[re
 
 func (p *directPeerRelays) run(ctx context.Context) {
 	var (
-		locals  map[relayID]quic.Connection
+		locals  map[relayID]*quic.Conn
 		remotes map[relayID]struct{}
 	)
 
@@ -393,7 +413,7 @@ func (p *directPeerRelays) run(ctx context.Context) {
 		for id := range active {
 			_, relayed := locals[id]
 			_, remoteByID := remotes[id]
-			if !(relayed && remoteByID) {
+			if !relayed || !remoteByID {
 				p.parent.local.removeActiveConn(p.parent.remoteID, peerRelay, string(id))
 				delete(active, id)
 			}

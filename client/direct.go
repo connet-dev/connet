@@ -12,6 +12,7 @@ import (
 	"github.com/connet-dev/connet/model"
 	"github.com/connet-dev/connet/proto/pberror"
 	"github.com/connet-dev/connet/quicc"
+	"github.com/connet-dev/connet/slogc"
 	"github.com/quic-go/quic-go"
 )
 
@@ -42,7 +43,7 @@ type vServer struct {
 
 type vClient struct {
 	cert *x509.Certificate
-	ch   chan quic.Connection
+	ch   chan *quic.Conn
 }
 
 func (s *vServer) dequeue(key model.Key, cert *x509.Certificate) *vClient {
@@ -89,7 +90,7 @@ func (s *DirectServer) getServer(serverName string) *vServer {
 	return s.servers[serverName]
 }
 
-func (s *DirectServer) expect(serverCert tls.Certificate, cert *x509.Certificate) (chan quic.Connection, func()) {
+func (s *DirectServer) expect(serverCert tls.Certificate, cert *x509.Certificate) (chan *quic.Conn, func()) {
 	key := model.NewKey(cert)
 	srv := s.getServer(serverCert.Leaf.DNSNames[0])
 
@@ -99,7 +100,7 @@ func (s *DirectServer) expect(serverCert tls.Certificate, cert *x509.Certificate
 	defer srv.mu.Unlock()
 
 	s.logger.Debug("expect client", "server", srv.serverName, "cert", key)
-	ch := make(chan quic.Connection)
+	ch := make(chan *quic.Conn)
 	srv.clients[key] = &vClient{cert: cert, ch: ch}
 	return ch, func() {
 		srv.mu.Lock()
@@ -133,6 +134,11 @@ func (s *DirectServer) Run(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
+	defer func() {
+		if err := l.Close(); err != nil {
+			slogc.Fine(s.logger, "close listener error", "err", err)
+		}
+	}()
 
 	s.logger.Debug("listening for conns")
 	for {
@@ -145,10 +151,12 @@ func (s *DirectServer) Run(ctx context.Context) error {
 	}
 }
 
-func (s *DirectServer) runConn(conn quic.Connection) {
+func (s *DirectServer) runConn(conn *quic.Conn) {
 	srv := s.getServer(conn.ConnectionState().TLS.ServerName)
 	if srv == nil {
-		conn.CloseWithError(quic.ApplicationErrorCode(pberror.Code_AuthenticationFailed), "unknown server")
+		if err := conn.CloseWithError(quic.ApplicationErrorCode(pberror.Code_AuthenticationFailed), "unknown server"); err != nil {
+			slogc.Fine(s.logger, "error closing connection", "err", err)
+		}
 		return
 	}
 
@@ -158,7 +166,9 @@ func (s *DirectServer) runConn(conn quic.Connection) {
 
 	exp := srv.dequeue(key, cert)
 	if exp == nil {
-		conn.CloseWithError(quic.ApplicationErrorCode(pberror.Code_AuthenticationFailed), "unknown client")
+		if err := conn.CloseWithError(quic.ApplicationErrorCode(pberror.Code_AuthenticationFailed), "unknown client"); err != nil {
+			slogc.Fine(s.logger, "error closing connection", "err", err)
+		}
 		return
 	}
 

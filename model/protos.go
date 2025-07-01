@@ -11,7 +11,7 @@ func (v ClientNextProto) String() string {
 	return v.string
 }
 
-func GetClientNextProto(conn quic.Connection) ClientNextProto {
+func GetClientNextProto(conn *quic.Conn) ClientNextProto {
 	proto := conn.ConnectionState().TLS.NegotiatedProtocol
 	for _, v := range AllClientNextProtos {
 		if v.string == proto {
@@ -64,7 +64,7 @@ func (v RelayNextProto) String() string {
 	return v.string
 }
 
-func GetRelayNextProto(conn quic.Connection) RelayNextProto {
+func GetRelayNextProto(conn *quic.Conn) RelayNextProto {
 	proto := conn.ConnectionState().TLS.NegotiatedProtocol
 	for _, v := range AllRelayNextProtos {
 		if v.string == proto {

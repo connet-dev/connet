@@ -16,6 +16,7 @@ import (
 	"github.com/connet-dev/connet/proto/pbconnect"
 	"github.com/connet-dev/connet/proto/pberror"
 	"github.com/connet-dev/connet/quicc"
+	"github.com/connet-dev/connet/slogc"
 	"github.com/quic-go/quic-go"
 	"golang.org/x/sync/errgroup"
 )
@@ -86,7 +87,7 @@ func (r *relayPeer) runConn(ctx context.Context) error {
 	}
 }
 
-func (r *relayPeer) connectAny(ctx context.Context) (quic.Connection, error) {
+func (r *relayPeer) connectAny(ctx context.Context) (*quic.Conn, error) {
 	for _, hp := range r.serverHostports {
 		if conn, err := r.connect(ctx, hp); err != nil {
 			r.logger.Debug("cannot connet relay", "hostport", hp, "err", err)
@@ -97,7 +98,7 @@ func (r *relayPeer) connectAny(ctx context.Context) (quic.Connection, error) {
 	return nil, fmt.Errorf("cannot connect to relay: %s", r.serverID)
 }
 
-func (r *relayPeer) connect(ctx context.Context, hp model.HostPort) (quic.Connection, error) {
+func (r *relayPeer) connect(ctx context.Context, hp model.HostPort) (*quic.Conn, error) {
 	addr, err := net.ResolveUDPAddr("udp", hp.String())
 	if err != nil {
 		return nil, err
@@ -105,7 +106,7 @@ func (r *relayPeer) connect(ctx context.Context, hp model.HostPort) (quic.Connec
 
 	cfg := r.serverConf.Load()
 	r.logger.Debug("dialing relay", "addr", addr, "server", cfg.name, "cert", cfg.key)
-	conn, err := r.local.direct.transport.Dial(quicc.RTTContext(ctx), addr, &tls.Config{
+	conn, err := r.local.direct.transport.Dial(ctx, addr, &tls.Config{
 		Certificates: []tls.Certificate{r.local.clientCert},
 		RootCAs:      cfg.cas,
 		ServerName:   cfg.name,
@@ -116,18 +117,22 @@ func (r *relayPeer) connect(ctx context.Context, hp model.HostPort) (quic.Connec
 	}
 
 	if err := r.check(ctx, conn); err != nil {
-		conn.CloseWithError(quic.ApplicationErrorCode(pberror.Code_ConnectionCheckFailed), "connection check failed")
-		return nil, err
+		cerr := conn.CloseWithError(quic.ApplicationErrorCode(pberror.Code_ConnectionCheckFailed), "connection check failed")
+		return nil, errors.Join(err, cerr)
 	}
 	return conn, nil
 }
 
-func (r *relayPeer) check(ctx context.Context, conn quic.Connection) error {
+func (r *relayPeer) check(ctx context.Context, conn *quic.Conn) error {
 	stream, err := conn.OpenStreamSync(ctx)
 	if err != nil {
 		return err
 	}
-	defer stream.Close()
+	defer func() {
+		if err := stream.Close(); err != nil {
+			slogc.Fine(r.logger, "error closing check stream", "err", err)
+		}
+	}()
 
 	if err := proto.Write(stream, &pbconnect.Request{}); err != nil {
 		return err
@@ -139,8 +144,12 @@ func (r *relayPeer) check(ctx context.Context, conn quic.Connection) error {
 	return nil
 }
 
-func (r *relayPeer) keepalive(ctx context.Context, conn quic.Connection) error {
-	defer conn.CloseWithError(quic.ApplicationErrorCode(pberror.Code_RelayKeepaliveClosed), "keepalive closed")
+func (r *relayPeer) keepalive(ctx context.Context, conn *quic.Conn) error {
+	defer func() {
+		if err := conn.CloseWithError(quic.ApplicationErrorCode(pberror.Code_RelayKeepaliveClosed), "keepalive closed"); err != nil {
+			slogc.Fine(r.logger, "error closing connection", "err", err)
+		}
+	}()
 
 	r.local.addRelayConn(r.serverID, conn)
 	defer r.local.removeRelayConn(r.serverID)

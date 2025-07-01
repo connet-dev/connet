@@ -152,6 +152,7 @@ var connectedTests = map[string]connectedTestCase{
 	},
 }
 
+//nolint:errcheck
 func TestE2E(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
@@ -598,6 +599,7 @@ func TestE2E(t *testing.T) {
 	_ = g.Wait()
 }
 
+//nolint:errcheck
 func proxyProtoServer(ctx context.Context, l net.Listener) error {
 	go func() {
 		<-ctx.Done()
@@ -625,6 +627,7 @@ func proxyProtoServer(ctx context.Context, l net.Listener) error {
 	}
 }
 
+//nolint:errcheck
 func echoServer(ctx context.Context, l net.Listener) error {
 	go func() {
 		<-ctx.Done()

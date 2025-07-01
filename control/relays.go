@@ -19,6 +19,7 @@ import (
 	"github.com/connet-dev/connet/proto/pberror"
 	"github.com/connet-dev/connet/proto/pbrelay"
 	"github.com/connet-dev/connet/quicc"
+	"github.com/connet-dev/connet/slogc"
 	"github.com/quic-go/quic-go"
 	"github.com/segmentio/ksuid"
 	"golang.org/x/sync/errgroup"
@@ -240,11 +241,19 @@ func (s *relayServer) runListener(ctx context.Context, ingress Ingress) error {
 	if err != nil {
 		return fmt.Errorf("relay server udp listen: %w", err)
 	}
-	defer udpConn.Close()
+	defer func() {
+		if err := udpConn.Close(); err != nil {
+			slogc.Fine(s.logger, "error closing udp listener", "err", err)
+		}
+	}()
 
 	s.logger.Debug("start quic listener", "addr", ingress.Addr)
 	transport := quicc.ServerTransport(udpConn, s.statelessResetKey)
-	defer transport.Close()
+	defer func() {
+		if err := transport.Close(); err != nil {
+			slogc.Fine(s.logger, "error closing transport", "err", err)
+		}
+	}()
 
 	tlsConf := ingress.TLS.Clone()
 	if len(tlsConf.NextProtos) == 0 {
@@ -254,7 +263,7 @@ func (s *relayServer) runListener(ctx context.Context, ingress Ingress) error {
 	quicConf := quicc.StdConfig
 	if ingress.Restr.IsNotEmpty() {
 		quicConf = quicConf.Clone()
-		quicConf.GetConfigForClient = func(info *quic.ClientHelloInfo) (*quic.Config, error) {
+		quicConf.GetConfigForClient = func(info *quic.ClientInfo) (*quic.Config, error) {
 			if ingress.Restr.IsAllowedAddr(info.RemoteAddr) {
 				return quicConf, nil
 			}
@@ -266,13 +275,17 @@ func (s *relayServer) runListener(ctx context.Context, ingress Ingress) error {
 	if err != nil {
 		return fmt.Errorf("relay server quic listen: %w", err)
 	}
-	defer l.Close()
+	defer func() {
+		if err := l.Close(); err != nil {
+			slogc.Fine(s.logger, "error closing relays listener", "err", err)
+		}
+	}()
 
 	s.logger.Info("accepting relay connections", "addr", transport.Conn.LocalAddr())
 	for {
 		conn, err := l.Accept(ctx)
 		if err != nil {
-			s.logger.Debug("accept error", "err", err)
+			slogc.Fine(s.logger, "accept error", "err", err)
 			return fmt.Errorf("relay server quic accept: %w", err)
 		}
 
@@ -350,7 +363,7 @@ func (s *relayServer) setRelayServerOffset(id ksuid.KSUID, offset int64) error {
 
 type relayConn struct {
 	server *relayServer
-	conn   quic.Connection
+	conn   *quic.Conn
 	logger *slog.Logger
 
 	endpoints logc.KV[RelayEndpointKey, RelayEndpointValue]
@@ -366,7 +379,11 @@ type relayConnAuth struct {
 }
 
 func (c *relayConn) run(ctx context.Context) {
-	defer c.conn.CloseWithError(quic.ApplicationErrorCode(pberror.Code_Unknown), "connection closed")
+	defer func() {
+		if err := c.conn.CloseWithError(quic.ApplicationErrorCode(pberror.Code_Unknown), "connection closed"); err != nil {
+			slogc.Fine(c.logger, "error closing connection", "err", err)
+		}
+	}()
 
 	if err := c.runErr(ctx); err != nil {
 		c.logger.Debug("error while running zzz", "err", err)
@@ -376,9 +393,11 @@ func (c *relayConn) run(ctx context.Context) {
 func (c *relayConn) runErr(ctx context.Context) error {
 	if rauth, err := c.authenticate(ctx); err != nil {
 		if perr := pberror.GetError(err); perr != nil {
-			c.conn.CloseWithError(quic.ApplicationErrorCode(perr.Code), perr.Message)
+			cerr := c.conn.CloseWithError(quic.ApplicationErrorCode(perr.Code), perr.Message)
+			err = errors.Join(perr, cerr)
 		} else {
-			c.conn.CloseWithError(quic.ApplicationErrorCode(pberror.Code_AuthenticationFailed), "Error while authenticating")
+			cerr := c.conn.CloseWithError(quic.ApplicationErrorCode(pberror.Code_AuthenticationFailed), "Error while authenticating")
+			err = errors.Join(err, cerr)
 		}
 		return err
 	} else {
@@ -392,7 +411,11 @@ func (c *relayConn) runErr(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
-	defer endpoints.Close()
+	defer func() {
+		if err := endpoints.Close(); err != nil {
+			c.logger.Warn("failed to close endpoints store", "id", c.id, "err", err)
+		}
+	}()
 	c.endpoints = endpoints
 
 	key := RelayConnKey{ID: c.id}
@@ -421,7 +444,11 @@ func (c *relayConn) authenticate(ctx context.Context) (*relayConnAuth, error) {
 	if err != nil {
 		return nil, fmt.Errorf("auth accept stream: %w", err)
 	}
-	defer authStream.Close()
+	defer func() {
+		if err := authStream.Close(); err != nil {
+			slogc.Fine(c.logger, "error closing relay auth", "err", err)
+		}
+	}()
 
 	req := &pbrelay.AuthenticateReq{}
 	if err := proto.Read(authStream, req); err != nil {
@@ -476,7 +503,11 @@ func (c *relayConn) runRelayClients(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
-	defer stream.Close()
+	defer func() {
+		if err := stream.Close(); err != nil {
+			slogc.Fine(c.logger, "error closing relay clients", "err", err)
+		}
+	}()
 
 	for {
 		req := &pbrelay.ClientsReq{}
@@ -539,7 +570,11 @@ func (c *relayConn) runRelayServers(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
-	defer stream.Close()
+	defer func() {
+		if err := stream.Close(); err != nil {
+			slogc.Fine(c.logger, "error closing relay servers", "err", err)
+		}
+	}()
 
 	for {
 		offset, err := c.server.getRelayServerOffset(c.id)

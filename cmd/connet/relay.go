@@ -50,8 +50,8 @@ func relayCmd() *cobra.Command {
 	var ingress RelayIngress
 	cmd.Flags().StringVar(&ingress.Addr, "addr", "", "server addr to use")
 	cmd.Flags().StringArrayVar(&ingress.Hostports, "hostport", nil, "server public host[:port] to use (if port is missing will use addr's port)")
-	cmd.Flags().StringArrayVar(&ingress.IPRestriction.AllowCIDRs, "allow-cidr", nil, "cidr to allow client connections from")
-	cmd.Flags().StringArrayVar(&ingress.IPRestriction.DenyCIDRs, "deny-cidr", nil, "cidr to deny client connections from")
+	cmd.Flags().StringArrayVar(&ingress.AllowCIDRs, "allow-cidr", nil, "cidr to allow client connections from")
+	cmd.Flags().StringArrayVar(&ingress.DenyCIDRs, "deny-cidr", nil, "cidr to deny client connections from")
 
 	cmd.Flags().StringVar(&flagsConfig.Relay.ControlAddr, "control-addr", "", "control server address to connect")
 	cmd.Flags().StringVar(&flagsConfig.Relay.ControlCAs, "control-cas", "", "control server CAs to use")
@@ -205,7 +205,7 @@ func (c RelayIngress) merge(o RelayIngress) RelayIngress {
 }
 
 func (s RelayIngress) isZero() bool {
-	return s.Addr == "" && len(s.Hostports) == 0 && len(s.IPRestriction.AllowCIDRs) == 0 && len(s.IPRestriction.DenyCIDRs) == 0
+	return s.Addr == "" && len(s.Hostports) == 0 && len(s.AllowCIDRs) == 0 && len(s.DenyCIDRs) == 0
 }
 
 var _ = RelayIngress.merge
