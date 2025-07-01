@@ -40,7 +40,7 @@ import (
 // }
 
 func TestPMP(t *testing.T) {
-	addr, err := net.ResolveUDPAddr("udp", ":19190")
+	addr, err := net.ResolveUDPAddr("udp", ":19290")
 	require.NoError(t, err)
 	udpConn, err := net.ListenUDP("udp", addr)
 	require.NoError(t, err)
@@ -57,7 +57,7 @@ func TestPMP(t *testing.T) {
 
 	fmt.Printf("Discover: epoch=%d, addr=%s\n", dresult.epochSeconds, dresult.externalAddr)
 
-	mresult, err := pm.pmpMap(context.Background(), 19190, 0, 60)
+	mresult, err := pm.pmpMap(context.Background(), 0, 60)
 	require.NoError(t, err)
 	fmt.Printf("Map: epoch=%d, port=%d, lifetime=%d\n", mresult.epochSeconds, mresult.externalPort, mresult.lifetimeSeconds)
 }
