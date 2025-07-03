@@ -98,23 +98,28 @@ func (s *Source) RunPeer(ctx context.Context) error {
 }
 
 func (s *Source) RunAnnounce(ctx context.Context, conn *quic.Conn, directAddrs *notify.V[DirectAddrs], notifyResponse func(error)) error {
-	if s.cfg.Route.AllowDirect() {
-		go func() {
-			directAddrs.Listen(ctx, func(t DirectAddrs) error {
-				s.peer.setDirectAddrs(t.All())
-				return nil
-			})
-		}()
-	}
-
-	return (&peerControl{
+	pc := &peerControl{
 		local:    s.peer,
 		endpoint: s.cfg.Endpoint,
 		role:     model.Source,
 		opt:      s.cfg.Route,
 		conn:     conn,
 		notify:   notifyResponse,
-	}).run(ctx)
+	}
+
+	if s.cfg.Route.AllowDirect() {
+		g, ctx := errgroup.WithContext(ctx)
+		g.Go(func() error {
+			return directAddrs.Listen(ctx, func(t DirectAddrs) error {
+				s.peer.setDirectAddrs(t.All())
+				return nil
+			})
+		})
+		g.Go(func() error { return pc.run(ctx) })
+		return g.Wait()
+	}
+
+	return pc.run(ctx)
 }
 
 func (s *Source) PeerStatus() (PeerStatus, error) {

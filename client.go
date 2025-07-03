@@ -350,22 +350,10 @@ func (c *Client) connect(ctx context.Context, transport *quic.Transport, retoken
 		// return nil, fmt.Errorf("local addrs: %w", err)
 	}
 
-	// connAddr, err := netc.AddrPortFromNet(transport.Conn.LocalAddr())
-	// if err != nil {
-	// return nil, fmt.Errorf("local conn addr: %w", err)
-	// }
-
 	addrs := client.DirectAddrs{
 		Control: []netip.AddrPort{resp.Public.AsNetip()},
-		// Conn:    []netip.AddrPort{connAddr},
-		Local: localAddrPorts,
-	}
-
-	if pms, err := c.portmap.Get(ctx); err == nil {
-		addrs.Mapped = pms
-	} else {
-		c.logger.Warn("cannot load portmapper", "err", err)
-		// return nil, fmt.Errorf("cannot load portmapper: %w", err)
+		Local:   localAddrPorts,
+		Mapped:  c.portmap.Get(),
 	}
 
 	c.logger.Info("authenticated to server", "addr", c.controlAddr, "direct", addrs)
@@ -403,13 +391,16 @@ func (c *Client) runSession(ctx context.Context, sess *session) error {
 	}()
 
 	go func() {
-		c.portmap.Listen(ctx, func(t []netip.AddrPort) error {
+		err := c.portmap.Listen(ctx, func(t []netip.AddrPort) error {
 			sess.addrs.Update(func(d client.DirectAddrs) client.DirectAddrs {
 				d.Mapped = t
 				return d
 			})
 			return nil
 		})
+		if err != nil {
+			slogc.Fine(c.logger, "closing portmap listener", "err", err)
+		}
 	}()
 
 	c.currentSession.Set(sess)

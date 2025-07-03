@@ -103,23 +103,28 @@ func (d *Destination) RunPeer(ctx context.Context) error {
 }
 
 func (d *Destination) RunAnnounce(ctx context.Context, conn *quic.Conn, directAddrs *notify.V[DirectAddrs], notifyResponse func(error)) error {
-	if d.cfg.Route.AllowDirect() {
-		go func() {
-			directAddrs.Listen(ctx, func(t DirectAddrs) error {
-				d.peer.setDirectAddrs(t.All())
-				return nil
-			})
-		}()
-	}
-
-	return (&peerControl{
+	pc := &peerControl{
 		local:    d.peer,
 		endpoint: d.cfg.Endpoint,
 		role:     model.Destination,
 		opt:      d.cfg.Route,
 		conn:     conn,
 		notify:   notifyResponse,
-	}).run(ctx)
+	}
+
+	if d.cfg.Route.AllowDirect() {
+		g, ctx := errgroup.WithContext(ctx)
+		g.Go(func() error {
+			return directAddrs.Listen(ctx, func(t DirectAddrs) error {
+				d.peer.setDirectAddrs(t.All())
+				return nil
+			})
+		})
+		g.Go(func() error { return pc.run(ctx) })
+		return g.Wait()
+	}
+
+	return pc.run(ctx)
 }
 
 func (d *Destination) Accept() (net.Conn, error) {

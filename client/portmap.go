@@ -11,12 +11,13 @@ import (
 	"time"
 
 	"github.com/connet-dev/connet/notify"
+	"github.com/connet-dev/connet/slogc"
 	"github.com/jackpal/gateway"
 	"github.com/quic-go/quic-go"
 	"golang.org/x/sync/errgroup"
 )
 
-const pmpBroadcastPort = 5350
+const pmpBroadcastAddr = "224.0.0.1:5350"
 const pmpCommandPort = 5351
 
 type Portmapper struct {
@@ -77,12 +78,12 @@ func (s *Portmapper) Run(ctx context.Context) error {
 	return g.Wait()
 }
 
-func (s *Portmapper) Get(ctx context.Context) ([]netip.AddrPort, error) {
+func (s *Portmapper) Get() []netip.AddrPort {
 	addr, err := s.externalAddrPort.Peek()
 	if err != nil || addr == nil {
-		return nil, err
+		return nil
 	}
-	return []netip.AddrPort{*addr}, nil
+	return []netip.AddrPort{*addr}
 }
 
 func (s *Portmapper) Listen(ctx context.Context, fn func([]netip.AddrPort) error) error {
@@ -149,11 +150,15 @@ var errEpochReset = errors.New("router epoch reset")
 
 func (s *Portmapper) listenAddressChanges(ctx context.Context, epoch uint32) error {
 	var lc net.ListenConfig
-	conn, err := lc.ListenPacket(ctx, "udp4", "224.0.0.1:5350")
+	conn, err := lc.ListenPacket(ctx, "udp4", pmpBroadcastAddr)
 	if err != nil {
 		return err
 	}
-	defer conn.Close()
+	defer func() {
+		if err := conn.Close(); err != nil {
+			slogc.Fine(s.logger, "error closing broadcast listener", "err", err)
+		}
+	}()
 
 	var readResponse = func(ctx context.Context, buff []byte) (int, net.Addr, error) {
 		return conn.ReadFrom(buff)
@@ -165,7 +170,7 @@ func (s *Portmapper) listenAddressChanges(ctx context.Context, epoch uint32) err
 			return fmt.Errorf("could not read packet: %w", err)
 		}
 		if err := checkResponseHeader(resp, 0); err != nil {
-			return fmt.Errorf("discovery check response: %w:", err)
+			return fmt.Errorf("discovery check response: %w", err)
 		}
 
 		nextEpoch := binary.BigEndian.Uint32(resp[4:])
@@ -198,7 +203,7 @@ func (s *Portmapper) pmpDiscover(ctx context.Context) (*pmpDiscoverResponse, err
 		return nil, fmt.Errorf("discovery read response: %w", err)
 	}
 	if err := checkResponseHeader(resp, 0); err != nil {
-		return nil, fmt.Errorf("discovey check response: %w:", err)
+		return nil, fmt.Errorf("discovey check response: %w", err)
 	}
 
 	epoch := binary.BigEndian.Uint32(resp[4:])
