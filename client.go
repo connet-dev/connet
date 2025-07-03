@@ -350,15 +350,15 @@ func (c *Client) connect(ctx context.Context, transport *quic.Transport, retoken
 		// return nil, fmt.Errorf("local addrs: %w", err)
 	}
 
-	connAddr, err := netc.AddrPortFromNet(transport.Conn.LocalAddr())
-	if err != nil {
-		return nil, fmt.Errorf("local conn addr: %w", err)
-	}
+	// connAddr, err := netc.AddrPortFromNet(transport.Conn.LocalAddr())
+	// if err != nil {
+	// return nil, fmt.Errorf("local conn addr: %w", err)
+	// }
 
 	addrs := client.DirectAddrs{
 		Control: []netip.AddrPort{resp.Public.AsNetip()},
-		Conn:    []netip.AddrPort{connAddr},
-		Local:   localAddrPorts,
+		// Conn:    []netip.AddrPort{connAddr},
+		Local: localAddrPorts,
 	}
 
 	pms, err := c.portmap.Get(ctx)
