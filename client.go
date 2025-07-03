@@ -339,13 +339,15 @@ func (c *Client) connect(ctx context.Context, transport *quic.Transport, retoken
 		return nil, fmt.Errorf("authentication failed: %w", resp.Error)
 	}
 
-	localAddrs, err := netc.LocalAddrs()
-	if err != nil {
-		return nil, fmt.Errorf("local addrs: %w", err)
-	}
-	localAddrPorts := make([]netip.AddrPort, len(localAddrs))
-	for i, addr := range localAddrs {
-		localAddrPorts[i] = netip.AddrPortFrom(addr, c.clientConfig.directAddr.AddrPort().Port())
+	var localAddrPorts []netip.AddrPort
+	if localAddrs, err := netc.LocalAddrs(); err == nil {
+		localAddrPorts := make([]netip.AddrPort, len(localAddrs))
+		for i, addr := range localAddrs {
+			localAddrPorts[i] = netip.AddrPortFrom(addr, c.clientConfig.directAddr.AddrPort().Port())
+		}
+	} else {
+		c.logger.Warn("cannot get local addrs", "err", err)
+		// return nil, fmt.Errorf("local addrs: %w", err)
 	}
 
 	connAddr, err := netc.AddrPortFromNet(transport.Conn.LocalAddr())
