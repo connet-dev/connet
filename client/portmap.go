@@ -78,7 +78,7 @@ func (s *Portmapper) Run(ctx context.Context) error {
 }
 
 func (s *Portmapper) Get(ctx context.Context) ([]netip.AddrPort, error) {
-	addr, _, err := s.externalAddrPort.GetAny(ctx)
+	addr, err := s.externalAddrPort.Peek()
 	if err != nil || addr == nil {
 		return nil, err
 	}
