@@ -15,13 +15,15 @@ import (
 
 type DirectAddrs struct {
 	Control []netip.AddrPort
+	Conn    []netip.AddrPort
 	Local   []netip.AddrPort
 	Mapped  []netip.AddrPort
 }
 
 func (d DirectAddrs) All() []netip.AddrPort {
-	addrs := make([]netip.AddrPort, 0, len(d.Control)+len(d.Local)+len(d.Mapped))
+	addrs := make([]netip.AddrPort, 0, len(d.Control)+len(d.Conn)+len(d.Local)+len(d.Mapped))
 	addrs = append(addrs, d.Control...)
+	addrs = append(addrs, d.Conn...)
 	addrs = append(addrs, d.Local...)
 	addrs = append(addrs, d.Mapped...)
 	return addrs

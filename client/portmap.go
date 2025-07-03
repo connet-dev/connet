@@ -34,28 +34,9 @@ type Portmapper struct {
 }
 
 func NewPortmapper(transport *quic.Transport, logger *slog.Logger) (*Portmapper, error) {
-	gwIP, err := gateway.DiscoverGateway()
-	if err != nil {
-		return nil, err
-	}
-	myIP, err := gateway.DiscoverInterface()
-	if err != nil {
-		return nil, err
-	}
-
-	addr, ok := transport.Conn.LocalAddr().(*net.UDPAddr)
-	if !ok {
-		return nil, fmt.Errorf("unexpected local address: %s", transport.Conn.LocalAddr())
-	}
-
 	return &Portmapper{
 		transport: transport,
 		logger:    logger.With("component", "portmapper"),
-
-		gatewayIP:   gwIP,
-		gatewayAddr: &net.UDPAddr{IP: gwIP, Port: pmpCommandPort},
-		localIP:     myIP,
-		localPort:   uint16(addr.Port),
 
 		externalAddr:     notify.NewEmpty[*netip.Addr](),
 		externalPort:     notify.NewEmpty[*uint16](),
@@ -64,6 +45,25 @@ func NewPortmapper(transport *quic.Transport, logger *slog.Logger) (*Portmapper,
 }
 
 func (s *Portmapper) Run(ctx context.Context) error {
+	gwIP, err := gateway.DiscoverGateway()
+	if err != nil {
+		return fmt.Errorf("discover network gateway: %w", err)
+	}
+	s.gatewayIP = gwIP
+	s.gatewayAddr = &net.UDPAddr{IP: gwIP, Port: pmpCommandPort}
+
+	myIP, err := gateway.DiscoverInterface()
+	if err != nil {
+		return fmt.Errorf("discover network interface: %w", err)
+	}
+	s.localIP = myIP
+
+	addr, ok := s.transport.Conn.LocalAddr().(*net.UDPAddr)
+	if !ok {
+		return fmt.Errorf("unexpected local address '%s': %w", s.transport.Conn.LocalAddr(), err)
+	}
+	s.localPort = uint16(addr.Port)
+
 	g, ctx := errgroup.WithContext(ctx)
 	g.Go(func() error {
 		return s.notifyExternalAddrPort(ctx)
@@ -77,8 +77,21 @@ func (s *Portmapper) Run(ctx context.Context) error {
 	return g.Wait()
 }
 
-func (s *Portmapper) ExternalNotify() *notify.V[*netip.AddrPort] {
-	return s.externalAddrPort
+func (s *Portmapper) Get(ctx context.Context) ([]netip.AddrPort, error) {
+	addr, _, err := s.externalAddrPort.GetAny(ctx)
+	if err != nil || addr == nil {
+		return nil, err
+	}
+	return []netip.AddrPort{*addr}, nil
+}
+
+func (s *Portmapper) Listen(ctx context.Context, fn func([]netip.AddrPort) error) error {
+	return s.externalAddrPort.Listen(ctx, func(t *netip.AddrPort) error {
+		if t == nil {
+			return fn(nil)
+		}
+		return fn([]netip.AddrPort{*t})
+	})
 }
 
 func (s *Portmapper) notifyExternalAddrPort(ctx context.Context) error {

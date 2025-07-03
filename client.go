@@ -132,7 +132,12 @@ func (c *Client) runClient(ctx context.Context, errCh chan error) {
 	g, ctx := errgroup.WithContext(ctx)
 
 	g.Go(func() error { return ds.Run(ctx) })
-	g.Go(func() error { return pm.Run(ctx) })
+	g.Go(func() error {
+		if err := pm.Run(ctx); err != nil {
+			c.logger.Warn("pormapper run failed", "err", err)
+		}
+		return nil
+	})
 	g.Go(func() error { return c.run(ctx, transport, errCh) })
 
 	if err := g.Wait(); err != nil {
@@ -343,15 +348,22 @@ func (c *Client) connect(ctx context.Context, transport *quic.Transport, retoken
 		localAddrPorts[i] = netip.AddrPortFrom(addr, c.clientConfig.directAddr.AddrPort().Port())
 	}
 
+	connAddr, err := netc.AddrPortFromNet(transport.Conn.LocalAddr())
+	if err != nil {
+		return nil, fmt.Errorf("local conn addr: %w", err)
+	}
+
 	addrs := client.DirectAddrs{
 		Control: []netip.AddrPort{resp.Public.AsNetip()},
+		Conn:    []netip.AddrPort{connAddr},
 		Local:   localAddrPorts,
 	}
 
-	pms, _, _ := c.portmap.ExternalNotify().GetAny(ctx)
-	if pms != nil {
-		addrs.Mapped = append(addrs.Mapped, *pms)
+	pms, err := c.portmap.Get(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("cannot load portmapper: %w", err)
 	}
+	addrs.Mapped = pms
 
 	c.logger.Info("authenticated to server", "addr", c.controlAddr, "direct", addrs)
 	return &session{conn, notify.New(addrs), resp.ReconnectToken}, nil
@@ -388,14 +400,9 @@ func (c *Client) runSession(ctx context.Context, sess *session) error {
 	}()
 
 	go func() {
-		c.portmap.ExternalNotify().Listen(ctx, func(t *netip.AddrPort) error {
+		c.portmap.Listen(ctx, func(t []netip.AddrPort) error {
 			sess.addrs.Update(func(d client.DirectAddrs) client.DirectAddrs {
-				if t == nil {
-					d.Mapped = nil
-				} else {
-					c.logger.Debug("portmap discover", "addr", *t)
-					d.Mapped = []netip.AddrPort{*t}
-				}
+				d.Mapped = t
 				return d
 			})
 			return nil
