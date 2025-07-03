@@ -10,7 +10,6 @@ import (
 	"log/slog"
 	"math"
 	"net"
-	"net/netip"
 	"slices"
 	"sync/atomic"
 	"time"
@@ -18,6 +17,7 @@ import (
 	"github.com/connet-dev/connet/certc"
 	"github.com/connet-dev/connet/cryptoc"
 	"github.com/connet-dev/connet/model"
+	"github.com/connet-dev/connet/notify"
 	"github.com/connet-dev/connet/proto"
 	"github.com/connet-dev/connet/proto/pbconnect"
 	"github.com/connet-dev/connet/quicc"
@@ -97,9 +97,14 @@ func (s *Source) RunPeer(ctx context.Context) error {
 	return g.Wait()
 }
 
-func (s *Source) RunAnnounce(ctx context.Context, conn *quic.Conn, directAddrs []netip.AddrPort, notifyResponse func(error)) error {
+func (s *Source) RunAnnounce(ctx context.Context, conn *quic.Conn, directAddrs *notify.V[DirectAddrs], notifyResponse func(error)) error {
 	if s.cfg.Route.AllowDirect() {
-		s.peer.setDirectAddrs(directAddrs)
+		go func() {
+			directAddrs.Listen(ctx, func(t DirectAddrs) error {
+				s.peer.setDirectAddrs(t.All())
+				return nil
+			})
+		}()
 	}
 
 	return (&peerControl{

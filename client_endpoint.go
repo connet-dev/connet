@@ -5,11 +5,11 @@ import (
 	"errors"
 	"log/slog"
 	"net"
-	"net/netip"
 	"sync"
 	"sync/atomic"
 
 	"github.com/connet-dev/connet/client"
+	"github.com/connet-dev/connet/notify"
 	"github.com/connet-dev/connet/statusc"
 	"github.com/quic-go/quic-go"
 )
@@ -109,7 +109,7 @@ func newClientSource(ctx context.Context, cl *Client, cfg SourceConfig) (*client
 
 type endpoint interface {
 	RunPeer(ctx context.Context) error
-	RunAnnounce(ctx context.Context, conn *quic.Conn, directAddrs []netip.AddrPort, firstReport func(error)) error
+	RunAnnounce(ctx context.Context, conn *quic.Conn, directAddrs *notify.V[client.DirectAddrs], firstReport func(error)) error
 	PeerStatus() (client.PeerStatus, error)
 }
 

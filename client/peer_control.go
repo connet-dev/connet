@@ -3,6 +3,7 @@ package client
 import (
 	"context"
 	"fmt"
+	"net/netip"
 
 	"github.com/connet-dev/connet/model"
 	"github.com/connet-dev/connet/proto"
@@ -11,6 +12,20 @@ import (
 	"github.com/quic-go/quic-go"
 	"golang.org/x/sync/errgroup"
 )
+
+type DirectAddrs struct {
+	Control []netip.AddrPort
+	Local   []netip.AddrPort
+	Mapped  []netip.AddrPort
+}
+
+func (d DirectAddrs) All() []netip.AddrPort {
+	addrs := make([]netip.AddrPort, 0, len(d.Control)+len(d.Local)+len(d.Mapped))
+	addrs = append(addrs, d.Control...)
+	addrs = append(addrs, d.Local...)
+	addrs = append(addrs, d.Mapped...)
+	return addrs
+}
 
 type peerControl struct {
 	local    *peer

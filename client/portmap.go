@@ -77,30 +77,20 @@ func (s *Portmapper) Run(ctx context.Context) error {
 	return g.Wait()
 }
 
-func (s *Portmapper) notifyExternalAddrPort(ctx context.Context) error {
-	addrCh := s.externalAddr.Notify(ctx)
-	portCh := s.externalPort.Notify(ctx)
+func (s *Portmapper) ExternalNotify() *notify.V[*netip.AddrPort] {
+	return s.externalAddrPort
+}
 
-	var currentIP *netip.Addr
-	var currentPort *uint16
-	var update = func() {
-		if currentIP != nil && currentPort != nil {
-			newAddr := netip.AddrPortFrom(*currentIP, *currentPort)
+func (s *Portmapper) notifyExternalAddrPort(ctx context.Context) error {
+	return notify.ListenMulti(ctx, s.externalAddr, s.externalPort, func(ctx context.Context, addr *netip.Addr, port *uint16) error {
+		if addr != nil && port != nil {
+			newAddr := netip.AddrPortFrom(*addr, *port)
 			s.externalAddrPort.Set(&newAddr)
 		} else {
 			s.externalAddrPort.Set(nil)
 		}
-	}
-	for {
-		select {
-		case currentIP = <-addrCh:
-			update()
-		case currentPort = <-portCh:
-			update()
-		case <-ctx.Done():
-			return ctx.Err()
-		}
-	}
+		return nil
+	})
 }
 
 func (s *Portmapper) runDiscovery(ctx context.Context) error {

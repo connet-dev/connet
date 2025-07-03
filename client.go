@@ -43,6 +43,8 @@ type Client struct {
 	currentSession *notify.V[*session]
 	ctxCancel      context.CancelCauseFunc
 	closer         chan struct{}
+
+	portmap *client.Portmapper
 }
 
 // Connect starts a new client and connects it to the control server.
@@ -120,9 +122,17 @@ func (c *Client) runClient(ctx context.Context, errCh chan error) {
 	}
 	c.directServer = ds
 
+	pm, err := client.NewPortmapper(transport, c.logger)
+	if err != nil {
+		errCh <- fmt.Errorf("create portmapper: %w", err)
+		return
+	}
+	c.portmap = pm
+
 	g, ctx := errgroup.WithContext(ctx)
 
 	g.Go(func() error { return ds.Run(ctx) })
+	g.Go(func() error { return pm.Run(ctx) })
 	g.Go(func() error { return c.run(ctx, transport, errCh) })
 
 	if err := g.Wait(); err != nil {
@@ -281,7 +291,7 @@ func (c *Client) run(ctx context.Context, transport *quic.Transport, errCh chan 
 
 type session struct {
 	conn    *quic.Conn
-	addrs   []netip.AddrPort
+	addrs   *notify.V[client.DirectAddrs]
 	retoken []byte
 }
 
@@ -333,10 +343,18 @@ func (c *Client) connect(ctx context.Context, transport *quic.Transport, retoken
 		localAddrPorts[i] = netip.AddrPortFrom(addr, c.clientConfig.directAddr.AddrPort().Port())
 	}
 
-	directAddrs := append(localAddrPorts, resp.Public.AsNetip())
+	addrs := client.DirectAddrs{
+		Control: []netip.AddrPort{resp.Public.AsNetip()},
+		Local:   localAddrPorts,
+	}
 
-	c.logger.Info("authenticated to server", "addr", c.controlAddr, "direct", directAddrs)
-	return &session{conn, directAddrs, resp.ReconnectToken}, nil
+	pms, _, _ := c.portmap.ExternalNotify().GetAny(ctx)
+	if pms != nil {
+		addrs.Mapped = append(addrs.Mapped, *pms)
+	}
+
+	c.logger.Info("authenticated to server", "addr", c.controlAddr, "direct", addrs)
+	return &session{conn, notify.New(addrs), resp.ReconnectToken}, nil
 }
 
 func (c *Client) reconnect(ctx context.Context, transport *quic.Transport, retoken []byte) (*session, error) {
@@ -367,6 +385,21 @@ func (c *Client) runSession(ctx context.Context, sess *session) error {
 		if err := sess.conn.CloseWithError(quic.ApplicationErrorCode(pberror.Code_Unknown), "connection closed"); err != nil {
 			slogc.Fine(c.logger, "error closing connection", "err", err)
 		}
+	}()
+
+	go func() {
+		c.portmap.ExternalNotify().Listen(ctx, func(t *netip.AddrPort) error {
+			sess.addrs.Update(func(d client.DirectAddrs) client.DirectAddrs {
+				if t == nil {
+					d.Mapped = nil
+				} else {
+					c.logger.Debug("portmap discover", "addr", *t)
+					d.Mapped = []netip.AddrPort{*t}
+				}
+				return d
+			})
+			return nil
+		})
 	}()
 
 	c.currentSession.Set(sess)
