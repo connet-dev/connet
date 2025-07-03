@@ -365,7 +365,7 @@ func (c *Client) connect(ctx context.Context, transport *quic.Transport, retoken
 		addrs.Mapped = pms
 	} else {
 		c.logger.Warn("cannot load portmapper", "err", err)
-		return nil, fmt.Errorf("cannot load portmapper: %w", err)
+		// return nil, fmt.Errorf("cannot load portmapper: %w", err)
 	}
 
 	c.logger.Info("authenticated to server", "addr", c.controlAddr, "direct", addrs)
