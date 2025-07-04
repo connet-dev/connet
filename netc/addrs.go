@@ -67,3 +67,11 @@ func AddrPortFromNet(addr net.Addr) (netip.AddrPort, error) {
 		return naddr, nil
 	}
 }
+
+func IPFromNet(addr net.Addr) (net.IP, error) {
+	a, err := AddrPortFromNet(addr)
+	if err != nil {
+		return net.IP{}, err
+	}
+	return net.IP(a.Addr().AsSlice()), nil
+}

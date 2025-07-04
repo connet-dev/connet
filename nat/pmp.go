@@ -10,7 +10,6 @@ import (
 	"net/netip"
 	"time"
 
-	"github.com/connet-dev/connet/netc"
 	"github.com/connet-dev/connet/notify"
 	"github.com/connet-dev/connet/slogc"
 	"github.com/jackpal/gateway"
@@ -48,16 +47,12 @@ func NewPMP(transport *quic.Transport, logger *slog.Logger) (*PMP, error) {
 }
 
 func (s *PMP) Run(ctx context.Context) error {
-	gwIP, err := gateway.DiscoverGateway()
-	if err != nil {
-		return fmt.Errorf("discover network gateway: %w", err)
-	}
-	s.gatewayIP = gwIP
-	s.gatewayAddr = &net.UDPAddr{IP: gwIP, Port: pmpCommandPort}
-
 	myIP, err := gateway.DiscoverInterface()
 	if err != nil {
 		return fmt.Errorf("discover network interface: %w", err)
+	}
+	if !myIP.IsPrivate() {
+		return fmt.Errorf("discovered interface is not private: %s", myIP)
 	}
 	s.localIP = myIP
 
@@ -67,6 +62,13 @@ func (s *PMP) Run(ctx context.Context) error {
 	}
 	s.localPort = uint16(addr.Port)
 	s.localAddrPort = netip.AddrPortFrom(netip.AddrFrom4([4]byte(myIP.To4())), s.localPort)
+
+	gwIP, err := gateway.DiscoverGateway()
+	if err != nil {
+		return fmt.Errorf("discover network gateway: %w", err)
+	}
+	s.gatewayIP = gwIP
+	s.gatewayAddr = &net.UDPAddr{IP: gwIP, Port: pmpCommandPort}
 
 	g, ctx := errgroup.WithContext(ctx)
 	g.Go(func() error {

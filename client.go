@@ -45,7 +45,8 @@ type Client struct {
 	ctxCancel      context.CancelCauseFunc
 	closer         chan struct{}
 
-	natpmp *nat.PMP
+	natlocal *nat.Local
+	natpmp   *nat.PMP
 }
 
 // Connect starts a new client and connects it to the control server.
@@ -123,18 +124,25 @@ func (c *Client) runClient(ctx context.Context, errCh chan error) {
 	}
 	c.directServer = ds
 
-	pm, err := nat.NewPMP(transport, c.logger)
+	nl, err := nat.NewLocal(uint16(c.directAddr.Port), c.logger)
 	if err != nil {
-		errCh <- fmt.Errorf("create portmapper: %w", err)
+		errCh <- fmt.Errorf("create nat local: %w", err)
 		return
 	}
-	c.natpmp = pm
+	c.natlocal = nl
+
+	nm, err := nat.NewPMP(transport, c.logger)
+	if err != nil {
+		errCh <- fmt.Errorf("create nat pmp: %w", err)
+		return
+	}
+	c.natpmp = nm
 
 	g, ctx := errgroup.WithContext(ctx)
 
 	g.Go(func() error { return ds.Run(ctx) })
 	g.Go(func() error {
-		if err := pm.Run(ctx); err != nil {
+		if err := nm.Run(ctx); err != nil {
 			c.logger.Warn("natpmp exited", "err", err)
 		}
 		return nil
@@ -340,21 +348,10 @@ func (c *Client) connect(ctx context.Context, transport *quic.Transport, retoken
 		return nil, fmt.Errorf("authentication failed: %w", resp.Error)
 	}
 
-	var localAddrPorts []netip.AddrPort
-	if localAddrs, err := netc.LocalAddrs(); err == nil {
-		localAddrPorts = make([]netip.AddrPort, len(localAddrs))
-		for i, addr := range localAddrs {
-			localAddrPorts[i] = netip.AddrPortFrom(addr, c.clientConfig.directAddr.AddrPort().Port())
-		}
-	} else {
-		c.logger.Warn("cannot get local addrs", "err", err)
-		// return nil, fmt.Errorf("local addrs: %w", err)
-	}
-
 	addrs := client.DirectAddrs{
-		Control: []netip.AddrPort{resp.Public.AsNetip()},
-		Local:   localAddrPorts,
-		Mapped:  c.natpmp.Get(),
+		STUN:  []netip.AddrPort{resp.Public.AsNetip()},
+		Local: c.natlocal.Get(),
+		PMP:   c.natpmp.Get(),
 	}
 
 	c.logger.Info("authenticated to server", "addr", c.controlAddr, "direct", addrs)
@@ -395,7 +392,7 @@ func (c *Client) runSession(ctx context.Context, sess *session) error {
 		err := c.natpmp.Listen(ctx, func(t []netip.AddrPort) error {
 			c.logger.Debug("updating portmap", "addrs", t)
 			sess.addrs.Update(func(d client.DirectAddrs) client.DirectAddrs {
-				d.Mapped = t
+				d.PMP = t
 				return d
 			})
 			return nil
