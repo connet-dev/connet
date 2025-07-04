@@ -45,7 +45,7 @@ type Client struct {
 	ctxCancel      context.CancelCauseFunc
 	closer         chan struct{}
 
-	portmap *nat.PMP
+	natpmp *nat.PMP
 }
 
 // Connect starts a new client and connects it to the control server.
@@ -123,12 +123,12 @@ func (c *Client) runClient(ctx context.Context, errCh chan error) {
 	}
 	c.directServer = ds
 
-	pm, err := nat.NewNatpmp(transport, c.logger)
+	pm, err := nat.NewPMP(transport, c.logger)
 	if err != nil {
 		errCh <- fmt.Errorf("create portmapper: %w", err)
 		return
 	}
-	c.portmap = pm
+	c.natpmp = pm
 
 	g, ctx := errgroup.WithContext(ctx)
 
@@ -342,7 +342,7 @@ func (c *Client) connect(ctx context.Context, transport *quic.Transport, retoken
 
 	var localAddrPorts []netip.AddrPort
 	if localAddrs, err := netc.LocalAddrs(); err == nil {
-		localAddrPorts := make([]netip.AddrPort, len(localAddrs))
+		localAddrPorts = make([]netip.AddrPort, len(localAddrs))
 		for i, addr := range localAddrs {
 			localAddrPorts[i] = netip.AddrPortFrom(addr, c.clientConfig.directAddr.AddrPort().Port())
 		}
@@ -354,7 +354,7 @@ func (c *Client) connect(ctx context.Context, transport *quic.Transport, retoken
 	addrs := client.DirectAddrs{
 		Control: []netip.AddrPort{resp.Public.AsNetip()},
 		Local:   localAddrPorts,
-		Mapped:  c.portmap.Get(),
+		Mapped:  c.natpmp.Get(),
 	}
 
 	c.logger.Info("authenticated to server", "addr", c.controlAddr, "direct", addrs)
@@ -392,7 +392,8 @@ func (c *Client) runSession(ctx context.Context, sess *session) error {
 	}()
 
 	go func() {
-		err := c.portmap.Listen(ctx, func(t []netip.AddrPort) error {
+		err := c.natpmp.Listen(ctx, func(t []netip.AddrPort) error {
+			c.logger.Debug("updating portmap", "addrs", t)
 			sess.addrs.Update(func(d client.DirectAddrs) client.DirectAddrs {
 				d.Mapped = t
 				return d

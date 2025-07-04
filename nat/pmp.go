@@ -10,6 +10,7 @@ import (
 	"net/netip"
 	"time"
 
+	"github.com/connet-dev/connet/netc"
 	"github.com/connet-dev/connet/notify"
 	"github.com/connet-dev/connet/slogc"
 	"github.com/jackpal/gateway"
@@ -24,10 +25,11 @@ type PMP struct {
 	transport *quic.Transport
 	logger    *slog.Logger
 
-	gatewayIP   net.IP
-	gatewayAddr *net.UDPAddr
-	localIP     net.IP
-	localPort   uint16
+	gatewayIP     net.IP
+	gatewayAddr   *net.UDPAddr
+	localIP       net.IP
+	localPort     uint16
+	localAddrPort netip.AddrPort
 
 	externalAddr     *notify.V[*netip.Addr]
 	externalPort     *notify.V[*uint16]
@@ -64,6 +66,7 @@ func (s *PMP) Run(ctx context.Context) error {
 		return fmt.Errorf("unexpected local address '%s': %w", s.transport.Conn.LocalAddr(), err)
 	}
 	s.localPort = uint16(addr.Port)
+	s.localAddrPort = netip.AddrPortFrom(netip.AddrFrom4([4]byte(myIP.To4())), s.localPort)
 
 	g, ctx := errgroup.WithContext(ctx)
 	g.Go(func() error {
@@ -83,7 +86,7 @@ func (s *PMP) Get() []netip.AddrPort {
 	if err != nil || addr == nil {
 		return nil
 	}
-	return []netip.AddrPort{*addr}
+	return []netip.AddrPort{*addr, s.localAddrPort}
 }
 
 func (s *PMP) Listen(ctx context.Context, fn func([]netip.AddrPort) error) error {
@@ -91,7 +94,7 @@ func (s *PMP) Listen(ctx context.Context, fn func([]netip.AddrPort) error) error
 		if t == nil {
 			return fn(nil)
 		}
-		return fn([]netip.AddrPort{*t})
+		return fn([]netip.AddrPort{*t, s.localAddrPort})
 	})
 }
 
