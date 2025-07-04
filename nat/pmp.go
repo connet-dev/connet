@@ -1,4 +1,4 @@
-package client
+package nat
 
 import (
 	"context"
@@ -20,7 +20,7 @@ import (
 const pmpBroadcastAddr = "224.0.0.1:5350"
 const pmpCommandPort = 5351
 
-type Portmapper struct {
+type PMP struct {
 	transport *quic.Transport
 	logger    *slog.Logger
 
@@ -34,10 +34,10 @@ type Portmapper struct {
 	externalAddrPort *notify.V[*netip.AddrPort]
 }
 
-func NewPortmapper(transport *quic.Transport, logger *slog.Logger) (*Portmapper, error) {
-	return &Portmapper{
+func NewPMP(transport *quic.Transport, logger *slog.Logger) (*PMP, error) {
+	return &PMP{
 		transport: transport,
-		logger:    logger.With("component", "portmapper"),
+		logger:    logger.With("component", "natpmp"),
 
 		externalAddr:     notify.NewEmpty[*netip.Addr](),
 		externalPort:     notify.NewEmpty[*uint16](),
@@ -45,7 +45,7 @@ func NewPortmapper(transport *quic.Transport, logger *slog.Logger) (*Portmapper,
 	}, nil
 }
 
-func (s *Portmapper) Run(ctx context.Context) error {
+func (s *PMP) Run(ctx context.Context) error {
 	gwIP, err := gateway.DiscoverGateway()
 	if err != nil {
 		return fmt.Errorf("discover network gateway: %w", err)
@@ -78,7 +78,7 @@ func (s *Portmapper) Run(ctx context.Context) error {
 	return g.Wait()
 }
 
-func (s *Portmapper) Get() []netip.AddrPort {
+func (s *PMP) Get() []netip.AddrPort {
 	addr, err := s.externalAddrPort.Peek()
 	if err != nil || addr == nil {
 		return nil
@@ -86,7 +86,7 @@ func (s *Portmapper) Get() []netip.AddrPort {
 	return []netip.AddrPort{*addr}
 }
 
-func (s *Portmapper) Listen(ctx context.Context, fn func([]netip.AddrPort) error) error {
+func (s *PMP) Listen(ctx context.Context, fn func([]netip.AddrPort) error) error {
 	return s.externalAddrPort.Listen(ctx, func(t *netip.AddrPort) error {
 		if t == nil {
 			return fn(nil)
@@ -95,7 +95,7 @@ func (s *Portmapper) Listen(ctx context.Context, fn func([]netip.AddrPort) error
 	})
 }
 
-func (s *Portmapper) notifyExternalAddrPort(ctx context.Context) error {
+func (s *PMP) notifyExternalAddrPort(ctx context.Context) error {
 	return notify.ListenMulti(ctx, s.externalAddr, s.externalPort, func(ctx context.Context, addr *netip.Addr, port *uint16) error {
 		if addr != nil && port != nil {
 			newAddr := netip.AddrPortFrom(*addr, *port)
@@ -107,7 +107,7 @@ func (s *Portmapper) notifyExternalAddrPort(ctx context.Context) error {
 	})
 }
 
-func (s *Portmapper) runDiscovery(ctx context.Context) error {
+func (s *PMP) runDiscovery(ctx context.Context) error {
 	defer s.externalAddr.Set(nil)
 
 	resp, err := retryCall(ctx, s.pmpDiscover)
@@ -119,7 +119,7 @@ func (s *Portmapper) runDiscovery(ctx context.Context) error {
 	return s.listenAddressChanges(ctx, resp.epochSeconds)
 }
 
-func (s *Portmapper) runMap(ctx context.Context) error {
+func (s *PMP) runMap(ctx context.Context) error {
 	defer s.externalPort.Set(nil)
 
 	resp, err := retryCall(ctx, func(ctx context.Context) (*pmpMapResponse, error) {
@@ -148,7 +148,7 @@ func (s *Portmapper) runMap(ctx context.Context) error {
 
 var errEpochReset = errors.New("router epoch reset")
 
-func (s *Portmapper) listenAddressChanges(ctx context.Context, epoch uint32) error {
+func (s *PMP) listenAddressChanges(ctx context.Context, epoch uint32) error {
 	var lc net.ListenConfig
 	conn, err := lc.ListenPacket(ctx, "udp4", pmpBroadcastAddr)
 	if err != nil {
@@ -189,7 +189,7 @@ type pmpDiscoverResponse struct {
 	externalAddr netip.Addr
 }
 
-func (s *Portmapper) pmpDiscover(ctx context.Context) (*pmpDiscoverResponse, error) {
+func (s *PMP) pmpDiscover(ctx context.Context) (*pmpDiscoverResponse, error) {
 	request := make([]byte, 2)
 	request[0] = 0 // version field
 	request[1] = 0 // opcode discover
@@ -217,7 +217,7 @@ type pmpMapResponse struct {
 	lifetimeSeconds uint32
 }
 
-func (s *Portmapper) pmpMap(ctx context.Context, desiredExternalPort uint16, mappingLifetimeSeconds int32) (*pmpMapResponse, error) {
+func (s *PMP) pmpMap(ctx context.Context, desiredExternalPort uint16, mappingLifetimeSeconds int32) (*pmpMapResponse, error) {
 	request := make([]byte, 12)
 	request[0] = 0 // version field
 	request[1] = 1 // opcode, map UDP
@@ -249,7 +249,7 @@ func (s *Portmapper) pmpMap(ctx context.Context, desiredExternalPort uint16, map
 	return &pmpMapResponse{epochSeconds: epoch, externalPort: respMappedPort, lifetimeSeconds: respLifetime}, nil
 }
 
-func (s *Portmapper) writeRequest(request []byte) error {
+func (s *PMP) writeRequest(request []byte) error {
 	n, err := s.transport.WriteTo(request, s.gatewayAddr)
 	if err != nil {
 		return fmt.Errorf("cannot write packet: %w", err)
@@ -279,7 +279,7 @@ func retryCall[T any](ctx context.Context, fn func(ctx context.Context) (T, erro
 
 type readerFn = func(context.Context, []byte) (int, net.Addr, error)
 
-func (s *Portmapper) readResponse(ctx context.Context, expectedSize int, rdr readerFn) ([]byte, error) {
+func (s *PMP) readResponse(ctx context.Context, expectedSize int, rdr readerFn) ([]byte, error) {
 	resp := make([]byte, 16)
 	m, respAddr, err := rdr(ctx, resp)
 	if err != nil {

@@ -16,6 +16,7 @@ import (
 	"github.com/connet-dev/connet/certc"
 	"github.com/connet-dev/connet/client"
 	"github.com/connet-dev/connet/model"
+	"github.com/connet-dev/connet/nat"
 	"github.com/connet-dev/connet/netc"
 	"github.com/connet-dev/connet/notify"
 	"github.com/connet-dev/connet/proto"
@@ -44,7 +45,7 @@ type Client struct {
 	ctxCancel      context.CancelCauseFunc
 	closer         chan struct{}
 
-	portmap *client.Portmapper
+	portmap *nat.PMP
 }
 
 // Connect starts a new client and connects it to the control server.
@@ -122,7 +123,7 @@ func (c *Client) runClient(ctx context.Context, errCh chan error) {
 	}
 	c.directServer = ds
 
-	pm, err := client.NewPortmapper(transport, c.logger)
+	pm, err := nat.NewNatpmp(transport, c.logger)
 	if err != nil {
 		errCh <- fmt.Errorf("create portmapper: %w", err)
 		return
@@ -134,7 +135,7 @@ func (c *Client) runClient(ctx context.Context, errCh chan error) {
 	g.Go(func() error { return ds.Run(ctx) })
 	g.Go(func() error {
 		if err := pm.Run(ctx); err != nil {
-			c.logger.Warn("pormapper run failed", "err", err)
+			c.logger.Warn("natpmp exited", "err", err)
 		}
 		return nil
 	})

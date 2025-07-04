@@ -45,6 +45,14 @@ func LocalAddrs() ([]netip.Addr, error) {
 	return localAddrs, nil
 }
 
+func AddrFromNet(addr net.Addr) (netip.Addr, error) {
+	a, err := AddrPortFromNet(addr)
+	if err != nil {
+		return netip.Addr{}, err
+	}
+	return a.Addr(), nil
+}
+
 func AddrPortFromNet(addr net.Addr) (netip.AddrPort, error) {
 	switch t := addr.(type) {
 	case *net.UDPAddr:
