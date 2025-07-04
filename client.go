@@ -389,16 +389,30 @@ func (c *Client) runSession(ctx context.Context, sess *session) error {
 	}()
 
 	go func() {
-		err := c.natpmp.Listen(ctx, func(t []netip.AddrPort) error {
-			c.logger.Debug("updating portmap", "addrs", t)
+		err := c.natlocal.Listen(ctx, func(ap []netip.AddrPort) error {
+			c.logger.Debug("updating nat local", "addrs", ap)
 			sess.addrs.Update(func(d client.DirectAddrs) client.DirectAddrs {
-				d.PMP = t
+				d.Local = ap
 				return d
 			})
 			return nil
 		})
 		if err != nil {
-			slogc.Fine(c.logger, "closing portmap listener", "err", err)
+			slogc.Fine(c.logger, "closing nat local listener", "err", err)
+		}
+	}()
+
+	go func() {
+		err := c.natpmp.Listen(ctx, func(ap []netip.AddrPort) error {
+			c.logger.Debug("updating nat pmp", "addrs", ap)
+			sess.addrs.Update(func(d client.DirectAddrs) client.DirectAddrs {
+				d.PMP = ap
+				return d
+			})
+			return nil
+		})
+		if err != nil {
+			slogc.Fine(c.logger, "closing nat pmp listener", "err", err)
 		}
 	}()
 
