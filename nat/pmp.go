@@ -11,6 +11,7 @@ import (
 	"os"
 	"time"
 
+	"github.com/connet-dev/connet/netc"
 	"github.com/connet-dev/connet/notify"
 	"github.com/connet-dev/connet/slogc"
 	"github.com/jackpal/gateway"
@@ -48,7 +49,17 @@ func NewPMP(transport *quic.Transport, logger *slog.Logger) (*PMP, error) {
 }
 
 func (s *PMP) Run(ctx context.Context) error {
-	return s.runGeneration(ctx)
+	var boff netc.SpinBackoff
+	for {
+		err := s.runGeneration(ctx)
+		if errors.Is(err, context.Canceled) {
+			return err
+		}
+
+		if err := boff.Wait(ctx); err != nil {
+			return err
+		}
+	}
 }
 
 func (s *PMP) runGeneration(ctx context.Context) error {
@@ -148,8 +159,14 @@ func (s *PMP) runMap(ctx context.Context) error {
 		return resp, err
 	})
 	if err != nil {
-		return err
+		return fmt.Errorf("mapping create: %w", err)
 	}
+	defer func() {
+		slogc.Fine(s.logger, "mapping delete", "external-port", resp.externalPort)
+		if _, err := s.pmpMap(context.Background(), 0, 0); err != nil {
+			slogc.Fine(s.logger, "mapping delete failed", "err", err)
+		}
+	}()
 
 	defer s.externalPort.Set(nil)
 
@@ -176,7 +193,7 @@ func (s *PMP) runMap(ctx context.Context) error {
 				return resp, err
 			})
 			if err != nil {
-				return err
+				return fmt.Errorf("mapping renew: %w", err)
 			}
 
 			resp = renewResp
@@ -184,10 +201,7 @@ func (s *PMP) runMap(ctx context.Context) error {
 			s.externalPort.Set(&resp.externalPort)
 			endOfLife = time.Now().Add(time.Duration(resp.lifetimeSeconds) * time.Second)
 		case <-ctx.Done():
-			slogc.Fine(s.logger, "mapping delete", "external-port", resp.externalPort)
-
-			_, merr := s.pmpMap(context.Background(), 0, 0)
-			return errors.Join(err, merr)
+			return ctx.Err()
 		}
 	}
 }
@@ -318,23 +332,26 @@ func (s *PMP) writeRequest(request []byte) error {
 	return nil
 }
 
+var errRetryFailed = errors.New("retry failed: timeout")
+
 func retryCall[T any](ctx context.Context, fn func(ctx context.Context) (T, error)) (T, error) {
-	var errs []error
 	timeout := 250 * time.Millisecond
 	for range 9 {
 		ctx, cancel := context.WithTimeout(ctx, timeout)
 		defer cancel()
 
 		resp, err := fn(ctx)
-		if err == nil {
+		switch {
+		case err == nil:
 			return resp, nil
+		case errors.Is(err, context.DeadlineExceeded):
+			timeout = 2 * timeout
+		default:
+			return resp, err
 		}
-		errs = append(errs, err)
-		timeout = 2 * timeout
 	}
-
 	var t T
-	return t, errors.Join(errs...)
+	return t, errRetryFailed
 }
 
 type readerFn = func(context.Context, []byte) (int, net.Addr, error)
@@ -365,6 +382,13 @@ func (s *PMP) readResponse(ctx context.Context, expectedSize int, rdr readerFn) 
 	return resp[0:m], nil
 }
 
+var errPMPUnsupportedVersion = errors.New("nat-pmp - unsupported version")
+var errPMPNotAuthorized = errors.New("nat-pmp - not authorized")
+var errPMPNetworkFailure = errors.New("nat-pmp - network failure")
+var errPMPOutOfResource = errors.New("nat-pmp - out of resource")
+var errPMPUnsupportedOpcode = errors.New("nat-pmp - unsupported opcode")
+var errPMPUnknownError = errors.New("nat-pmp - unknown error")
+
 func checkResponseHeader(resp []byte, opcode byte) error {
 	if resp[0] != 0 {
 		return fmt.Errorf("nat-pmp - version mismatch: %d", resp[0])
@@ -377,16 +401,16 @@ func checkResponseHeader(resp []byte, opcode byte) error {
 	case 0:
 		return nil
 	case 1:
-		return fmt.Errorf("nat-pmp - unsupported version")
+		return errPMPUnsupportedVersion
 	case 2:
-		return fmt.Errorf("nat-pmp - not authorized")
+		return errPMPNotAuthorized
 	case 3:
-		return fmt.Errorf("nat-pmp - network failure")
+		return errPMPNetworkFailure
 	case 4:
-		return fmt.Errorf("nat-pmp - out of resource")
+		return errPMPOutOfResource
 	case 5:
-		return fmt.Errorf("nat-pmp - unsupported opcode")
+		return errPMPUnsupportedOpcode
 	default:
-		return fmt.Errorf("nat-pmp - unknown error")
+		return errPMPUnknownError
 	}
 }

@@ -141,12 +141,7 @@ func (c *Client) runClient(ctx context.Context, errCh chan error) {
 	g, ctx := errgroup.WithContext(ctx)
 
 	g.Go(func() error { return ds.Run(ctx) })
-	g.Go(func() error {
-		if err := nm.Run(ctx); err != nil {
-			c.logger.Warn("natpmp exited", "err", err)
-		}
-		return nil
-	})
+	g.Go(func() error { return nm.Run(ctx) })
 	g.Go(func() error { return c.run(ctx, transport, errCh) })
 
 	if err := g.Wait(); err != nil {
