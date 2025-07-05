@@ -57,6 +57,8 @@ func (s *PMP) Run(ctx context.Context) error {
 		switch {
 		case errors.Is(err, context.Canceled):
 			return err
+		case errors.Is(err, &gateway.ErrNoGateway{}):
+			// did not found gateway
 		case errors.Is(err, errDiscoverInterface), errors.Is(err, errDiscoverGateway):
 			s.logger.Debug("pmp exiting: cannot read interface/gateway", "err", err)
 			return nil
