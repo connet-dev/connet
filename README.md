@@ -553,13 +553,13 @@ by adding account management and it is one of the easiest way to start.
  - [x] remove expired protocols
  - [x] refactor protocol errors
  - [x] from forward to endpoint
+ - [ ] UPnP and other methods for hole-punching
  - [ ] api to control client/control/relay
  - [ ] preshared clients - controless p2p
  - [ ] destination load balance
 
 ## Future
  - [ ] UDP support
- - [ ] UPnP and other methods for hole-punching
  - [ ] package refactor/rename
  - [ ] notarize mac app
  - [ ] systemd dynamic user in nixos

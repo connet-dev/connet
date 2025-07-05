@@ -3,6 +3,8 @@ package pbmodel
 import (
 	"net"
 	"net/netip"
+
+	"github.com/connet-dev/connet/netc"
 )
 
 func AddrFromNetip(addr netip.Addr) *Addr {
@@ -22,18 +24,11 @@ func (a *Addr) AsNetip() netip.Addr {
 }
 
 func AddrPortFromNet(addr net.Addr) (*AddrPort, error) {
-	switch t := addr.(type) {
-	case *net.UDPAddr:
-		return AddrPortFromNetip(t.AddrPort()), nil
-	case *net.TCPAddr:
-		return AddrPortFromNetip(t.AddrPort()), nil
-	default:
-		naddr, err := netip.ParseAddrPort(addr.String())
-		if err != nil {
-			return nil, err
-		}
-		return AddrPortFromNetip(naddr), nil
+	a, err := netc.AddrPortFromNet(addr)
+	if err != nil {
+		return nil, err
 	}
+	return AddrPortFromNetip(a), nil
 }
 
 func AddrPortFromNetip(addr netip.AddrPort) *AddrPort {

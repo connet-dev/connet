@@ -44,3 +44,34 @@ func LocalAddrs() ([]netip.Addr, error) {
 
 	return localAddrs, nil
 }
+
+func AddrFromNet(addr net.Addr) (netip.Addr, error) {
+	a, err := AddrPortFromNet(addr)
+	if err != nil {
+		return netip.Addr{}, err
+	}
+	return a.Addr(), nil
+}
+
+func AddrPortFromNet(addr net.Addr) (netip.AddrPort, error) {
+	switch t := addr.(type) {
+	case *net.UDPAddr:
+		return t.AddrPort(), nil
+	case *net.TCPAddr:
+		return t.AddrPort(), nil
+	default:
+		naddr, err := netip.ParseAddrPort(addr.String())
+		if err != nil {
+			return netip.AddrPort{}, err
+		}
+		return naddr, nil
+	}
+}
+
+func IPFromNet(addr net.Addr) (net.IP, error) {
+	a, err := AddrPortFromNet(addr)
+	if err != nil {
+		return net.IP{}, err
+	}
+	return net.IP(a.Addr().AsSlice()), nil
+}

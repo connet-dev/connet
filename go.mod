@@ -4,6 +4,7 @@ go 1.24.4
 
 require (
 	github.com/gorilla/websocket v1.5.3
+	github.com/jackpal/gateway v1.1.1
 	github.com/klev-dev/klevdb v0.8.0
 	github.com/mr-tron/base58 v1.2.0
 	github.com/pelletier/go-toml/v2 v2.2.4
@@ -25,6 +26,7 @@ require (
 	github.com/plar/go-adaptive-radix-tree/v2 v2.0.3 // indirect
 	github.com/pmezard/go-difflib v1.0.0 // indirect
 	github.com/spf13/pflag v1.0.6 // indirect
+	github.com/stretchr/objx v0.5.2 // indirect
 	go.uber.org/mock v0.5.2 // indirect
 	golang.org/x/exp v0.0.0-20250620022241-b7579e27df2b // indirect
 	golang.org/x/mod v0.25.0 // indirect

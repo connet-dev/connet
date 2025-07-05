@@ -7,11 +7,11 @@ import (
 	"fmt"
 	"log/slog"
 	"net"
-	"net/netip"
 
 	"github.com/connet-dev/connet/certc"
 	"github.com/connet-dev/connet/cryptoc"
 	"github.com/connet-dev/connet/model"
+	"github.com/connet-dev/connet/notify"
 	"github.com/connet-dev/connet/proto"
 	"github.com/connet-dev/connet/proto/pbconnect"
 	"github.com/connet-dev/connet/proto/pberror"
@@ -102,19 +102,29 @@ func (d *Destination) RunPeer(ctx context.Context) error {
 	return g.Wait()
 }
 
-func (d *Destination) RunAnnounce(ctx context.Context, conn *quic.Conn, directAddrs []netip.AddrPort, notifyResponse func(error)) error {
-	if d.cfg.Route.AllowDirect() {
-		d.peer.setDirectAddrs(directAddrs)
-	}
-
-	return (&peerControl{
+func (d *Destination) RunAnnounce(ctx context.Context, conn *quic.Conn, directAddrs *notify.V[AdvertiseAddrs], notifyResponse func(error)) error {
+	pc := &peerControl{
 		local:    d.peer,
 		endpoint: d.cfg.Endpoint,
 		role:     model.Destination,
 		opt:      d.cfg.Route,
 		conn:     conn,
 		notify:   notifyResponse,
-	}).run(ctx)
+	}
+
+	if d.cfg.Route.AllowDirect() {
+		g, ctx := errgroup.WithContext(ctx)
+		g.Go(func() error {
+			return directAddrs.Listen(ctx, func(t AdvertiseAddrs) error {
+				d.peer.setDirectAddrs(t.All())
+				return nil
+			})
+		})
+		g.Go(func() error { return pc.run(ctx) })
+		return g.Wait()
+	}
+
+	return pc.run(ctx)
 }
 
 func (d *Destination) Accept() (net.Conn, error) {

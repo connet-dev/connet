@@ -16,6 +16,7 @@ import (
 	"github.com/connet-dev/connet/certc"
 	"github.com/connet-dev/connet/client"
 	"github.com/connet-dev/connet/model"
+	"github.com/connet-dev/connet/nat"
 	"github.com/connet-dev/connet/netc"
 	"github.com/connet-dev/connet/notify"
 	"github.com/connet-dev/connet/proto"
@@ -43,6 +44,9 @@ type Client struct {
 	currentSession *notify.V[*session]
 	ctxCancel      context.CancelCauseFunc
 	closer         chan struct{}
+
+	natlocal *nat.Local
+	natpmp   *nat.PMP
 }
 
 // Connect starts a new client and connects it to the control server.
@@ -120,9 +124,24 @@ func (c *Client) runClient(ctx context.Context, errCh chan error) {
 	}
 	c.directServer = ds
 
+	nl, err := nat.NewLocal(uint16(c.directAddr.Port), c.logger)
+	if err != nil {
+		errCh <- fmt.Errorf("create nat local: %w", err)
+		return
+	}
+	c.natlocal = nl
+
+	nm, err := nat.NewPMP(transport, c.logger)
+	if err != nil {
+		errCh <- fmt.Errorf("create nat pmp: %w", err)
+		return
+	}
+	c.natpmp = nm
+
 	g, ctx := errgroup.WithContext(ctx)
 
 	g.Go(func() error { return ds.Run(ctx) })
+	g.Go(func() error { return nm.Run(ctx) })
 	g.Go(func() error { return c.run(ctx, transport, errCh) })
 
 	if err := g.Wait(); err != nil {
@@ -281,7 +300,7 @@ func (c *Client) run(ctx context.Context, transport *quic.Transport, errCh chan 
 
 type session struct {
 	conn    *quic.Conn
-	addrs   []netip.AddrPort
+	addrs   *notify.V[client.AdvertiseAddrs]
 	retoken []byte
 }
 
@@ -324,19 +343,14 @@ func (c *Client) connect(ctx context.Context, transport *quic.Transport, retoken
 		return nil, fmt.Errorf("authentication failed: %w", resp.Error)
 	}
 
-	localAddrs, err := netc.LocalAddrs()
-	if err != nil {
-		return nil, fmt.Errorf("local addrs: %w", err)
-	}
-	localAddrPorts := make([]netip.AddrPort, len(localAddrs))
-	for i, addr := range localAddrs {
-		localAddrPorts[i] = netip.AddrPortFrom(addr, c.clientConfig.directAddr.AddrPort().Port())
+	addrs := client.AdvertiseAddrs{
+		STUN:  []netip.AddrPort{resp.Public.AsNetip()},
+		Local: c.natlocal.Get(),
+		PMP:   c.natpmp.Get(),
 	}
 
-	directAddrs := append(localAddrPorts, resp.Public.AsNetip())
-
-	c.logger.Info("authenticated to server", "addr", c.controlAddr, "direct", directAddrs)
-	return &session{conn, directAddrs, resp.ReconnectToken}, nil
+	c.logger.Info("authenticated to server", "addr", c.controlAddr, "direct", addrs)
+	return &session{conn, notify.New(addrs), resp.ReconnectToken}, nil
 }
 
 func (c *Client) reconnect(ctx context.Context, transport *quic.Transport, retoken []byte) (*session, error) {
@@ -366,6 +380,34 @@ func (c *Client) runSession(ctx context.Context, sess *session) error {
 	defer func() {
 		if err := sess.conn.CloseWithError(quic.ApplicationErrorCode(pberror.Code_Unknown), "connection closed"); err != nil {
 			slogc.Fine(c.logger, "error closing connection", "err", err)
+		}
+	}()
+
+	go func() {
+		err := c.natlocal.Listen(ctx, func(ap []netip.AddrPort) error {
+			c.logger.Debug("updating nat local", "addrs", ap)
+			sess.addrs.Update(func(d client.AdvertiseAddrs) client.AdvertiseAddrs {
+				d.Local = ap
+				return d
+			})
+			return nil
+		})
+		if err != nil {
+			slogc.Fine(c.logger, "closing nat local listener", "err", err)
+		}
+	}()
+
+	go func() {
+		err := c.natpmp.Listen(ctx, func(ap []netip.AddrPort) error {
+			c.logger.Debug("updating nat pmp", "addrs", ap)
+			sess.addrs.Update(func(d client.AdvertiseAddrs) client.AdvertiseAddrs {
+				d.PMP = ap
+				return d
+			})
+			return nil
+		})
+		if err != nil {
+			slogc.Fine(c.logger, "closing nat pmp listener", "err", err)
 		}
 	}()
 

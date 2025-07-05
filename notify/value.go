@@ -231,3 +231,26 @@ func MapDeleteFunc[M ~map[K]T, K comparable, T any](m *V[M], del func(K, T) bool
 		return t
 	})
 }
+
+func ListenMulti[L any, R any](ctx context.Context, nl *V[L], nr *V[R], fn func(context.Context, L, R) error) error {
+	var l L
+	var r R
+
+	cl := nl.Notify(ctx)
+	cr := nr.Notify(ctx)
+
+	for {
+		select {
+		case l = <-cl:
+			if err := fn(ctx, l, r); err != nil {
+				return err
+			}
+		case r = <-cr:
+			if err := fn(ctx, l, r); err != nil {
+				return err
+			}
+		case <-ctx.Done():
+			return ctx.Err()
+		}
+	}
+}

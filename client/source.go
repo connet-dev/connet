@@ -10,7 +10,6 @@ import (
 	"log/slog"
 	"math"
 	"net"
-	"net/netip"
 	"slices"
 	"sync/atomic"
 	"time"
@@ -18,6 +17,7 @@ import (
 	"github.com/connet-dev/connet/certc"
 	"github.com/connet-dev/connet/cryptoc"
 	"github.com/connet-dev/connet/model"
+	"github.com/connet-dev/connet/notify"
 	"github.com/connet-dev/connet/proto"
 	"github.com/connet-dev/connet/proto/pbconnect"
 	"github.com/connet-dev/connet/quicc"
@@ -97,19 +97,29 @@ func (s *Source) RunPeer(ctx context.Context) error {
 	return g.Wait()
 }
 
-func (s *Source) RunAnnounce(ctx context.Context, conn *quic.Conn, directAddrs []netip.AddrPort, notifyResponse func(error)) error {
-	if s.cfg.Route.AllowDirect() {
-		s.peer.setDirectAddrs(directAddrs)
-	}
-
-	return (&peerControl{
+func (s *Source) RunAnnounce(ctx context.Context, conn *quic.Conn, directAddrs *notify.V[AdvertiseAddrs], notifyResponse func(error)) error {
+	pc := &peerControl{
 		local:    s.peer,
 		endpoint: s.cfg.Endpoint,
 		role:     model.Source,
 		opt:      s.cfg.Route,
 		conn:     conn,
 		notify:   notifyResponse,
-	}).run(ctx)
+	}
+
+	if s.cfg.Route.AllowDirect() {
+		g, ctx := errgroup.WithContext(ctx)
+		g.Go(func() error {
+			return directAddrs.Listen(ctx, func(t AdvertiseAddrs) error {
+				s.peer.setDirectAddrs(t.All())
+				return nil
+			})
+		})
+		g.Go(func() error { return pc.run(ctx) })
+		return g.Wait()
+	}
+
+	return pc.run(ctx)
 }
 
 func (s *Source) PeerStatus() (PeerStatus, error) {
