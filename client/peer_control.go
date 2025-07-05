@@ -13,13 +13,13 @@ import (
 	"golang.org/x/sync/errgroup"
 )
 
-type DirectAddrs struct {
+type AdvertiseAddrs struct {
 	STUN  []netip.AddrPort
 	Local []netip.AddrPort
 	PMP   []netip.AddrPort
 }
 
-func (d DirectAddrs) All() []netip.AddrPort {
+func (d AdvertiseAddrs) All() []netip.AddrPort {
 	addrs := make([]netip.AddrPort, 0, len(d.STUN)+len(d.Local)+len(d.PMP))
 	addrs = append(addrs, d.STUN...)
 	addrs = append(addrs, d.Local...)

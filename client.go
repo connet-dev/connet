@@ -305,7 +305,7 @@ func (c *Client) run(ctx context.Context, transport *quic.Transport, errCh chan 
 
 type session struct {
 	conn    *quic.Conn
-	addrs   *notify.V[client.DirectAddrs]
+	addrs   *notify.V[client.AdvertiseAddrs]
 	retoken []byte
 }
 
@@ -348,7 +348,7 @@ func (c *Client) connect(ctx context.Context, transport *quic.Transport, retoken
 		return nil, fmt.Errorf("authentication failed: %w", resp.Error)
 	}
 
-	addrs := client.DirectAddrs{
+	addrs := client.AdvertiseAddrs{
 		STUN:  []netip.AddrPort{resp.Public.AsNetip()},
 		Local: c.natlocal.Get(),
 		PMP:   c.natpmp.Get(),
@@ -391,7 +391,7 @@ func (c *Client) runSession(ctx context.Context, sess *session) error {
 	go func() {
 		err := c.natlocal.Listen(ctx, func(ap []netip.AddrPort) error {
 			c.logger.Debug("updating nat local", "addrs", ap)
-			sess.addrs.Update(func(d client.DirectAddrs) client.DirectAddrs {
+			sess.addrs.Update(func(d client.AdvertiseAddrs) client.AdvertiseAddrs {
 				d.Local = ap
 				return d
 			})
@@ -405,7 +405,7 @@ func (c *Client) runSession(ctx context.Context, sess *session) error {
 	go func() {
 		err := c.natpmp.Listen(ctx, func(ap []netip.AddrPort) error {
 			c.logger.Debug("updating nat pmp", "addrs", ap)
-			sess.addrs.Update(func(d client.DirectAddrs) client.DirectAddrs {
+			sess.addrs.Update(func(d client.AdvertiseAddrs) client.AdvertiseAddrs {
 				d.PMP = ap
 				return d
 			})

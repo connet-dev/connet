@@ -109,7 +109,7 @@ func newClientSource(ctx context.Context, cl *Client, cfg SourceConfig) (*client
 
 type endpoint interface {
 	RunPeer(ctx context.Context) error
-	RunAnnounce(ctx context.Context, conn *quic.Conn, directAddrs *notify.V[client.DirectAddrs], firstReport func(error)) error
+	RunAnnounce(ctx context.Context, conn *quic.Conn, directAddrs *notify.V[client.AdvertiseAddrs], firstReport func(error)) error
 	PeerStatus() (client.PeerStatus, error)
 }
 

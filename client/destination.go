@@ -102,7 +102,7 @@ func (d *Destination) RunPeer(ctx context.Context) error {
 	return g.Wait()
 }
 
-func (d *Destination) RunAnnounce(ctx context.Context, conn *quic.Conn, directAddrs *notify.V[DirectAddrs], notifyResponse func(error)) error {
+func (d *Destination) RunAnnounce(ctx context.Context, conn *quic.Conn, directAddrs *notify.V[AdvertiseAddrs], notifyResponse func(error)) error {
 	pc := &peerControl{
 		local:    d.peer,
 		endpoint: d.cfg.Endpoint,
@@ -115,7 +115,7 @@ func (d *Destination) RunAnnounce(ctx context.Context, conn *quic.Conn, directAd
 	if d.cfg.Route.AllowDirect() {
 		g, ctx := errgroup.WithContext(ctx)
 		g.Go(func() error {
-			return directAddrs.Listen(ctx, func(t DirectAddrs) error {
+			return directAddrs.Listen(ctx, func(t AdvertiseAddrs) error {
 				d.peer.setDirectAddrs(t.All())
 				return nil
 			})
