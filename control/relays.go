@@ -11,6 +11,7 @@ import (
 	"maps"
 	"net"
 	"sync"
+	"time"
 
 	"github.com/connet-dev/connet/logc"
 	"github.com/connet-dev/connet/model"
@@ -19,6 +20,7 @@ import (
 	"github.com/connet-dev/connet/proto/pberror"
 	"github.com/connet-dev/connet/proto/pbrelay"
 	"github.com/connet-dev/connet/quicc"
+	"github.com/connet-dev/connet/reliable"
 	"github.com/connet-dev/connet/slogc"
 	"github.com/quic-go/quic-go"
 	"github.com/segmentio/ksuid"
@@ -225,12 +227,17 @@ func (s *relayServer) listen(ctx context.Context, endpoint model.Endpoint,
 }
 
 func (s *relayServer) run(ctx context.Context) error {
-	g, ctx := errgroup.WithContext(ctx)
+	g := reliable.NewGroup(ctx)
 
 	for _, ingress := range s.ingresses {
-		g.Go(func() error { return s.runListener(ctx, ingress) })
+		reliable.Go1(g, ingress, s.runListener)
 	}
-	g.Go(func() error { return s.runEndpointsCache(ctx) })
+	g.Go(s.runEndpointsCache)
+
+	g.GoScheduledDelayed(5*time.Minute, time.Hour, s.conns.Compact)
+	g.GoScheduledDelayed(5*time.Minute, time.Hour, s.clients.Compact)
+	g.GoScheduledDelayed(5*time.Minute, time.Hour, s.servers.Compact)
+	g.GoScheduledDelayed(5*time.Minute, time.Hour, s.serverOffsets.Compact)
 
 	return g.Wait()
 }

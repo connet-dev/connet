@@ -21,6 +21,7 @@ import (
 	"github.com/connet-dev/connet/proto/pberror"
 	"github.com/connet-dev/connet/proto/pbmodel"
 	"github.com/connet-dev/connet/quicc"
+	"github.com/connet-dev/connet/reliable"
 	"github.com/connet-dev/connet/slogc"
 	"github.com/quic-go/quic-go"
 	"github.com/segmentio/ksuid"
@@ -236,13 +237,16 @@ func (s *clientServer) listen(ctx context.Context, endpoint model.Endpoint, role
 }
 
 func (s *clientServer) run(ctx context.Context) error {
-	g, ctx := errgroup.WithContext(ctx)
+	g := reliable.NewGroup(ctx)
 
 	for _, ingress := range s.ingresses {
-		g.Go(func() error { return s.runListener(ctx, ingress) })
+		reliable.Go1(g, ingress, s.runListener)
 	}
-	g.Go(func() error { return s.runPeerCache(ctx) })
-	g.Go(func() error { return s.runCleaner(ctx) })
+	g.Go(s.runPeerCache)
+	g.Go(s.runCleaner)
+
+	g.GoScheduledDelayed(5*time.Minute, time.Hour, s.conns.Compact)
+	g.GoScheduledDelayed(5*time.Minute, time.Hour, s.peers.Compact)
 
 	return g.Wait()
 }
