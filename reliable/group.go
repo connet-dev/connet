@@ -22,10 +22,11 @@ func NewGroup(ctx context.Context) *Group {
 	}
 }
 
-func (g *Group) Go(fn RunFn) {
+func (g *Group) Go(fn RunFn) *Group {
 	g.group.Go(func() error {
 		return fn(g.ctx)
 	})
+	return g
 }
 
 func GroupGo1[T any](g *Group, t T, fn func(context.Context, T) error) {
@@ -34,24 +35,26 @@ func GroupGo1[T any](g *Group, t T, fn func(context.Context, T) error) {
 	})
 }
 
-func (g *Group) GoScheduled(d time.Duration, fn RunFn) {
-	g.GoScheduledDelayed(d, d, fn)
+func (g *Group) GoScheduled(d time.Duration, fn RunFn) *Group {
+	return g.GoScheduledDelayed(d, d, fn)
 }
 
-func (g *Group) GoScheduledImmediate(d time.Duration, fn RunFn) {
+func (g *Group) GoScheduledImmediate(d time.Duration, fn RunFn) *Group {
 	g.group.Go(func() error {
-		return RunDeline(g.ctx, d, fn)
+		return rerunDeline(g.ctx, d, fn)
 	})
+	return g
 }
 
-func (g *Group) GoScheduledDelayed(delay, d time.Duration, fn RunFn) {
+func (g *Group) GoScheduledDelayed(delay, d time.Duration, fn RunFn) *Group {
 	g.group.Go(func() error {
 		if err := Wait(g.ctx, NextDeline(delay)); err != nil {
 			return err
 		}
 
-		return RunDeline(g.ctx, d, fn)
+		return rerunDeline(g.ctx, d, fn)
 	})
+	return g
 }
 
 func (g *Group) Wait() error {

@@ -21,7 +21,7 @@ func Wait(ctx context.Context, d time.Duration) error {
 	}
 }
 
-func RunDeline(ctx context.Context, d time.Duration, fn func(ctx context.Context) error) error {
+func rerunDeline(ctx context.Context, d time.Duration, fn func(ctx context.Context) error) error {
 	for {
 		if err := fn(ctx); err != nil {
 			return err

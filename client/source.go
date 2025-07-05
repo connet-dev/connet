@@ -21,8 +21,8 @@ import (
 	"github.com/connet-dev/connet/proto"
 	"github.com/connet-dev/connet/proto/pbconnect"
 	"github.com/connet-dev/connet/quicc"
+	"github.com/connet-dev/connet/reliable"
 	"github.com/quic-go/quic-go"
-	"golang.org/x/sync/errgroup"
 )
 
 // SourceConfig structure represents source configuration.
@@ -89,12 +89,10 @@ func (s *Source) Config() SourceConfig {
 }
 
 func (s *Source) RunPeer(ctx context.Context) error {
-	g, ctx := errgroup.WithContext(ctx)
-
-	g.Go(func() error { return s.peer.run(ctx) })
-	g.Go(func() error { return s.runActive(ctx) })
-
-	return g.Wait()
+	return reliable.NewGroup(ctx).
+		Go(s.peer.run).
+		Go(s.runActive).
+		Wait()
 }
 
 func (s *Source) RunAnnounce(ctx context.Context, conn *quic.Conn, directAddrs []netip.AddrPort, notifyResponse func(error)) error {
