@@ -22,10 +22,16 @@ func NewGroup(ctx context.Context) *Group {
 	}
 }
 
-func (g *Group) Go(fn RunFn) *Group {
-	g.group.Go(func() error {
-		return fn(g.ctx)
-	})
+func RunGroup(ctx context.Context, fns ...RunFn) error {
+	return NewGroup(ctx).Go(fns...).Wait()
+}
+
+func (g *Group) Go(fns ...RunFn) *Group {
+	for _, fn := range fns {
+		g.group.Go(func() error {
+			return fn(g.ctx)
+		})
+	}
 	return g
 }
 

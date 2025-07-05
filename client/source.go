@@ -89,10 +89,7 @@ func (s *Source) Config() SourceConfig {
 }
 
 func (s *Source) RunPeer(ctx context.Context) error {
-	return reliable.NewGroup(ctx).
-		Go(s.peer.run).
-		Go(s.runActive).
-		Wait()
+	return reliable.RunGroup(ctx, s.peer.run, s.runActive)
 }
 
 func (s *Source) RunAnnounce(ctx context.Context, conn *quic.Conn, directAddrs []netip.AddrPort, notifyResponse func(error)) error {

@@ -436,9 +436,7 @@ func (c *relayConn) runErr(ctx context.Context) error {
 	}()
 
 	return reliable.NewGroup(ctx).
-		Go(c.runRelayClients).
-		Go(c.runRelayEndpoints).
-		Go(c.runRelayServers).
+		Go(c.runRelayClients, c.runRelayEndpoints, c.runRelayServers).
 		ScheduledDelayed(time.Minute, time.Hour, c.endpoints.Compact).
 		Wait()
 }

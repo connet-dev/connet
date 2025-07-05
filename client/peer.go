@@ -133,11 +133,7 @@ func (p *peer) setPeers(peers []*pbclient.RemotePeer) {
 }
 
 func (p *peer) run(ctx context.Context) error {
-	return reliable.NewGroup(ctx).
-		Go(p.runRelays).
-		Go(p.runShareRelays).
-		Go(p.runPeers).
-		Wait()
+	return reliable.RunGroup(ctx, p.runRelays, p.runShareRelays, p.runPeers)
 }
 
 func (p *peer) runRelays(ctx context.Context) error {
