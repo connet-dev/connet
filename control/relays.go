@@ -233,10 +233,10 @@ func (s *relayServer) run(ctx context.Context) error {
 	}
 	g.Go(s.runEndpointsCache)
 
-	g.GoScheduledDelayed(5*time.Minute, time.Hour, s.conns.Compact)
-	g.GoScheduledDelayed(5*time.Minute, time.Hour, s.clients.Compact)
-	g.GoScheduledDelayed(5*time.Minute, time.Hour, s.servers.Compact)
-	g.GoScheduledDelayed(5*time.Minute, time.Hour, s.serverOffsets.Compact)
+	g.ScheduledDelayed(5*time.Minute, time.Hour, s.conns.Compact)
+	g.ScheduledDelayed(5*time.Minute, time.Hour, s.clients.Compact)
+	g.ScheduledDelayed(5*time.Minute, time.Hour, s.servers.Compact)
+	g.ScheduledDelayed(5*time.Minute, time.Hour, s.serverOffsets.Compact)
 
 	return g.Wait()
 }
@@ -435,15 +435,12 @@ func (c *relayConn) runErr(ctx context.Context) error {
 		}
 	}()
 
-	g := reliable.NewGroup(ctx)
-
-	g.Go(c.runRelayClients)
-	g.Go(c.runRelayEndpoints)
-	g.Go(c.runRelayServers)
-
-	g.GoScheduledDelayed(time.Minute, time.Hour, c.endpoints.Compact)
-
-	return g.Wait()
+	return reliable.NewGroup(ctx).
+		Go(c.runRelayClients).
+		Go(c.runRelayEndpoints).
+		Go(c.runRelayServers).
+		ScheduledDelayed(time.Minute, time.Hour, c.endpoints.Compact).
+		Wait()
 }
 
 func (c *relayConn) authenticate(ctx context.Context) (*relayConnAuth, error) {

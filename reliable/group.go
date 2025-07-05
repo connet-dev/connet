@@ -35,18 +35,18 @@ func GroupGo1[T any](g *Group, t T, fn func(context.Context, T) error) {
 	})
 }
 
-func (g *Group) GoScheduled(d time.Duration, fn RunFn) *Group {
-	return g.GoScheduledDelayed(d, d, fn)
+func (g *Group) Scheduled(d time.Duration, fn RunFn) *Group {
+	return g.ScheduledDelayed(d, d, fn)
 }
 
-func (g *Group) GoScheduledImmediate(d time.Duration, fn RunFn) *Group {
+func (g *Group) ScheduledImmediate(d time.Duration, fn RunFn) *Group {
 	g.group.Go(func() error {
 		return rerunDeline(g.ctx, d, fn)
 	})
 	return g
 }
 
-func (g *Group) GoScheduledDelayed(delay, d time.Duration, fn RunFn) *Group {
+func (g *Group) ScheduledDelayed(delay, d time.Duration, fn RunFn) *Group {
 	g.group.Go(func() error {
 		if err := Wait(g.ctx, NextDeline(delay)); err != nil {
 			return err

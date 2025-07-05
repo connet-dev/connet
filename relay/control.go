@@ -179,9 +179,9 @@ func (s *controlClient) run(ctx context.Context, tfn TransportsFn) error {
 
 	reliable.GroupGo1(g, tfn, s.runControl)
 
-	g.GoScheduledDelayed(5*time.Minute, time.Hour, s.config.Compact)
-	g.GoScheduledDelayed(5*time.Minute, time.Hour, s.clients.Compact)
-	g.GoScheduledDelayed(5*time.Minute, time.Hour, s.servers.Compact)
+	g.ScheduledDelayed(5*time.Minute, time.Hour, s.config.Compact)
+	g.ScheduledDelayed(5*time.Minute, time.Hour, s.clients.Compact)
+	g.ScheduledDelayed(5*time.Minute, time.Hour, s.servers.Compact)
 
 	return g.Wait()
 }
