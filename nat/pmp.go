@@ -52,10 +52,15 @@ func (s *PMP) Run(ctx context.Context) error {
 	var boff netc.SpinBackoff
 	for {
 		err := s.runGeneration(ctx)
-		if errors.Is(err, context.Canceled) {
-			return err
-		}
 		slogc.Fine(s.logger, "pmp generation completed", "err", err)
+
+		switch {
+		case errors.Is(err, context.Canceled):
+			return err
+		case errors.Is(err, os.ErrNotExist), errors.Is(err, os.ErrPermission):
+			s.logger.Debug("pmp exiting: cannot read interface/gateway", "err", err)
+			return nil
+		}
 
 		if err := boff.Wait(ctx); err != nil {
 			return err
