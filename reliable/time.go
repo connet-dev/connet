@@ -21,25 +21,13 @@ func Wait(ctx context.Context, d time.Duration) error {
 	}
 }
 
-func RunWait(ctx context.Context, d time.Duration, fn func(ctx context.Context) error) error {
+func RunDeline(ctx context.Context, d time.Duration, fn func(ctx context.Context) error) error {
 	for {
 		if err := fn(ctx); err != nil {
 			return err
 		}
 
 		if err := Wait(ctx, NextDeline(d)); err != nil {
-			return err
-		}
-	}
-}
-
-func WaitRun(ctx context.Context, d time.Duration, fn func(ctx context.Context) error) error {
-	for {
-		if err := Wait(ctx, NextDeline(d)); err != nil {
-			return err
-		}
-
-		if err := fn(ctx); err != nil {
 			return err
 		}
 	}

@@ -177,7 +177,7 @@ type TransportsFn func(ctx context.Context) ([]*quic.Transport, error)
 func (s *controlClient) run(ctx context.Context, tfn TransportsFn) error {
 	g := reliable.NewGroup(ctx)
 
-	reliable.Go1(g, tfn, s.runControl)
+	reliable.GroupGo1(g, tfn, s.runControl)
 
 	g.GoScheduledDelayed(5*time.Minute, time.Hour, s.config.Compact)
 	g.GoScheduledDelayed(5*time.Minute, time.Hour, s.clients.Compact)
@@ -321,10 +321,10 @@ func (s *controlClient) runConnection(ctx context.Context, conn *quic.Conn) erro
 
 	g := reliable.NewGroup(ctx)
 
-	reliable.Go1(g, conn, s.runClientsStream)
+	reliable.GroupGo1(g, conn, s.runClientsStream)
 	g.Go(s.runClientsLog)
 	g.Go(s.runServersLog)
-	reliable.Go1(g, conn, s.runServersStream)
+	reliable.GroupGo1(g, conn, s.runServersStream)
 
 	return g.Wait()
 }

@@ -24,7 +24,6 @@ import (
 	"github.com/connet-dev/connet/slogc"
 	"github.com/quic-go/quic-go"
 	"github.com/segmentio/ksuid"
-	"golang.org/x/sync/errgroup"
 )
 
 type RelayAuthenticateRequest struct {
@@ -230,7 +229,7 @@ func (s *relayServer) run(ctx context.Context) error {
 	g := reliable.NewGroup(ctx)
 
 	for _, ingress := range s.ingresses {
-		reliable.Go1(g, ingress, s.runListener)
+		reliable.GroupGo1(g, ingress, s.runListener)
 	}
 	g.Go(s.runEndpointsCache)
 
@@ -436,11 +435,13 @@ func (c *relayConn) runErr(ctx context.Context) error {
 		}
 	}()
 
-	g, ctx := errgroup.WithContext(ctx)
+	g := reliable.NewGroup(ctx)
 
-	g.Go(func() error { return c.runRelayClients(ctx) })
-	g.Go(func() error { return c.runRelayEndpoints(ctx) })
-	g.Go(func() error { return c.runRelayServers(ctx) })
+	g.Go(c.runRelayClients)
+	g.Go(c.runRelayEndpoints)
+	g.Go(c.runRelayServers)
+
+	g.GoScheduledDelayed(time.Minute, time.Hour, c.endpoints.Compact)
 
 	return g.Wait()
 }

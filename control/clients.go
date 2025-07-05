@@ -240,7 +240,7 @@ func (s *clientServer) run(ctx context.Context) error {
 	g := reliable.NewGroup(ctx)
 
 	for _, ingress := range s.ingresses {
-		reliable.Go1(g, ingress, s.runListener)
+		reliable.GroupGo1(g, ingress, s.runListener)
 	}
 	g.Go(s.runPeerCache)
 	g.Go(s.runCleaner)
