@@ -8,6 +8,7 @@ import (
 	"log/slog"
 	"net"
 	"net/netip"
+	"os"
 	"time"
 
 	"github.com/connet-dev/connet/notify"
@@ -47,35 +48,58 @@ func NewPMP(transport *quic.Transport, logger *slog.Logger) (*PMP, error) {
 }
 
 func (s *PMP) Run(ctx context.Context) error {
-	myIP, err := gateway.DiscoverInterface()
+	return s.runGeneration(ctx)
+}
+
+func (s *PMP) runGeneration(ctx context.Context) error {
+	localIP, err := gateway.DiscoverInterface()
 	if err != nil {
-		return fmt.Errorf("discover network interface: %w", err)
+		return fmt.Errorf("pmp discover interface: %w", err)
 	}
-	if !myIP.IsPrivate() {
-		return fmt.Errorf("discovered interface is not private: %s", myIP)
+	if !localIP.IsPrivate() {
+		return fmt.Errorf("pmp interface is not private: %s", localIP)
 	}
-	s.localIP = myIP
+	s.localIP = localIP
 
 	addr, ok := s.transport.Conn.LocalAddr().(*net.UDPAddr)
 	if !ok {
 		return fmt.Errorf("unexpected local address '%s': %w", s.transport.Conn.LocalAddr(), err)
 	}
 	s.localPort = uint16(addr.Port)
-	s.localAddrPort = netip.AddrPortFrom(netip.AddrFrom4([4]byte(myIP.To4())), s.localPort)
+	s.localAddrPort = netip.AddrPortFrom(netip.AddrFrom4([4]byte(localIP.To4())), s.localPort)
 
-	gwIP, err := gateway.DiscoverGateway()
+	gatewayIP, err := gateway.DiscoverGateway()
 	if err != nil {
 		return fmt.Errorf("discover network gateway: %w", err)
 	}
-	s.gatewayIP = gwIP
-	s.gatewayAddr = &net.UDPAddr{IP: gwIP, Port: pmpCommandPort}
+	s.gatewayIP = gatewayIP
+	s.gatewayAddr = &net.UDPAddr{IP: gatewayIP, Port: pmpCommandPort}
+
+	slogc.Fine(s.logger, "generation start", "gateway", s.gatewayAddr, "local", s.localAddrPort)
+
+	resp, err := retryCall(ctx, func(ctx context.Context) (*pmpDiscoverResponse, error) {
+		slogc.Fine(s.logger, "discover external address start", "gateway", s.gatewayAddr)
+		resp, err := s.pmpDiscover(ctx)
+		if err != nil {
+			slogc.Fine(s.logger, "discover external address failed", "gateway", s.gatewayAddr, "err", err)
+		} else {
+			slogc.Fine(s.logger, "discover external address completed", "gateway", s.gatewayAddr, "external-addr", resp.externalAddr)
+		}
+		return resp, err
+	})
+	if err != nil {
+		return fmt.Errorf("cannot discover NAT-PMP gateway: %w", err)
+	}
+
+	defer s.externalAddr.Set(nil)
+	s.externalAddr.Set(&resp.externalAddr)
 
 	g, ctx := errgroup.WithContext(ctx)
 	g.Go(func() error {
 		return s.notifyExternalAddrPort(ctx)
 	})
 	g.Go(func() error {
-		return s.runDiscovery(ctx)
+		return s.listenAddressChanges(ctx, resp.epochSeconds)
 	})
 	g.Go(func() error {
 		return s.runMap(ctx)
@@ -112,39 +136,56 @@ func (s *PMP) notifyExternalAddrPort(ctx context.Context) error {
 	})
 }
 
-func (s *PMP) runDiscovery(ctx context.Context) error {
-	defer s.externalAddr.Set(nil)
-
-	resp, err := retryCall(ctx, s.pmpDiscover)
-	if err != nil {
-		return err
-	}
-	s.externalAddr.Set(&resp.externalAddr)
-
-	return s.listenAddressChanges(ctx, resp.epochSeconds)
-}
-
 func (s *PMP) runMap(ctx context.Context) error {
-	defer s.externalPort.Set(nil)
-
 	resp, err := retryCall(ctx, func(ctx context.Context) (*pmpMapResponse, error) {
-		return s.pmpMap(ctx, 0, 60) // TODO change lifetime
+		slogc.Fine(s.logger, "mapping create start", "gateway", s.gatewayAddr, "local-port", s.localPort)
+		resp, err := s.pmpMap(ctx, 0, 60) // TODO change lifetime
+		if err != nil {
+			slogc.Fine(s.logger, "mapping create failed", "gateway", s.gatewayAddr, "err", err)
+		} else {
+			slogc.Fine(s.logger, "mapping create completed", "gateway", s.gatewayAddr, "external-port", resp.externalPort)
+		}
+		return resp, err
 	})
 	if err != nil {
 		return err
 	}
+
+	defer s.externalPort.Set(nil)
+
 	s.externalPort.Set(&resp.externalPort)
+	endOfLife := time.Now().Add(time.Duration(resp.lifetimeSeconds) * time.Second)
 
 	for {
+		nextRenew := time.Until(endOfLife) / 2
+		if nextRenew <= 0 {
+			return fmt.Errorf("mapping renew: timed out")
+		}
+
+		slogc.Fine(s.logger, "mapping renew scheduled", "after", nextRenew)
 		select {
-		case <-time.After(time.Duration(resp.lifetimeSeconds) * time.Second / 2):
-			resp, err = retryCall(ctx, func(ctx context.Context) (*pmpMapResponse, error) {
-				return s.pmpMap(ctx, resp.externalPort, 60)
+		case <-time.After(nextRenew):
+			renewResp, err := retryCall(ctx, func(ctx context.Context) (*pmpMapResponse, error) {
+				slogc.Fine(s.logger, "mapping renew start", "gateway", s.gatewayAddr, "local-port", s.localPort)
+				resp, err := s.pmpMap(ctx, resp.externalPort, 60)
+				if err != nil {
+					slogc.Fine(s.logger, "mapping renew failed", "gateway", s.gatewayAddr, "err", err)
+				} else {
+					slogc.Fine(s.logger, "mapping renew completed", "gateway", s.gatewayAddr, "external-port", resp.externalPort)
+				}
+				return resp, err
 			})
 			if err != nil {
 				return err
 			}
+
+			resp = renewResp
+
+			s.externalPort.Set(&resp.externalPort)
+			endOfLife = time.Now().Add(time.Duration(resp.lifetimeSeconds) * time.Second)
 		case <-ctx.Done():
+			slogc.Fine(s.logger, "mapping delete", "external-port", resp.externalPort)
+
 			_, merr := s.pmpMap(context.Background(), 0, 0)
 			return errors.Join(err, merr)
 		}
@@ -166,12 +207,23 @@ func (s *PMP) listenAddressChanges(ctx context.Context, epoch uint32) error {
 	}()
 
 	var readResponse = func(ctx context.Context, buff []byte) (int, net.Addr, error) {
+		if err := conn.SetReadDeadline(time.Now().Add(100 * time.Millisecond)); err != nil {
+			return 0, nil, err
+		}
+		defer func() {
+			if err := conn.SetReadDeadline(time.Time{}); err != nil {
+				slogc.Fine(s.logger, "error resetting deadline", "err", err)
+			}
+		}()
 		return conn.ReadFrom(buff)
 	}
 
-	for {
+	for ctx.Err() == nil {
 		resp, err := s.readResponse(ctx, 12, readResponse)
 		if err != nil {
+			if errors.Is(err, os.ErrDeadlineExceeded) {
+				continue
+			}
 			return fmt.Errorf("could not read packet: %w", err)
 		}
 		if err := checkResponseHeader(resp, 0); err != nil {
@@ -187,6 +239,8 @@ func (s *PMP) listenAddressChanges(ctx context.Context, epoch uint32) error {
 		}
 		epoch = nextEpoch
 	}
+
+	return ctx.Err()
 }
 
 type pmpDiscoverResponse struct {
@@ -266,8 +320,8 @@ func (s *PMP) writeRequest(request []byte) error {
 
 func retryCall[T any](ctx context.Context, fn func(ctx context.Context) (T, error)) (T, error) {
 	var errs []error
-	for i := range 9 {
-		timeout := time.Duration(250*i) * time.Millisecond
+	timeout := 250 * time.Millisecond
+	for range 9 {
 		ctx, cancel := context.WithTimeout(ctx, timeout)
 		defer cancel()
 
@@ -276,6 +330,7 @@ func retryCall[T any](ctx context.Context, fn func(ctx context.Context) (T, erro
 			return resp, nil
 		}
 		errs = append(errs, err)
+		timeout = 2 * timeout
 	}
 
 	var t T
