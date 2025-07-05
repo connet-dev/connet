@@ -55,6 +55,7 @@ func (s *PMP) Run(ctx context.Context) error {
 		if errors.Is(err, context.Canceled) {
 			return err
 		}
+		slogc.Fine(s.logger, "pmp generation completed", "err", err)
 
 		if err := boff.Wait(ctx); err != nil {
 			return err
