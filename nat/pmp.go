@@ -57,7 +57,7 @@ func (s *PMP) Run(ctx context.Context) error {
 		switch {
 		case errors.Is(err, context.Canceled):
 			return err
-		case errors.Is(err, os.ErrNotExist), errors.Is(err, os.ErrPermission):
+		case errors.Is(err, errDiscoverInterface), errors.Is(err, errDiscoverGateway):
 			s.logger.Debug("pmp exiting: cannot read interface/gateway", "err", err)
 			return nil
 		}
@@ -68,10 +68,13 @@ func (s *PMP) Run(ctx context.Context) error {
 	}
 }
 
+var errDiscoverInterface = errors.New("pmp discover interface")
+var errDiscoverGateway = errors.New("pmp discover gateway")
+
 func (s *PMP) runGeneration(ctx context.Context) error {
 	localIP, err := gateway.DiscoverInterface()
 	if err != nil {
-		return fmt.Errorf("pmp discover interface: %w", err)
+		return fmt.Errorf("%w: %w", errDiscoverInterface, err)
 	}
 	if !localIP.IsPrivate() {
 		return fmt.Errorf("pmp interface is not private: %s", localIP)
@@ -87,7 +90,7 @@ func (s *PMP) runGeneration(ctx context.Context) error {
 
 	gatewayIP, err := gateway.DiscoverGateway()
 	if err != nil {
-		return fmt.Errorf("discover network gateway: %w", err)
+		return fmt.Errorf("%w: %w", errDiscoverGateway, err)
 	}
 	s.gatewayIP = gatewayIP
 	s.gatewayAddr = &net.UDPAddr{IP: gatewayIP, Port: pmpCommandPort}
