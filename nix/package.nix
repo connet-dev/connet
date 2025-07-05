@@ -24,7 +24,7 @@ pkgs.buildGoModule
     fileset = sourceFiles;
   };
 
-  vendorHash = "sha256-pDQjxkyMKoUffonyK5GvrBNn6qokssP9Q6Nw91Zv8zY=";
+  vendorHash = "sha256-dqVQwFVJvE42zsRNINI4nrxe8D2pr919efKed4H76ao=";
   subPackages = [ "cmd/connet" ];
 
   nativeBuildInputs = [ pkgs.installShellFiles ];

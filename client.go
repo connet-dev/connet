@@ -22,6 +22,7 @@ import (
 	"github.com/connet-dev/connet/proto/pbclient"
 	"github.com/connet-dev/connet/proto/pberror"
 	"github.com/connet-dev/connet/quicc"
+	"github.com/connet-dev/connet/reliable"
 	"github.com/connet-dev/connet/slogc"
 	"github.com/connet-dev/connet/statusc"
 	"github.com/quic-go/quic-go"
@@ -260,7 +261,7 @@ func (c *Client) run(ctx context.Context, transport *quic.Transport, errCh chan 
 	}
 	close(errCh)
 
-	var boff netc.SpinBackoff
+	var boff reliable.SpinBackoff
 	for {
 		if err := c.runSession(ctx, sess); err != nil {
 			c.logger.Error("session ended", "err", err)
@@ -340,7 +341,7 @@ func (c *Client) connect(ctx context.Context, transport *quic.Transport, retoken
 }
 
 func (c *Client) reconnect(ctx context.Context, transport *quic.Transport, retoken []byte) (*session, error) {
-	d := netc.MinBackoff
+	d := reliable.MinBackoff
 	t := time.NewTimer(d)
 	defer t.Stop()
 	for {
@@ -357,7 +358,7 @@ func (c *Client) reconnect(ctx context.Context, transport *quic.Transport, retok
 			return sess, nil
 		}
 
-		d = netc.NextBackoff(d)
+		d = reliable.NextBackoff(d)
 		t.Reset(d)
 	}
 }

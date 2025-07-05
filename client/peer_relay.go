@@ -11,11 +11,11 @@ import (
 	"time"
 
 	"github.com/connet-dev/connet/model"
-	"github.com/connet-dev/connet/netc"
 	"github.com/connet-dev/connet/proto"
 	"github.com/connet-dev/connet/proto/pbconnect"
 	"github.com/connet-dev/connet/proto/pberror"
 	"github.com/connet-dev/connet/quicc"
+	"github.com/connet-dev/connet/reliable"
 	"github.com/connet-dev/connet/slogc"
 	"github.com/quic-go/quic-go"
 	"golang.org/x/sync/errgroup"
@@ -62,7 +62,7 @@ func (r *relayPeer) run(ctx context.Context) {
 }
 
 func (r *relayPeer) runConn(ctx context.Context) error {
-	boff := netc.MinBackoff
+	boff := reliable.MinBackoff
 	for {
 		conn, err := r.connectAny(ctx)
 		if err != nil {
@@ -75,11 +75,11 @@ func (r *relayPeer) runConn(ctx context.Context) error {
 			case <-ctx.Done():
 				return ctx.Err()
 			case <-time.After(boff):
-				boff = netc.NextBackoff(boff)
+				boff = reliable.NextBackoff(boff)
 			}
 			continue
 		}
-		boff = netc.MinBackoff
+		boff = reliable.MinBackoff
 
 		if err := r.keepalive(ctx, conn); err != nil {
 			r.logger.Debug("disconnected relay", "err", err)

@@ -12,13 +12,13 @@ import (
 	"time"
 
 	"github.com/connet-dev/connet/model"
-	"github.com/connet-dev/connet/netc"
 	"github.com/connet-dev/connet/notify"
 	"github.com/connet-dev/connet/proto"
 	"github.com/connet-dev/connet/proto/pbclient"
 	"github.com/connet-dev/connet/proto/pbconnect"
 	"github.com/connet-dev/connet/proto/pberror"
 	"github.com/connet-dev/connet/quicc"
+	"github.com/connet-dev/connet/reliable"
 	"github.com/connet-dev/connet/slogc"
 	"github.com/quic-go/quic-go"
 	"golang.org/x/sync/errgroup"
@@ -154,7 +154,7 @@ func newDirectPeerIncoming(ctx context.Context, parent *directPeer, clientCert *
 }
 
 func (p *directPeerIncoming) run(ctx context.Context) {
-	boff := netc.MinBackoff
+	boff := reliable.MinBackoff
 	for {
 		conn, err := p.connect(ctx)
 		if err != nil {
@@ -172,11 +172,11 @@ func (p *directPeerIncoming) run(ctx context.Context) {
 			case <-p.closer:
 				return
 			case <-time.After(boff):
-				boff = netc.NextBackoff(boff)
+				boff = reliable.NextBackoff(boff)
 			}
 			continue
 		}
-		boff = netc.MinBackoff
+		boff = reliable.MinBackoff
 
 		if err := p.keepalive(ctx, conn); err != nil {
 			p.logger.Debug("keepalive failed", "err", err)
@@ -266,7 +266,7 @@ func newDirectPeerOutgoing(ctx context.Context, parent *directPeer, serverConfg 
 }
 
 func (p *directPeerOutgoing) run(ctx context.Context) {
-	boff := netc.MinBackoff
+	boff := reliable.MinBackoff
 	for {
 		conn, err := p.connect(ctx)
 		if err != nil {
@@ -281,11 +281,11 @@ func (p *directPeerOutgoing) run(ctx context.Context) {
 			case <-p.closer:
 				return
 			case <-time.After(boff):
-				boff = netc.NextBackoff(boff)
+				boff = reliable.NextBackoff(boff)
 			}
 			continue
 		}
-		boff = netc.MinBackoff
+		boff = reliable.MinBackoff
 
 		if err := p.keepalive(ctx, conn); err != nil {
 			p.logger.Debug("keepalive failed", "err", err)
