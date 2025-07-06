@@ -16,15 +16,15 @@ import (
 
 type AdvertiseAddrs struct {
 	STUN  []netip.AddrPort
-	Local []netip.AddrPort
 	PMP   []netip.AddrPort
+	Local []netip.AddrPort
 }
 
 func (d AdvertiseAddrs) All() []netip.AddrPort {
-	addrs := make([]netip.AddrPort, 0, len(d.STUN)+len(d.Local)+len(d.PMP))
+	addrs := make([]netip.AddrPort, 0, len(d.STUN)+len(d.PMP)+len(d.Local))
 	addrs = append(addrs, d.STUN...)
-	addrs = append(addrs, d.Local...)
 	addrs = append(addrs, d.PMP...)
+	addrs = append(addrs, d.Local...)
 	return addrs
 }
 

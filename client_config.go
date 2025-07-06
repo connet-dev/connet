@@ -12,6 +12,7 @@ import (
 	"path/filepath"
 	"strings"
 
+	"github.com/connet-dev/connet/nat"
 	"github.com/quic-go/quic-go"
 )
 
@@ -25,11 +26,17 @@ type clientConfig struct {
 	directAddr     *net.UDPAddr
 	directResetKey *quic.StatelessResetKey
 
+	natPMP nat.PMPConfig
+
 	logger *slog.Logger
 }
 
 func newClientConfig(opts []ClientOption) (*clientConfig, error) {
 	cfg := &clientConfig{
+		natPMP: nat.PMPConfig{
+			LocalResolver:   nat.LocalIPSystemResolver(),
+			GatewayResolver: nat.GatewayIPSystemResolver(),
+		},
 		logger: slog.Default(),
 	}
 	for _, opt := range opts {
@@ -198,6 +205,13 @@ func clientDirectStatelessResetKey() ClientOption {
 			return fmt.Errorf("stat stateless reset key file: %w", err)
 		}
 
+		return nil
+	}
+}
+
+func ClientNatPMPConfig(pmp nat.PMPConfig) ClientOption {
+	return func(cfg *clientConfig) error {
+		cfg.natPMP = pmp
 		return nil
 	}
 }

@@ -13,6 +13,7 @@ import (
 
 	"github.com/connet-dev/connet"
 	"github.com/connet-dev/connet/model"
+	"github.com/connet-dev/connet/nat"
 	"github.com/connet-dev/connet/statusc"
 	"github.com/mr-tron/base58"
 	"github.com/quic-go/quic-go"
@@ -31,6 +32,7 @@ type ClientConfig struct {
 	DirectResetKey     string `toml:"direct-stateless-reset-key"`
 	DirectResetKeyFile string `toml:"direct-stateless-reset-key-file"`
 	StatusAddr         string `toml:"status-addr"`
+	NatPMP             string `toml:"nat-pmp"`
 
 	RelayEncryptions []string                     `toml:"relay-encryptions"`
 	Destinations     map[string]DestinationConfig `toml:"destinations"`
@@ -81,6 +83,7 @@ func clientCmd() *cobra.Command {
 
 	cmd.Flags().StringVar(&flagsConfig.Client.DirectAddr, "direct-addr", "", "direct server address to listen")
 	cmd.Flags().StringVar(&flagsConfig.Client.StatusAddr, "status-addr", "", "status server address to listen")
+	cmd.Flags().StringVar(&flagsConfig.Client.NatPMP, "nat-pmp", "", "nat-pmp behavior ('disabled', 'local', 'dial')")
 
 	var dstName string
 	var dstCfg DestinationConfig
@@ -177,6 +180,21 @@ func clientRun(ctx context.Context, cfg ClientConfig, logger *slog.Logger) error
 		}
 		statusAddr = addr
 	}
+
+	var pmpCfg nat.PMPConfig
+	switch cfg.NatPMP {
+	case "", "system":
+		pmpCfg.LocalResolver = nat.LocalIPSystemResolver()
+		pmpCfg.GatewayResolver = nat.GatewayIPSystemResolver()
+	case "disabled":
+		pmpCfg.Disabled = true
+	case "dial":
+		pmpCfg.LocalResolver = nat.LocalIPDialResolver(cfg.ServerAddr)
+		pmpCfg.GatewayResolver = nat.GatewayIPNet24Resolver()
+	default:
+		return fmt.Errorf("invalid Nat-PMP config option: %s", cfg.NatPMP)
+	}
+	opts = append(opts, connet.ClientNatPMPConfig(pmpCfg))
 
 	var defaultRelayEncryptions = []model.EncryptionScheme{model.NoEncryption}
 	if len(cfg.RelayEncryptions) > 0 {
@@ -476,6 +494,7 @@ func (c *ClientConfig) merge(o ClientConfig) {
 		c.DirectResetKeyFile = o.DirectResetKeyFile
 	}
 	c.StatusAddr = override(c.StatusAddr, o.StatusAddr)
+	c.NatPMP = override(c.NatPMP, o.NatPMP)
 
 	c.RelayEncryptions = overrides(c.RelayEncryptions, o.RelayEncryptions)
 

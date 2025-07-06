@@ -125,14 +125,7 @@ func (c *Client) runClient(ctx context.Context, errCh chan error) {
 	c.directServer = ds
 
 	c.natlocal = nat.NewLocal(uint16(c.directAddr.Port), c.logger)
-	c.natpmp = nat.NewPMP(nat.PMPConfig{
-		Transport: transport,
-
-		LocalResolver: nat.LocalIPDialResolver(c.controlAddr.String()),
-		LocalPort:     uint16(c.directAddr.Port),
-
-		GatewayResolver: nat.GatewayIPNet24Resolver(),
-	}, c.logger)
+	c.natpmp = nat.NewPMP(c.natPMP, transport, uint16(c.directAddr.Port), c.logger)
 
 	g, ctx := errgroup.WithContext(ctx)
 
