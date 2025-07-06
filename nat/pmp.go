@@ -25,7 +25,6 @@ const pmpLifetime = 10 * 60 // 10 minutes
 
 type PMP struct {
 	transport *quic.Transport
-	logger    *slog.Logger
 
 	gatewayIP     net.IP
 	gatewayAddr   *net.UDPAddr
@@ -36,17 +35,39 @@ type PMP struct {
 	externalAddr     *notify.V[*netip.Addr]
 	externalPort     *notify.V[*uint16]
 	externalAddrPort *notify.V[*netip.AddrPort]
+
+	logger *slog.Logger
 }
 
-func NewPMP(transport *quic.Transport, logger *slog.Logger) (*PMP, error) {
+func NewPMP(transport *quic.Transport, localPort uint16, logger *slog.Logger) (*PMP, error) {
 	return &PMP{
 		transport: transport,
-		logger:    logger.With("component", "natpmp"),
+
+		localPort: localPort,
 
 		externalAddr:     notify.NewEmpty[*netip.Addr](),
 		externalPort:     notify.NewEmpty[*uint16](),
 		externalAddrPort: notify.NewEmpty[*netip.AddrPort](),
+
+		logger: logger.With("component", "natpmp"),
 	}, nil
+}
+
+func (s *PMP) Get() []netip.AddrPort {
+	addr, err := s.externalAddrPort.Peek()
+	if err != nil || addr == nil {
+		return nil
+	}
+	return []netip.AddrPort{*addr, s.localAddrPort}
+}
+
+func (s *PMP) Listen(ctx context.Context, fn func([]netip.AddrPort) error) error {
+	return s.externalAddrPort.Listen(ctx, func(t *netip.AddrPort) error {
+		if t == nil {
+			return fn(nil)
+		}
+		return fn([]netip.AddrPort{*t, s.localAddrPort})
+	})
 }
 
 func (s *PMP) Run(ctx context.Context) error {
@@ -75,20 +96,11 @@ var errDiscoverInterface = errors.New("pmp discover interface")
 var errDiscoverGateway = errors.New("pmp discover gateway")
 
 func (s *PMP) runGeneration(ctx context.Context) error {
-	localIP, err := gateway.DiscoverInterface()
+	localIP, err := s.waitInterface(ctx)
 	if err != nil {
-		return fmt.Errorf("%w: %w", errDiscoverInterface, err)
-	}
-	if !localIP.IsPrivate() {
-		return fmt.Errorf("pmp interface is not private: %s", localIP)
+		return err
 	}
 	s.localIP = localIP
-
-	addr, ok := s.transport.Conn.LocalAddr().(*net.UDPAddr)
-	if !ok {
-		return fmt.Errorf("unexpected local address '%s': %w", s.transport.Conn.LocalAddr(), err)
-	}
-	s.localPort = uint16(addr.Port)
 	s.localAddrPort = netip.AddrPortFrom(netip.AddrFrom4([4]byte(localIP.To4())), s.localPort)
 
 	gatewayIP, err := gateway.DiscoverGateway()
@@ -130,21 +142,19 @@ func (s *PMP) runGeneration(ctx context.Context) error {
 	return g.Wait()
 }
 
-func (s *PMP) Get() []netip.AddrPort {
-	addr, err := s.externalAddrPort.Peek()
-	if err != nil || addr == nil {
-		return nil
-	}
-	return []netip.AddrPort{*addr, s.localAddrPort}
-}
-
-func (s *PMP) Listen(ctx context.Context, fn func([]netip.AddrPort) error) error {
-	return s.externalAddrPort.Listen(ctx, func(t *netip.AddrPort) error {
-		if t == nil {
-			return fn(nil)
+func (s *PMP) waitInterface(ctx context.Context) (net.IP, error) {
+	for {
+		localIP, err := gateway.DiscoverInterface()
+		if err != nil {
+			return net.IPv4zero, fmt.Errorf("%w: %w", errDiscoverInterface, err)
 		}
-		return fn([]netip.AddrPort{*t, s.localAddrPort})
-	})
+		if localIP.IsPrivate() {
+			return localIP, nil
+		}
+		if err := reliable.Wait(ctx, 10*time.Second); err != nil {
+			return net.IPv4zero, err
+		}
+	}
 }
 
 func (s *PMP) notifyExternalAddrPort(ctx context.Context) error {

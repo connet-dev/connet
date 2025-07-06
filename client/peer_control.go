@@ -38,14 +38,14 @@ type peerControl struct {
 }
 
 func (d *peerControl) run(ctx context.Context) error {
-	if !d.opt.AllowRelay() {
-		return d.runAnnounce(ctx)
+	if d.opt.AllowRelay() {
+		return reliable.RunGroup(ctx,
+			d.runAnnounce,
+			d.runRelay,
+		)
 	}
 
-	return reliable.RunGroup(ctx,
-		d.runAnnounce,
-		d.runRelay,
-	)
+	return d.runAnnounce(ctx)
 }
 
 func (d *peerControl) runAnnounce(ctx context.Context) error {
