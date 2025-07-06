@@ -171,7 +171,6 @@ func (s *PMP) waitInterface(ctx context.Context) (net.IP, error) {
 }
 
 func (s *PMP) notifyExternalAddrPort(ctx context.Context) error {
-	defer s.logger.Warn("completed notifyExternalAddrPort")
 	return notify.ListenMulti(ctx, s.externalAddr, s.externalPort, func(ctx context.Context, addr *netip.Addr, port *uint16) error {
 		if addr != nil && port != nil {
 			newAddr := netip.AddrPortFrom(*addr, *port)
@@ -184,7 +183,6 @@ func (s *PMP) notifyExternalAddrPort(ctx context.Context) error {
 }
 
 func (s *PMP) runMap(ctx context.Context) error {
-	defer s.logger.Warn("completed runMap")
 	resp, err := retryCall(ctx, func(ctx context.Context) (*pmpMapResponse, error) {
 		slogc.Fine(s.logger, "mapping create start", "gateway", s.gatewayAddr, "local-port", s.LocalPort)
 		resp, err := s.pmpMap(ctx, 0, pmpLifetime) // TODO change lifetime
@@ -250,7 +248,6 @@ func (s *PMP) runMap(ctx context.Context) error {
 var errLocalAddressChanged = errors.New("local address changed")
 
 func (s *PMP) resolverListenAddressChange(ctx context.Context) error {
-	defer s.logger.Warn("completed resolverListenAddressChange")
 	for {
 		nextIP, err := s.LocalResolver(ctx)
 		slogc.Fine(s.logger, "local IP resolve", "ip", nextIP, "err", err)
@@ -266,7 +263,6 @@ func (s *PMP) resolverListenAddressChange(ctx context.Context) error {
 var errEpochReset = errors.New("router epoch reset")
 
 func (s *PMP) pmpListenAddressChange(ctx context.Context, epoch uint32) error {
-	defer s.logger.Warn("completed pmpListenAddressChange")
 	var lc net.ListenConfig
 	conn, err := lc.ListenPacket(ctx, "udp4", pmpBroadcastAddr)
 	if err != nil {
