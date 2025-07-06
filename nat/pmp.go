@@ -42,6 +42,7 @@ type PMP struct {
 	gatewayAddr   *net.UDPAddr
 	localIP       net.IP
 	localAddrPort netip.AddrPort
+	epoch         *epochTracker
 
 	externalAddr     *notify.V[*netip.Addr]
 	externalPort     *notify.V[*uint16]
@@ -50,7 +51,7 @@ type PMP struct {
 	logger *slog.Logger
 }
 
-func NewPMP(cfg PMPConfig, logger *slog.Logger) (*PMP, error) {
+func NewPMP(cfg PMPConfig, logger *slog.Logger) *PMP {
 	return &PMP{
 		PMPConfig: cfg,
 
@@ -59,7 +60,7 @@ func NewPMP(cfg PMPConfig, logger *slog.Logger) (*PMP, error) {
 		externalAddrPort: notify.NewEmpty[*netip.AddrPort](),
 
 		logger: logger.With("component", "natpmp"),
-	}, nil
+	}
 }
 
 func (s *PMP) Get() []netip.AddrPort {
@@ -144,12 +145,17 @@ func (s *PMP) runGeneration(ctx context.Context) error {
 		return fmt.Errorf("cannot discover NAT-PMP gateway: %w", err)
 	}
 
-	defer s.externalAddr.Set(nil)
 	s.externalAddr.Set(&resp.externalAddr)
+	defer s.externalAddr.Set(nil)
+
+	s.epoch = &epochTracker{epochAt: time.Now(), epochSeconds: resp.epochSeconds, logger: s.logger}
+	defer func() {
+		s.epoch = nil
+	}()
 
 	return reliable.RunGroup(ctx,
 		s.notifyExternalAddrPort,
-		reliable.Bind(resp.epochSeconds, s.pmpListenAddressChange),
+		s.pmpListenAddressChange,
 		s.resolverListenAddressChange,
 		s.runMap,
 	)
@@ -207,9 +213,13 @@ func (s *PMP) runMap(ctx context.Context) error {
 		}
 	}()
 
+	s.externalPort.Set(&resp.externalPort)
 	defer s.externalPort.Set(nil)
 
-	s.externalPort.Set(&resp.externalPort)
+	if err := s.epoch.Update(resp.epochSeconds); err != nil {
+		return fmt.Errorf("mapping create - epoch reset: %w", err)
+	}
+
 	endOfLife := time.Now().Add(time.Duration(resp.lifetimeSeconds) * time.Second)
 
 	for {
@@ -238,6 +248,10 @@ func (s *PMP) runMap(ctx context.Context) error {
 			resp = renewResp
 
 			s.externalPort.Set(&resp.externalPort)
+			if err := s.epoch.Update(resp.epochSeconds); err != nil {
+				return fmt.Errorf("mapping renew - epoch reset: %w", err)
+			}
+
 			endOfLife = time.Now().Add(time.Duration(resp.lifetimeSeconds) * time.Second)
 		case <-ctx.Done():
 			return ctx.Err()
@@ -260,9 +274,7 @@ func (s *PMP) resolverListenAddressChange(ctx context.Context) error {
 	}
 }
 
-var errEpochReset = errors.New("router epoch reset")
-
-func (s *PMP) pmpListenAddressChange(ctx context.Context, epoch uint32) error {
+func (s *PMP) pmpListenAddressChange(ctx context.Context) error {
 	var lc net.ListenConfig
 	conn, err := lc.ListenPacket(ctx, "udp4", pmpBroadcastAddr)
 	if err != nil {
@@ -299,10 +311,9 @@ func (s *PMP) pmpListenAddressChange(ctx context.Context, epoch uint32) error {
 		externalAddr := netip.AddrFrom4([4]byte(resp[8:12]))
 
 		s.externalAddr.Set(&externalAddr)
-		if nextEpoch < epoch {
-			return errEpochReset
+		if err := s.epoch.Update(nextEpoch); err != nil {
+			return fmt.Errorf("pmp listen change - epoch reset: %w", err)
 		}
-		epoch = nextEpoch
 	}
 
 	return ctx.Err()
@@ -461,4 +472,28 @@ func checkResponseHeader(resp []byte, opcode byte) error {
 	default:
 		return errPMPUnknownError
 	}
+}
+
+var errEpochReset = errors.New("router epoch reset")
+
+type epochTracker struct {
+	epochAt      time.Time
+	epochSeconds uint32
+	logger       *slog.Logger
+}
+
+func (t *epochTracker) Update(nextEpochSeconds uint32) error {
+	nextAt := time.Now()
+	elapsedSeconds := uint32(nextAt.Sub(t.epochAt).Seconds())
+	expectedEpochSeconds := elapsedSeconds + t.epochSeconds
+	slogc.Fine(t.logger, "updating epoch", "next-epoch", nextEpochSeconds, "expected-epoch", expectedEpochSeconds)
+
+	sssoe := (expectedEpochSeconds * 7 / 8) - 2
+	if nextEpochSeconds < sssoe {
+		return errEpochReset
+	}
+
+	t.epochAt = nextAt
+	t.epochSeconds = nextEpochSeconds
+	return nil
 }

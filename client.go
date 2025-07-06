@@ -124,14 +124,8 @@ func (c *Client) runClient(ctx context.Context, errCh chan error) {
 	}
 	c.directServer = ds
 
-	nl, err := nat.NewLocal(uint16(c.directAddr.Port), c.logger)
-	if err != nil {
-		errCh <- fmt.Errorf("create nat local: %w", err)
-		return
-	}
-	c.natlocal = nl
-
-	nm, err := nat.NewPMP(nat.PMPConfig{
+	c.natlocal = nat.NewLocal(uint16(c.directAddr.Port), c.logger)
+	c.natpmp = nat.NewPMP(nat.PMPConfig{
 		Transport: transport,
 
 		LocalResolver: nat.LocalIPDialResolver(c.controlAddr.String()),
@@ -139,16 +133,11 @@ func (c *Client) runClient(ctx context.Context, errCh chan error) {
 
 		GatewayResolver: nat.GatewayIPNet24Resolver(),
 	}, c.logger)
-	if err != nil {
-		errCh <- fmt.Errorf("create nat pmp: %w", err)
-		return
-	}
-	c.natpmp = nm
 
 	g, ctx := errgroup.WithContext(ctx)
 
 	g.Go(func() error { return ds.Run(ctx) })
-	g.Go(func() error { return nm.Run(ctx) })
+	g.Go(func() error { return c.natpmp.Run(ctx) })
 	g.Go(func() error { return c.run(ctx, transport, errCh) })
 
 	if err := g.Wait(); err != nil {

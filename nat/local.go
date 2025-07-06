@@ -13,8 +13,8 @@ type Local struct {
 	logger    *slog.Logger
 }
 
-func NewLocal(localPort uint16, logger *slog.Logger) (*Local, error) {
-	return &Local{localPort, logger.With("component", "local")}, nil
+func NewLocal(localPort uint16, logger *slog.Logger) *Local {
+	return &Local{localPort, logger.With("component", "local")}
 }
 
 func (s *Local) Get() []netip.AddrPort {
