@@ -113,9 +113,6 @@ func (s *PMP) Run(ctx context.Context) error {
 	}
 }
 
-var errDiscoverInterface = errors.New("pmp discover interface")
-var errDiscoverGateway = errors.New("pmp discover gateway")
-
 func (s *PMP) runGeneration(ctx context.Context) error {
 	localIP, err := s.waitInterface(ctx)
 	if err != nil {

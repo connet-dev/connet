@@ -2,12 +2,15 @@ package nat
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"net"
 
 	"github.com/connet-dev/connet/netc"
 	"github.com/jackpal/gateway"
 )
+
+var errDiscoverInterface = errors.New("pmp discover interface")
 
 func LocalIPSystemResolver() LocalIPResolver {
 	return func(ctx context.Context) (net.IP, error) {
@@ -32,6 +35,8 @@ func LocalIPDialResolver(addr string) LocalIPResolver {
 		return addr, nil
 	}
 }
+
+var errDiscoverGateway = errors.New("pmp discover gateway")
 
 func GatewayIPSystemResolver() GatewayIPResolver {
 	return func(ctx context.Context, localIP net.IP) (net.IP, error) {
