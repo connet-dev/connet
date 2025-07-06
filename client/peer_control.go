@@ -7,6 +7,7 @@ import (
 	"github.com/connet-dev/connet/model"
 	"github.com/connet-dev/connet/proto"
 	"github.com/connet-dev/connet/proto/pbclient"
+	"github.com/connet-dev/connet/reliable"
 	"github.com/connet-dev/connet/slogc"
 	"github.com/quic-go/quic-go"
 	"golang.org/x/sync/errgroup"
@@ -22,14 +23,14 @@ type peerControl struct {
 }
 
 func (d *peerControl) run(ctx context.Context) error {
-	g, ctx := errgroup.WithContext(ctx)
-
-	g.Go(func() error { return d.runAnnounce(ctx) })
-	if d.opt.AllowRelay() {
-		g.Go(func() error { return d.runRelay(ctx) })
+	if !d.opt.AllowRelay() {
+		return d.runAnnounce(ctx)
 	}
 
-	return g.Wait()
+	return reliable.RunGroup(ctx,
+		d.runAnnounce,
+		d.runRelay,
+	)
 }
 
 func (d *peerControl) runAnnounce(ctx context.Context) error {
