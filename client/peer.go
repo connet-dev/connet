@@ -20,8 +20,8 @@ import (
 	"github.com/connet-dev/connet/proto/pbclient"
 	"github.com/connet-dev/connet/proto/pbconnect"
 	"github.com/connet-dev/connet/proto/pbmodel"
+	"github.com/connet-dev/connet/reliable"
 	"github.com/quic-go/quic-go"
-	"golang.org/x/sync/errgroup"
 )
 
 type peer struct {
@@ -133,13 +133,11 @@ func (p *peer) setPeers(peers []*pbclient.RemotePeer) {
 }
 
 func (p *peer) run(ctx context.Context) error {
-	g, ctx := errgroup.WithContext(ctx)
-
-	g.Go(func() error { return p.runRelays(ctx) })
-	g.Go(func() error { return p.runShareRelays(ctx) })
-	g.Go(func() error { return p.runPeers(ctx) })
-
-	return g.Wait()
+	return reliable.RunGroup(ctx,
+		p.runRelays,
+		p.runShareRelays,
+		p.runPeers,
+	)
 }
 
 func (p *peer) runRelays(ctx context.Context) error {

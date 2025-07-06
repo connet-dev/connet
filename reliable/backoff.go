@@ -1,4 +1,4 @@
-package netc
+package reliable
 
 import (
 	"context"
@@ -52,10 +52,5 @@ func (s *SpinBackoff) Wait(ctx context.Context) error {
 	}
 
 	s.lastBoff = NextBackoffCustom(s.lastBoff, s.MinBackoff, s.MaxBackoff)
-	select {
-	case <-ctx.Done():
-		return ctx.Err()
-	case <-time.After(s.lastBoff):
-		return nil
-	}
+	return Wait(ctx, s.lastBoff)
 }

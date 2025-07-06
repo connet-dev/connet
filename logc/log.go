@@ -7,8 +7,11 @@ import (
 	"fmt"
 	"maps"
 	"slices"
+	"time"
 
+	"github.com/connet-dev/connet/reliable"
 	"github.com/klev-dev/klevdb"
+	"github.com/klev-dev/klevdb/compact"
 )
 
 const (
@@ -37,6 +40,7 @@ type KV[K comparable, V any] interface {
 	Consume(ctx context.Context, offset int64) ([]Message[K, V], int64, error)
 	Snapshot() ([]Message[K, V], int64, error) // TODO this could possible return too much data
 
+	Compact(ctx context.Context) error
 	Close() error
 }
 
@@ -164,6 +168,24 @@ func (l *kv[K, V]) Snapshot() ([]Message[K, V], int64, error) {
 	}), maxOffset, nil
 }
 
+func (l *kv[K, V]) Compact(ctx context.Context) error {
+	if _, _, err := compact.Updates(ctx, l.log.Raw(), time.Now().Add(-6*time.Hour)); err != nil {
+		return err
+	}
+	if _, _, err := compact.Deletes(ctx, l.log.Raw(), time.Now().Add(-12*time.Hour)); err != nil {
+		return err
+	}
+	return l.log.GC(0)
+}
+
 func (l *kv[K, V]) Close() error {
 	return l.log.Close()
+}
+
+func ScheduleCompact[K comparable, V any](l KV[K, V]) reliable.RunFn {
+	return reliable.ScheduleDelayed(5*time.Minute, time.Hour, l.Compact)
+}
+
+func ScheduleCompactAcc[K comparable, V any](l KV[K, V]) reliable.RunFn {
+	return reliable.ScheduleDelayed(1*time.Minute, time.Hour, l.Compact)
 }

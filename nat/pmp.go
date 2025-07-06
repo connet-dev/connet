@@ -11,8 +11,8 @@ import (
 	"os"
 	"time"
 
-	"github.com/connet-dev/connet/netc"
 	"github.com/connet-dev/connet/notify"
+	"github.com/connet-dev/connet/reliable"
 	"github.com/connet-dev/connet/slogc"
 	"github.com/jackpal/gateway"
 	"github.com/quic-go/quic-go"
@@ -50,7 +50,7 @@ func NewPMP(transport *quic.Transport, logger *slog.Logger) (*PMP, error) {
 }
 
 func (s *PMP) Run(ctx context.Context) error {
-	boff := netc.SpinBackoff{MinBackoff: time.Second, MaxBackoff: time.Minute}
+	boff := reliable.SpinBackoff{MinBackoff: time.Second, MaxBackoff: time.Minute}
 	for {
 		err := s.runGeneration(ctx)
 		s.logger.Debug("pmp generation completed", "err", err)

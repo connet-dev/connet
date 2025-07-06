@@ -6,9 +6,10 @@ import (
 	"log/slog"
 
 	"github.com/connet-dev/connet/iterc"
+	"github.com/connet-dev/connet/logc"
 	"github.com/connet-dev/connet/model"
+	"github.com/connet-dev/connet/reliable"
 	"github.com/segmentio/ksuid"
-	"golang.org/x/sync/errgroup"
 )
 
 type Config struct {
@@ -42,21 +43,24 @@ func NewServer(cfg Config) (*Server, error) {
 	return &Server{
 		clients: clients,
 		relays:  relays,
+
+		config: configStore,
 	}, nil
 }
 
 type Server struct {
 	clients *clientServer
 	relays  *relayServer
+
+	config logc.KV[ConfigKey, ConfigValue]
 }
 
 func (s *Server) Run(ctx context.Context) error {
-	g, ctx := errgroup.WithContext(ctx)
-
-	g.Go(func() error { return s.relays.run(ctx) })
-	g.Go(func() error { return s.clients.run(ctx) })
-
-	return g.Wait()
+	return reliable.RunGroup(ctx,
+		s.relays.run,
+		s.clients.run,
+		logc.ScheduleCompact(s.config),
+	)
 }
 
 func (s *Server) Status(ctx context.Context) (Status, error) {

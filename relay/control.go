@@ -21,6 +21,7 @@ import (
 	"github.com/connet-dev/connet/proto/pberror"
 	"github.com/connet-dev/connet/proto/pbrelay"
 	"github.com/connet-dev/connet/quicc"
+	"github.com/connet-dev/connet/reliable"
 	"github.com/connet-dev/connet/slogc"
 	"github.com/connet-dev/connet/statusc"
 	"github.com/klev-dev/klevdb"
@@ -174,6 +175,15 @@ func (s *controlClient) authenticate(serverName string, certs []*x509.Certificat
 type TransportsFn func(ctx context.Context) ([]*quic.Transport, error)
 
 func (s *controlClient) run(ctx context.Context, tfn TransportsFn) error {
+	return reliable.RunGroup(ctx,
+		reliable.Bind(tfn, s.runControl),
+		logc.ScheduleCompact(s.config),
+		logc.ScheduleCompact(s.clients),
+		logc.ScheduleCompact(s.servers),
+	)
+}
+
+func (s *controlClient) runControl(ctx context.Context, tfn TransportsFn) error {
 	defer s.connStatus.Store(statusc.Disconnected)
 
 	s.logger.Info("connecting to control server", "addr", s.controlAddr, "hostports", s.hostports)
@@ -182,7 +192,7 @@ func (s *controlClient) run(ctx context.Context, tfn TransportsFn) error {
 		return err
 	}
 
-	var boff netc.SpinBackoff
+	var boff reliable.SpinBackoff
 	for {
 		if err := s.runConnection(ctx, conn); err != nil {
 			s.logger.Error("session ended", "err", err)
@@ -274,7 +284,7 @@ func (s *controlClient) connect(ctx context.Context, tfn TransportsFn) (*quic.Co
 }
 
 func (s *controlClient) reconnect(ctx context.Context, tfn TransportsFn) (*quic.Conn, error) {
-	d := netc.MinBackoff
+	d := reliable.MinBackoff
 	t := time.NewTimer(d)
 	defer t.Stop()
 	for {
@@ -291,7 +301,7 @@ func (s *controlClient) reconnect(ctx context.Context, tfn TransportsFn) (*quic.
 			return conn, nil
 		}
 
-		d = netc.NextBackoff(d)
+		d = reliable.NextBackoff(d)
 		t.Reset(d)
 	}
 }
@@ -306,14 +316,11 @@ func (s *controlClient) runConnection(ctx context.Context, conn *quic.Conn) erro
 	s.connStatus.Store(statusc.Connected)
 	defer s.connStatus.Store(statusc.Reconnecting)
 
-	g, ctx := errgroup.WithContext(ctx)
-
-	g.Go(func() error { return s.runClientsStream(ctx, conn) })
-	g.Go(func() error { return s.runClientsLog(ctx) })
-	g.Go(func() error { return s.runServersLog(ctx) })
-	g.Go(func() error { return s.runServersStream(ctx, conn) })
-
-	return g.Wait()
+	return reliable.RunGroup(ctx,
+		reliable.Bind(conn, s.runClientsStream),
+		s.runClientsLog,
+		s.runServersLog,
+		reliable.Bind(conn, s.runServersStream))
 }
 
 func (s *controlClient) runClientsStream(ctx context.Context, conn *quic.Conn) error {

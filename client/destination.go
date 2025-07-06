@@ -16,6 +16,7 @@ import (
 	"github.com/connet-dev/connet/proto/pbconnect"
 	"github.com/connet-dev/connet/proto/pberror"
 	"github.com/connet-dev/connet/quicc"
+	"github.com/connet-dev/connet/reliable"
 	"github.com/quic-go/quic-go"
 	"golang.org/x/sync/errgroup"
 )
@@ -94,12 +95,10 @@ func (d *Destination) Config() DestinationConfig {
 func (d *Destination) RunPeer(ctx context.Context) error {
 	defer close(d.acceptCh)
 
-	g, ctx := errgroup.WithContext(ctx)
-
-	g.Go(func() error { return d.peer.run(ctx) })
-	g.Go(func() error { return d.runActive(ctx) })
-
-	return g.Wait()
+	return reliable.RunGroup(ctx,
+		d.peer.run,
+		d.runActive,
+	)
 }
 
 func (d *Destination) RunAnnounce(ctx context.Context, conn *quic.Conn, directAddrs *notify.V[AdvertiseAddrs], notifyResponse func(error)) error {

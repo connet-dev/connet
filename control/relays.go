@@ -19,10 +19,10 @@ import (
 	"github.com/connet-dev/connet/proto/pberror"
 	"github.com/connet-dev/connet/proto/pbrelay"
 	"github.com/connet-dev/connet/quicc"
+	"github.com/connet-dev/connet/reliable"
 	"github.com/connet-dev/connet/slogc"
 	"github.com/quic-go/quic-go"
 	"github.com/segmentio/ksuid"
-	"golang.org/x/sync/errgroup"
 )
 
 type RelayAuthenticateRequest struct {
@@ -225,12 +225,17 @@ func (s *relayServer) listen(ctx context.Context, endpoint model.Endpoint,
 }
 
 func (s *relayServer) run(ctx context.Context) error {
-	g, ctx := errgroup.WithContext(ctx)
+	g := reliable.NewGroup(ctx)
 
 	for _, ingress := range s.ingresses {
-		g.Go(func() error { return s.runListener(ctx, ingress) })
+		g.Go(reliable.Bind(ingress, s.runListener))
 	}
-	g.Go(func() error { return s.runEndpointsCache(ctx) })
+	g.Go(s.runEndpointsCache)
+
+	g.Go(logc.ScheduleCompact(s.conns))
+	g.Go(logc.ScheduleCompact(s.clients))
+	g.Go(logc.ScheduleCompact(s.servers))
+	g.Go(logc.ScheduleCompact(s.serverOffsets))
 
 	return g.Wait()
 }
@@ -429,13 +434,12 @@ func (c *relayConn) runErr(ctx context.Context) error {
 		}
 	}()
 
-	g, ctx := errgroup.WithContext(ctx)
-
-	g.Go(func() error { return c.runRelayClients(ctx) })
-	g.Go(func() error { return c.runRelayEndpoints(ctx) })
-	g.Go(func() error { return c.runRelayServers(ctx) })
-
-	return g.Wait()
+	return reliable.RunGroup(ctx,
+		c.runRelayClients,
+		c.runRelayEndpoints,
+		c.runRelayServers,
+		logc.ScheduleCompactAcc(c.endpoints),
+	)
 }
 
 func (c *relayConn) authenticate(ctx context.Context) (*relayConnAuth, error) {
