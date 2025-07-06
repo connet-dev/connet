@@ -246,6 +246,7 @@ var errLocalAddressChanged = errors.New("local address changed")
 func (s *PMP) resolverListenAddressChange(ctx context.Context) error {
 	for {
 		nextIP, err := s.LocalResolver(ctx)
+		slogc.Fine(s.logger, "local IP resolve", "ip", nextIP, "err", err)
 		if err == nil && !s.localIP.Equal(nextIP) {
 			return errLocalAddressChanged
 		}
