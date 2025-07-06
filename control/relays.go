@@ -11,7 +11,6 @@ import (
 	"maps"
 	"net"
 	"sync"
-	"time"
 
 	"github.com/connet-dev/connet/logc"
 	"github.com/connet-dev/connet/model"
@@ -233,10 +232,10 @@ func (s *relayServer) run(ctx context.Context) error {
 	}
 	g.Go(s.runEndpointsCache)
 
-	g.Go(reliable.ScheduleDelayed(5*time.Minute, time.Hour, s.conns.Compact))
-	g.Go(reliable.ScheduleDelayed(5*time.Minute, time.Hour, s.clients.Compact))
-	g.Go(reliable.ScheduleDelayed(5*time.Minute, time.Hour, s.servers.Compact))
-	g.Go(reliable.ScheduleDelayed(5*time.Minute, time.Hour, s.serverOffsets.Compact))
+	g.Go(logc.ScheduleCompact(s.conns))
+	g.Go(logc.ScheduleCompact(s.clients))
+	g.Go(logc.ScheduleCompact(s.servers))
+	g.Go(logc.ScheduleCompact(s.serverOffsets))
 
 	return g.Wait()
 }
@@ -439,7 +438,7 @@ func (c *relayConn) runErr(ctx context.Context) error {
 		c.runRelayClients,
 		c.runRelayEndpoints,
 		c.runRelayServers,
-		reliable.ScheduleDelayed(time.Minute, time.Hour, c.endpoints.Compact),
+		logc.ScheduleCompactAcc(c.endpoints),
 	)
 }
 

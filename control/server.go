@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
-	"time"
 
 	"github.com/connet-dev/connet/iterc"
 	"github.com/connet-dev/connet/logc"
@@ -60,7 +59,7 @@ func (s *Server) Run(ctx context.Context) error {
 	return reliable.RunGroup(ctx,
 		s.relays.run,
 		s.clients.run,
-		reliable.ScheduleDelayed(5*time.Minute, time.Hour, s.config.Compact),
+		logc.ScheduleCompact(s.config),
 	)
 }
 

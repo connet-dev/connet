@@ -177,9 +177,9 @@ type TransportsFn func(ctx context.Context) ([]*quic.Transport, error)
 func (s *controlClient) run(ctx context.Context, tfn TransportsFn) error {
 	return reliable.RunGroup(ctx,
 		reliable.Bind(tfn, s.runControl),
-		reliable.ScheduleDelayed(5*time.Minute, time.Hour, s.config.Compact),
-		reliable.ScheduleDelayed(5*time.Minute, time.Hour, s.clients.Compact),
-		reliable.ScheduleDelayed(5*time.Minute, time.Hour, s.servers.Compact),
+		logc.ScheduleCompact(s.config),
+		logc.ScheduleCompact(s.clients),
+		logc.ScheduleCompact(s.servers),
 	)
 }
 

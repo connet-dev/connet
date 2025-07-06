@@ -9,6 +9,7 @@ import (
 	"slices"
 	"time"
 
+	"github.com/connet-dev/connet/reliable"
 	"github.com/klev-dev/klevdb"
 	"github.com/klev-dev/klevdb/compact"
 )
@@ -179,4 +180,12 @@ func (l *kv[K, V]) Compact(ctx context.Context) error {
 
 func (l *kv[K, V]) Close() error {
 	return l.log.Close()
+}
+
+func ScheduleCompact[K comparable, V any](l KV[K, V]) reliable.RunFn {
+	return reliable.ScheduleDelayed(5*time.Minute, time.Hour, l.Compact)
+}
+
+func ScheduleCompactAcc[K comparable, V any](l KV[K, V]) reliable.RunFn {
+	return reliable.ScheduleDelayed(1*time.Minute, time.Hour, l.Compact)
 }

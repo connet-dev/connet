@@ -245,8 +245,8 @@ func (s *clientServer) run(ctx context.Context) error {
 	g.Go(s.runPeerCache)
 	g.Go(s.runCleaner)
 
-	g.Go(reliable.ScheduleDelayed(5*time.Minute, time.Hour, s.conns.Compact))
-	g.Go(reliable.ScheduleDelayed(5*time.Minute, time.Hour, s.peers.Compact))
+	g.Go(logc.ScheduleCompact(s.conns))
+	g.Go(logc.ScheduleCompact(s.peers))
 
 	return g.Wait()
 }
