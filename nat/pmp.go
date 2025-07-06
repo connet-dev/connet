@@ -16,7 +16,6 @@ import (
 	"github.com/connet-dev/connet/slogc"
 	"github.com/jackpal/gateway"
 	"github.com/quic-go/quic-go"
-	"golang.org/x/sync/errgroup"
 )
 
 type LocalIPResolver func(context.Context) (net.IP, error)
@@ -151,17 +150,12 @@ func (s *PMP) runGeneration(ctx context.Context) error {
 	defer s.externalAddr.Set(nil)
 	s.externalAddr.Set(&resp.externalAddr)
 
-	g, ctx := errgroup.WithContext(ctx)
-	g.Go(func() error {
-		return s.notifyExternalAddrPort(ctx)
-	})
-	g.Go(func() error {
-		return s.listenAddressChanges(ctx, resp.epochSeconds)
-	})
-	g.Go(func() error {
-		return s.runMap(ctx)
-	})
-	return g.Wait()
+	return reliable.RunGroup(ctx,
+		s.notifyExternalAddrPort,
+		reliable.Bind(resp.epochSeconds, s.pmpListenAddressChange),
+		s.resolverListenAddressChange,
+		s.runMap,
+	)
 }
 
 func (s *PMP) waitInterface(ctx context.Context) (net.IP, error) {
@@ -250,9 +244,23 @@ func (s *PMP) runMap(ctx context.Context) error {
 	}
 }
 
+var errLocalAddressChanged = errors.New("local address changed")
+
+func (s *PMP) resolverListenAddressChange(ctx context.Context) error {
+	for {
+		nextIP, err := s.LocalResolver(ctx)
+		if err == nil && !s.localIP.Equal(nextIP) {
+			return errLocalAddressChanged
+		}
+		if err := reliable.Wait(ctx, 10*time.Second); err != nil {
+			return err
+		}
+	}
+}
+
 var errEpochReset = errors.New("router epoch reset")
 
-func (s *PMP) listenAddressChanges(ctx context.Context, epoch uint32) error {
+func (s *PMP) pmpListenAddressChange(ctx context.Context, epoch uint32) error {
 	var lc net.ListenConfig
 	conn, err := lc.ListenPacket(ctx, "udp4", pmpBroadcastAddr)
 	if err != nil {
