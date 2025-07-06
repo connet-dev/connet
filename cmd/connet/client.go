@@ -83,7 +83,7 @@ func clientCmd() *cobra.Command {
 
 	cmd.Flags().StringVar(&flagsConfig.Client.DirectAddr, "direct-addr", "", "direct server address to listen")
 	cmd.Flags().StringVar(&flagsConfig.Client.StatusAddr, "status-addr", "", "status server address to listen")
-	cmd.Flags().StringVar(&flagsConfig.Client.NatPMP, "nat-pmp", "", "nat-pmp behavior ('disabled', 'local', 'dial')")
+	cmd.Flags().StringVar(&flagsConfig.Client.NatPMP, "nat-pmp", "", "nat-pmp behavior ('disabled', 'system', 'dial')")
 
 	var dstName string
 	var dstCfg DestinationConfig
