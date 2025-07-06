@@ -131,7 +131,14 @@ func (c *Client) runClient(ctx context.Context, errCh chan error) {
 	}
 	c.natlocal = nl
 
-	nm, err := nat.NewPMP(transport, uint16(c.directAddr.Port), c.logger)
+	nm, err := nat.NewPMP(nat.PMPConfig{
+		Transport: transport,
+
+		LocalResolver: nat.LocalIPDialResolver(c.controlAddr.String()),
+		LocalPort:     uint16(c.directAddr.Port),
+
+		GatewayResolver: nat.GatewayIPNet24Resolver(),
+	}, c.logger)
 	if err != nil {
 		errCh <- fmt.Errorf("create nat pmp: %w", err)
 		return

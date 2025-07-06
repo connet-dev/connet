@@ -19,17 +19,29 @@ import (
 	"golang.org/x/sync/errgroup"
 )
 
+type LocalIPResolver func(context.Context) (net.IP, error)
+type GatewayIPResolver func(context.Context, net.IP) (net.IP, error)
+
+type PMPConfig struct {
+	Disabled  bool
+	Transport *quic.Transport
+
+	LocalResolver LocalIPResolver
+	LocalPort     uint16
+
+	GatewayResolver GatewayIPResolver
+}
+
 const pmpBroadcastAddr = "224.0.0.1:5350"
 const pmpCommandPort = 5351
 const pmpLifetime = 10 * 60 // 10 minutes
 
 type PMP struct {
-	transport *quic.Transport
+	PMPConfig
 
 	gatewayIP     net.IP
 	gatewayAddr   *net.UDPAddr
 	localIP       net.IP
-	localPort     uint16
 	localAddrPort netip.AddrPort
 
 	externalAddr     *notify.V[*netip.Addr]
@@ -39,11 +51,9 @@ type PMP struct {
 	logger *slog.Logger
 }
 
-func NewPMP(transport *quic.Transport, localPort uint16, logger *slog.Logger) (*PMP, error) {
+func NewPMP(cfg PMPConfig, logger *slog.Logger) (*PMP, error) {
 	return &PMP{
-		transport: transport,
-
-		localPort: localPort,
+		PMPConfig: cfg,
 
 		externalAddr:     notify.NewEmpty[*netip.Addr](),
 		externalPort:     notify.NewEmpty[*uint16](),
@@ -54,6 +64,10 @@ func NewPMP(transport *quic.Transport, localPort uint16, logger *slog.Logger) (*
 }
 
 func (s *PMP) Get() []netip.AddrPort {
+	if s.Disabled {
+		return nil
+	}
+
 	addr, err := s.externalAddrPort.Peek()
 	if err != nil || addr == nil {
 		return nil
@@ -62,6 +76,10 @@ func (s *PMP) Get() []netip.AddrPort {
 }
 
 func (s *PMP) Listen(ctx context.Context, fn func([]netip.AddrPort) error) error {
+	if s.Disabled {
+		return nil
+	}
+
 	return s.externalAddrPort.Listen(ctx, func(t *netip.AddrPort) error {
 		if t == nil {
 			return fn(nil)
@@ -71,6 +89,10 @@ func (s *PMP) Listen(ctx context.Context, fn func([]netip.AddrPort) error) error
 }
 
 func (s *PMP) Run(ctx context.Context) error {
+	if s.Disabled {
+		return nil
+	}
+
 	boff := reliable.SpinBackoff{MinBackoff: time.Second, MaxBackoff: time.Minute}
 	for {
 		err := s.runGeneration(ctx)
@@ -101,9 +123,9 @@ func (s *PMP) runGeneration(ctx context.Context) error {
 		return err
 	}
 	s.localIP = localIP
-	s.localAddrPort = netip.AddrPortFrom(netip.AddrFrom4([4]byte(localIP.To4())), s.localPort)
+	s.localAddrPort = netip.AddrPortFrom(netip.AddrFrom4([4]byte(localIP.To4())), s.LocalPort)
 
-	gatewayIP, err := gateway.DiscoverGateway()
+	gatewayIP, err := s.GatewayResolver(ctx, localIP)
 	if err != nil {
 		return fmt.Errorf("%w: %w", errDiscoverGateway, err)
 	}
@@ -144,9 +166,9 @@ func (s *PMP) runGeneration(ctx context.Context) error {
 
 func (s *PMP) waitInterface(ctx context.Context) (net.IP, error) {
 	for {
-		localIP, err := gateway.DiscoverInterface()
+		localIP, err := s.LocalResolver(ctx)
 		if err != nil {
-			return net.IPv4zero, fmt.Errorf("%w: %w", errDiscoverInterface, err)
+			return net.IPv4zero, err
 		}
 		if localIP.IsPrivate() {
 			return localIP, nil
@@ -171,7 +193,7 @@ func (s *PMP) notifyExternalAddrPort(ctx context.Context) error {
 
 func (s *PMP) runMap(ctx context.Context) error {
 	resp, err := retryCall(ctx, func(ctx context.Context) (*pmpMapResponse, error) {
-		slogc.Fine(s.logger, "mapping create start", "gateway", s.gatewayAddr, "local-port", s.localPort)
+		slogc.Fine(s.logger, "mapping create start", "gateway", s.gatewayAddr, "local-port", s.LocalPort)
 		resp, err := s.pmpMap(ctx, 0, pmpLifetime) // TODO change lifetime
 		if err != nil {
 			slogc.Fine(s.logger, "mapping create failed", "gateway", s.gatewayAddr, "err", err)
@@ -205,7 +227,7 @@ func (s *PMP) runMap(ctx context.Context) error {
 		select {
 		case <-time.After(nextRenew):
 			renewResp, err := retryCall(ctx, func(ctx context.Context) (*pmpMapResponse, error) {
-				slogc.Fine(s.logger, "mapping renew start", "gateway", s.gatewayAddr, "local-port", s.localPort)
+				slogc.Fine(s.logger, "mapping renew start", "gateway", s.gatewayAddr, "local-port", s.LocalPort)
 				resp, err := s.pmpMap(ctx, resp.externalPort, pmpLifetime)
 				if err != nil {
 					slogc.Fine(s.logger, "mapping renew failed", "gateway", s.gatewayAddr, "err", err)
@@ -289,7 +311,7 @@ func (s *PMP) pmpDiscover(ctx context.Context) (*pmpDiscoverResponse, error) {
 	if err := s.writeRequest(request); err != nil {
 		return nil, fmt.Errorf("discovery write request: %w", err)
 	}
-	resp, err := s.readResponse(ctx, 12, 0, s.transport.ReadNonQUICPacket)
+	resp, err := s.readResponse(ctx, 12, 0, s.Transport.ReadNonQUICPacket)
 	if err != nil {
 		return nil, fmt.Errorf("discovery read response: %w", err)
 	}
@@ -310,21 +332,21 @@ func (s *PMP) pmpMap(ctx context.Context, desiredExternalPort uint16, mappingLif
 	request[0] = 0 // version field
 	request[1] = 1 // opcode, map UDP
 	// request[2] + request[3] are reserved, 0
-	binary.BigEndian.PutUint16(request[4:], s.localPort)
+	binary.BigEndian.PutUint16(request[4:], s.LocalPort)
 	binary.BigEndian.PutUint16(request[6:], uint16(desiredExternalPort))
 	binary.BigEndian.PutUint32(request[8:], uint32(mappingLifetimeSeconds))
 
 	if err := s.writeRequest(request); err != nil {
 		return nil, fmt.Errorf("map write request: %w", err)
 	}
-	resp, err := s.readResponse(ctx, 16, 1, s.transport.ReadNonQUICPacket)
+	resp, err := s.readResponse(ctx, 16, 1, s.Transport.ReadNonQUICPacket)
 	if err != nil {
 		return nil, fmt.Errorf("map read response: %w", err)
 	}
 
 	epoch := binary.BigEndian.Uint32(resp[4:])
 	respInternalPort := binary.BigEndian.Uint16(resp[8:])
-	if respInternalPort != s.localPort {
+	if respInternalPort != s.LocalPort {
 		return nil, fmt.Errorf("map internal port mismatch")
 	}
 	respMappedPort := binary.BigEndian.Uint16(resp[10:])
@@ -334,7 +356,7 @@ func (s *PMP) pmpMap(ctx context.Context, desiredExternalPort uint16, mappingLif
 }
 
 func (s *PMP) writeRequest(request []byte) error {
-	n, err := s.transport.WriteTo(request, s.gatewayAddr)
+	n, err := s.Transport.WriteTo(request, s.gatewayAddr)
 	if err != nil {
 		return fmt.Errorf("cannot write packet: %w", err)
 	} else if n < len(request) {
