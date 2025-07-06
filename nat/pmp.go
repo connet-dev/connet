@@ -200,7 +200,11 @@ func (s *PMP) runMap(ctx context.Context) error {
 	}
 	defer func() {
 		slogc.Fine(s.logger, "mapping delete", "external-port", resp.externalPort)
-		if _, err := s.pmpMap(context.Background(), 0, 0); err != nil {
+
+		ctx, cancel := context.WithTimeout(context.Background(), 100*time.Millisecond)
+		defer cancel()
+
+		if _, err := s.pmpMap(ctx, 0, 0); err != nil {
 			slogc.Fine(s.logger, "mapping delete failed", "err", err)
 		}
 	}()
