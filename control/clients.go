@@ -240,13 +240,13 @@ func (s *clientServer) run(ctx context.Context) error {
 	g := reliable.NewGroup(ctx)
 
 	for _, ingress := range s.ingresses {
-		reliable.GroupGo1(g, ingress, s.runListener)
+		g.Go(reliable.Bind(ingress, s.runListener))
 	}
 	g.Go(s.runPeerCache)
 	g.Go(s.runCleaner)
 
-	g.ScheduledDelayed(5*time.Minute, time.Hour, s.conns.Compact)
-	g.ScheduledDelayed(5*time.Minute, time.Hour, s.peers.Compact)
+	g.Go(reliable.ScheduleDelayed(5*time.Minute, time.Hour, s.conns.Compact))
+	g.Go(reliable.ScheduleDelayed(5*time.Minute, time.Hour, s.peers.Compact))
 
 	return g.Wait()
 }

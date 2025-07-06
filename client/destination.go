@@ -95,7 +95,10 @@ func (d *Destination) Config() DestinationConfig {
 func (d *Destination) RunPeer(ctx context.Context) error {
 	defer close(d.acceptCh)
 
-	return reliable.RunGroup(ctx, d.peer.run, d.runActive)
+	return reliable.RunGroup(ctx,
+		d.peer.run,
+		d.runActive,
+	)
 }
 
 func (d *Destination) RunAnnounce(ctx context.Context, conn *quic.Conn, directAddrs []netip.AddrPort, notifyResponse func(error)) error {

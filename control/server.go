@@ -57,11 +57,11 @@ type Server struct {
 }
 
 func (s *Server) Run(ctx context.Context) error {
-	return reliable.NewGroup(ctx).
-		Go(s.relays.run).
-		Go(s.clients.run).
-		ScheduledDelayed(5*time.Minute, time.Hour, s.config.Compact).
-		Wait()
+	return reliable.RunGroup(ctx,
+		s.relays.run,
+		s.clients.run,
+		reliable.ScheduleDelayed(5*time.Minute, time.Hour, s.config.Compact),
+	)
 }
 
 func (s *Server) Status(ctx context.Context) (Status, error) {

@@ -175,15 +175,12 @@ func (s *controlClient) authenticate(serverName string, certs []*x509.Certificat
 type TransportsFn func(ctx context.Context) ([]*quic.Transport, error)
 
 func (s *controlClient) run(ctx context.Context, tfn TransportsFn) error {
-	g := reliable.NewGroup(ctx)
-
-	reliable.GroupGo1(g, tfn, s.runControl)
-
-	g.ScheduledDelayed(5*time.Minute, time.Hour, s.config.Compact)
-	g.ScheduledDelayed(5*time.Minute, time.Hour, s.clients.Compact)
-	g.ScheduledDelayed(5*time.Minute, time.Hour, s.servers.Compact)
-
-	return g.Wait()
+	return reliable.RunGroup(ctx,
+		reliable.Bind(tfn, s.runControl),
+		reliable.ScheduleDelayed(5*time.Minute, time.Hour, s.config.Compact),
+		reliable.ScheduleDelayed(5*time.Minute, time.Hour, s.clients.Compact),
+		reliable.ScheduleDelayed(5*time.Minute, time.Hour, s.servers.Compact),
+	)
 }
 
 func (s *controlClient) runControl(ctx context.Context, tfn TransportsFn) error {
@@ -319,14 +316,11 @@ func (s *controlClient) runConnection(ctx context.Context, conn *quic.Conn) erro
 	s.connStatus.Store(statusc.Connected)
 	defer s.connStatus.Store(statusc.Reconnecting)
 
-	g := reliable.NewGroup(ctx)
-
-	reliable.GroupGo1(g, conn, s.runClientsStream)
-	g.Go(s.runClientsLog)
-	g.Go(s.runServersLog)
-	reliable.GroupGo1(g, conn, s.runServersStream)
-
-	return g.Wait()
+	return reliable.RunGroup(ctx,
+		reliable.Bind(conn, s.runClientsStream),
+		s.runClientsLog,
+		s.runServersLog,
+		reliable.Bind(conn, s.runServersStream))
 }
 
 func (s *controlClient) runClientsStream(ctx context.Context, conn *quic.Conn) error {
