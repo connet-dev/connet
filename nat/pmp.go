@@ -129,7 +129,7 @@ func (s *PMP) runGeneration(ctx context.Context) error {
 	s.gatewayIP = gatewayIP
 	s.gatewayAddr = &net.UDPAddr{IP: gatewayIP, Port: pmpCommandPort}
 
-	slogc.Fine(s.logger, "generation start", "gateway", s.gatewayAddr, "local", s.localAddrPort)
+	s.logger.Debug("generation start", "gateway", s.gatewayAddr, "local", s.localAddrPort)
 
 	resp, err := retryCall(ctx, func(ctx context.Context) (*pmpDiscoverResponse, error) {
 		slogc.Fine(s.logger, "discover external address start", "gateway", s.gatewayAddr)

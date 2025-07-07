@@ -372,6 +372,9 @@ func (c *Client) runSession(ctx context.Context, sess *session) error {
 		}
 	}()
 
+	ctx, cancel := context.WithCancel(ctx)
+	defer cancel()
+
 	go func() {
 		err := c.natlocal.Listen(ctx, func(ap []netip.AddrPort) error {
 			c.logger.Debug("updating nat local", "addrs", ap)

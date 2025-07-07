@@ -562,15 +562,18 @@ by adding account management and it is one of the easiest way to start.
  - [x] remove expired protocols
  - [x] refactor protocol errors
  - [x] from forward to endpoint
+ - [x] compact control/relay stores
  - [x] Support for NAT-PMP (rfc 6886)
- - [ ] UPnP and other methods for hole-punching
- - [ ] api to control client/control/relay
+
+### v0.10.0
  - [ ] preshared clients - controless p2p
  - [ ] destination load balance
+ - [ ] UPnP/IDG and PCP for hole-punching
+ - [ ] api to control client/control/relay
+ - [ ] package refactor/rename
 
 ## Future
  - [ ] UDP support
- - [ ] package refactor/rename
  - [ ] notarize mac app
  - [ ] systemd dynamic user in nixos
  - [ ] docs section for building the project
