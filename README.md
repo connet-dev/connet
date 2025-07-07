@@ -139,6 +139,7 @@ direct-addr = ":19192" # at what address this client listens for direct connecti
 direct-stateless-reset-key = "" # the quic stateless reset key as a literal 32 byte value in bas58 format
 direct-stateless-reset-key-file = "/path/to/reset/key" # the quic stateless reset key read from a file
 status-addr = "127.0.0.1:19182" # at what address this client listens for status connections, disabled unless set
+nat-pmp = "system" # support for NAT-PMP, defaults to `system`
 
 relay-encryption = ["none"] # require encryption when using relay for all destination/sources, defaults to "none"
 
@@ -276,6 +277,14 @@ hostports = ["localhost:19191"] # the public host:port (e.g. domain, ip address)
 allow-cidrs = [] # set of networks in CIDR format, to allow client connetctions from
 deny-cidrs = [] # set of networks in CIDR format, to deny client connetctions from
 ```
+
+### NAT Management
+
+`connet` can detect and control a nat device, to provide additional routes to connect clients. Currently it implements:
+ - NAT-PMP (rfc6886), controlled by `nat-pmp` option. By default, the option is configured as `system`
+(e.g. using the local system to detect local ip and router). You can use `disabled` to completely disable nat-pmp. On
+some systems (for example android), access to ip/router information is restricted, in which case you can try the `dial` option
+which will try to dynamically determine this information by dialing in the control server.
 
 ### IP Restrictions
 
@@ -553,6 +562,7 @@ by adding account management and it is one of the easiest way to start.
  - [x] remove expired protocols
  - [x] refactor protocol errors
  - [x] from forward to endpoint
+ - [x] Support for NAT-PMP (rfc 6886)
  - [ ] UPnP and other methods for hole-punching
  - [ ] api to control client/control/relay
  - [ ] preshared clients - controless p2p
