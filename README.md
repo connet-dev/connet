@@ -565,12 +565,16 @@ by adding account management and it is one of the easiest way to start.
  - [x] compact control/relay stores
  - [x] Support for NAT-PMP (rfc 6886)
 
+### v0.9.1
+ - [x] compact mulitple segments in stores
+
 ### v0.10.0
  - [ ] preshared clients - controless p2p
  - [ ] destination load balance
+ - [ ] package refactor/rename
+ - [ ] embed version when building
  - [ ] UPnP/IDG and PCP for hole-punching
  - [ ] api to control client/control/relay
- - [ ] package refactor/rename
 
 ## Future
  - [ ] UDP support

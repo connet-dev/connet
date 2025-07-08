@@ -6,12 +6,6 @@ import (
 	"time"
 )
 
-func NextDeline(d time.Duration) time.Duration {
-	idur := int64(d) / 4
-	change := rand.Int64N(idur * 2)
-	return time.Duration(3*idur + change)
-}
-
 func Wait(ctx context.Context, d time.Duration) error {
 	select {
 	case <-time.After(d):
@@ -19,6 +13,16 @@ func Wait(ctx context.Context, d time.Duration) error {
 	case <-ctx.Done():
 		return ctx.Err()
 	}
+}
+
+func NextDeline(d time.Duration) time.Duration {
+	idur := int64(d) / 4
+	change := rand.Int64N(idur * 2)
+	return time.Duration(3*idur + change)
+}
+
+func WaitDeline(ctx context.Context, d time.Duration) error {
+	return Wait(ctx, NextDeline(d))
 }
 
 func rerunDeline(ctx context.Context, d time.Duration, fn func(ctx context.Context) error) error {

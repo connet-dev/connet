@@ -5,7 +5,7 @@ go 1.24.4
 require (
 	github.com/gorilla/websocket v1.5.3
 	github.com/jackpal/gateway v1.1.1
-	github.com/klev-dev/klevdb v0.8.0
+	github.com/klev-dev/klevdb v0.9.0
 	github.com/mr-tron/base58 v1.2.0
 	github.com/pelletier/go-toml/v2 v2.2.4
 	github.com/pires/go-proxyproto v0.8.1

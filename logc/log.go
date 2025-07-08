@@ -169,10 +169,12 @@ func (l *kv[K, V]) Snapshot() ([]Message[K, V], int64, error) {
 }
 
 func (l *kv[K, V]) Compact(ctx context.Context) error {
-	if _, _, err := compact.Updates(ctx, l.log.Raw(), time.Now().Add(-6*time.Hour)); err != nil {
+	updatesBefore := time.Now().Add(-6 * time.Hour)
+	if _, _, err := compact.UpdatesMulti(ctx, l.log.Raw(), updatesBefore, compactBackoff); err != nil {
 		return err
 	}
-	if _, _, err := compact.Deletes(ctx, l.log.Raw(), time.Now().Add(-12*time.Hour)); err != nil {
+	deletesBefore := time.Now().Add(-12 * time.Hour)
+	if _, _, err := compact.DeletesMulti(ctx, l.log.Raw(), deletesBefore, compactBackoff); err != nil {
 		return err
 	}
 	return l.log.GC(0)
@@ -180,6 +182,10 @@ func (l *kv[K, V]) Compact(ctx context.Context) error {
 
 func (l *kv[K, V]) Close() error {
 	return l.log.Close()
+}
+
+func compactBackoff(ctx context.Context) error {
+	return reliable.WaitDeline(ctx, time.Second)
 }
 
 func ScheduleCompact[K comparable, V any](l KV[K, V]) reliable.RunFn {

@@ -11,8 +11,8 @@ github.com/inconshreveable/mousetrap v1.1.0 h1:wN+x4NVGpMsO7ErUn/mUI3vEoE6Jt13X2
 github.com/inconshreveable/mousetrap v1.1.0/go.mod h1:vpF70FUmC8bwa3OWnCshd2FqLfsEA9PFc4w1p2J65bw=
 github.com/jackpal/gateway v1.1.1 h1:UXXXkJGIHFsStms9ZBgGpoaFEJP7oJtFn5vplIT68E8=
 github.com/jackpal/gateway v1.1.1/go.mod h1:Tl1vZVtUaXx5j6P5HFmv45alhEi4yHHLfT4PRbB7eyw=
-github.com/klev-dev/klevdb v0.8.0 h1:eYFjofts4Mjc6otYUJEG/QBeTp5hqohquYK2gd5ivi0=
-github.com/klev-dev/klevdb v0.8.0/go.mod h1:Uv5at8UhqBosgp3LjVsN4ny6yClr/QGuK8YdtsgxAgM=
+github.com/klev-dev/klevdb v0.9.0 h1:gbEwfsCJwJundeBk3b8X7P55f1jVPOJZQGAJdNsRQTo=
+github.com/klev-dev/klevdb v0.9.0/go.mod h1:eUV3mCllvy7HCYEIY8jxqQiMQh6Ug5Het6nrA2zGJM4=
 github.com/kr/pretty v0.3.1 h1:flRD4NNwYAUpkphVc1HcthR4KEIFJ65n8Mw5qdRn3LE=
 github.com/kr/pretty v0.3.1/go.mod h1:hoEshYVHaxMs3cyo3Yncou5ZscifuDolrwPKZanG3xk=
 github.com/kr/text v0.2.0 h1:5Nx0Ya0ZqY2ygV366QzturHI13Jq95ApcVaJBhpS+AY=
