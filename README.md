@@ -141,11 +141,11 @@ direct-stateless-reset-key-file = "/path/to/reset/key" # the quic stateless rese
 status-addr = "127.0.0.1:19182" # at what address this client listens for status connections, disabled unless set
 nat-pmp = "system" # support for NAT-PMP, defaults to `system`
 
-relay-encryption = ["none"] # require encryption when using relay for all destination/sources, defaults to "none"
+relay-encryptions = ["none"] # require encryption when using relay for all destination/sources, defaults to "none"
 
 [client.destinations.serviceX]
 route = "any" # what kind of routes to use, `any` will use both `direct` and `relay`
-relay-encryption = ["tls", "dhxcp"] # require `tls` or `dhxcp` encryption when using relay for this destination
+relay-encryptions = ["tls", "dhxcp"] # require `tls` or `dhxcp` encryption when using relay for this destination
 proxy-proto-version = "" # proxy proto version to push origin information to the server, supports `v1` and `v2`
 url = "tcp://localhost:3000" # url to which destination connects to, over tcp
 # other options for the url field:
@@ -165,7 +165,7 @@ url = "tcp://192.168.1.100:8000"
 
 [client.sources.serviceX] # matches destinations.serviceX
 route = "relay" # the kind of route to use
-relay-encryption = ["dhxcp"] # require `dhxcp` encryption when using relay for this source
+relay-encryptions = ["dhxcp"] # require `dhxcp` encryption when using relay for this source
 url = "tcp://:8000" # url for the source to listen for incoming connections to be forwarded
 # other options for the url field:
 url = "tls://:8003" # runs a tls source server
@@ -315,17 +315,17 @@ a `destination` or a `source`, depending on the value of the `role-matches` opti
 ### Relay Encryption
 
 `connet` has the capability to encrypt a connection between a `source` and a `destination` when using a relay, therefore hiding
-the contents of what is transferred between them. The possible values for `relay-encryption` are:
+the contents of what is transferred between them. The possible values for `relay-encryptions` are:
  - `none` - no encryption. Good when using trusted relays (e.g. under your control) for best performance and system load
  - `tls` - setup TLS based on the exchanged client/server certificates. Well understood and mature option, but requires additional
 roundtrips between client and server to setup TLS within the TLS connection to the relay.
  - `dhxcp` - new option which does ephemeral (e.g. per connection) ECDH/X25519 exchange as part of the source/destination connect
 and asymmetrically encrypts data with Chacha20Poly1305. A good comporimse between maturity, security, and performance.
 
-By default `connet` doesn't encrypt relay connections (`relay-encryption = ["none"]`) (e.g. you are running your own trusted relay).
-When multiple values are set (e.g. `relay-encryption = ["none", "dhxcp", "tls"]`) it will prefer the most secure/mature option
+By default `connet` doesn't encrypt relay connections (`relay-encryptions = ["none"]`) (e.g. you are running your own trusted relay).
+When multiple values are set (e.g. `relay-encryptions = ["none", "dhxcp", "tls"]`) it will prefer the most secure/mature option
 (`tls` in this case, then `dhxp`), but fallback to `none` in case the other peer is not configured to use encryption yet.
-Only setting one encryption option (for example `relay-encryption = ["tls"]`), is the most strict configuration, which will
+Only setting one encryption option (for example `relay-encryptions = ["tls"]`), is the most strict configuration, which will
 require same encryption at both clients (e.g. source and destination).  
 
 ### Storage
