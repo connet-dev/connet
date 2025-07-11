@@ -19,7 +19,7 @@
         };
         testCerts = pkgs.runCommand "test-certs" { } ''
           mkdir $out && cd $out
-          ${pkgs.minica}/bin/minica -ip-addresses 192.168.1.2
+          ${pkgs.minica}/bin/minica -ip-addresses 192.168.1.3
         '';
       in
       {
@@ -60,7 +60,7 @@
             nodes.destination = {
               imports = [ self.nixosModules.default ];
               environment.etc."server.cert" = {
-                source = "${testCerts}/192.168.1.2/cert.pem";
+                source = "${testCerts}/192.168.1.3/cert.pem";
               };
               environment.etc."tokens" = {
                 text = "token-dst";
@@ -72,7 +72,7 @@
                   log-level = "debug";
                   client = {
                     token-file = "/etc/tokens";
-                    server-addr = "192.168.1.2:19190";
+                    server-addr = "192.168.1.3:19190";
                     server-cas = "/etc/server.cert";
                     destinations = {
                       files.url = "file:.";
@@ -93,7 +93,7 @@
             nodes.source = {
               imports = [ self.nixosModules.default ];
               environment.etc."server.cert" = {
-                source = "${testCerts}/192.168.1.2/cert.pem";
+                source = "${testCerts}/192.168.1.3/cert.pem";
               };
               environment.etc."tokens" = {
                 text = "token-src";
@@ -105,7 +105,7 @@
                   log-level = "debug";
                   client = {
                     token-file = "/etc/tokens";
-                    server-addr = "192.168.1.2:19190";
+                    server-addr = "192.168.1.3:19190";
                     server-cas = "/etc/server.cert";
                     sources = {
                       files.url = "tcp://:3000";
@@ -123,13 +123,51 @@
               };
             };
 
+            nodes.docker = {
+              environment.etc."connet-server.cert" = {
+                source = "${testCerts}/192.168.1.3/cert.pem";
+              };
+              environment.etc."connet-token" = {
+                text = "token-src";
+              };
+              environment.etc."connet-config.toml" = {
+                source = (pkgs.formats.toml { }).generate "connet-config.toml" {
+                  log-level = "debug";
+                  client = {
+                    server-addr = "192.168.1.3:19190";
+                    server-cas = "connet-server.cert";
+                    token-file = "connet-token";
+                    sources = {
+                      files.url = "tcp://:3000";
+                    };
+                  };
+                };
+              };
+              virtualisation.containers.enable = true;
+              virtualisation.docker.enable = true;
+              virtualisation.oci-containers = {
+                backend = "docker";
+                containers.connet = {
+                  image = "ghcr.io/connet-dev/connet:latest-amd64";
+                  imageFile = self.packages.${system}.docker;
+                  cmd = [ "--config" "connet-config.toml" ];
+                  volumes = [
+                    "/etc/connet-server.cert:/connet-server.cert"
+                    "/etc/connet-token:/connet-token"
+                    "/etc/connet-config.toml:/connet-config.toml"
+                  ];
+                  extraOptions = [ "--network=host" ];
+                };
+              };
+            };
+
             nodes.server = {
               imports = [ self.nixosModules.server ];
               environment.etc."server.cert" = {
-                source = "${testCerts}/192.168.1.2/cert.pem";
+                source = "${testCerts}/192.168.1.3/cert.pem";
               };
               environment.etc."server.key" = {
-                source = "${testCerts}/192.168.1.2/key.pem";
+                source = "${testCerts}/192.168.1.3/key.pem";
               };
               environment.etc."tokens" = {
                 text = "token-dst\ntoken-src";
@@ -155,6 +193,7 @@
 
             testScript = ''
               start_all()
+
               server.wait_for_unit("connet-server.service")
               destination.wait_for_unit("connet-client.service")
               source.wait_for_unit("connet-client.service")
@@ -164,6 +203,10 @@
               source.wait_until_succeeds("${pkgs.curl}/bin/curl http://localhost:3001", timeout=10)
               source.wait_for_open_port(3002)
               source.wait_until_succeeds("${pkgs.curl}/bin/curl http://localhost:3002", timeout=10)
+
+              docker.wait_for_unit("docker-connet.service")
+              docker.wait_for_open_port(3000)
+              docker.wait_until_succeeds("${pkgs.curl}/bin/curl http://localhost:3000", timeout=10)
             '';
           };
         };

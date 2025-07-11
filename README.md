@@ -568,6 +568,10 @@ by adding account management and it is one of the easiest way to start.
 ### v0.9.1
  - [x] compact mulitple segments in stores
 
+### v0.9.2
+ - [x] fix docker stateless reset file error
+ - [ ] token from env
+
 ### v0.10.0
  - [ ] preshared clients - controless p2p
  - [ ] destination load balance

@@ -16,6 +16,7 @@ pkgs.dockerTools.buildLayeredImage {
       "19191/udp" = { }; # relay listens for clients
       "19192/udp" = { }; # client listens for clients
     };
+    Env = [ "CACHE_DIRECTORY=/tmp" ];
     Volumes = {
       "/tmp" = { };
     };
