@@ -161,9 +161,15 @@ func clientDirectStatelessResetKey() ClientOption {
 			strings.TrimPrefix(strings.ReplaceAll(cfg.directAddr.String(), ":", "-"), "-"))
 
 		var path string
-		if cacheDir := os.Getenv("CACHE_DIRECTORY"); cacheDir != "" {
+		if connetCacheDir := os.Getenv("CONNET_CACHE_DIR"); connetCacheDir != "" {
+			// Support direct override if necessary, currently used in docker
+			path = filepath.Join(connetCacheDir, name)
+		} else if cacheDir := os.Getenv("CACHE_DIRECTORY"); cacheDir != "" {
+			// Supports setting up the cache directory via systemd. For reference
+			// https://www.freedesktop.org/software/systemd/man/latest/systemd.exec.html#RuntimeDirectory=
 			path = filepath.Join(cacheDir, name)
 		} else if userCacheDir, err := os.UserCacheDir(); err == nil {
+			// Look for XDG_CACHE_HOME, fallback to $HOME/.cache
 			dir := filepath.Join(userCacheDir, "connet")
 			switch _, err := os.Stat(dir); {
 			case err == nil:
