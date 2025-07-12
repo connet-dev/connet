@@ -60,10 +60,10 @@ func newServerConfig(opts []ServerOption) (*serverConfig, error) {
 	}
 
 	if cfg.dir == "" {
-		if err := serverStoreDir(cfg); err != nil {
+		if err := ServerStoreDirFromEnv()(cfg); err != nil {
 			return nil, fmt.Errorf("default store dir: %w", err)
 		}
-		cfg.logger.Info("using temporary store directory", "dir", cfg.dir)
+		cfg.logger.Info("using default store directory", "dir", cfg.dir)
 	}
 
 	return cfg, nil
@@ -115,22 +115,15 @@ func ServerStoreDir(dir string) ServerOption {
 	}
 }
 
-func serverStoreDir(cfg *serverConfig) error {
-	if stateDir := os.Getenv("CONNET_STATE_DIR"); stateDir != "" {
-		// Support direct override if necessary, currently used in docker
-		cfg.dir = stateDir
-	} else if stateDir := os.Getenv("STATE_DIRECTORY"); stateDir != "" {
-		// Supports setting up the state directory via systemd. For reference
-		// https://www.freedesktop.org/software/systemd/man/latest/systemd.exec.html#RuntimeDirectory=
-		cfg.dir = stateDir
-	} else {
-		tmpDir, err := os.MkdirTemp("", "connet-server-")
+func ServerStoreDirFromEnv() ServerOption {
+	return func(cfg *serverConfig) error {
+		stateDir, err := StoreDirFromEnv("connet-server-")
 		if err != nil {
-			return fmt.Errorf("create /tmp dir: %w", err)
+			return err
 		}
-		cfg.dir = tmpDir
+		cfg.dir = stateDir
+		return nil
 	}
-	return nil
 }
 
 func ServerLogger(logger *slog.Logger) ServerOption {
@@ -138,4 +131,20 @@ func ServerLogger(logger *slog.Logger) ServerOption {
 		cfg.logger = logger
 		return nil
 	}
+}
+
+func StoreDirFromEnv(prefix string) (string, error) {
+	if stateDir := os.Getenv("CONNET_STATE_DIR"); stateDir != "" {
+		// Support direct override if necessary, currently used in docker
+		return stateDir, nil
+	} else if stateDir := os.Getenv("STATE_DIRECTORY"); stateDir != "" {
+		// Supports setting up the state directory via systemd. For reference
+		// https://www.freedesktop.org/software/systemd/man/latest/systemd.exec.html#RuntimeDirectory=
+		return stateDir, nil
+	}
+	tmpDir, err := os.MkdirTemp("", prefix)
+	if err != nil {
+		return "", fmt.Errorf("create /tmp dir: %w", err)
+	}
+	return tmpDir, nil
 }

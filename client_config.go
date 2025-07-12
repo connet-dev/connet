@@ -46,7 +46,7 @@ func newClientConfig(opts []ClientOption) (*clientConfig, error) {
 	}
 
 	if cfg.token == "" {
-		if err := clientToken(cfg); err != nil {
+		if err := ClientTokenFromEnv()(cfg); err != nil {
 			return nil, fmt.Errorf("default token: %w", err)
 		}
 	}
@@ -64,7 +64,7 @@ func newClientConfig(opts []ClientOption) (*clientConfig, error) {
 	}
 
 	if cfg.directResetKey == nil {
-		if err := clientDirectStatelessResetKey(cfg); err != nil {
+		if err := ClientDirectStatelessResetKeyFromEnv()(cfg); err != nil {
 			return nil, fmt.Errorf("default stateless reset key: %w", err)
 		}
 		if cfg.directResetKey == nil {
@@ -84,11 +84,13 @@ func ClientToken(token string) ClientOption {
 	}
 }
 
-func clientToken(cfg *clientConfig) error {
-	if connetToken := os.Getenv("CONNET_TOKEN"); connetToken != "" {
-		cfg.token = connetToken
+func ClientTokenFromEnv() ClientOption {
+	return func(cfg *clientConfig) error {
+		if connetToken := os.Getenv("CONNET_TOKEN"); connetToken != "" {
+			cfg.token = connetToken
+		}
+		return nil
 	}
-	return nil
 }
 
 func ClientControlAddress(address string) ClientOption {
@@ -168,62 +170,64 @@ func ClientDirectStatelessResetKeyFile(path string) ClientOption {
 	}
 }
 
-func clientDirectStatelessResetKey(cfg *clientConfig) error {
-	var name = fmt.Sprintf("stateless-reset-%s.key",
-		strings.TrimPrefix(strings.ReplaceAll(cfg.directAddr.String(), ":", "-"), "-"))
+func ClientDirectStatelessResetKeyFromEnv() ClientOption {
+	return func(cfg *clientConfig) error {
+		var name = fmt.Sprintf("stateless-reset-%s.key",
+			strings.TrimPrefix(strings.ReplaceAll(cfg.directAddr.String(), ":", "-"), "-"))
 
-	var path string
-	if connetCacheDir := os.Getenv("CONNET_CACHE_DIR"); connetCacheDir != "" {
-		// Support direct override if necessary, currently used in docker
-		path = filepath.Join(connetCacheDir, name)
-	} else if cacheDir := os.Getenv("CACHE_DIRECTORY"); cacheDir != "" {
-		// Supports setting up the cache directory via systemd. For reference
-		// https://www.freedesktop.org/software/systemd/man/latest/systemd.exec.html#RuntimeDirectory=
-		path = filepath.Join(cacheDir, name)
-	} else if userCacheDir, err := os.UserCacheDir(); err == nil {
-		// Look for XDG_CACHE_HOME, fallback to $HOME/.cache
-		dir := filepath.Join(userCacheDir, "connet")
-		switch _, err := os.Stat(dir); {
-		case err == nil:
-			// the directory is already there, nothing to do
-		case errors.Is(err, os.ErrNotExist):
-			if err := os.Mkdir(dir, 0700); err != nil {
-				return fmt.Errorf("mkdir cache dir: %w", err)
+		var path string
+		if connetCacheDir := os.Getenv("CONNET_CACHE_DIR"); connetCacheDir != "" {
+			// Support direct override if necessary, currently used in docker
+			path = filepath.Join(connetCacheDir, name)
+		} else if cacheDir := os.Getenv("CACHE_DIRECTORY"); cacheDir != "" {
+			// Supports setting up the cache directory via systemd. For reference
+			// https://www.freedesktop.org/software/systemd/man/latest/systemd.exec.html#RuntimeDirectory=
+			path = filepath.Join(cacheDir, name)
+		} else if userCacheDir, err := os.UserCacheDir(); err == nil {
+			// Look for XDG_CACHE_HOME, fallback to $HOME/.cache
+			dir := filepath.Join(userCacheDir, "connet")
+			switch _, err := os.Stat(dir); {
+			case err == nil:
+				// the directory is already there, nothing to do
+			case errors.Is(err, os.ErrNotExist):
+				if err := os.Mkdir(dir, 0700); err != nil {
+					return fmt.Errorf("mkdir cache dir: %w", err)
+				}
+			default:
+				return fmt.Errorf("stat cache dir: %w", err)
 			}
-		default:
-			return fmt.Errorf("stat cache dir: %w", err)
+
+			path = filepath.Join(dir, name)
+		} else {
+			return nil
 		}
 
-		path = filepath.Join(dir, name)
-	} else {
+		switch _, err := os.Stat(path); {
+		case err == nil:
+			keyBytes, err := os.ReadFile(path)
+			if err != nil {
+				return fmt.Errorf("read stateless reset key: %w", err)
+			}
+			if len(keyBytes) < 32 {
+				return fmt.Errorf("stateless reset key len %d", len(keyBytes))
+			}
+			key := quic.StatelessResetKey(keyBytes)
+			cfg.directResetKey = &key
+		case errors.Is(err, os.ErrNotExist):
+			var key quic.StatelessResetKey
+			if _, err := io.ReadFull(rand.Reader, key[:]); err != nil {
+				return fmt.Errorf("generate stateless reset key: %w", err)
+			}
+			if err := os.WriteFile(path, key[:], 0600); err != nil {
+				return fmt.Errorf("write stateless reset key: %w", err)
+			}
+			cfg.directResetKey = &key
+		default:
+			return fmt.Errorf("stat stateless reset key file: %w", err)
+		}
+
 		return nil
 	}
-
-	switch _, err := os.Stat(path); {
-	case err == nil:
-		keyBytes, err := os.ReadFile(path)
-		if err != nil {
-			return fmt.Errorf("read stateless reset key: %w", err)
-		}
-		if len(keyBytes) < 32 {
-			return fmt.Errorf("stateless reset key len %d", len(keyBytes))
-		}
-		key := quic.StatelessResetKey(keyBytes)
-		cfg.directResetKey = &key
-	case errors.Is(err, os.ErrNotExist):
-		var key quic.StatelessResetKey
-		if _, err := io.ReadFull(rand.Reader, key[:]); err != nil {
-			return fmt.Errorf("generate stateless reset key: %w", err)
-		}
-		if err := os.WriteFile(path, key[:], 0600); err != nil {
-			return fmt.Errorf("write stateless reset key: %w", err)
-		}
-		cfg.directResetKey = &key
-	default:
-		return fmt.Errorf("stat stateless reset key file: %w", err)
-	}
-
-	return nil
 }
 
 func ClientNatPMPConfig(pmp nat.PMPConfig) ClientOption {

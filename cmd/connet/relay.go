@@ -8,6 +8,7 @@ import (
 	"net"
 	"os"
 
+	"github.com/connet-dev/connet"
 	"github.com/connet-dev/connet/relay"
 	"github.com/spf13/cobra"
 )
@@ -151,11 +152,11 @@ func relayRun(ctx context.Context, cfg RelayConfig, logger *slog.Logger) error {
 	}
 
 	if cfg.StoreDir == "" {
-		dir, err := os.MkdirTemp("", "connet-relay-")
+		dir, err := connet.StoreDirFromEnv("connet-relay-")
 		if err != nil {
-			return fmt.Errorf("create /tmp dir: %w", err)
+			return fmt.Errorf("store dir from env: %w", err)
 		}
-		logger.Info("using temporary store directory", "dir", dir)
+		logger.Info("using default store directory", "dir", dir)
 		cfg.StoreDir = dir
 	}
 	relayCfg.Stores = relay.NewFileStores(cfg.StoreDir)

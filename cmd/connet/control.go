@@ -5,8 +5,8 @@ import (
 	"fmt"
 	"log/slog"
 	"net"
-	"os"
 
+	"github.com/connet-dev/connet"
 	"github.com/connet-dev/connet/control"
 	"github.com/connet-dev/connet/restr"
 	"github.com/connet-dev/connet/selfhosted"
@@ -182,11 +182,11 @@ func controlRun(ctx context.Context, cfg ControlConfig, logger *slog.Logger) err
 	}
 
 	if cfg.StoreDir == "" {
-		dir, err := os.MkdirTemp("", "connet-control-")
+		dir, err := connet.StoreDirFromEnv("connet-control-")
 		if err != nil {
-			return fmt.Errorf("create /tmp dir: %w", err)
+			return fmt.Errorf("store dir from env: %w", err)
 		}
-		logger.Info("using temporary store directory", "dir", dir)
+		logger.Info("using default store directory", "dir", dir)
 		cfg.StoreDir = dir
 	}
 	controlCfg.Stores = control.NewFileStores(cfg.StoreDir)
