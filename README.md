@@ -181,6 +181,16 @@ route = "direct" # force only direct communication between clients, even if othe
 url = "tcp://:8001" # again, mulitple sources can be defined
 ```
 
+#### Client environment
+
+The client uses the following environment variables, in case the associated fields in the config file are empty:
+ - `CONNET_TOKEN` - pass the client's token from as env variable, used when `token` and `token-file` are empty
+ - `CONNET_CACHE_DIR` - specifies the location of the stateless reset token, used when `direct-stateless-reset-key`
+   and `direct-stateless-reset-key-file` are empty
+ - `CACHE_DIRECTORY` - used after trying to use `CONNET_CACHE_DIR`, another location for the stateless reset token. This
+   variable is usually specified by systemd
+ - `XDG_CACHE_HOME` - the cache directory, as specified by XDG, used if both `CONNET_CACHE_DIR` and `CACHE_DIRECTORY` are empty
+
 ### Server
 
 To run a server (e.g. running both control and a relay server), use `connet server --config server-config.toml` command. 
@@ -277,6 +287,14 @@ hostports = ["localhost:19191"] # the public host:port (e.g. domain, ip address)
 allow-cidrs = [] # set of networks in CIDR format, to allow client connetctions from
 deny-cidrs = [] # set of networks in CIDR format, to deny client connetctions from
 ```
+
+#### Servers environment
+
+The server (including control/relay server) uses the following environment variables, in case the associated fields in
+the config file are empty:
+ - `CONNET_STATE_DIR` - used when `store-dir` is empty, to setup explicitly from the environment
+ - `STATE_DIRECTORY` - used as a fallback after `CONNET_STATE_DIR`, usually setup by systemd
+ - `TMPDIR` - as a final fallback for finding `store-dir` location, falling back to `/tmp` if unset 
 
 ### NAT Management
 
