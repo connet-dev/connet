@@ -588,7 +588,7 @@ by adding account management and it is one of the easiest way to start.
 
 ### v0.9.2
  - [x] fix docker stateless reset file error
- - [ ] token from env
+ - [x] improve env usage, pass token from env
 
 ### v0.10.0
  - [ ] preshared clients - controless p2p
