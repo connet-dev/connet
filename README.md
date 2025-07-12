@@ -476,8 +476,8 @@ docker run -p 19192:19192 -p 9000:9000 connet \
 Or if you are using a config file on your system:
 ```bash
 docker run -p 19192:19192 -p 9000:9000 \
-  --mount "type=bind,source=/path/to/config,target=/data" \
-  connet --config "/data/config.toml"
+  --mount "type=bind,source=/path/to/connet.toml,target=/config/connet.toml" \
+  connet --config "/config/connet.toml"
 ```
 
 ## Embedding
