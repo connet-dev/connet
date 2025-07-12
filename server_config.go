@@ -60,7 +60,7 @@ func newServerConfig(opts []ServerOption) (*serverConfig, error) {
 	}
 
 	if cfg.dir == "" {
-		if err := serverStoreDir()(cfg); err != nil {
+		if err := serverStoreDir(cfg); err != nil {
 			return nil, fmt.Errorf("default store dir: %w", err)
 		}
 		cfg.logger.Info("using temporary store directory", "dir", cfg.dir)
@@ -115,24 +115,22 @@ func ServerStoreDir(dir string) ServerOption {
 	}
 }
 
-func serverStoreDir() ServerOption {
-	return func(cfg *serverConfig) error {
-		if stateDir := os.Getenv("CONNET_STATE_DIR"); stateDir != "" {
-			// Support direct override if necessary, currently used in docker
-			cfg.dir = stateDir
-		} else if stateDir := os.Getenv("STATE_DIRECTORY"); stateDir != "" {
-			// Supports setting up the state directory via systemd. For reference
-			// https://www.freedesktop.org/software/systemd/man/latest/systemd.exec.html#RuntimeDirectory=
-			cfg.dir = stateDir
-		} else {
-			tmpDir, err := os.MkdirTemp("", "connet-server-")
-			if err != nil {
-				return fmt.Errorf("create /tmp dir: %w", err)
-			}
-			cfg.dir = tmpDir
+func serverStoreDir(cfg *serverConfig) error {
+	if stateDir := os.Getenv("CONNET_STATE_DIR"); stateDir != "" {
+		// Support direct override if necessary, currently used in docker
+		cfg.dir = stateDir
+	} else if stateDir := os.Getenv("STATE_DIRECTORY"); stateDir != "" {
+		// Supports setting up the state directory via systemd. For reference
+		// https://www.freedesktop.org/software/systemd/man/latest/systemd.exec.html#RuntimeDirectory=
+		cfg.dir = stateDir
+	} else {
+		tmpDir, err := os.MkdirTemp("", "connet-server-")
+		if err != nil {
+			return fmt.Errorf("create /tmp dir: %w", err)
 		}
-		return nil
+		cfg.dir = tmpDir
 	}
+	return nil
 }
 
 func ServerLogger(logger *slog.Logger) ServerOption {
