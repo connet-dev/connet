@@ -28,17 +28,19 @@ import (
 
 // SourceConfig structure represents source configuration.
 type SourceConfig struct {
-	Endpoint         model.Endpoint
-	Route            model.RouteOption
-	RelayEncryptions []model.EncryptionScheme
+	Endpoint            model.Endpoint
+	Route               model.RouteOption
+	RelayEncryptions    []model.EncryptionScheme
+	DestinationBalancer model.LoadBalancer
 }
 
 // NewSourceConfig creates a source config for a given name.
 func NewSourceConfig(name string) SourceConfig {
 	return SourceConfig{
-		Endpoint:         model.NewEndpoint(name),
-		Route:            model.RouteAny,
-		RelayEncryptions: []model.EncryptionScheme{model.NoEncryption},
+		Endpoint:            model.NewEndpoint(name),
+		Route:               model.RouteAny,
+		RelayEncryptions:    []model.EncryptionScheme{model.NoEncryption},
+		DestinationBalancer: model.FindFastestBalancer,
 	}
 }
 
@@ -51,6 +53,11 @@ func (cfg SourceConfig) WithRoute(route model.RouteOption) SourceConfig {
 // WithRelayEncryptions sets the relay encryptions option for this configuration.
 func (cfg SourceConfig) WithRelayEncryptions(schemes ...model.EncryptionScheme) SourceConfig {
 	cfg.RelayEncryptions = schemes
+	return cfg
+}
+
+func (cfg SourceConfig) WithDestinationBalancer(balancer model.LoadBalancer) SourceConfig {
+	cfg.DestinationBalancer = balancer
 	return cfg
 }
 

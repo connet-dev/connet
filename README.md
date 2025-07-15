@@ -591,8 +591,9 @@ by adding account management and it is one of the easiest way to start.
  - [x] improve env usage, pass token from env
 
 ### v0.10.0
- - [ ] preshared clients - controless p2p
  - [ ] destination load balance
+ - [ ] zip mac app
+ - [ ] preshared clients - controless p2p
  - [ ] package refactor/rename
  - [ ] embed version when building
  - [ ] UPnP/IDG and PCP for hole-punching

@@ -30,7 +30,7 @@ func serverCmd() *cobra.Command {
 	}
 	cmd.Flags().SortFlags = false
 
-	filenames := cmd.Flags().StringArray("config", nil, "config file to load, can be passed mulitple times")
+	filenames := cmd.Flags().StringArray("config", nil, "config file to load, can be passed multiple times")
 
 	var flagsConfig Config
 	cmd.Flags().StringVar(&flagsConfig.LogLevel, "log-level", "", "log level to use")
