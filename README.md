@@ -590,6 +590,10 @@ by adding account management and it is one of the easiest way to start.
  - [x] fix docker stateless reset file error
  - [x] improve env usage, pass token from env
 
+### v0.9.3
+ - [x] combined control/client runner
+ - [ ] fix help for store dir (servers) and other flags
+
 ### v0.10.0
  - [ ] preshared clients - controless p2p
  - [ ] destination load balance

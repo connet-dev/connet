@@ -32,3 +32,11 @@ key-file = ".direnv/localhost/key.pem"
 [relay]
 token-file = "examples/relay-token.secret"
 control-cas = ".direnv/localhost/cert.pem"
+
+[combined]
+tokens-file = "examples/client-token.secret"
+ingress.cert-file = ".direnv/localhost/cert.pem"
+ingress.key-file = ".direnv/localhost/key.pem"
+
+[combined.destinations.sws]
+url = "file:."

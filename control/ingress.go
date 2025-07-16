@@ -14,6 +14,17 @@ type Ingress struct {
 	Restr restr.IP
 }
 
+func (ing Ingress) ExternalAddress() string {
+	var serverName string
+	serverCert := ing.TLS.Certificates[0].Leaf
+	if len(serverCert.DNSNames) > 0 {
+		serverName = serverCert.DNSNames[0]
+	} else if len(serverCert.IPAddresses) > 0 {
+		serverName = serverCert.IPAddresses[0].String()
+	}
+	return fmt.Sprintf("%s:%d", serverName, ing.Addr.Port)
+}
+
 type IngressBuilder struct {
 	ingress Ingress
 	err     error
