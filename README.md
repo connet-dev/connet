@@ -590,12 +590,15 @@ by adding account management and it is one of the easiest way to start.
  - [x] fix docker stateless reset file error
  - [x] improve env usage, pass token from env
 
+### v0.9.3
+ - [x] zip distribution for macos
+ - [x] embed version when building
+
 ### v0.10.0
  - [ ] destination load balance
  - [ ] zip mac app
  - [ ] preshared clients - controless p2p
  - [ ] package refactor/rename
- - [ ] embed version when building
  - [ ] UPnP/IDG and PCP for hole-punching
  - [ ] api to control client/control/relay
 
