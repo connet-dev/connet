@@ -63,7 +63,7 @@ CONNET_VERSION ?= $(shell git describe --exact-match --tags 2> /dev/null || git 
 release-archive:
 	mkdir dist/archive
 	for x in $(shell ls dist/build); do \
-	  if [[ $$x == windows* ]]; then \
+	  if [[ $$x == windows* || $$x == darwin* ]]; then \
 	    zip --junk-paths dist/archive/connet-$(CONNET_VERSION)-$$x.zip dist/build/$$x/*; \
 	  else \
 	    tar -czf dist/archive/connet-$(CONNET_VERSION)-$$x.tar.gz -C dist/build/$$x connet; \
