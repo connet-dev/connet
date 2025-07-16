@@ -42,8 +42,7 @@ func relayCmd() *cobra.Command {
 	filenames := addConfigsFlag(cmd)
 
 	var flagsConfig Config
-	cmd.Flags().StringVar(&flagsConfig.LogLevel, "log-level", "", "log level to use")
-	cmd.Flags().StringVar(&flagsConfig.LogFormat, "log-format", "", "log formatter to use")
+	flagsConfig.addLogFlags(cmd)
 
 	cmd.Flags().StringVar(&flagsConfig.Relay.Token, "token", "", "token to use")
 	cmd.Flags().StringVar(&flagsConfig.Relay.TokenFile, "token-file", "", "token file to use")

@@ -73,18 +73,17 @@ func clientCmd() *cobra.Command {
 	filenames := addConfigsFlag(cmd)
 
 	var flagsConfig Config
-	cmd.Flags().StringVar(&flagsConfig.LogLevel, "log-level", "", "log level to use")
-	cmd.Flags().StringVar(&flagsConfig.LogFormat, "log-format", "", "log formatter to use")
+	flagsConfig.addLogFlags(cmd)
 
-	cmd.Flags().StringVar(&flagsConfig.Client.Token, "token", "", "token to use")
-	cmd.Flags().StringVar(&flagsConfig.Client.TokenFile, "token-file", "", "token file to use")
+	cmd.Flags().StringVar(&flagsConfig.Client.Token, "token", "", "token to use for authenticating to the control server\nif token and token-file are not specified, will read CONNET_TOKEN environment variable")
+	cmd.Flags().StringVar(&flagsConfig.Client.TokenFile, "token-file", "", "a file to read the authentication token from")
 
 	cmd.Flags().StringVar(&flagsConfig.Client.ServerAddr, "server-addr", "", "control server address to connect")
-	cmd.Flags().StringVar(&flagsConfig.Client.ServerCAs, "server-cas", "", "control server CAs to use")
+	cmd.Flags().StringVar(&flagsConfig.Client.ServerCAs, "server-cas", "", "control server CAs to use, when not using public CAs")
 
 	cmd.Flags().StringVar(&flagsConfig.Client.DirectAddr, "direct-addr", "", "direct server address to listen")
 	cmd.Flags().StringVar(&flagsConfig.Client.StatusAddr, "status-addr", "", "status server address to listen")
-	cmd.Flags().StringVar(&flagsConfig.Client.NatPMP, "nat-pmp", "", "nat-pmp behavior ('disabled', 'system', 'dial')")
+	cmd.Flags().StringVar(&flagsConfig.Client.NatPMP, "nat-pmp", "", "nat-pmp behavior, one of [system, dial, disabled] (defaults to 'system')")
 
 	var dstName string
 	var dstCfg DestinationConfig

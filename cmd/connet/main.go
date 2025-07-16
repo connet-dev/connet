@@ -119,6 +119,11 @@ func addConfigsFlag(cmd *cobra.Command) *[]string {
 	return cmd.Flags().StringArray("config", nil, "configuration file(s) to load, merged when passed mulitple times")
 }
 
+func (cfg *Config) addLogFlags(cmd *cobra.Command) {
+	cmd.Flags().StringVar(&cfg.LogLevel, "log-level", "", "log level, one of [fine, debug, info, warn, error] (defaults to 'info')")
+	cmd.Flags().StringVar(&cfg.LogFormat, "log-format", "", "log formatter, one of [text, json] (defaults to 'text')")
+}
+
 func loadConfigs(files []string) (Config, error) {
 	var merged Config
 

@@ -33,8 +33,7 @@ func serverCmd() *cobra.Command {
 	filenames := addConfigsFlag(cmd)
 
 	var flagsConfig Config
-	cmd.Flags().StringVar(&flagsConfig.LogLevel, "log-level", "", "log level to use")
-	cmd.Flags().StringVar(&flagsConfig.LogFormat, "log-format", "", "log formatter to use")
+	flagsConfig.addLogFlags(cmd)
 
 	var clientIngress ControlIngress
 	cmd.Flags().StringVar(&clientIngress.Addr, "addr", "", "control server addr to use")

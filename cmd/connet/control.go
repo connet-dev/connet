@@ -56,8 +56,7 @@ func controlCmd() *cobra.Command {
 	filenames := addConfigsFlag(cmd)
 
 	var flagsConfig Config
-	cmd.Flags().StringVar(&flagsConfig.LogLevel, "log-level", "", "log level to use")
-	cmd.Flags().StringVar(&flagsConfig.LogFormat, "log-format", "", "log formatter to use")
+	flagsConfig.addLogFlags(cmd)
 
 	var commonIngress ControlIngress
 	cmd.Flags().StringVar(&commonIngress.Cert, "cert-file", "", "control server cert to use (both clients and relays)")
