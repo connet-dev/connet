@@ -170,6 +170,36 @@ func ClientDirectStatelessResetKeyFile(path string) ClientOption {
 	}
 }
 
+func ClientDirectStatelessResetKeyFileCreate(path string) ClientOption {
+	return func(cfg *clientConfig) error {
+		switch _, err := os.Stat(path); {
+		case err == nil:
+			keyBytes, err := os.ReadFile(path)
+			if err != nil {
+				return fmt.Errorf("read stateless reset key: %w", err)
+			}
+			if len(keyBytes) < 32 {
+				return fmt.Errorf("stateless reset key len %d", len(keyBytes))
+			}
+			key := quic.StatelessResetKey(keyBytes)
+			cfg.directResetKey = &key
+		case errors.Is(err, os.ErrNotExist):
+			var key quic.StatelessResetKey
+			if _, err := io.ReadFull(rand.Reader, key[:]); err != nil {
+				return fmt.Errorf("generate stateless reset key: %w", err)
+			}
+			if err := os.WriteFile(path, key[:], 0600); err != nil {
+				return fmt.Errorf("write stateless reset key: %w", err)
+			}
+			cfg.directResetKey = &key
+		default:
+			return fmt.Errorf("stat stateless reset key file: %w", err)
+		}
+
+		return nil
+	}
+}
+
 func ClientDirectStatelessResetKeyFromEnv() ClientOption {
 	return func(cfg *clientConfig) error {
 		var name = fmt.Sprintf("stateless-reset-%s.key",
@@ -202,31 +232,7 @@ func ClientDirectStatelessResetKeyFromEnv() ClientOption {
 			return nil
 		}
 
-		switch _, err := os.Stat(path); {
-		case err == nil:
-			keyBytes, err := os.ReadFile(path)
-			if err != nil {
-				return fmt.Errorf("read stateless reset key: %w", err)
-			}
-			if len(keyBytes) < 32 {
-				return fmt.Errorf("stateless reset key len %d", len(keyBytes))
-			}
-			key := quic.StatelessResetKey(keyBytes)
-			cfg.directResetKey = &key
-		case errors.Is(err, os.ErrNotExist):
-			var key quic.StatelessResetKey
-			if _, err := io.ReadFull(rand.Reader, key[:]); err != nil {
-				return fmt.Errorf("generate stateless reset key: %w", err)
-			}
-			if err := os.WriteFile(path, key[:], 0600); err != nil {
-				return fmt.Errorf("write stateless reset key: %w", err)
-			}
-			cfg.directResetKey = &key
-		default:
-			return fmt.Errorf("stat stateless reset key file: %w", err)
-		}
-
-		return nil
+		return ClientDirectStatelessResetKeyFileCreate(path)(cfg)
 	}
 }
 

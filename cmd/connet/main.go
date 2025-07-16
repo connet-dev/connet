@@ -29,6 +29,8 @@ type Config struct {
 
 	Control ControlConfig `toml:"control"`
 	Relay   RelayConfig   `toml:"relay"`
+
+	Combined CombinedConfig `toml:"combined"`
 }
 
 func main() {
@@ -40,6 +42,7 @@ func main() {
 	rootCmd.AddCommand(serverCmd())
 	rootCmd.AddCommand(controlCmd())
 	rootCmd.AddCommand(relayCmd())
+	rootCmd.AddCommand(combinedCmd())
 	rootCmd.AddCommand(checkCmd())
 	rootCmd.AddCommand(versionCmd())
 
@@ -187,6 +190,8 @@ func (c *Config) merge(o Config) {
 
 	c.Control.merge(o.Control)
 	c.Relay.merge(o.Relay)
+
+	c.Combined.merge(o.Combined)
 }
 
 func override(s, o string) string {
