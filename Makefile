@@ -48,17 +48,18 @@ update-nix:
 release-clean:
 	rm -rf dist/
 
-release-build:
-	GOOS=darwin GOARCH=amd64 go build -v -o dist/build/darwin-amd64/connet github.com/connet-dev/connet/cmd/connet
-	GOOS=darwin GOARCH=arm64 go build -v -o dist/build/darwin-arm64/connet github.com/connet-dev/connet/cmd/connet
-	GOOS=linux GOARCH=amd64 go build -v -o dist/build/linux-amd64/connet github.com/connet-dev/connet/cmd/connet
-	GOOS=linux GOARCH=arm64 go build -v -o dist/build/linux-arm64/connet github.com/connet-dev/connet/cmd/connet
-	GOOS=freebsd GOARCH=amd64 go build -v -o dist/build/freebsd-amd64/connet github.com/connet-dev/connet/cmd/connet
-	GOOS=freebsd GOARCH=arm64 go build -v -o dist/build/freebsd-arm64/connet github.com/connet-dev/connet/cmd/connet
-	GOOS=windows GOARCH=amd64 go build -v -o dist/build/windows-amd64/connet.exe github.com/connet-dev/connet/cmd/connet
-	GOOS=windows GOARCH=arm64 go build -v -o dist/build/windows-arm64/connet.exe github.com/connet-dev/connet/cmd/connet
-
 CONNET_VERSION ?= $(shell git describe --exact-match --tags 2> /dev/null || git rev-parse --short HEAD)
+LDFLAGS := "-X 'github.com/connet-dev/connet/model.Version=${CONNET_VERSION}'"
+
+release-build:
+	GOOS=darwin GOARCH=amd64 go build -v -ldflags ${LDFLAGS} -o dist/build/darwin-amd64/connet github.com/connet-dev/connet/cmd/connet
+	GOOS=darwin GOARCH=arm64 go build -v -ldflags ${LDFLAGS} -o dist/build/darwin-arm64/connet github.com/connet-dev/connet/cmd/connet
+	GOOS=linux GOARCH=amd64 go build -v -ldflags ${LDFLAGS} -o dist/build/linux-amd64/connet github.com/connet-dev/connet/cmd/connet
+	GOOS=linux GOARCH=arm64 go build -v -ldflags ${LDFLAGS} -o dist/build/linux-arm64/connet github.com/connet-dev/connet/cmd/connet
+	GOOS=freebsd GOARCH=amd64 go build -v -ldflags ${LDFLAGS} -o dist/build/freebsd-amd64/connet github.com/connet-dev/connet/cmd/connet
+	GOOS=freebsd GOARCH=arm64 go build -v -ldflags ${LDFLAGS} -o dist/build/freebsd-arm64/connet github.com/connet-dev/connet/cmd/connet
+	GOOS=windows GOARCH=amd64 go build -v -ldflags ${LDFLAGS} -o dist/build/windows-amd64/connet.exe github.com/connet-dev/connet/cmd/connet
+	GOOS=windows GOARCH=arm64 go build -v -ldflags ${LDFLAGS} -o dist/build/windows-arm64/connet.exe github.com/connet-dev/connet/cmd/connet
 
 release-archive:
 	mkdir dist/archive
