@@ -49,11 +49,11 @@ type TokenRestriction struct {
 func controlCmd() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "control",
-		Short: "run connet control server",
+		Short: "Run a connet control server",
 	}
 	cmd.Flags().SortFlags = false
 
-	filenames := cmd.Flags().StringArray("config", nil, "config file to load, can be passed mulitple times")
+	filenames := addConfigsFlag(cmd)
 
 	var flagsConfig Config
 	cmd.Flags().StringVar(&flagsConfig.LogLevel, "log-level", "", "log level to use")

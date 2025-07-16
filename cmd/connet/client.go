@@ -63,13 +63,14 @@ type SourceConfig struct {
 func clientCmd() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:           "connet",
-		Short:         "connet is a reverse proxy/nat traversal tool",
+		Short:         "Run a connet client",
+		Long:          "Run a connet client\n\nconnet is a p2p reverse proxy/nat traversal tool",
 		SilenceUsage:  true,
 		SilenceErrors: true,
 	}
 	cmd.Flags().SortFlags = false
 
-	filenames := cmd.Flags().StringArray("config", nil, "config file to load")
+	filenames := addConfigsFlag(cmd)
 
 	var flagsConfig Config
 	cmd.Flags().StringVar(&flagsConfig.LogLevel, "log-level", "", "log level to use")

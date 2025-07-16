@@ -35,11 +35,11 @@ type RelayIngress struct {
 func relayCmd() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "relay",
-		Short: "run connet relay server",
+		Short: "Run a connet relay server",
 	}
 	cmd.Flags().SortFlags = false
 
-	filenames := cmd.Flags().StringArray("config", nil, "config file to load")
+	filenames := addConfigsFlag(cmd)
 
 	var flagsConfig Config
 	cmd.Flags().StringVar(&flagsConfig.LogLevel, "log-level", "", "log level to use")

@@ -26,11 +26,11 @@ type ServerConfig struct {
 func serverCmd() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "server",
-		Short: "run connet server",
+		Short: "Run a connet server (control and relay server as one)",
 	}
 	cmd.Flags().SortFlags = false
 
-	filenames := cmd.Flags().StringArray("config", nil, "config file to load, can be passed mulitple times")
+	filenames := addConfigsFlag(cmd)
 
 	var flagsConfig Config
 	cmd.Flags().StringVar(&flagsConfig.LogLevel, "log-level", "", "log level to use")
