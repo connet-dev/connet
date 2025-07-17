@@ -88,7 +88,7 @@ running [lego](https://go-acme.github.io/lego/).
 
 To create a self-signed certificate, you can use openssl. Alternatively, you can use a tool like 
 [minica](https://github.com/jsha/minica). When using self-signed certificate, you'll need your clients (and relays) 
-trusting the server's certificate. Copying the certificate (or CA) public key to the clients and using `server-cas`
+trusting the server's certificate. Copying the certificate (or CA) public key to the clients and using `server-cas-file`
 configuration option is the easiest way to achieve this.
 
 ### Client D (aka the `destination`)
@@ -98,7 +98,7 @@ Then, on device `D` run `connet --config client-d.toml` with the following `clie
 [client]
 token = "client-d-token"
 server-addr = "SERVER_IP:19190"
-server-cas = "cert.pem"
+server-cas-file = "cert.pem"
 
 [client.destinations.serviceA]
 url = "tcp://:3000"
@@ -111,7 +111,7 @@ On device `S` run `connet --config client-s.toml` with the following `client-s.t
 [client]
 token = "client-s-token"
 server-addr = "SERVER_IP:19190"
-server-cas = "cert.pem"
+server-cas-file = "cert.pem"
 
 [client.sources.serviceA]
 url = "tcp://:8000"
@@ -133,7 +133,7 @@ token = "client-token-1" # the token which the client uses to authenticate again
 token-file = "path/to/relay/token" # a file that contains the token, one of token or token-file is required
 
 server-addr = "localhost:19190" # the control server address to connect to
-server-cas = "path/to/cert.pem" # the control server certificate
+server-cas-file = "path/to/cert.pem" # the control server certificate
 
 direct-addr = ":19192" # at what address this client listens for direct connections, defaults to :19192
 direct-stateless-reset-key = "" # the quic stateless reset key as a literal 32 byte value in bas58 format
@@ -276,7 +276,7 @@ token = "relay-token-1" # the token which the relay server uses to authenticate 
 token-file = "path/to/relay/token" # a file that contains the token, one of token or token-file is required
 
 control-addr = "localhost:19190" # the control server address to connect to, defaults to localhost:19191
-control-cas = "path/to/ca/file.pem" # the public certificate root of the control server, no default, required when using self-signed certs
+control-cas-file = "path/to/ca/file.pem" # the public certificate root of the control server, no default, required when using self-signed certs
 
 status-addr = "127.0.0.1:19181" # at what address the relay server listens for status connections, disabled unless set
 store-dir = "path/to/relay-store" # where does this relay persist runtime information, defaults to a /tmp subdirectory
