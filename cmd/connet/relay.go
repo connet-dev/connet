@@ -20,7 +20,7 @@ type RelayConfig struct {
 	Ingresses []RelayIngress `toml:"ingress"`
 
 	ControlAddr string `toml:"control-addr"`
-	ControlCAs  string `toml:"control-cas"`
+	ControlCAs  string `toml:"control-cas-file"`
 
 	StatusAddr string `toml:"status-addr"`
 	StoreDir   string `toml:"store-dir"`
@@ -44,19 +44,19 @@ func relayCmd() *cobra.Command {
 	var flagsConfig Config
 	flagsConfig.addLogFlags(cmd)
 
-	cmd.Flags().StringVar(&flagsConfig.Relay.Token, "token", "", "token to use")
-	cmd.Flags().StringVar(&flagsConfig.Relay.TokenFile, "token-file", "", "token file to use")
+	cmd.Flags().StringVar(&flagsConfig.Relay.Token, "token", "", "token to use for authenticating to the control server")
+	cmd.Flags().StringVar(&flagsConfig.Relay.TokenFile, "token-file", "", "a file to read the authentication token from")
 
 	var ingress RelayIngress
-	cmd.Flags().StringVar(&ingress.Addr, "addr", "", "server addr to use")
-	cmd.Flags().StringArrayVar(&ingress.Hostports, "hostport", nil, "server public host[:port] to use (if port is missing will use addr's port)")
-	cmd.Flags().StringArrayVar(&ingress.AllowCIDRs, "allow-cidr", nil, "cidr to allow client connections from")
-	cmd.Flags().StringArrayVar(&ingress.DenyCIDRs, "deny-cidr", nil, "cidr to deny client connections from")
+	cmd.Flags().StringVar(&ingress.Addr, "addr", "", "UDP address to ([host]:port) listen for client connections")
+	cmd.Flags().StringArrayVar(&ingress.Hostports, "hostport", nil, "public host[:port] advertised by the control server for clients to connect to this relay")
+	cmd.Flags().StringArrayVar(&ingress.AllowCIDRs, "allow-cidr", nil, "CIDR to allow client connections from")
+	cmd.Flags().StringArrayVar(&ingress.DenyCIDRs, "deny-cidr", nil, "CIDR to deny client connections from")
 
-	cmd.Flags().StringVar(&flagsConfig.Relay.ControlAddr, "control-addr", "", "control server address to connect")
-	cmd.Flags().StringVar(&flagsConfig.Relay.ControlCAs, "control-cas", "", "control server CAs to use")
+	cmd.Flags().StringVar(&flagsConfig.Relay.ControlAddr, "control-addr", "", "control server UDP address (host:port)")
+	cmd.Flags().StringVar(&flagsConfig.Relay.ControlCAs, "control-cas-file", "", "control server TLS certificate authorities file, when not using public CAs")
 
-	cmd.Flags().StringVar(&flagsConfig.Relay.StatusAddr, "status-addr", "", "status server address to listen")
+	cmd.Flags().StringVar(&flagsConfig.Relay.StatusAddr, "status-addr", "", "TCP address ([host]:port) to listen for status connections (disabled if not present)")
 	cmd.Flags().StringVar(&flagsConfig.Relay.StoreDir, "store-dir", "", "storage dir, /tmp subdirectory if empty")
 
 	cmd.RunE = wrapErr("run connet relay server", func(cmd *cobra.Command, _ []string) error {

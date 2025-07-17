@@ -26,7 +26,7 @@ type ClientConfig struct {
 	TokenFile string `toml:"token-file"`
 
 	ServerAddr string `toml:"server-addr"`
-	ServerCAs  string `toml:"server-cas"`
+	ServerCAs  string `toml:"server-cas-file"`
 
 	DirectAddr         string `toml:"direct-addr"`
 	DirectResetKey     string `toml:"direct-stateless-reset-key"`
@@ -78,11 +78,11 @@ func clientCmd() *cobra.Command {
 	cmd.Flags().StringVar(&flagsConfig.Client.Token, "token", "", "token to use for authenticating to the control server\nif token and token-file are not specified, will read CONNET_TOKEN environment variable")
 	cmd.Flags().StringVar(&flagsConfig.Client.TokenFile, "token-file", "", "a file to read the authentication token from")
 
-	cmd.Flags().StringVar(&flagsConfig.Client.ServerAddr, "server-addr", "", "control server address to connect")
-	cmd.Flags().StringVar(&flagsConfig.Client.ServerCAs, "server-cas", "", "control server CAs to use, when not using public CAs")
+	cmd.Flags().StringVar(&flagsConfig.Client.ServerAddr, "server-addr", "", "control server UDP address (host:port) to connect to")
+	cmd.Flags().StringVar(&flagsConfig.Client.ServerCAs, "server-cas-file", "", "control server TLS certificate authorities file, when not using public CAs")
 
-	cmd.Flags().StringVar(&flagsConfig.Client.DirectAddr, "direct-addr", "", "direct server address to listen")
-	cmd.Flags().StringVar(&flagsConfig.Client.StatusAddr, "status-addr", "", "status server address to listen")
+	cmd.Flags().StringVar(&flagsConfig.Client.DirectAddr, "direct-addr", "", "UDP address ([host]:port) to listen for peer connections")
+	cmd.Flags().StringVar(&flagsConfig.Client.StatusAddr, "status-addr", "", "TCP address ([host]:port) to listen for status connections (disabled if not present)")
 	cmd.Flags().StringVar(&flagsConfig.Client.NatPMP, "nat-pmp", "", "nat-pmp behavior, one of [system, dial, disabled] (defaults to 'system')")
 
 	var dstName string

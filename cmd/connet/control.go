@@ -59,30 +59,30 @@ func controlCmd() *cobra.Command {
 	flagsConfig.addLogFlags(cmd)
 
 	var commonIngress ControlIngress
-	cmd.Flags().StringVar(&commonIngress.Cert, "cert-file", "", "control server cert to use (both clients and relays)")
-	cmd.Flags().StringVar(&commonIngress.Key, "key-file", "", "control server key to use (both clients and relays)")
+	cmd.Flags().StringVar(&commonIngress.Cert, "cert-file", "", "TLS certificate to use for both client and relay connections")
+	cmd.Flags().StringVar(&commonIngress.Key, "key-file", "", "TLS certificate key to use for both client and relay connections")
 
 	var clientIngress ControlIngress
-	cmd.Flags().StringVar(&clientIngress.Addr, "clients-addr", "", "control client server addr to use")
-	cmd.Flags().StringVar(&clientIngress.Cert, "clients-cert-file", "", "control server cert to use for clients")
-	cmd.Flags().StringVar(&clientIngress.Key, "clients-key-file", "", "control server key to use for clients")
-	cmd.Flags().StringArrayVar(&clientIngress.AllowCIDRs, "clients-allow-cidr", nil, "cidr to allow client connections from")
-	cmd.Flags().StringArrayVar(&clientIngress.DenyCIDRs, "clients-deny-cidr", nil, "cidr to deny client connections from")
+	cmd.Flags().StringVar(&clientIngress.Addr, "clients-addr", "", "UDP address ([host]:port) to listen for client connections")
+	cmd.Flags().StringVar(&clientIngress.Cert, "clients-cert-file", "", "TLS certificate to use for client connections (defaults to 'cert-file')")
+	cmd.Flags().StringVar(&clientIngress.Key, "clients-key-file", "", "TLS certificate key to use for client connections (defaults to 'key-file')")
+	cmd.Flags().StringArrayVar(&clientIngress.AllowCIDRs, "clients-allow-cidr", nil, "CIDR to allow client connections from")
+	cmd.Flags().StringArrayVar(&clientIngress.DenyCIDRs, "clients-deny-cidr", nil, "CIDR to deny client connections from")
 
 	cmd.Flags().StringArrayVar(&flagsConfig.Control.ClientsTokens, "clients-tokens", nil, "client tokens for clients to connect")
 	cmd.Flags().StringVar(&flagsConfig.Control.ClientsTokensFile, "clients-tokens-file", "", "client tokens file to load")
 
 	var relayIngress ControlIngress
-	cmd.Flags().StringVar(&relayIngress.Addr, "relays-addr", "", "control relay server addr to use")
-	cmd.Flags().StringVar(&relayIngress.Cert, "relays-cert-file", "", "control server cert to use for relays")
-	cmd.Flags().StringVar(&relayIngress.Key, "relays-key-file", "", "control server key to use for relays")
-	cmd.Flags().StringArrayVar(&relayIngress.AllowCIDRs, "relays-allow-cidr", nil, "cidr to allow relay connections from")
-	cmd.Flags().StringArrayVar(&relayIngress.DenyCIDRs, "relays-deny-cidr", nil, "cidr to deny relay connections from")
+	cmd.Flags().StringVar(&relayIngress.Addr, "relays-addr", "", "UDP address ([host]:port) to listen for relay server connections")
+	cmd.Flags().StringVar(&relayIngress.Cert, "relays-cert-file", "", "TLS certificate to use for relay server connections (defaults to 'cert-file')")
+	cmd.Flags().StringVar(&relayIngress.Key, "relays-key-file", "", "TLS certificate key to use for relay server connections (defaults to 'key-file')")
+	cmd.Flags().StringArrayVar(&relayIngress.AllowCIDRs, "relays-allow-cidr", nil, "CIDR to allow relay server connections from")
+	cmd.Flags().StringArrayVar(&relayIngress.DenyCIDRs, "relays-deny-cidr", nil, "CIDR to deny relay server connections from")
 
 	cmd.Flags().StringArrayVar(&flagsConfig.Control.RelaysTokens, "relays-tokens", nil, "relay tokens for clients to connect")
 	cmd.Flags().StringVar(&flagsConfig.Control.RelaysTokensFile, "relays-tokens-file", "", "relay tokens file to load")
 
-	cmd.Flags().StringVar(&flagsConfig.Control.StatusAddr, "status-addr", "", "status server address to listen")
+	cmd.Flags().StringVar(&flagsConfig.Control.StatusAddr, "status-addr", "", "TCP address ([host]:port) to listen for status connections (disabled if not present)")
 	cmd.Flags().StringVar(&flagsConfig.Control.StoreDir, "store-dir", "", "storage dir, /tmp subdirectory if empty")
 
 	cmd.RunE = wrapErr("run connet control server", func(cmd *cobra.Command, _ []string) error {
