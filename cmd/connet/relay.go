@@ -19,8 +19,9 @@ type RelayConfig struct {
 
 	Ingresses []RelayIngress `toml:"ingress"`
 
-	ControlAddr string `toml:"control-addr"`
-	ControlCAs  string `toml:"control-cas-file"`
+	ControlAddr   string `toml:"control-addr"`
+	ControlCAs    string `toml:"control-cas-file"`
+	ControlCAsDEP string `toml:"control-cas"` // TODO remove in 0.11.0
 
 	StatusAddr string `toml:"status-addr"`
 	StoreDir   string `toml:"store-dir"`
@@ -55,6 +56,10 @@ func relayCmd() *cobra.Command {
 
 	cmd.Flags().StringVar(&flagsConfig.Relay.ControlAddr, "control-addr", "", "control server UDP address (host:port)")
 	cmd.Flags().StringVar(&flagsConfig.Relay.ControlCAs, "control-cas-file", "", "control server TLS certificate authorities file, when not using public CAs")
+	cmd.Flags().StringVar(&flagsConfig.Relay.ControlCAsDEP, "control-cas", "", "control server TLS certificate authorities file, when not using public CAs (deprecated)")
+	if err := cmd.Flags().MarkHidden("control-cas"); err != nil {
+		slog.Warn("cannot to mark hidden", "err", err)
+	}
 
 	cmd.Flags().StringVar(&flagsConfig.Relay.StatusAddr, "status-addr", "", "TCP address ([host]:port) to listen for status connections (disabled if not present)")
 	cmd.Flags().StringVar(&flagsConfig.Relay.StoreDir, "store-dir", "", "storage dir, /tmp subdirectory if empty")
@@ -122,15 +127,20 @@ func relayRun(ctx context.Context, cfg RelayConfig, logger *slog.Logger) error {
 	}
 	relayCfg.ControlAddr = controlAddr
 
-	if cfg.ControlCAs != "" {
-		casData, err := os.ReadFile(cfg.ControlCAs)
+	controlCAs := cfg.ControlCAs
+	if controlCAs == "" && cfg.ControlCAsDEP != "" {
+		logger.Warn("'control-cas' is deprecated, use 'control-cas-file' instead")
+		controlCAs = cfg.ControlCAsDEP
+	}
+	if controlCAs != "" {
+		casData, err := os.ReadFile(controlCAs)
 		if err != nil {
 			return fmt.Errorf("read server CAs: %w", err)
 		}
 
 		cas := x509.NewCertPool()
 		if !cas.AppendCertsFromPEM(casData) {
-			return fmt.Errorf("missing server CA certificate in %s", cfg.ControlCAs)
+			return fmt.Errorf("missing server CA certificate in %s", controlCAs)
 		}
 		relayCfg.ControlCAs = cas
 	}
@@ -191,6 +201,7 @@ func (c *RelayConfig) merge(o RelayConfig) {
 
 	c.ControlAddr = override(c.ControlAddr, o.ControlAddr)
 	c.ControlCAs = override(c.ControlCAs, o.ControlCAs)
+	c.ControlCAsDEP = override(c.ControlCAsDEP, o.ControlCAsDEP)
 
 	c.StatusAddr = override(c.StatusAddr, o.StatusAddr)
 	c.StoreDir = override(c.StoreDir, o.StoreDir)

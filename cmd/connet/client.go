@@ -25,8 +25,9 @@ type ClientConfig struct {
 	Token     string `toml:"token"`
 	TokenFile string `toml:"token-file"`
 
-	ServerAddr string `toml:"server-addr"`
-	ServerCAs  string `toml:"server-cas-file"`
+	ServerAddr   string `toml:"server-addr"`
+	ServerCAs    string `toml:"server-cas-file"`
+	ServerCAsDEP string `toml:"server-cas"` // TODO remove in 0.11.0
 
 	DirectAddr         string `toml:"direct-addr"`
 	DirectResetKey     string `toml:"direct-stateless-reset-key"`
@@ -80,6 +81,10 @@ func clientCmd() *cobra.Command {
 
 	cmd.Flags().StringVar(&flagsConfig.Client.ServerAddr, "server-addr", "", "control server UDP address (host:port) to connect to")
 	cmd.Flags().StringVar(&flagsConfig.Client.ServerCAs, "server-cas-file", "", "control server TLS certificate authorities file, when not using public CAs")
+	cmd.Flags().StringVar(&flagsConfig.Client.ServerCAsDEP, "server-cas", "", "control server TLS certificate authorities file, when not using public CAs")
+	if err := cmd.Flags().MarkHidden("server-cas"); err != nil {
+		slog.Warn("cannot to mark hidden", "err", err)
+	}
 
 	cmd.Flags().StringVar(&flagsConfig.Client.DirectAddr, "direct-addr", "", "UDP address ([host]:port) to listen for peer connections")
 	cmd.Flags().StringVar(&flagsConfig.Client.StatusAddr, "status-addr", "", "TCP address ([host]:port) to listen for status connections (disabled if not present)")
@@ -152,6 +157,9 @@ func clientRun(ctx context.Context, cfg ClientConfig, logger *slog.Logger) error
 	}
 	if cfg.ServerCAs != "" {
 		opts = append(opts, connet.ClientControlCAs(cfg.ServerCAs))
+	} else if cfg.ServerCAsDEP != "" {
+		logger.Warn("'server-cas' is deprecated, use 'server-cas-file' instead")
+		opts = append(opts, connet.ClientControlCAs(cfg.ServerCAsDEP))
 	}
 
 	if cfg.DirectAddr != "" {
@@ -487,6 +495,7 @@ func (c *ClientConfig) merge(o ClientConfig) {
 
 	c.ServerAddr = override(c.ServerAddr, o.ServerAddr)
 	c.ServerCAs = override(c.ServerCAs, o.ServerCAs)
+	c.ServerCAsDEP = override(c.ServerCAsDEP, o.ServerCAsDEP)
 
 	c.DirectAddr = override(c.DirectAddr, o.DirectAddr)
 	if o.DirectResetKey != "" || o.DirectResetKeyFile != "" {
