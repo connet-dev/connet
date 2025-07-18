@@ -35,21 +35,22 @@ func serverCmd() *cobra.Command {
 	var flagsConfig Config
 	flagsConfig.addLogFlags(cmd)
 
-	var clientIngress ControlIngress
-	cmd.Flags().StringVar(&clientIngress.Addr, "addr", "", "UDP address ([host]:port) for the control server to listen for client connections")
-	cmd.Flags().StringVar(&clientIngress.Cert, "cert-file", "", "TLS certificate to use for client connections")
-	cmd.Flags().StringVar(&clientIngress.Key, "key-file", "", "TLS certificate key to use for client connections")
-	cmd.Flags().StringArrayVar(&clientIngress.AllowCIDRs, "allow-cidr", nil, "CIDR to allow client connections from")
-	cmd.Flags().StringArrayVar(&clientIngress.DenyCIDRs, "deny-cidr", nil, "CIDR to deny client connections from")
+	cmd.Flags().StringVar(&flagsConfig.Server.TokensFile, "tokens-file", "", "file containing list of client auth tokens (token per line)")
+	cmd.Flags().StringArrayVar(&flagsConfig.Server.Tokens, "tokens", nil, "list of client auth tokens (fallback 'tokens-file' is not specified)")
 
-	cmd.Flags().StringVar(&flagsConfig.Server.TokensFile, "tokens-file", "", "file containing list of client authentication tokens (token per line)")
-	cmd.Flags().StringArrayVar(&flagsConfig.Server.Tokens, "tokens", nil, "list of client authentication tokens (when 'tokens-file' is empty)")
+	var clientIngress ControlIngress
+	cmd.Flags().StringVar(&clientIngress.Addr, "addr", "", "clients server address to listen for connection (UDP/QUIC, [host]:port) (defaults to ':19190')")
+	cmd.Flags().StringVar(&clientIngress.Cert, "cert-file", "", "clients server TLS certificate file (pem format)")
+	cmd.Flags().StringVar(&clientIngress.Key, "key-file", "", "clients server TLS certificate private key file (pem format)")
+	cmd.Flags().StringArrayVar(&clientIngress.AllowCIDRs, "allow-cidr", nil, "list of allowed networks for client connections (CIDR format)")
+	cmd.Flags().StringArrayVar(&clientIngress.DenyCIDRs, "deny-cidr", nil, "list of denied networks for client connections (CIDR format)")
 
 	var relayIngress RelayIngress
-	cmd.Flags().StringVar(&relayIngress.Addr, "relay-addr", "", "UDP address ([host]:port) for the relay server to listen for client connections")
-	cmd.Flags().StringArrayVar(&relayIngress.Hostports, "relay-hostport", nil, "relay server public host[:port] to use (if port is missing will use addr's port)")
-	cmd.Flags().StringArrayVar(&relayIngress.AllowCIDRs, "relay-allow-cidr", nil, "CIDR to allow client relay connections from")
-	cmd.Flags().StringArrayVar(&relayIngress.DenyCIDRs, "relay-deny-cidr", nil, "CIDR to deny client relay connections from")
+	cmd.Flags().StringVar(&relayIngress.Addr, "relay-addr", "", "relay clients server address (UDP/QUIC, [host]:port) (defaults to ':19191')")
+	cmd.Flags().StringArrayVar(&relayIngress.Hostports, "relay-hostport", nil, `list of host[:port]s advertised by the control server for clients to connect to this relay
+  if empty will use 'localhost:(addr's port)', if port is unspecified will use the addr's port`)
+	cmd.Flags().StringArrayVar(&relayIngress.AllowCIDRs, "relay-allow-cidr", nil, "list of allowed networks for relay client connections (CIDR format)")
+	cmd.Flags().StringArrayVar(&relayIngress.DenyCIDRs, "relay-deny-cidr", nil, "list of denied networks for relay client connections (CIDR format)")
 
 	addStatusAddrFlag(cmd, &flagsConfig.Server.StatusAddr)
 	addStoreDirFlag(cmd, &flagsConfig.Server.StoreDir)

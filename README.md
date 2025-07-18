@@ -129,17 +129,17 @@ To run a client, use `connet --config client-config.toml` command. Here is the f
 configuration spec:
 ```toml
 [client]
-token-file = "path/to/relay/token" # file that contains the token for authenticating to the control server
-token = "client-token-1" # token for authenticating to the control server (when 'token-file' is empty)
-# when both 'token-file' and 'token' are missing, will try reading 'CONNET_TOKEN' from the environment
+token-file = "path/to/relay/token" # file that contains the auth token for the control server
+token = "client-token-1" # auth token for the control server (fallback when 'token-file' is not specified)
+# if both 'token-file' and 'token' are empty, will read 'CONNET_TOKEN' environment variable
 
-server-addr = "localhost:19190" # the control server address to connect to
-server-cas-file = "path/to/cert.pem" # the control server certificate
+server-addr = "localhost:19190" # control server address (UDP/QUIC, host:port) (defaults to '127.0.0.1:19190')
+server-cas-file = "path/to/cert.pem" # control server TLS certificate authorities file, when not using public CAs
 
-direct-addr = ":19192" # at what address this client listens for direct connections, defaults to :19192
+direct-addr = ":19192" # direct server address to listen for peer connections (UDP/QUIC, [host]:port) (defaults to ':19192')
 direct-stateless-reset-key = "" # the quic stateless reset key as a literal 32 byte value in bas58 format
 direct-stateless-reset-key-file = "/path/to/reset/key" # the quic stateless reset key read from a file
-status-addr = "127.0.0.1:19182" # at what address this client listens for status connections, disabled unless set
+status-addr = "127.0.0.1:19182" # status server address to listen for connections (TCP/HTTP, [host]:port) (disabled by default)
 nat-pmp = "system" # support for NAT-PMP, defaults to `system`
 
 relay-encryptions = ["none"] # require encryption when using relay for all destination/sources, defaults to "none"
@@ -202,7 +202,7 @@ tokens-file = "path/to/client/tokens" # file that contains a list of client toke
 tokens = ["client-token-1", "client-token-n"] # set of recognized client tokens
 # one of tokens or tokens-file is required
 
-status-addr = "127.0.0.1:19180" # at what address the server listens for status connections, disabled unless set
+status-addr = "127.0.0.1:19180" # address to listen for incoming status connections (TCP/HTTP, [host]:port) (disabled by default)
 store-dir = "path/to/server-store" # where does this server persist runtime information, defaults to a /tmp subdirectory
 
 [[server.ingress]] # defines how to accept client connections, can define mulitple
@@ -235,14 +235,14 @@ clients-tokens-file = "path/to/client/tokens" # a file that contains a list of c
 clients-tokens = ["client-token-1", "client-token-n"] # set of recognized client tokens
 # one of client-tokens-file or client-tokens is required
 
-relays-tokens = ["relay-token-1", "relay-token-n"] # set of recognized relay tokens
 relays-tokens-file = "path/to/relay/token" # a file that contains a list of relay tokens, one token per line
+relays-tokens = ["relay-token-1", "relay-token-n"] # set of recognized relay tokens
 # one of relay-tokens or relay-tokens-file is required if connecting relays
 
-status-addr = "127.0.0.1:19180" # at what address the control server listens for status connections, disabled unless set
+status-addr = "127.0.0.1:19180" # address to listen for incoming status connections (TCP/HTTP, [host]:port) (disabled by default)
 store-dir = "path/to/control-store" # where does this control server persist runtime information, defaults to a /tmp subdirectory
 
-[[control.clients-ingress]] # defines how client connections will be accepted, can add mulitple
+[[control.clients-ingress]] # defines how client connections will be accepted, can add mulitple ingresses
 addr = ":19190" # the address at which the control server will listen for client connections, defaults to :19190
 cert-file = "path/to/cert.pem" # the clients server certificate file, in pem format
 key-file = "path/to/key.pem" # the clients server certificate private key file
@@ -255,10 +255,10 @@ deny-cidrs = [] # set of networks in CIDR format, to deny client connetctions fr
 name-matches = "" # regular expression to check the name of the destination/source against
 role-matches = "" # only allow specific role for this token, either 'source' or 'destination'
 
-[[control.relays-ingress]] # defines how relay connections will be accepted, can add mulitple
+[[control.relays-ingress]] # defines how relay connections will be accepted, can add mulitple ingresses
 addr = ":19189" # the address at which the control server will listen for relay connections, defaults to :19189
-cert-file = "path/to/cert.pem" # the relays server certificate file, in pem format
-key-file = "path/to/key.pem" # the relays server certificate private key file
+cert-file = "path/to/cert.pem" # relays server TLS certificate file (pem format)
+key-file = "path/to/key.pem" # relays server TLS certificate private key file (pem format)
 allow-cidrs = [] # set of networks in CIDR format, to allow relay connetctions from
 deny-cidrs = [] # set of networks in CIDR format, to deny relay connetctions from
 
@@ -273,21 +273,22 @@ To run a relay server, use `connet relay --config relay-config.toml` command. He
 `relay-config.toml` configuration specification:
 ```toml
 [relay]
-token-file = "path/to/relay/token" # file that contains the token for authenticating to the control server
-token = "relay-token-1" # the token for authenticating to the control server (when 'token-file' is empty)
+token-file = "path/to/relay/token" # file that contains the auth token for the control server
+token = "relay-token-1" # auth token for the control server (fallback when 'token-file' is not specified)
 # one of token-file or token is required
 
-control-addr = "localhost:19190" # the control server address to connect to, defaults to localhost:19191
+control-addr = "localhost:19189" # the control server address to connect to, defaults to localhost:19189
 control-cas-file = "path/to/ca/file.pem" # the public certificate root of the control server, no default, required when using self-signed certs
 
-status-addr = "127.0.0.1:19181" # at what address the relay server listens for status connections, disabled unless set
+status-addr = "127.0.0.1:19181" # address to listen for incoming status connections (TCP/HTTP, [host]:port) (disabled by default)
 store-dir = "path/to/relay-store" # where does this relay persist runtime information, defaults to a /tmp subdirectory
 
-[[relay.ingress]] # defines how relay server will accept client connections, defaults to "localhost:19191"
+[[relay.ingress]] # defines how relay server will accept client connections, defaults to ":19191"
 addr = ":19191" # the address at which the relay will listen for connectsion, defaults to :19191
-hostports = ["localhost:19191"] # the public host:port (e.g. domain, ip address) which will be advertised to clients, defaults to localhost:[addr.port]
-allow-cidrs = [] # set of networks in CIDR format, to allow client connetctions from
-deny-cidrs = [] # set of networks in CIDR format, to deny client connetctions from
+hostports = ["localhost:19191"] # list of host[:port]s (e.g. domain, ip address) advertised by the control server for clients to connect to this relay
+                                #   if empty will use 'localhost:(addr's port)', if port is unspecified will use the addr's port
+allow-cidrs = [] # list of networks in CIDR format, to allow client connetctions from
+deny-cidrs = [] # list of networks in CIDR format, to deny client connetctions from
 ```
 
 #### Servers environment

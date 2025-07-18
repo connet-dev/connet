@@ -76,18 +76,18 @@ func clientCmd() *cobra.Command {
 	var flagsConfig Config
 	flagsConfig.addLogFlags(cmd)
 
-	cmd.Flags().StringVar(&flagsConfig.Client.TokenFile, "token-file", "", "file to read the token for authenticating to the control server")
-	cmd.Flags().StringVar(&flagsConfig.Client.Token, "token", "", `token for authenticating to the control server (when 'token-file' is empty)
-  if both 'token-file' and 'token' are unspecified, will read CONNET_TOKEN environment variable`)
+	cmd.Flags().StringVar(&flagsConfig.Client.TokenFile, "token-file", "", "file that contains the auth token for the control server")
+	cmd.Flags().StringVar(&flagsConfig.Client.Token, "token", "", `auth token for the control server (fallback when 'token-file' is not specified)
+  if both 'token-file' and 'token' are empty, will read CONNET_TOKEN environment variable`)
 
-	cmd.Flags().StringVar(&flagsConfig.Client.ServerAddr, "server-addr", "", "control server UDP address (host:port) to connect to")
+	cmd.Flags().StringVar(&flagsConfig.Client.ServerAddr, "server-addr", "", "control server address (UDP/QUIC, host:port) (defaults to '127.0.0.1:19190')")
 	cmd.Flags().StringVar(&flagsConfig.Client.ServerCAsFile, "server-cas-file", "", "control server TLS certificate authorities file, when not using public CAs")
 	cmd.Flags().StringVar(&flagsConfig.Client.ServerCAs, "server-cas", "", "control server TLS certificate authorities file, when not using public CAs")
 	if err := cmd.Flags().MarkHidden("server-cas"); err != nil {
 		slog.Warn("cannot to mark hidden", "err", err)
 	}
 
-	cmd.Flags().StringVar(&flagsConfig.Client.DirectAddr, "direct-addr", "", "UDP address ([host]:port) to listen for peer connections")
+	cmd.Flags().StringVar(&flagsConfig.Client.DirectAddr, "direct-addr", "", "direct server address to listen for peer connections (UDP/QUIC, [host]:port) (defaults to ':19192')")
 	addStatusAddrFlag(cmd, &flagsConfig.Client.StatusAddr)
 	cmd.Flags().StringVar(&flagsConfig.Client.NatPMP, "nat-pmp", "", "nat-pmp behavior, one of [system, dial, disabled] (defaults to 'system')")
 

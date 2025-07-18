@@ -45,16 +45,17 @@ func relayCmd() *cobra.Command {
 	var flagsConfig Config
 	flagsConfig.addLogFlags(cmd)
 
-	cmd.Flags().StringVar(&flagsConfig.Relay.TokenFile, "token-file", "", "file to read the token for authenticating to the control server")
-	cmd.Flags().StringVar(&flagsConfig.Relay.Token, "token", "", "token for authenticating to the control server (when 'token-file' is empty)")
+	cmd.Flags().StringVar(&flagsConfig.Relay.TokenFile, "token-file", "", "file that contains the auth token for the control server")
+	cmd.Flags().StringVar(&flagsConfig.Relay.Token, "token", "", "auth token for the control server (fallback when 'token-file' is not specified)")
 
 	var ingress RelayIngress
-	cmd.Flags().StringVar(&ingress.Addr, "addr", "", "UDP address to ([host]:port) listen for client connections")
-	cmd.Flags().StringArrayVar(&ingress.Hostports, "hostport", nil, "public host[:port] advertised by the control server for clients to connect to this relay")
-	cmd.Flags().StringArrayVar(&ingress.AllowCIDRs, "allow-cidr", nil, "CIDR to allow client connections from")
-	cmd.Flags().StringArrayVar(&ingress.DenyCIDRs, "deny-cidr", nil, "CIDR to deny client connections from")
+	cmd.Flags().StringVar(&ingress.Addr, "addr", "", "clients server address to listen for connections (UDP/QUIC, [host]:port) (defaults to ':19191')")
+	cmd.Flags().StringArrayVar(&ingress.Hostports, "hostport", nil, `list of host[:port]s advertised by the control server for clients to connect to this relay
+  if empty will use 'localhost:(addr's port)', if port is unspecified will use the addr's port`)
+	cmd.Flags().StringArrayVar(&ingress.AllowCIDRs, "allow-cidr", nil, "list of allowed networks for client connections (CIDR format) ")
+	cmd.Flags().StringArrayVar(&ingress.DenyCIDRs, "deny-cidr", nil, "list of denied networks for client connections (CIDR format) ")
 
-	cmd.Flags().StringVar(&flagsConfig.Relay.ControlAddr, "control-addr", "", "control server UDP address (host:port)")
+	cmd.Flags().StringVar(&flagsConfig.Relay.ControlAddr, "control-addr", "", "control server address (UDP/QUIC, host:port) (defaults to '127.0.0.1:19189')")
 	cmd.Flags().StringVar(&flagsConfig.Relay.ControlCAsFile, "control-cas-file", "", "control server TLS certificate authorities file, when not using public CAs")
 	cmd.Flags().StringVar(&flagsConfig.Relay.ControlCAs, "control-cas", "", "control server TLS certificate authorities file, when not using public CAs (deprecated)")
 	if err := cmd.Flags().MarkHidden("control-cas"); err != nil {

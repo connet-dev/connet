@@ -225,7 +225,7 @@ func mergeSlices[S ~[]T, T interface{ merge(T) T }](c S, o S) S {
 }
 
 func addStatusAddrFlag(cmd *cobra.Command, ref *string) {
-	cmd.Flags().StringVar(ref, "status-addr", "", "TCP address ([host]:port) to listen for status connections (disabled if empty)")
+	cmd.Flags().StringVar(ref, "status-addr", "", "status server address to listen for connections (TCP/HTTP, [host]:port) (disabled by default)")
 }
 
 type withStatus[T any] interface {

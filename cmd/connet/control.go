@@ -59,28 +59,28 @@ func controlCmd() *cobra.Command {
 	flagsConfig.addLogFlags(cmd)
 
 	var commonIngress ControlIngress
-	cmd.Flags().StringVar(&commonIngress.Cert, "cert-file", "", "TLS certificate to use for both client and relay connections")
-	cmd.Flags().StringVar(&commonIngress.Key, "key-file", "", "TLS certificate key to use for both client and relay connections")
+	cmd.Flags().StringVar(&commonIngress.Cert, "cert-file", "", "default servers' TLS certificate file (pem format)")
+	cmd.Flags().StringVar(&commonIngress.Key, "key-file", "", "default servers' TLS certificate private key file (pem format)")
+
+	cmd.Flags().StringVar(&flagsConfig.Control.ClientsTokensFile, "clients-tokens-file", "", "file containing a list of client auth tokens (token per line)")
+	cmd.Flags().StringArrayVar(&flagsConfig.Control.ClientsTokens, "clients-tokens", nil, "list of client auth tokens (fallback when 'client-tokens-file' is not specified)")
 
 	var clientIngress ControlIngress
-	cmd.Flags().StringVar(&clientIngress.Addr, "clients-addr", "", "UDP address ([host]:port) to listen for client connections")
-	cmd.Flags().StringVar(&clientIngress.Cert, "clients-cert-file", "", "TLS certificate to use for client connections (defaults to 'cert-file')")
-	cmd.Flags().StringVar(&clientIngress.Key, "clients-key-file", "", "TLS certificate key to use for client connections (defaults to 'key-file')")
-	cmd.Flags().StringArrayVar(&clientIngress.AllowCIDRs, "clients-allow-cidr", nil, "CIDR to allow client connections from")
-	cmd.Flags().StringArrayVar(&clientIngress.DenyCIDRs, "clients-deny-cidr", nil, "CIDR to deny client connections from")
+	cmd.Flags().StringVar(&clientIngress.Addr, "clients-addr", "", "clients server address to listen for connections (UDP/QUIC, [host]:port) (defaults to ':19190')")
+	cmd.Flags().StringVar(&clientIngress.Cert, "clients-cert-file", "", "clients server TLS certificate file (pem format) (defaults to 'cert-file' if unspecified)")
+	cmd.Flags().StringVar(&clientIngress.Key, "clients-key-file", "", "clients server TLS certificate key file (pem format) (defaults to 'key-file' if unspecified)")
+	cmd.Flags().StringArrayVar(&clientIngress.AllowCIDRs, "clients-allow-cidr", nil, "list of allowed networks for client connections (CIDR format)")
+	cmd.Flags().StringArrayVar(&clientIngress.DenyCIDRs, "clients-deny-cidr", nil, "list of denied networks for client connections (CIDR format)")
 
-	cmd.Flags().StringVar(&flagsConfig.Control.ClientsTokensFile, "clients-tokens-file", "", "file containing a list of client authentication tokens (token per line)")
-	cmd.Flags().StringArrayVar(&flagsConfig.Control.ClientsTokens, "clients-tokens", nil, "list of client authentication tokens (when 'client-tokens-file' is empty)")
+	cmd.Flags().StringVar(&flagsConfig.Control.RelaysTokensFile, "relays-tokens-file", "", "file containing a list of relay auth tokens (token per line)")
+	cmd.Flags().StringArrayVar(&flagsConfig.Control.RelaysTokens, "relays-tokens", nil, "list of relay auth tokens (fallback when 'relay-tokens-file' is not specified)")
 
 	var relayIngress ControlIngress
-	cmd.Flags().StringVar(&relayIngress.Addr, "relays-addr", "", "UDP address ([host]:port) to listen for relay server connections")
-	cmd.Flags().StringVar(&relayIngress.Cert, "relays-cert-file", "", "TLS certificate to use for relay server connections (defaults to 'cert-file')")
-	cmd.Flags().StringVar(&relayIngress.Key, "relays-key-file", "", "TLS certificate key to use for relay server connections (defaults to 'key-file')")
-	cmd.Flags().StringArrayVar(&relayIngress.AllowCIDRs, "relays-allow-cidr", nil, "CIDR to allow relay server connections from")
-	cmd.Flags().StringArrayVar(&relayIngress.DenyCIDRs, "relays-deny-cidr", nil, "CIDR to deny relay server connections from")
-
-	cmd.Flags().StringVar(&flagsConfig.Control.RelaysTokensFile, "relays-tokens-file", "", "file containing a list of relay authentication tokens (token per line)")
-	cmd.Flags().StringArrayVar(&flagsConfig.Control.RelaysTokens, "relays-tokens", nil, "list of relay authentication tokens (when 'relay-tokens-file' is empty)")
+	cmd.Flags().StringVar(&relayIngress.Addr, "relays-addr", "", "relays server address to listen for connections (UDP/QUIC, [host]:port) (defaults to ':19189')")
+	cmd.Flags().StringVar(&relayIngress.Cert, "relays-cert-file", "", "relays server TLS certificate file (pem format) (defaults to 'cert-file' if unspecified)")
+	cmd.Flags().StringVar(&relayIngress.Key, "relays-key-file", "", "relays server TLS certificate key file (pem format) (defaults to 'key-file' if unspecified)")
+	cmd.Flags().StringArrayVar(&relayIngress.AllowCIDRs, "relays-allow-cidr", nil, "list of allowed networks for relay connections (CIDR format)")
+	cmd.Flags().StringArrayVar(&relayIngress.DenyCIDRs, "relays-deny-cidr", nil, "list of denied networks for relay connections (CIDR format)")
 
 	addStatusAddrFlag(cmd, &flagsConfig.Control.StatusAddr)
 	addStoreDirFlag(cmd, &flagsConfig.Control.StoreDir)
