@@ -342,7 +342,7 @@ and asymmetrically encrypts data with Chacha20Poly1305. A good comporimse betwee
 
 By default `connet` doesn't encrypt relay connections (`relay-encryptions = ["none"]`) (e.g. you are running your own trusted relay).
 When multiple values are set (e.g. `relay-encryptions = ["none", "dhxcp", "tls"]`) it will prefer the most secure/mature option
-(`tls` in this case, then `dhxp`), but fallback to `none` in case the other peer is not configured to use encryption yet.
+(`tls` in this case, then `dhxcp`), but fallback to `none` in case the other peer is not configured to use encryption yet.
 Only setting one encryption option (for example `relay-encryptions = ["tls"]`), is the most strict configuration, which will
 require same encryption at both clients (e.g. source and destination).  
 

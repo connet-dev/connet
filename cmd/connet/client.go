@@ -87,25 +87,25 @@ func clientCmd() *cobra.Command {
 	}
 
 	cmd.Flags().StringVar(&flagsConfig.Client.DirectAddr, "direct-addr", "", "UDP address ([host]:port) to listen for peer connections")
-	cmd.Flags().StringVar(&flagsConfig.Client.StatusAddr, "status-addr", "", "TCP address ([host]:port) to listen for status connections (disabled if not present)")
+	addStatusAddrFlag(cmd, &flagsConfig.Client.StatusAddr)
 	cmd.Flags().StringVar(&flagsConfig.Client.NatPMP, "nat-pmp", "", "nat-pmp behavior, one of [system, dial, disabled] (defaults to 'system')")
 
 	var dstName string
 	var dstCfg DestinationConfig
 	cmd.Flags().StringVar(&dstName, "dst-name", "", "destination name")
-	cmd.Flags().StringVar(&dstCfg.Route, "dst-route", "", "destination route")
-	cmd.Flags().StringSliceVar(&dstCfg.RelayEncryptions, "dst-relay-encryption", nil, "destination relay encryptions")
+	cmd.Flags().StringVar(&dstCfg.Route, "dst-route", "", "destination route, one of [any, direct, relay] (defaults to 'any')")
+	cmd.Flags().StringSliceVar(&dstCfg.RelayEncryptions, "dst-relay-encryption", nil, "destination relay encryptions, one of [none, tls, dhxcp] (defaults to 'none')")
 	cmd.Flags().StringVar(&dstCfg.URL, "dst-url", "", "destination url (scheme describes the destination)")
-	cmd.Flags().StringVar(&dstCfg.CAsFile, "dst-cas-file", "", "destination client tls certificate authorities file")
+	cmd.Flags().StringVar(&dstCfg.CAsFile, "dst-cas-file", "", "destination client TLS certificate authorities file")
 
 	var srcName string
 	var srcCfg SourceConfig
 	cmd.Flags().StringVar(&srcName, "src-name", "", "source name")
-	cmd.Flags().StringVar(&srcCfg.Route, "src-route", "", "source route")
-	cmd.Flags().StringSliceVar(&srcCfg.RelayEncryptions, "src-relay-encryption", nil, "source relay encryptions")
+	cmd.Flags().StringVar(&srcCfg.Route, "src-route", "", "source route, one of [any, direct, relay] (default to 'any')")
+	cmd.Flags().StringSliceVar(&srcCfg.RelayEncryptions, "src-relay-encryption", nil, "source relay encryptions, one of [none, tls, dhxcp] (defaults to 'none')")
 	cmd.Flags().StringVar(&srcCfg.URL, "src-url", "", "source url (scheme describes server type)")
-	cmd.Flags().StringVar(&srcCfg.CertFile, "src-cert-file", "", "source server tls cert file")
-	cmd.Flags().StringVar(&srcCfg.KeyFile, "src-key-file", "", "source server tls key file")
+	cmd.Flags().StringVar(&srcCfg.CertFile, "src-cert-file", "", "source server TLS certificate file (when using tls or https scheme)")
+	cmd.Flags().StringVar(&srcCfg.KeyFile, "src-key-file", "", "source server TLS certificate key file (when using tls or https scheme)")
 
 	cmd.RunE = wrapErr("run connet client", func(cmd *cobra.Command, _ []string) error {
 		cfg, err := loadConfigs(*filenames)

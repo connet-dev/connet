@@ -82,7 +82,7 @@ func controlCmd() *cobra.Command {
 	cmd.Flags().StringArrayVar(&flagsConfig.Control.RelaysTokens, "relays-tokens", nil, "relay tokens for clients to connect")
 	cmd.Flags().StringVar(&flagsConfig.Control.RelaysTokensFile, "relays-tokens-file", "", "relay tokens file to load")
 
-	cmd.Flags().StringVar(&flagsConfig.Control.StatusAddr, "status-addr", "", "TCP address ([host]:port) to listen for status connections (disabled if not present)")
+	addStatusAddrFlag(cmd, &flagsConfig.Control.StatusAddr)
 	cmd.Flags().StringVar(&flagsConfig.Control.StoreDir, "store-dir", "", "storage dir, /tmp subdirectory if empty")
 
 	cmd.RunE = wrapErr("run connet control server", func(cmd *cobra.Command, _ []string) error {

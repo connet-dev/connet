@@ -61,7 +61,7 @@ func relayCmd() *cobra.Command {
 		slog.Warn("cannot to mark hidden", "err", err)
 	}
 
-	cmd.Flags().StringVar(&flagsConfig.Relay.StatusAddr, "status-addr", "", "TCP address ([host]:port) to listen for status connections (disabled if not present)")
+	addStatusAddrFlag(cmd, &flagsConfig.Relay.StatusAddr)
 	cmd.Flags().StringVar(&flagsConfig.Relay.StoreDir, "store-dir", "", "storage dir, /tmp subdirectory if empty")
 
 	cmd.RunE = wrapErr("run connet relay server", func(cmd *cobra.Command, _ []string) error {

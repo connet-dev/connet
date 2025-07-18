@@ -223,6 +223,10 @@ func mergeSlices[S ~[]T, T interface{ merge(T) T }](c S, o S) S {
 	return c
 }
 
+func addStatusAddrFlag(cmd *cobra.Command, ref *string) {
+	cmd.Flags().StringVar(ref, "status-addr", "", "TCP address ([host]:port) to listen for status connections (disabled if empty)")
+}
+
 type withStatus[T any] interface {
 	Run(context.Context) error
 	Status(context.Context) (T, error)

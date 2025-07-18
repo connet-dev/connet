@@ -51,7 +51,7 @@ func serverCmd() *cobra.Command {
 	cmd.Flags().StringArrayVar(&relayIngress.AllowCIDRs, "relay-allow-cidr", nil, "CIDR to allow client relay connections from")
 	cmd.Flags().StringArrayVar(&relayIngress.DenyCIDRs, "relay-deny-cidr", nil, "CIDR to deny client relay connections from")
 
-	cmd.Flags().StringVar(&flagsConfig.Server.StatusAddr, "status-addr", "", "TCP address ([host]:port) to listen for status connections (disabled if not present)")
+	addStatusAddrFlag(cmd, &flagsConfig.Server.StatusAddr)
 	cmd.Flags().StringVar(&flagsConfig.Server.StoreDir, "store-dir", "", "storage dir, /tmp subdirectory if empty")
 
 	cmd.RunE = wrapErr("run connet server", func(cmd *cobra.Command, _ []string) error {
