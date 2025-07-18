@@ -198,12 +198,12 @@ To run a server (e.g. running both control and a relay server), use `connet serv
 Here is the full server `server-config.toml` configuration specification:
 ```toml
 [server]
-tokens-file = "path/to/client/tokens" # file that contains a list of client tokens, one token per line
-tokens = ["client-token-1", "client-token-n"] # set of recognized client tokens
+tokens-file = "path/to/client/tokens" # file that contains a list of client auth tokens, one token per line
+tokens = ["client-token-1", "client-token-n"] # set of recognized client auth tokens
 # one of tokens or tokens-file is required
 
 status-addr = "127.0.0.1:19180" # address to listen for incoming status connections (TCP/HTTP, [host]:port) (disabled by default)
-store-dir = "path/to/server-store" # where does this server persist runtime information, defaults to a /tmp subdirectory
+store-dir = "path/to/server-store" # directory for this server to persist runtime information, see Storage section for more info
 
 [[server.ingress]] # defines how to accept client connections, can define mulitple
 addr = ":19190" # the address at which the control server will listen for client connections, defaults to :19190
@@ -231,16 +231,16 @@ To run a control server, use `connet control --config control-config.toml` comma
 `control-config.toml` configuration specification:
 ```toml
 [control]
-clients-tokens-file = "path/to/client/tokens" # a file that contains a list of client tokens, one token per line
-clients-tokens = ["client-token-1", "client-token-n"] # set of recognized client tokens
+clients-tokens-file = "path/to/client/tokens" # file containing a list of client auth tokens, one token per line
+clients-tokens = ["client-token-1", "client-token-n"] # list of recognized client auth tokens
 # one of client-tokens-file or client-tokens is required
 
-relays-tokens-file = "path/to/relay/token" # a file that contains a list of relay tokens, one token per line
-relays-tokens = ["relay-token-1", "relay-token-n"] # set of recognized relay tokens
+relays-tokens-file = "path/to/relay/token" # file containing a list of relay auth tokens, one token per line
+relays-tokens = ["relay-token-1", "relay-token-n"] # list of recognized relay auth tokens
 # one of relay-tokens or relay-tokens-file is required if connecting relays
 
 status-addr = "127.0.0.1:19180" # address to listen for incoming status connections (TCP/HTTP, [host]:port) (disabled by default)
-store-dir = "path/to/control-store" # where does this control server persist runtime information, defaults to a /tmp subdirectory
+store-dir = "path/to/control-store" # directory for this control server to persist runtime information, see Storage section for more info
 
 [[control.clients-ingress]] # defines how client connections will be accepted, can add mulitple ingresses
 addr = ":19190" # the address at which the control server will listen for client connections, defaults to :19190
@@ -281,7 +281,7 @@ control-addr = "localhost:19189" # the control server address to connect to, def
 control-cas-file = "path/to/ca/file.pem" # the public certificate root of the control server, no default, required when using self-signed certs
 
 status-addr = "127.0.0.1:19181" # address to listen for incoming status connections (TCP/HTTP, [host]:port) (disabled by default)
-store-dir = "path/to/relay-store" # where does this relay persist runtime information, defaults to a /tmp subdirectory
+store-dir = "path/to/relay-store" # directory for this relay server to persist runtime information, see Storage section for more info
 
 [[relay.ingress]] # defines how relay server will accept client connections, defaults to ":19191"
 addr = ":19191" # the address at which the relay will listen for connectsion, defaults to :19191
@@ -352,8 +352,13 @@ require same encryption at both clients (e.g. source and destination).
 ### Storage
 
 `connet` servers (both control and relay servers) store runtime state on the file system. If you don't explicitly specify 
-`store-dir`, they will use a new subdirectory in `/tmp` by default, which means that every time they restart they'll loose
-any state and identity. To prevent this, you can specify an explicit `store-dir` location, which can be reused between runs.
+`store-dir` in the configuration, it will try to use the following:
+ - check if `CONNET_STATE_DIR` environment variable is not empty, and use that location
+ - then check if `STATE_DIRECTORY` environment variable is not empty, and use that location
+ - finally, try to create a new subdirectory in the current's system temporary directory (`TMPDIR`)
+
+When using a temporary subdirectory, every time the server restarts it will loose any state and identity. To prevent this,
+you can specify an explicit `store-dir` location, which can be reused between runs.
 
 ### Logging
 
