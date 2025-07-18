@@ -129,8 +129,9 @@ To run a client, use `connet --config client-config.toml` command. Here is the f
 configuration spec:
 ```toml
 [client]
-token = "client-token-1" # the token which the client uses to authenticate against the control server
-token-file = "path/to/relay/token" # a file that contains the token, one of token or token-file is required
+token-file = "path/to/relay/token" # file that contains the token for authenticating to the control server
+token = "client-token-1" # token for authenticating to the control server (when 'token-file' is empty)
+# when both 'token-file' and 'token' are missing, will try reading 'CONNET_TOKEN' from the environment
 
 server-addr = "localhost:19190" # the control server address to connect to
 server-cas-file = "path/to/cert.pem" # the control server certificate
@@ -184,7 +185,7 @@ url = "tcp://:8001" # again, mulitple sources can be defined
 #### Client environment
 
 The client uses the following environment variables, in case the associated fields in the config file are empty:
- - `CONNET_TOKEN` - pass the client's token from as env variable, used when `token` and `token-file` are empty
+ - `CONNET_TOKEN` - pass the client's token from as env variable, used when `token-file` and `token` are empty
  - `CONNET_CACHE_DIR` - specifies the location of the stateless reset token, used when `direct-stateless-reset-key`
    and `direct-stateless-reset-key-file` are empty
  - `CACHE_DIRECTORY` - used after trying to use `CONNET_CACHE_DIR`, another location for the stateless reset token. This
@@ -197,8 +198,8 @@ To run a server (e.g. running both control and a relay server), use `connet serv
 Here is the full server `server-config.toml` configuration specification:
 ```toml
 [server]
+tokens-file = "path/to/client/tokens" # file that contains a list of client tokens, one token per line
 tokens = ["client-token-1", "client-token-n"] # set of recognized client tokens
-tokens-file = "path/to/client/tokens" # a file that contains a list of client tokens, one token per line
 # one of tokens or tokens-file is required
 
 status-addr = "127.0.0.1:19180" # at what address the server listens for status connections, disabled unless set
@@ -230,9 +231,9 @@ To run a control server, use `connet control --config control-config.toml` comma
 `control-config.toml` configuration specification:
 ```toml
 [control]
-clients-tokens = ["client-token-1", "client-token-n"] # set of recognized client tokens
 clients-tokens-file = "path/to/client/tokens" # a file that contains a list of client tokens, one token per line
-# one of client-tokens or client-tokens-file is required
+clients-tokens = ["client-token-1", "client-token-n"] # set of recognized client tokens
+# one of client-tokens-file or client-tokens is required
 
 relays-tokens = ["relay-token-1", "relay-token-n"] # set of recognized relay tokens
 relays-tokens-file = "path/to/relay/token" # a file that contains a list of relay tokens, one token per line
@@ -272,8 +273,9 @@ To run a relay server, use `connet relay --config relay-config.toml` command. He
 `relay-config.toml` configuration specification:
 ```toml
 [relay]
-token = "relay-token-1" # the token which the relay server uses to authenticate against the control server
-token-file = "path/to/relay/token" # a file that contains the token, one of token or token-file is required
+token-file = "path/to/relay/token" # file that contains the token for authenticating to the control server
+token = "relay-token-1" # the token for authenticating to the control server (when 'token-file' is empty)
+# one of token-file or token is required
 
 control-addr = "localhost:19190" # the control server address to connect to, defaults to localhost:19191
 control-cas-file = "path/to/ca/file.pem" # the public certificate root of the control server, no default, required when using self-signed certs

@@ -13,8 +13,8 @@ import (
 type ServerConfig struct {
 	Ingresses []ControlIngress `toml:"ingress"`
 
-	Tokens            []string           `toml:"tokens"`
 	TokensFile        string             `toml:"tokens-file"`
+	Tokens            []string           `toml:"tokens"`
 	TokenRestrictions []TokenRestriction `toml:"token-restriction"`
 
 	RelayIngresses []RelayIngress `toml:"relay-ingress"`
@@ -42,8 +42,8 @@ func serverCmd() *cobra.Command {
 	cmd.Flags().StringArrayVar(&clientIngress.AllowCIDRs, "allow-cidr", nil, "CIDR to allow client connections from")
 	cmd.Flags().StringArrayVar(&clientIngress.DenyCIDRs, "deny-cidr", nil, "CIDR to deny client connections from")
 
-	cmd.Flags().StringArrayVar(&flagsConfig.Server.Tokens, "tokens", nil, "tokens for clients to connect")
-	cmd.Flags().StringVar(&flagsConfig.Server.TokensFile, "tokens-file", "", "tokens file to load")
+	cmd.Flags().StringVar(&flagsConfig.Server.TokensFile, "tokens-file", "", "file containing list of client authentication tokens (token per line)")
+	cmd.Flags().StringArrayVar(&flagsConfig.Server.Tokens, "tokens", nil, "list of client authentication tokens (when 'tokens-file' is empty)")
 
 	var relayIngress RelayIngress
 	cmd.Flags().StringVar(&relayIngress.Addr, "relay-addr", "", "UDP address ([host]:port) for the relay server to listen for client connections")
@@ -52,7 +52,7 @@ func serverCmd() *cobra.Command {
 	cmd.Flags().StringArrayVar(&relayIngress.DenyCIDRs, "relay-deny-cidr", nil, "CIDR to deny client relay connections from")
 
 	addStatusAddrFlag(cmd, &flagsConfig.Server.StatusAddr)
-	cmd.Flags().StringVar(&flagsConfig.Server.StoreDir, "store-dir", "", "storage dir, /tmp subdirectory if empty")
+	addStoreDirFlag(cmd, &flagsConfig.Server.StoreDir)
 
 	cmd.RunE = wrapErr("run connet server", func(cmd *cobra.Command, _ []string) error {
 		cfg, err := loadConfigs(*filenames)
@@ -77,6 +77,12 @@ func serverCmd() *cobra.Command {
 	})
 
 	return cmd
+}
+
+func addStoreDirFlag(cmd *cobra.Command, ref *string) {
+	cmd.Flags().StringVar(ref, "store-dir", "", `directory to store persistent state
+  when empty will try the following environment variables: CONNET_STATE_DIR, STATE_DIRECTORY
+  if still empty, it will try to create a subdirectory in the current system TMPDIR directory`)
 }
 
 func serverRun(ctx context.Context, cfg ServerConfig, logger *slog.Logger) error {

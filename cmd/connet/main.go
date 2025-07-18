@@ -116,7 +116,8 @@ func versionCmd() *cobra.Command {
 }
 
 func addConfigsFlag(cmd *cobra.Command) *[]string {
-	return cmd.Flags().StringArray("config", nil, "configuration file(s) to load, merged when passed mulitple times")
+	return cmd.Flags().StringArray("config", nil, `configuration file(s) to load, merged when passed mulitple times
+  any explicit flags are merged last and override values from the configuration files`)
 }
 
 func (cfg *Config) addLogFlags(cmd *cobra.Command) {

@@ -15,13 +15,13 @@ import (
 
 type ControlConfig struct {
 	ClientsIngresses         []ControlIngress   `toml:"clients-ingress"`
-	ClientsTokens            []string           `toml:"clients-tokens"`
 	ClientsTokensFile        string             `toml:"clients-tokens-file"`
+	ClientsTokens            []string           `toml:"clients-tokens"`
 	ClientsTokenRestrictions []TokenRestriction `toml:"clients-token-restriction"`
 
 	RelaysIngresses         []ControlIngress `toml:"relays-ingress"`
-	RelaysTokens            []string         `toml:"relays-tokens"`
 	RelaysTokensFile        string           `toml:"relays-tokens-file"`
+	RelaysTokens            []string         `toml:"relays-tokens"`
 	RelaysTokenRestrictions []IPRestriction  `toml:"relays-token-restriction"`
 
 	StatusAddr string `toml:"status-addr"`
@@ -69,8 +69,8 @@ func controlCmd() *cobra.Command {
 	cmd.Flags().StringArrayVar(&clientIngress.AllowCIDRs, "clients-allow-cidr", nil, "CIDR to allow client connections from")
 	cmd.Flags().StringArrayVar(&clientIngress.DenyCIDRs, "clients-deny-cidr", nil, "CIDR to deny client connections from")
 
-	cmd.Flags().StringArrayVar(&flagsConfig.Control.ClientsTokens, "clients-tokens", nil, "client tokens for clients to connect")
-	cmd.Flags().StringVar(&flagsConfig.Control.ClientsTokensFile, "clients-tokens-file", "", "client tokens file to load")
+	cmd.Flags().StringVar(&flagsConfig.Control.ClientsTokensFile, "clients-tokens-file", "", "file containing a list of client authentication tokens (token per line)")
+	cmd.Flags().StringArrayVar(&flagsConfig.Control.ClientsTokens, "clients-tokens", nil, "list of client authentication tokens (when 'client-tokens-file' is empty)")
 
 	var relayIngress ControlIngress
 	cmd.Flags().StringVar(&relayIngress.Addr, "relays-addr", "", "UDP address ([host]:port) to listen for relay server connections")
@@ -79,11 +79,11 @@ func controlCmd() *cobra.Command {
 	cmd.Flags().StringArrayVar(&relayIngress.AllowCIDRs, "relays-allow-cidr", nil, "CIDR to allow relay server connections from")
 	cmd.Flags().StringArrayVar(&relayIngress.DenyCIDRs, "relays-deny-cidr", nil, "CIDR to deny relay server connections from")
 
-	cmd.Flags().StringArrayVar(&flagsConfig.Control.RelaysTokens, "relays-tokens", nil, "relay tokens for clients to connect")
-	cmd.Flags().StringVar(&flagsConfig.Control.RelaysTokensFile, "relays-tokens-file", "", "relay tokens file to load")
+	cmd.Flags().StringVar(&flagsConfig.Control.RelaysTokensFile, "relays-tokens-file", "", "file containing a list of relay authentication tokens (token per line)")
+	cmd.Flags().StringArrayVar(&flagsConfig.Control.RelaysTokens, "relays-tokens", nil, "list of relay authentication tokens (when 'relay-tokens-file' is empty)")
 
 	addStatusAddrFlag(cmd, &flagsConfig.Control.StatusAddr)
-	cmd.Flags().StringVar(&flagsConfig.Control.StoreDir, "store-dir", "", "storage dir, /tmp subdirectory if empty")
+	addStoreDirFlag(cmd, &flagsConfig.Control.StoreDir)
 
 	cmd.RunE = wrapErr("run connet control server", func(cmd *cobra.Command, _ []string) error {
 		cfg, err := loadConfigs(*filenames)
