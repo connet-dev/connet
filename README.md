@@ -604,6 +604,7 @@ by adding account management and it is one of the easiest way to start.
 ### v0.9.3
  - [x] zip distribution for macos
  - [x] embed version when building
+ - [x] cleanup and improve cli interface/docs
 
 ### v0.10.0
  - [ ] preshared clients - controless p2p
