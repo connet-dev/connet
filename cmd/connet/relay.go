@@ -51,7 +51,7 @@ func relayCmd() *cobra.Command {
 	var ingress RelayIngress
 	cmd.Flags().StringVar(&ingress.Addr, "addr", "", "clients server address to listen for connections (UDP/QUIC, [host]:port) (defaults to ':19191')")
 	cmd.Flags().StringArrayVar(&ingress.Hostports, "hostport", nil, `list of host[:port]s advertised by the control server for clients to connect to this relay
-  if empty will use 'localhost:(addr's port)', if port is unspecified will use the addr's port`)
+  defaults to 'localhost:<port in addr>', if port is not set will use the addr's port`)
 	cmd.Flags().StringArrayVar(&ingress.AllowCIDRs, "allow-cidr", nil, "list of allowed networks for client connections (CIDR format) ")
 	cmd.Flags().StringArrayVar(&ingress.DenyCIDRs, "deny-cidr", nil, "list of denied networks for client connections (CIDR format) ")
 

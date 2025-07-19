@@ -222,7 +222,8 @@ role-matches = "" # only allow specific role for this token, either 'source' or 
 
 [[server.relay-ingress]]
 addr = ":19191" # the address at which the relay will listen for connectsion, defaults to :19191
-hostports = ["localhost"] # the public host[:port] (e.g. domain, ip address) which will be advertised to clients, defaults to localhost:<port of address>
+hostports = ["localhost"] # list of host[:port] (e.g. domain, ip address) advertised by the control server for clients to connect to this relay
+                          #   defaults to 'localhost:<port of addr>', if port is not set will use <port of addr>
 allow-cidrs = [] # set of networks in CIDR format, to allow client relay connetctions from
 deny-cidrs = [] # set of networks in CIDR format, to deny client relay connetctions from
 ```
@@ -288,7 +289,7 @@ store-dir = "path/to/relay-store" # directory for this relay server to persist r
 [[relay.ingress]] # defines how relay server will accept client connections, defaults to ":19191"
 addr = ":19191" # the address at which the relay will listen for connectsion, defaults to :19191
 hostports = ["localhost:19191"] # list of host[:port]s (e.g. domain, ip address) advertised by the control server for clients to connect to this relay
-                                #   if empty will use 'localhost:(addr's port)', if port is unspecified will use the addr's port
+                                #   defaults to 'localhost:<port of addr>', if port is not set will use <port of addr>
 allow-cidrs = [] # list of networks in CIDR format, to allow client connetctions from
 deny-cidrs = [] # list of networks in CIDR format, to deny client connetctions from
 ```
