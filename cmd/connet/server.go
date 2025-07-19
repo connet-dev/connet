@@ -13,8 +13,8 @@ import (
 type ServerConfig struct {
 	Ingresses []ControlIngress `toml:"ingress"`
 
-	Tokens            []string           `toml:"tokens"`
 	TokensFile        string             `toml:"tokens-file"`
+	Tokens            []string           `toml:"tokens"`
 	TokenRestrictions []TokenRestriction `toml:"token-restriction"`
 
 	RelayIngresses []RelayIngress `toml:"relay-ingress"`
@@ -26,34 +26,34 @@ type ServerConfig struct {
 func serverCmd() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "server",
-		Short: "run connet server",
+		Short: "Run a connet server (control and relay server as one)",
 	}
 	cmd.Flags().SortFlags = false
 
-	filenames := cmd.Flags().StringArray("config", nil, "config file to load, can be passed multiple times")
+	filenames := addConfigsFlag(cmd)
 
 	var flagsConfig Config
-	cmd.Flags().StringVar(&flagsConfig.LogLevel, "log-level", "", "log level to use")
-	cmd.Flags().StringVar(&flagsConfig.LogFormat, "log-format", "", "log formatter to use")
+	flagsConfig.addLogFlags(cmd)
+
+	cmd.Flags().StringVar(&flagsConfig.Server.TokensFile, "tokens-file", "", "file containing list of client auth tokens (token per line)")
+	cmd.Flags().StringArrayVar(&flagsConfig.Server.Tokens, "tokens", nil, "list of client auth tokens (fallback 'tokens-file' is not specified)")
 
 	var clientIngress ControlIngress
-	cmd.Flags().StringVar(&clientIngress.Addr, "addr", "", "control server addr to use")
-	cmd.Flags().StringVar(&clientIngress.Cert, "cert-file", "", "control server cert to use")
-	cmd.Flags().StringVar(&clientIngress.Key, "key-file", "", "control server key to use")
-	cmd.Flags().StringArrayVar(&clientIngress.AllowCIDRs, "allow-cidr", nil, "cidr to allow client connections from")
-	cmd.Flags().StringArrayVar(&clientIngress.DenyCIDRs, "deny-cidr", nil, "cidr to deny client connections from")
-
-	cmd.Flags().StringArrayVar(&flagsConfig.Server.Tokens, "tokens", nil, "tokens for clients to connect")
-	cmd.Flags().StringVar(&flagsConfig.Server.TokensFile, "tokens-file", "", "tokens file to load")
+	cmd.Flags().StringVar(&clientIngress.Addr, "addr", "", "clients server address to listen for connection (UDP/QUIC, [host]:port) (defaults to ':19190')")
+	cmd.Flags().StringVar(&clientIngress.Cert, "cert-file", "", "clients server TLS certificate file (pem format)")
+	cmd.Flags().StringVar(&clientIngress.Key, "key-file", "", "clients server TLS certificate private key file (pem format)")
+	cmd.Flags().StringArrayVar(&clientIngress.AllowCIDRs, "allow-cidr", nil, "list of allowed networks for client connections (CIDR format)")
+	cmd.Flags().StringArrayVar(&clientIngress.DenyCIDRs, "deny-cidr", nil, "list of denied networks for client connections (CIDR format)")
 
 	var relayIngress RelayIngress
-	cmd.Flags().StringVar(&relayIngress.Addr, "relay-addr", "", "relay server addr to use")
-	cmd.Flags().StringArrayVar(&relayIngress.Hostports, "relay-hostport", nil, "relay server public host[:port] to use (if port is missing will use addr's port)")
-	cmd.Flags().StringArrayVar(&relayIngress.AllowCIDRs, "relay-allow-cidr", nil, "cidr to allow client relay connections from")
-	cmd.Flags().StringArrayVar(&relayIngress.DenyCIDRs, "relay-deny-cidr", nil, "cidr to deny client relay connections from")
+	cmd.Flags().StringVar(&relayIngress.Addr, "relay-addr", "", "relay clients server address (UDP/QUIC, [host]:port) (defaults to ':19191')")
+	cmd.Flags().StringArrayVar(&relayIngress.Hostports, "relay-hostport", nil, `list of host[:port]s advertised by the control server for clients to connect to this relay
+  defaults to 'localhost:<port in addr>', if port is not set will use the addr's port`)
+	cmd.Flags().StringArrayVar(&relayIngress.AllowCIDRs, "relay-allow-cidr", nil, "list of allowed networks for relay client connections (CIDR format)")
+	cmd.Flags().StringArrayVar(&relayIngress.DenyCIDRs, "relay-deny-cidr", nil, "list of denied networks for relay client connections (CIDR format)")
 
-	cmd.Flags().StringVar(&flagsConfig.Server.StatusAddr, "status-addr", "", "status server address to listen")
-	cmd.Flags().StringVar(&flagsConfig.Server.StoreDir, "store-dir", "", "storage dir, /tmp subdirectory if empty")
+	addStatusAddrFlag(cmd, &flagsConfig.Server.StatusAddr)
+	addStoreDirFlag(cmd, &flagsConfig.Server.StoreDir)
 
 	cmd.RunE = wrapErr("run connet server", func(cmd *cobra.Command, _ []string) error {
 		cfg, err := loadConfigs(*filenames)
@@ -78,6 +78,12 @@ func serverCmd() *cobra.Command {
 	})
 
 	return cmd
+}
+
+func addStoreDirFlag(cmd *cobra.Command, ref *string) {
+	cmd.Flags().StringVar(ref, "store-dir", "", `directory to store persistent state
+  when empty will try the following environment variables: CONNET_STATE_DIR, STATE_DIRECTORY
+  if still empty, it will try to create a subdirectory in the current system TMPDIR directory`)
 }
 
 func serverRun(ctx context.Context, cfg ServerConfig, logger *slog.Logger) error {

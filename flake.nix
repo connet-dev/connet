@@ -73,7 +73,7 @@
                   client = {
                     token-file = "/etc/tokens";
                     server-addr = "192.168.1.3:19190";
-                    server-cas = "/etc/server.cert";
+                    server-cas-file = "/etc/server.cert";
                     destinations = {
                       files.url = "file:.";
                       filesd = {
@@ -106,7 +106,7 @@
                   client = {
                     token-file = "/etc/tokens";
                     server-addr = "192.168.1.3:19190";
-                    server-cas = "/etc/server.cert";
+                    server-cas-file = "/etc/server.cert";
                     sources = {
                       files.url = "tcp://:3000";
                       filesd = {
@@ -135,7 +135,7 @@
                   log-level = "debug";
                   client = {
                     server-addr = "192.168.1.3:19190";
-                    server-cas = "connet-server.cert";
+                    server-cas-file = "connet-server.cert";
                     token-file = "connet-token";
                     sources = {
                       files.url = "tcp://:3000";

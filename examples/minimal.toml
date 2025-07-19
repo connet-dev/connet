@@ -2,7 +2,7 @@ log-level = "debug"
 
 [client]
 token-file = "examples/client-token.secret"
-server-cas = ".direnv/minica.pem"
+server-cas-file = ".direnv/minica.pem"
 
 [client.destinations.sws]
 url = "file:."
@@ -31,4 +31,4 @@ key-file = ".direnv/localhost/key.pem"
 
 [relay]
 token-file = "examples/relay-token.secret"
-control-cas = ".direnv/localhost/cert.pem"
+control-cas-file = ".direnv/localhost/cert.pem"

@@ -81,7 +81,7 @@ func wrapErr(ws string, runErr cobraRunE) cobraRunE {
 func checkCmd() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "check <config-file>",
-		Short: "check configuration file",
+		Short: "Check a configuration file",
 		Args:  cobra.ExactArgs(1),
 	}
 
@@ -104,7 +104,7 @@ func checkCmd() *cobra.Command {
 func versionCmd() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "version",
-		Short: "print version information",
+		Short: "Print version information",
 	}
 
 	cmd.RunE = wrapErr("run configuration check", func(_ *cobra.Command, args []string) error {
@@ -113,6 +113,16 @@ func versionCmd() *cobra.Command {
 	})
 
 	return cmd
+}
+
+func addConfigsFlag(cmd *cobra.Command) *[]string {
+	return cmd.Flags().StringArray("config", nil, `configuration file(s) to load, merged when passed mulitple times
+  any explicit flags are merged last and override values from the configuration files`)
+}
+
+func (cfg *Config) addLogFlags(cmd *cobra.Command) {
+	cmd.Flags().StringVar(&cfg.LogLevel, "log-level", "", "log level, one of [fine, debug, info, warn, error] (defaults to 'info')")
+	cmd.Flags().StringVar(&cfg.LogFormat, "log-format", "", "log formatter, one of [text, json] (defaults to 'text')")
 }
 
 func loadConfigs(files []string) (Config, error) {
@@ -212,6 +222,10 @@ func mergeSlices[S ~[]T, T interface{ merge(T) T }](c S, o S) S {
 		return o
 	}
 	return c
+}
+
+func addStatusAddrFlag(cmd *cobra.Command, ref *string) {
+	cmd.Flags().StringVar(ref, "status-addr", "", "status server address to listen for connections (TCP/HTTP, [host]:port) (disabled by default)")
 }
 
 type withStatus[T any] interface {
