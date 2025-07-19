@@ -217,195 +217,21 @@ func clientRun(ctx context.Context, cfg ClientConfig, logger *slog.Logger) error
 	destinations := map[string]connet.DestinationConfig{}
 	destinationHandlers := map[string]newrunnable[connet.Destination]{}
 	for name, fc := range cfg.Destinations {
-		route, err := parseRouteOption(fc.Route)
+		dstCfg, handler, err := fc.parse(name, defaultRelayEncryptions, logger)
 		if err != nil {
-			return fmt.Errorf("[destination %s] parse route option: %w", name, err)
+			return fmt.Errorf("parse destination %s: %w", name, err)
 		}
-		proxy, err := parseProxyVersion(fc.ProxyProtoVersion)
-		if err != nil {
-			return fmt.Errorf("[destination %s] parse proxy proto version: %w", name, err)
-		}
-		relayEncryptions := defaultRelayEncryptions
-		if len(fc.RelayEncryptions) > 0 {
-			res, err := parseEncryptionSchemes(fc.RelayEncryptions)
-			if err != nil {
-				return fmt.Errorf("[destination %s] parse relay encryptions: %w", name, err)
-			}
-			relayEncryptions = res
-		}
-		destinations[name] = connet.NewDestinationConfig(name).
-			WithRoute(route).
-			WithProxy(proxy).
-			WithRelayEncryptions(relayEncryptions...)
-
-		targetURL, err := url.Parse(fc.URL)
-		if err != nil {
-			return fmt.Errorf("[destination %s] parse url: %w", name, err)
-		}
-
-		if !slices.Contains([]string{"tcp", "tls", "http", "https", "file"}, targetURL.Scheme) {
-			return fmt.Errorf("[destination %s] unsupported scheme '%s'", name, targetURL.Scheme)
-		}
-
-		if targetURL.Scheme == "tcp" || targetURL.Scheme == "tls" {
-			if targetURL.Port() == "" {
-				return fmt.Errorf("[destination %s] missing port for tcp/tls", name)
-			}
-			if targetURL.Path != "" {
-				return fmt.Errorf("[destination %s] url path not supported for tcp/tls", name)
-			}
-		}
-
-		var destCAs *x509.CertPool
-		var destInsecureSkipVerify bool
-		var destCerts []tls.Certificate
-		if targetURL.Scheme == "tls" || targetURL.Scheme == "https" {
-			if fc.CAsFile == "insecure-skip-verify" {
-				destInsecureSkipVerify = true
-			} else if fc.CAsFile != "" {
-				casData, err := os.ReadFile(fc.CAsFile)
-				if err != nil {
-					return fmt.Errorf("[destination %s] read CAs file: %w", name, err)
-				}
-
-				cas := x509.NewCertPool()
-				if !cas.AppendCertsFromPEM(casData) {
-					return fmt.Errorf("[destination %s] missing CA certificate in %s", name, fc.CAsFile)
-				}
-				destCAs = cas
-			}
-
-			if fc.CertFile != "" {
-				cert, err := tls.LoadX509KeyPair(fc.CertFile, fc.KeyFile)
-				if err != nil {
-					return fmt.Errorf("[destination %s] load cert/key pair: %w", name, err)
-				}
-				destCerts = append(destCerts, cert)
-			}
-		}
-
-		destinationHandlers[name] = func(dst connet.Destination) runnable {
-			switch targetURL.Scheme {
-			case "tcp":
-				return connet.NewTCPDestination(dst, targetURL.Host, logger)
-			case "tls":
-				return connet.NewTLSDestination(dst, targetURL.Host, &tls.Config{
-					RootCAs:            destCAs,
-					Certificates:       destCerts,
-					InsecureSkipVerify: destInsecureSkipVerify,
-				}, logger)
-			case "http":
-				return connet.NewHTTPProxyDestination(dst, targetURL, nil)
-			case "https":
-				return connet.NewHTTPProxyDestination(dst, targetURL, &tls.Config{
-					RootCAs:            destCAs,
-					Certificates:       destCerts,
-					InsecureSkipVerify: destInsecureSkipVerify,
-				})
-			case "file":
-				path := targetURL.Path
-				if path == "" {
-					path = targetURL.Opaque
-				}
-				return connet.NewHTTPFileDestination(dst, path)
-			default:
-				panic(fmt.Sprintf("unexpected destination scheme: %s", targetURL.Scheme))
-			}
-		}
+		destinations[name], destinationHandlers[name] = dstCfg, handler
 	}
 
 	sources := map[string]connet.SourceConfig{}
 	sourceHandlers := map[string]newrunnable[connet.Source]{}
 	for name, fc := range cfg.Sources {
-		route, err := parseRouteOption(fc.Route)
+		srcCfg, handler, err := fc.parse(name, defaultRelayEncryptions, logger)
 		if err != nil {
-			return fmt.Errorf("[source %s] parse route option: %w", name, err)
+			return fmt.Errorf("parse source %s: %w", name, err)
 		}
-		relayEncryptions := defaultRelayEncryptions
-		if len(fc.RelayEncryptions) > 0 {
-			res, err := parseEncryptionSchemes(fc.RelayEncryptions)
-			if err != nil {
-				return fmt.Errorf("[source %s] parse relay encryptions: %w", name, err)
-			}
-			relayEncryptions = res
-		}
-		sources[name] = connet.NewSourceConfig(name).
-			WithRoute(route).
-			WithRelayEncryptions(relayEncryptions...)
-
-		targetURL, err := url.Parse(fc.URL)
-		if err != nil {
-			return fmt.Errorf("[source %s] parse url: %w", name, err)
-		}
-
-		if !slices.Contains([]string{"tcp", "tls", "http", "https", "ws", "wss"}, targetURL.Scheme) {
-			return fmt.Errorf("[source %s] unsupported scheme '%s'", name, targetURL.Scheme)
-		}
-
-		if targetURL.Scheme == "tcp" || targetURL.Scheme == "tls" {
-			if targetURL.Port() == "" {
-				return fmt.Errorf("[source %s] missing port for tcp/tls", name)
-			}
-			if targetURL.Path != "" {
-				return fmt.Errorf("[source %s] url path not supported for tcp/tls", name)
-			}
-		}
-
-		var srcCerts []tls.Certificate
-		var srcClientCAs *x509.CertPool
-		var srcClientAuth tls.ClientAuthType
-		if targetURL.Scheme == "tls" || targetURL.Scheme == "https" || targetURL.Scheme == "wss" {
-			cert, err := tls.LoadX509KeyPair(fc.CertFile, fc.KeyFile)
-			if err != nil {
-				return fmt.Errorf("[source %s] load server cert: %w", name, err)
-			}
-			srcCerts = append(srcCerts, cert)
-
-			if fc.CAsFile != "" {
-				casData, err := os.ReadFile(fc.CAsFile)
-				if err != nil {
-					return fmt.Errorf("[source %s] read CAs file: %w", name, err)
-				}
-
-				cas := x509.NewCertPool()
-				if !cas.AppendCertsFromPEM(casData) {
-					return fmt.Errorf("[source %s] missing CA certificate in %s", name, fc.CAsFile)
-				}
-				srcClientCAs = cas
-				srcClientAuth = tls.RequireAndVerifyClientCert
-			}
-		}
-
-		sourceHandlers[name] = func(src connet.Source) runnable {
-			switch targetURL.Scheme {
-			case "tcp":
-				return connet.NewTCPSource(src, targetURL.Host, logger)
-			case "tls":
-				return connet.NewTLSSource(src, targetURL.Host, &tls.Config{
-					Certificates: srcCerts,
-					ClientCAs:    srcClientCAs,
-					ClientAuth:   srcClientAuth,
-				}, logger)
-			case "http":
-				return connet.NewHTTPSource(src, targetURL, nil)
-			case "https":
-				return connet.NewHTTPSource(src, targetURL, &tls.Config{
-					Certificates: srcCerts,
-					ClientCAs:    srcClientCAs,
-					ClientAuth:   srcClientAuth,
-				})
-			case "ws":
-				return connet.NewWSSource(src, targetURL, nil, logger)
-			case "wss":
-				return connet.NewWSSource(src, targetURL, &tls.Config{
-					Certificates: srcCerts,
-					ClientCAs:    srcClientCAs,
-					ClientAuth:   srcClientAuth,
-				}, logger)
-			default:
-				panic(fmt.Sprintf("unexpected source scheme: %s", targetURL.Scheme))
-			}
-		}
+		sources[name], sourceHandlers[name] = srcCfg, handler
 	}
 
 	opts = append(opts, connet.ClientLogger(logger))
@@ -453,6 +279,208 @@ func clientRun(ctx context.Context, cfg ClientConfig, logger *slog.Logger) error
 	}
 
 	return g.Wait()
+}
+
+func (fc DestinationConfig) parse(name string, defaultRelayEncryptions []model.EncryptionScheme, logger *slog.Logger) (connet.DestinationConfig, newrunnable[connet.Destination], error) {
+	var retErr = func(err error) (connet.DestinationConfig, newrunnable[connet.Destination], error) {
+		return connet.DestinationConfig{}, nil, err
+	}
+
+	route, err := parseRouteOption(fc.Route)
+	if err != nil {
+		return retErr(fmt.Errorf("parse route option: %w", err))
+	}
+	proxy, err := parseProxyVersion(fc.ProxyProtoVersion)
+	if err != nil {
+		return retErr(fmt.Errorf("parse proxy proto version: %w", err))
+	}
+	relayEncryptions := defaultRelayEncryptions
+	if len(fc.RelayEncryptions) > 0 {
+		res, err := parseEncryptionSchemes(fc.RelayEncryptions)
+		if err != nil {
+			return retErr(fmt.Errorf("parse relay encryptions: %w", err))
+		}
+		relayEncryptions = res
+	}
+	dstCfg := connet.NewDestinationConfig(name).
+		WithRoute(route).
+		WithProxy(proxy).
+		WithRelayEncryptions(relayEncryptions...)
+
+	targetURL, err := url.Parse(fc.URL)
+	if err != nil {
+		return retErr(fmt.Errorf("parse url: %w", err))
+	}
+
+	if !slices.Contains([]string{"tcp", "tls", "http", "https", "file"}, targetURL.Scheme) {
+		return retErr(fmt.Errorf("unsupported scheme '%s'", targetURL.Scheme))
+	}
+
+	if targetURL.Scheme == "tcp" || targetURL.Scheme == "tls" {
+		if targetURL.Port() == "" {
+			return retErr(fmt.Errorf("missing port for tcp/tls"))
+		}
+		if targetURL.Path != "" {
+			return retErr(fmt.Errorf("url path not supported for tcp/tls"))
+		}
+	}
+
+	var destCAs *x509.CertPool
+	var destInsecureSkipVerify bool
+	var destCerts []tls.Certificate
+	if targetURL.Scheme == "tls" || targetURL.Scheme == "https" {
+		if fc.CAsFile == "insecure-skip-verify" {
+			destInsecureSkipVerify = true
+		} else if fc.CAsFile != "" {
+			casData, err := os.ReadFile(fc.CAsFile)
+			if err != nil {
+				return retErr(fmt.Errorf("read CAs file: %w", err))
+			}
+
+			cas := x509.NewCertPool()
+			if !cas.AppendCertsFromPEM(casData) {
+				return retErr(fmt.Errorf("missing CA certificate in %s", fc.CAsFile))
+			}
+			destCAs = cas
+		}
+
+		if fc.CertFile != "" {
+			cert, err := tls.LoadX509KeyPair(fc.CertFile, fc.KeyFile)
+			if err != nil {
+				return retErr(fmt.Errorf("load cert/key pair: %w", err))
+			}
+			destCerts = append(destCerts, cert)
+		}
+	}
+
+	handler := func(dst connet.Destination) runnable {
+		switch targetURL.Scheme {
+		case "tcp":
+			return connet.NewTCPDestination(dst, targetURL.Host, logger)
+		case "tls":
+			return connet.NewTLSDestination(dst, targetURL.Host, &tls.Config{
+				RootCAs:            destCAs,
+				Certificates:       destCerts,
+				InsecureSkipVerify: destInsecureSkipVerify,
+			}, logger)
+		case "http":
+			return connet.NewHTTPProxyDestination(dst, targetURL, nil)
+		case "https":
+			return connet.NewHTTPProxyDestination(dst, targetURL, &tls.Config{
+				RootCAs:            destCAs,
+				Certificates:       destCerts,
+				InsecureSkipVerify: destInsecureSkipVerify,
+			})
+		case "file":
+			path := targetURL.Path
+			if path == "" {
+				path = targetURL.Opaque
+			}
+			return connet.NewHTTPFileDestination(dst, path)
+		default:
+			panic(fmt.Sprintf("unexpected destination scheme: %s", targetURL.Scheme))
+		}
+	}
+
+	return dstCfg, handler, nil
+}
+
+func (fc SourceConfig) parse(name string, defaultRelayEncryptions []model.EncryptionScheme, logger *slog.Logger) (connet.SourceConfig, newrunnable[connet.Source], error) {
+	var retErr = func(err error) (connet.SourceConfig, newrunnable[connet.Source], error) {
+		return connet.SourceConfig{}, nil, err
+	}
+
+	route, err := parseRouteOption(fc.Route)
+	if err != nil {
+		return retErr(fmt.Errorf("parse route option: %w", err))
+	}
+	relayEncryptions := defaultRelayEncryptions
+	if len(fc.RelayEncryptions) > 0 {
+		res, err := parseEncryptionSchemes(fc.RelayEncryptions)
+		if err != nil {
+			return retErr(fmt.Errorf("parse relay encryptions: %w", err))
+		}
+		relayEncryptions = res
+	}
+	cfg := connet.NewSourceConfig(name).
+		WithRoute(route).
+		WithRelayEncryptions(relayEncryptions...)
+
+	targetURL, err := url.Parse(fc.URL)
+	if err != nil {
+		return retErr(fmt.Errorf("parse url: %w", err))
+	}
+
+	if !slices.Contains([]string{"tcp", "tls", "http", "https", "ws", "wss"}, targetURL.Scheme) {
+		return retErr(fmt.Errorf("unsupported scheme '%s'", targetURL.Scheme))
+	}
+
+	if targetURL.Scheme == "tcp" || targetURL.Scheme == "tls" {
+		if targetURL.Port() == "" {
+			return retErr(fmt.Errorf("missing port for tcp/tls"))
+		}
+		if targetURL.Path != "" {
+			return retErr(fmt.Errorf("url path not supported for tcp/tls"))
+		}
+	}
+
+	var srcCerts []tls.Certificate
+	var srcClientCAs *x509.CertPool
+	var srcClientAuth tls.ClientAuthType
+	if targetURL.Scheme == "tls" || targetURL.Scheme == "https" || targetURL.Scheme == "wss" {
+		cert, err := tls.LoadX509KeyPair(fc.CertFile, fc.KeyFile)
+		if err != nil {
+			return retErr(fmt.Errorf("load server cert: %w", err))
+		}
+		srcCerts = append(srcCerts, cert)
+
+		if fc.CAsFile != "" {
+			casData, err := os.ReadFile(fc.CAsFile)
+			if err != nil {
+				return retErr(fmt.Errorf("read CAs file: %w", err))
+			}
+
+			cas := x509.NewCertPool()
+			if !cas.AppendCertsFromPEM(casData) {
+				return retErr(fmt.Errorf("missing CA certificate in %s", fc.CAsFile))
+			}
+			srcClientCAs = cas
+			srcClientAuth = tls.RequireAndVerifyClientCert
+		}
+	}
+
+	handler := func(src connet.Source) runnable {
+		switch targetURL.Scheme {
+		case "tcp":
+			return connet.NewTCPSource(src, targetURL.Host, logger)
+		case "tls":
+			return connet.NewTLSSource(src, targetURL.Host, &tls.Config{
+				Certificates: srcCerts,
+				ClientCAs:    srcClientCAs,
+				ClientAuth:   srcClientAuth,
+			}, logger)
+		case "http":
+			return connet.NewHTTPSource(src, targetURL, nil)
+		case "https":
+			return connet.NewHTTPSource(src, targetURL, &tls.Config{
+				Certificates: srcCerts,
+				ClientCAs:    srcClientCAs,
+				ClientAuth:   srcClientAuth,
+			})
+		case "ws":
+			return connet.NewWSSource(src, targetURL, nil, logger)
+		case "wss":
+			return connet.NewWSSource(src, targetURL, &tls.Config{
+				Certificates: srcCerts,
+				ClientCAs:    srcClientCAs,
+				ClientAuth:   srcClientAuth,
+			}, logger)
+		default:
+			panic(fmt.Sprintf("unexpected source scheme: %s", targetURL.Scheme))
+		}
+	}
+
+	return cfg, handler, nil
 }
 
 func parseRouteOption(s string) (model.RouteOption, error) {
