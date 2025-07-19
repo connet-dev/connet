@@ -93,8 +93,9 @@ configuration option is the easiest way to achieve this.
 
 ### Client D (aka the `destination`)
 
-Then, on device `D` run `connet --config client-d.toml` with the following `client-d.toml`:
+Then, on device `D` run `connet --config destination.toml` with the following config:
 ```toml
+# destination.toml
 [client]
 token = "client-d-token"
 server-addr = "SERVER_IP:19190"
@@ -106,8 +107,9 @@ url = "tcp://:3000"
 
 ### Client S (aka the `source`)
 
-On device `S` run `connet --config client-s.toml` with the following `client-s.toml`:
+On device `S` run `connet --config source.toml` with the following config:
 ```toml
+# source.toml
 [client]
 token = "client-s-token"
 server-addr = "SERVER_IP:19190"
@@ -125,8 +127,8 @@ only support a single `destination` or `source` configuration.
 
 ### Client
 
-To run a client, use `connet --config client-config.toml` command. Here is the full client `client-config.toml` 
-configuration spec:
+To run a client, use `connet --config client.toml` command.
+Here is the full client `client.toml` configuration specification:
 ```toml
 [client]
 token-file = "path/to/relay/token" # file that contains the auth token for the control server
@@ -194,8 +196,8 @@ The client uses the following environment variables, in case the associated fiel
 
 ### Server
 
-To run a server (e.g. running both control and a relay server), use `connet server --config server-config.toml` command. 
-Here is the full server `server-config.toml` configuration specification:
+To run a server (e.g. running both control and a relay server), use `connet server --config server.toml` command. 
+Here is the full server `server.toml` configuration specification:
 ```toml
 [server]
 tokens-file = "path/to/client/tokens" # file that contains a list of client auth tokens, one token per line
@@ -227,8 +229,8 @@ deny-cidrs = [] # set of networks in CIDR format, to deny client relay connetcti
 
 #### Control server
 
-To run a control server, use `connet control --config control-config.toml` command. Here is the full control server 
-`control-config.toml` configuration specification:
+To run a control server, use `connet control --config control.toml` command.
+Here is the full control server `control.toml` configuration specification:
 ```toml
 [control]
 clients-tokens-file = "path/to/client/tokens" # file containing a list of client auth tokens, one token per line
@@ -269,8 +271,8 @@ deny-cidrs = [] # set of networks in CIDR format, to deny relay connetctions fro
 
 #### Relay server
 
-To run a relay server, use `connet relay --config relay-config.toml` command. Here is the full relay server 
-`relay-config.toml` configuration specification:
+To run a relay server, use `connet relay --config relay.toml` command.
+Here is the full relay server `relay.toml` configuration specification:
 ```toml
 [relay]
 token-file = "path/to/relay/token" # file that contains the auth token for the control server
@@ -364,7 +366,7 @@ you can specify an explicit `store-dir` location, which can be reused between ru
 
 At the root of the config file, you can configure logging (`connet` uses slog internally):
 ```toml
-log-level = "info" # supports debug, info, warn, error, defaults to info
+log-level = "info" # supports fine, debug, info, warn, error, defaults to info
 log-format = "text" # supports text and json, defaults to text
 ```
 
@@ -381,8 +383,8 @@ In which case, we recommend visiting the [wiki page](https://github.com/quic-go/
 
 #### Client
 
-If neither `direct-stateless-reset-key` nor `direct-stateless-reset-key-file` has been set, a new key file will be created
-under the user cache dir (`$XDG_CACHE_DIR` or `$HOME/.cache` on linux), suffixed with the direct address of this client.
+If neither `direct-stateless-reset-key` nor `direct-stateless-reset-key-file` has been set, a new key file will be created under
+the cache dir (using one of `$CONNET_CACHE_DIR`, `$CACHE_DIRECTORY`, `$XDG_CACHE_DIR` or `$HOME/.cache` on linux), suffixed with the direct address of this client.
 
 #### Server
 
