@@ -8,10 +8,12 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"maps"
 	"math"
 	"math/rand/v2"
 	"net"
 	"slices"
+	"sync"
 	"sync/atomic"
 	"time"
 
@@ -85,6 +87,8 @@ type Source struct {
 	peer  *peer
 	conns atomic.Pointer[[]sourceConn]
 
+	connsTracking   map[peerConnKey]*atomic.Int32
+	connsTrackingMu sync.RWMutex
 	roundRobinIndex atomic.Int32
 }
 
@@ -102,12 +106,18 @@ func NewSource(cfg SourceConfig, direct *DirectServer, root *certc.Cert, logger 
 	if cfg.Route.AllowDirect() {
 		p.expectDirect()
 	}
+	var connsTracking map[peerConnKey]*atomic.Int32
+	if cfg.DestinationRetryByPeer {
+		connsTracking = map[peerConnKey]*atomic.Int32{}
+	}
 
 	return &Source{
 		cfg:    cfg,
 		logger: logger,
 
 		peer: p,
+
+		connsTracking: connsTracking,
 	}, nil
 }
 
@@ -176,6 +186,9 @@ func (s *Source) findActive() ([]sourceConn, error) {
 	case model.LeastLatencyStrategy:
 		return s.leastLatencySorted(*conns), nil
 	case model.LeastConnsBalancer:
+		if s.cfg.DestinationRetryByPeer {
+			return s.leastConnsSortedByPeer(*conns), nil
+		}
 		return s.leastConnsSorted(*conns), nil
 	case model.RoundRobinBalancer:
 		return s.roundRobinSorted(*conns), nil
@@ -186,6 +199,19 @@ func (s *Source) findActive() ([]sourceConn, error) {
 	}
 }
 
+func rttCompare(l, r sourceConn) int {
+	var ld, rd = time.Duration(math.MaxInt64), time.Duration(math.MaxInt64)
+
+	if rtt := quicc.RTTStats(l.conn); rtt != nil {
+		ld = rtt.SmoothedRTT()
+	}
+	if rtt := quicc.RTTStats(r.conn); rtt != nil {
+		rd = rtt.SmoothedRTT()
+	}
+
+	return cmp.Compare(ld, rd)
+}
+
 func (s *Source) leastLatencySorted(conns []sourceConn) []sourceConn {
 	return slices.SortedFunc(slices.Values(conns), func(l, r sourceConn) int {
 		switch {
@@ -194,22 +220,57 @@ func (s *Source) leastLatencySorted(conns []sourceConn) []sourceConn {
 		case l.peer.style != peerRelay && r.peer.style == peerRelay:
 			return -1
 		}
-		var ld, rd = time.Duration(math.MaxInt64), time.Duration(math.MaxInt64)
 
-		if rtt := quicc.RTTStats(l.conn); rtt != nil {
-			ld = rtt.SmoothedRTT()
-		}
-		if rtt := quicc.RTTStats(r.conn); rtt != nil {
-			rd = rtt.SmoothedRTT()
-		}
-
-		return cmp.Compare(ld, rd)
+		return rttCompare(l, r)
 	})
 }
 
+func connCompare(connsTracking map[peerConnKey]*atomic.Int32) func(sourceConn, sourceConn) int {
+	return func(l, r sourceConn) int {
+		var lcount, rcount int32
+		if c, ok := connsTracking[l.peer]; ok {
+			lcount = c.Load()
+		}
+		if c, ok := connsTracking[r.peer]; ok {
+			rcount = c.Load()
+		}
+
+		connCmp := lcount - rcount
+		if connCmp != 0 {
+			return int(connCmp)
+		}
+		return rttCompare(l, r)
+	}
+}
+
 func (s *Source) leastConnsSorted(conns []sourceConn) []sourceConn {
-	// TODO implement conns
-	return conns
+	s.connsTrackingMu.RLock()
+	connsTracking := maps.Clone(s.connsTracking)
+	s.connsTrackingMu.RUnlock()
+
+	return slices.SortedFunc(slices.Values(conns), connCompare(connsTracking))
+}
+
+func (s *Source) leastConnsSortedByPeer(conns []sourceConn) []sourceConn {
+	s.connsTrackingMu.RLock()
+	connsTracking := maps.Clone(s.connsTracking)
+	s.connsTrackingMu.RUnlock()
+
+	byPeer := map[string]int32{}
+	for k, c := range connsTracking {
+		byPeer[k.id] = byPeer[k.id] + c.Load()
+	}
+
+	cmpByConns := connCompare(connsTracking)
+	return slices.SortedFunc(slices.Values(conns), func(l, r sourceConn) int {
+		ltotal, rtotal := byPeer[l.peer.id], byPeer[r.peer.id]
+		totalCmp := ltotal - rtotal
+
+		if totalCmp != 0 {
+			return int(totalCmp)
+		}
+		return cmpByConns(l, r)
+	})
 }
 
 func (s *Source) roundRobinSorted(conns []sourceConn) []sourceConn {
@@ -252,24 +313,25 @@ func (s *Source) DialContext(ctx context.Context, network, address string) (net.
 		ctx = cancelCtx
 	}
 
+	if s.cfg.DestinationRetryByPeer {
+		byPeer := map[string]struct{}{}
+		var tryConns []sourceConn
+		for _, conn := range conns {
+			if _, ok := byPeer[conn.peer.id]; ok {
+				continue
+			}
+			byPeer[conn.peer.id] = struct{}{}
+			tryConns = append(tryConns, conn)
+		}
+		conns = tryConns
+	}
+
 	return s.dialInOrder(ctx, conns)
 }
 
 func (s *Source) dialInOrder(ctx context.Context, conns []sourceConn) (net.Conn, error) {
-	var triedPeers map[string]struct{}
-	if s.cfg.DestinationRetryByPeer {
-		triedPeers = map[string]struct{}{}
-	}
-
 	var errs []error
 	for _, dest := range conns {
-		if s.cfg.DestinationRetryByPeer {
-			if _, ok := triedPeers[dest.peer.id]; ok {
-				continue
-			}
-			triedPeers[dest.peer.id] = struct{}{}
-		}
-
 		if conn, err := s.dial(ctx, dest); err != nil {
 			s.logger.Debug("could not dial destination", "err", err)
 			errs = append(errs, err)
@@ -294,6 +356,7 @@ func (s *Source) dial(ctx context.Context, dest sourceConn) (net.Conn, error) {
 		}
 		return nil, err
 	}
+	// TODO attach conn tracking
 	return conn, nil
 }
 
