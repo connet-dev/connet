@@ -1,11 +1,21 @@
 package model
 
-type LoadBalancer struct{ string }
+type LoadBalancerStrategy struct{ string }
 
 var (
-	UnknownLoadBalancer = LoadBalancer{}
-	FindFastestBalancer = LoadBalancer{"find-fastest"}
-	RoundRobinBalancer  = LoadBalancer{"round-robin"}
-	RandomBalancer      = LoadBalancer{"random"}
-	LeastConnsBalancer  = LoadBalancer{"least-conns"}
+	UnknownStrategy      = LoadBalancerStrategy{}
+	LeastLatencyStrategy = LoadBalancerStrategy{"least-latency"}
+	LeastConnsBalancer   = LoadBalancerStrategy{"least-conns"}
+	RoundRobinBalancer   = LoadBalancerStrategy{"round-robin"}
+	RandomBalancer       = LoadBalancerStrategy{"random"}
+)
+
+type LoadBalancerRetry struct{ string }
+
+var (
+	UnknownRetry = LoadBalancerRetry{}
+	NeverRetry   = LoadBalancerRetry{"never"}
+	CountRetry   = LoadBalancerRetry{"count"}
+	TimedRetry   = LoadBalancerRetry{"timed"}
+	AllRetry     = LoadBalancerRetry{"all"}
 )

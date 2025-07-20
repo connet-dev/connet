@@ -608,6 +608,7 @@ by adding account management and it is one of the easiest way to start.
 
 ### v0.10.0
  - [ ] destination load balance
+ - [ ] nix embed version on release
  - [ ] preshared clients - controless p2p
  - [ ] package refactor/rename
  - [ ] UPnP/IDG and PCP for hole-punching

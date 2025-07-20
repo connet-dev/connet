@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"log/slog"
 	"math"
+	"math/rand/v2"
 	"net"
 	"slices"
 	"sync/atomic"
@@ -28,10 +29,14 @@ import (
 
 // SourceConfig structure represents source configuration.
 type SourceConfig struct {
-	Endpoint            model.Endpoint
-	Route               model.RouteOption
-	RelayEncryptions    []model.EncryptionScheme
-	DestinationBalancer model.LoadBalancer
+	Endpoint         model.Endpoint
+	Route            model.RouteOption
+	RelayEncryptions []model.EncryptionScheme
+
+	DestinationStrategy    model.LoadBalancerStrategy
+	DestinationRetry       model.LoadBalancerRetry
+	DestinationRetryMax    int
+	DestinationRetryByPeer bool
 }
 
 // NewSourceConfig creates a source config for a given name.
@@ -40,7 +45,8 @@ func NewSourceConfig(name string) SourceConfig {
 		Endpoint:            model.NewEndpoint(name),
 		Route:               model.RouteAny,
 		RelayEncryptions:    []model.EncryptionScheme{model.NoEncryption},
-		DestinationBalancer: model.FindFastestBalancer,
+		DestinationStrategy: model.LeastLatencyStrategy,
+		DestinationRetry:    model.AllRetry,
 	}
 }
 
@@ -56,8 +62,19 @@ func (cfg SourceConfig) WithRelayEncryptions(schemes ...model.EncryptionScheme) 
 	return cfg
 }
 
-func (cfg SourceConfig) WithDestinationBalancer(balancer model.LoadBalancer) SourceConfig {
-	cfg.DestinationBalancer = balancer
+func (cfg SourceConfig) WithDestinationStrategy(strategy model.LoadBalancerStrategy) SourceConfig {
+	cfg.DestinationStrategy = strategy
+	return cfg
+}
+
+func (cfg SourceConfig) WithDestinationRetry(retry model.LoadBalancerRetry, max int) SourceConfig {
+	cfg.DestinationRetry = retry
+	cfg.DestinationRetryMax = max
+	return cfg
+}
+
+func (cfg SourceConfig) WithDestinationRetryByPeer(bypeer bool) SourceConfig {
+	cfg.DestinationRetryByPeer = bypeer
 	return cfg
 }
 
@@ -67,6 +84,8 @@ type Source struct {
 
 	peer  *peer
 	conns atomic.Pointer[[]sourceConn]
+
+	roundRobinIndex atomic.Int32
 }
 
 type sourceConn struct {
@@ -145,25 +164,6 @@ func (s *Source) runActive(ctx context.Context) error {
 	})
 }
 
-func connCompare(l, r sourceConn) int {
-	switch {
-	case l.peer.style == peerRelay && r.peer.style != peerRelay:
-		return +1
-	case l.peer.style != peerRelay && r.peer.style == peerRelay:
-		return -1
-	}
-	var ld, rd = time.Duration(math.MaxInt64), time.Duration(math.MaxInt64)
-
-	if rtt := quicc.RTTStats(l.conn); rtt != nil {
-		ld = rtt.SmoothedRTT()
-	}
-	if rtt := quicc.RTTStats(r.conn); rtt != nil {
-		rd = rtt.SmoothedRTT()
-	}
-
-	return cmp.Compare(ld, rd)
-}
-
 var ErrNoActiveDestinations = errors.New("no active destinations")
 
 func (s *Source) findActive() ([]sourceConn, error) {
@@ -172,7 +172,60 @@ func (s *Source) findActive() ([]sourceConn, error) {
 		return nil, ErrNoActiveDestinations
 	}
 
-	return slices.SortedFunc(slices.Values(*conns), connCompare), nil
+	switch s.cfg.DestinationStrategy {
+	case model.LeastLatencyStrategy:
+		return s.leastLatencySorted(*conns), nil
+	case model.LeastConnsBalancer:
+		return s.leastConnsSorted(*conns), nil
+	case model.RoundRobinBalancer:
+		return s.roundRobinSorted(*conns), nil
+	case model.RandomBalancer:
+		return s.randomSorted(*conns), nil
+	default:
+		return *conns, nil
+	}
+}
+
+func (s *Source) leastLatencySorted(conns []sourceConn) []sourceConn {
+	return slices.SortedFunc(slices.Values(conns), func(l, r sourceConn) int {
+		switch {
+		case l.peer.style == peerRelay && r.peer.style != peerRelay:
+			return +1
+		case l.peer.style != peerRelay && r.peer.style == peerRelay:
+			return -1
+		}
+		var ld, rd = time.Duration(math.MaxInt64), time.Duration(math.MaxInt64)
+
+		if rtt := quicc.RTTStats(l.conn); rtt != nil {
+			ld = rtt.SmoothedRTT()
+		}
+		if rtt := quicc.RTTStats(r.conn); rtt != nil {
+			rd = rtt.SmoothedRTT()
+		}
+
+		return cmp.Compare(ld, rd)
+	})
+}
+
+func (s *Source) leastConnsSorted(conns []sourceConn) []sourceConn {
+	// TODO implement conns
+	return conns
+}
+
+func (s *Source) roundRobinSorted(conns []sourceConn) []sourceConn {
+	startFrom := int(s.roundRobinIndex.Add(1)) % len(conns)
+	return append(conns[startFrom:], conns[:startFrom]...)
+}
+
+func (s *Source) randomSorted(conns []sourceConn) []sourceConn {
+	conns = slices.Clone(conns)
+	random := make([]sourceConn, 0, len(conns))
+	for len(conns) > 0 {
+		ix := rand.IntN(len(conns))
+		random = append(random, conns[ix])
+		conns = slices.Delete(conns, ix, ix+1)
+	}
+	return random
 }
 
 func (s *Source) Dial(network, address string) (net.Conn, error) {
@@ -187,8 +240,36 @@ func (s *Source) DialContext(ctx context.Context, network, address string) (net.
 		return nil, fmt.Errorf("get active conns: %w", err)
 	}
 
+	switch s.cfg.DestinationRetry {
+	case model.NeverRetry:
+		conns = conns[0:1]
+	case model.CountRetry:
+		maxLen := min(len(conns), s.cfg.DestinationRetryMax)
+		conns = conns[0:maxLen]
+	case model.TimedRetry:
+		cancelCtx, cancel := context.WithTimeout(ctx, time.Duration(s.cfg.DestinationRetryMax)*time.Second)
+		defer cancel()
+		ctx = cancelCtx
+	}
+
+	return s.dialInOrder(ctx, conns)
+}
+
+func (s *Source) dialInOrder(ctx context.Context, conns []sourceConn) (net.Conn, error) {
+	var triedPeers map[string]struct{}
+	if s.cfg.DestinationRetryByPeer {
+		triedPeers = map[string]struct{}{}
+	}
+
 	var errs []error
 	for _, dest := range conns {
+		if s.cfg.DestinationRetryByPeer {
+			if _, ok := triedPeers[dest.peer.id]; ok {
+				continue
+			}
+			triedPeers[dest.peer.id] = struct{}{}
+		}
+
 		if conn, err := s.dial(ctx, dest); err != nil {
 			s.logger.Debug("could not dial destination", "err", err)
 			errs = append(errs, err)
