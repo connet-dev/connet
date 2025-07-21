@@ -1,13 +1,13 @@
 package model
 
-type LoadBalancerStrategy struct{ string }
+type LoadBalancerOrder struct{ string }
 
 var (
-	UnknownStrategy      = LoadBalancerStrategy{}
-	LeastLatencyStrategy = LoadBalancerStrategy{"least-latency"}
-	LeastConnsBalancer   = LoadBalancerStrategy{"least-conns"}
-	RoundRobinBalancer   = LoadBalancerStrategy{"round-robin"}
-	RandomBalancer       = LoadBalancerStrategy{"random"}
+	UnknownOrder      = LoadBalancerOrder{}
+	LeastLatencyOrder = LoadBalancerOrder{"least-latency"}
+	LeastConnsOrder   = LoadBalancerOrder{"least-conns"}
+	RoundRobinOrder   = LoadBalancerOrder{"round-robin"}
+	RandomOrder       = LoadBalancerOrder{"random"}
 )
 
 type LoadBalancerRetry struct{ string }

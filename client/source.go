@@ -35,7 +35,7 @@ type SourceConfig struct {
 	Route            model.RouteOption
 	RelayEncryptions []model.EncryptionScheme
 
-	DestinationStrategy    model.LoadBalancerStrategy
+	DestinationOrder       model.LoadBalancerOrder
 	DestinationRetry       model.LoadBalancerRetry
 	DestinationRetryMax    int
 	DestinationRetryByPeer bool
@@ -44,11 +44,11 @@ type SourceConfig struct {
 // NewSourceConfig creates a source config for a given name.
 func NewSourceConfig(name string) SourceConfig {
 	return SourceConfig{
-		Endpoint:            model.NewEndpoint(name),
-		Route:               model.RouteAny,
-		RelayEncryptions:    []model.EncryptionScheme{model.NoEncryption},
-		DestinationStrategy: model.LeastLatencyStrategy,
-		DestinationRetry:    model.AllRetry,
+		Endpoint:         model.NewEndpoint(name),
+		Route:            model.RouteAny,
+		RelayEncryptions: []model.EncryptionScheme{model.NoEncryption},
+		DestinationOrder: model.LeastLatencyOrder,
+		DestinationRetry: model.AllRetry,
 	}
 }
 
@@ -64,8 +64,8 @@ func (cfg SourceConfig) WithRelayEncryptions(schemes ...model.EncryptionScheme) 
 	return cfg
 }
 
-func (cfg SourceConfig) WithDestinationStrategy(strategy model.LoadBalancerStrategy) SourceConfig {
-	cfg.DestinationStrategy = strategy
+func (cfg SourceConfig) WithDestinationOrder(order model.LoadBalancerOrder) SourceConfig {
+	cfg.DestinationOrder = order
 	return cfg
 }
 
@@ -182,17 +182,17 @@ func (s *Source) findActive() ([]sourceConn, error) {
 		return nil, ErrNoActiveDestinations
 	}
 
-	switch s.cfg.DestinationStrategy {
-	case model.LeastLatencyStrategy:
+	switch s.cfg.DestinationOrder {
+	case model.LeastLatencyOrder:
 		return s.leastLatencySorted(*conns), nil
-	case model.LeastConnsBalancer:
+	case model.LeastConnsOrder:
 		if s.cfg.DestinationRetryByPeer {
 			return s.leastConnsSortedByPeer(*conns), nil
 		}
 		return s.leastConnsSorted(*conns), nil
-	case model.RoundRobinBalancer:
+	case model.RoundRobinOrder:
 		return s.roundRobinSorted(*conns), nil
-	case model.RandomBalancer:
+	case model.RandomOrder:
 		return s.randomSorted(*conns), nil
 	default:
 		return *conns, nil
