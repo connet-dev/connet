@@ -1,21 +1,20 @@
 package model
 
-type LoadBalancerOrder struct{ string }
+type LoadBalancer struct{ string }
 
 var (
-	UnknownOrder      = LoadBalancerOrder{}
-	LeastLatencyOrder = LoadBalancerOrder{"least-latency"}
-	LeastConnsOrder   = LoadBalancerOrder{"least-conns"}
-	RoundRobinOrder   = LoadBalancerOrder{"round-robin"}
-	RandomOrder       = LoadBalancerOrder{"random"}
+	NoLB           = LoadBalancer{}
+	LeastLatencyLB = LoadBalancer{"least-latency"}
+	LeastConnsLB   = LoadBalancer{"least-conns"}
+	RoundRobinLB   = LoadBalancer{"round-robin"}
+	RandomLB       = LoadBalancer{"random"}
 )
 
 type LoadBalancerRetry struct{ string }
 
 var (
-	UnknownRetry = LoadBalancerRetry{}
-	NeverRetry   = LoadBalancerRetry{"never"}
-	CountRetry   = LoadBalancerRetry{"count"}
-	TimedRetry   = LoadBalancerRetry{"timed"}
-	AllRetry     = LoadBalancerRetry{"all"}
+	NeverRetry = LoadBalancerRetry{""}
+	CountRetry = LoadBalancerRetry{"count"}
+	TimedRetry = LoadBalancerRetry{"timed"}
+	AllRetry   = LoadBalancerRetry{"all"}
 )

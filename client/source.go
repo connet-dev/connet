@@ -13,6 +13,7 @@ import (
 	"math/rand/v2"
 	"net"
 	"slices"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -35,20 +36,19 @@ type SourceConfig struct {
 	Route            model.RouteOption
 	RelayEncryptions []model.EncryptionScheme
 
-	DestinationOrder       model.LoadBalancerOrder
-	DestinationRetry       model.LoadBalancerRetry
-	DestinationRetryMax    int
-	DestinationRetryByPeer bool
+	DestinationLB         model.LoadBalancer
+	DestinationLBRetry    model.LoadBalancerRetry
+	DestinationLBRetryMax int
 }
 
 // NewSourceConfig creates a source config for a given name.
 func NewSourceConfig(name string) SourceConfig {
 	return SourceConfig{
-		Endpoint:         model.NewEndpoint(name),
-		Route:            model.RouteAny,
-		RelayEncryptions: []model.EncryptionScheme{model.NoEncryption},
-		DestinationOrder: model.LeastLatencyOrder,
-		DestinationRetry: model.AllRetry,
+		Endpoint:           model.NewEndpoint(name),
+		Route:              model.RouteAny,
+		RelayEncryptions:   []model.EncryptionScheme{model.NoEncryption},
+		DestinationLB:      model.LeastLatencyLB,
+		DestinationLBRetry: model.AllRetry,
 	}
 }
 
@@ -64,19 +64,10 @@ func (cfg SourceConfig) WithRelayEncryptions(schemes ...model.EncryptionScheme) 
 	return cfg
 }
 
-func (cfg SourceConfig) WithDestinationOrder(order model.LoadBalancerOrder) SourceConfig {
-	cfg.DestinationOrder = order
-	return cfg
-}
-
-func (cfg SourceConfig) WithDestinationRetry(retry model.LoadBalancerRetry, max int) SourceConfig {
-	cfg.DestinationRetry = retry
-	cfg.DestinationRetryMax = max
-	return cfg
-}
-
-func (cfg SourceConfig) WithDestinationRetryByPeer(bypeer bool) SourceConfig {
-	cfg.DestinationRetryByPeer = bypeer
+func (cfg SourceConfig) WithDestinationLB(lb model.LoadBalancer, retry model.LoadBalancerRetry, max int) SourceConfig {
+	cfg.DestinationLB = lb
+	cfg.DestinationLBRetry = retry
+	cfg.DestinationLBRetryMax = max
 	return cfg
 }
 
@@ -87,7 +78,7 @@ type Source struct {
 	peer  *peer
 	conns atomic.Pointer[[]sourceConn]
 
-	connsTracking   map[peerConnKey]*atomic.Int32
+	connsTracking   map[string]*atomic.Int32 // TODO add peer id type
 	connsTrackingMu sync.RWMutex
 	roundRobinIndex atomic.Int32
 }
@@ -106,9 +97,9 @@ func NewSource(cfg SourceConfig, direct *DirectServer, root *certc.Cert, logger 
 	if cfg.Route.AllowDirect() {
 		p.expectDirect()
 	}
-	var connsTracking map[peerConnKey]*atomic.Int32
-	if cfg.DestinationRetryByPeer {
-		connsTracking = map[peerConnKey]*atomic.Int32{}
+	var connsTracking map[string]*atomic.Int32
+	if cfg.DestinationLB == model.LeastConnsLB {
+		connsTracking = map[string]*atomic.Int32{}
 	}
 
 	return &Source{
@@ -182,24 +173,17 @@ func (s *Source) findActive() ([]sourceConn, error) {
 		return nil, ErrNoActiveDestinations
 	}
 
-	switch s.cfg.DestinationOrder {
-	case model.LeastLatencyOrder:
-		return s.leastLatencySorted(*conns), nil
-	case model.LeastConnsOrder:
-		if s.cfg.DestinationRetryByPeer {
-			return s.leastConnsSortedByPeer(*conns), nil
-		}
-		return s.leastConnsSorted(*conns), nil
-	case model.RoundRobinOrder:
-		return s.roundRobinSorted(*conns), nil
-	case model.RandomOrder:
-		return s.randomSorted(*conns), nil
-	default:
-		return *conns, nil
-	}
+	return slices.SortedFunc(slices.Values(*conns), rttCompare), nil
 }
 
 func rttCompare(l, r sourceConn) int {
+	switch {
+	case l.peer.style == peerRelay && r.peer.style != peerRelay:
+		return +1
+	case l.peer.style != peerRelay && r.peer.style == peerRelay:
+		return -1
+	}
+
 	var ld, rd = time.Duration(math.MaxInt64), time.Duration(math.MaxInt64)
 
 	if rtt := quicc.RTTStats(l.conn); rtt != nil {
@@ -212,75 +196,86 @@ func rttCompare(l, r sourceConn) int {
 	return cmp.Compare(ld, rd)
 }
 
-func (s *Source) leastLatencySorted(conns []sourceConn) []sourceConn {
-	return slices.SortedFunc(slices.Values(conns), func(l, r sourceConn) int {
-		switch {
-		case l.peer.style == peerRelay && r.peer.style != peerRelay:
-			return +1
-		case l.peer.style != peerRelay && r.peer.style == peerRelay:
-			return -1
-		}
-
-		return rttCompare(l, r)
-	})
+type peerSourceConn struct {
+	peerID string
+	conns  []sourceConn
 }
 
-func connCompare(connsTracking map[peerConnKey]*atomic.Int32) func(sourceConn, sourceConn) int {
-	return func(l, r sourceConn) int {
-		var lcount, rcount int32
-		if c, ok := connsTracking[l.peer]; ok {
-			lcount = c.Load()
-		}
-		if c, ok := connsTracking[r.peer]; ok {
-			rcount = c.Load()
-		}
+func (s *Source) findActiveByPeer() ([]peerSourceConn, error) {
+	conns := s.conns.Load()
+	if conns == nil || len(*conns) == 0 {
+		return nil, ErrNoActiveDestinations
+	}
 
-		connCmp := lcount - rcount
-		if connCmp != 0 {
-			return int(connCmp)
-		}
-		return rttCompare(l, r)
+	bypeer := map[string][]sourceConn{}
+	for _, conn := range *conns {
+		bypeer[conn.peer.id] = append(bypeer[conn.peer.id], conn)
+	}
+	peerConns := make([]peerSourceConn, 0, len(bypeer))
+	for k, conns := range bypeer {
+		slices.SortFunc(conns, rttCompare)
+		peerConns = append(peerConns, peerSourceConn{k, conns})
+	}
+
+	switch s.cfg.DestinationLB {
+	case model.LeastLatencyLB:
+		return s.leastLatencySorted(peerConns), nil
+	case model.LeastConnsLB:
+		return s.leastConnsSortedByPeer(peerConns), nil
+	case model.RoundRobinLB:
+		return s.roundRobinSorted(peerConns), nil
+	case model.RandomLB:
+		return s.randomSorted(peerConns), nil
+	default:
+		return s.leastLatencySorted(peerConns), nil
 	}
 }
 
-func (s *Source) leastConnsSorted(conns []sourceConn) []sourceConn {
-	s.connsTrackingMu.RLock()
-	connsTracking := maps.Clone(s.connsTracking)
-	s.connsTrackingMu.RUnlock()
-
-	return slices.SortedFunc(slices.Values(conns), connCompare(connsTracking))
+func (s *Source) leastLatencySorted(conns []peerSourceConn) []peerSourceConn {
+	return slices.SortedFunc(slices.Values(conns), func(l, r peerSourceConn) int {
+		return rttCompare(l.conns[0], r.conns[0])
+	})
 }
 
-func (s *Source) leastConnsSortedByPeer(conns []sourceConn) []sourceConn {
+func (s *Source) leastConnsSortedByPeer(conns []peerSourceConn) []peerSourceConn {
 	s.connsTrackingMu.RLock()
 	connsTracking := maps.Clone(s.connsTracking)
 	s.connsTrackingMu.RUnlock()
 
 	byPeer := map[string]int32{}
 	for k, c := range connsTracking {
-		byPeer[k.id] = byPeer[k.id] + c.Load()
+		byPeer[k] = byPeer[k] + c.Load()
 	}
 
-	cmpByConns := connCompare(connsTracking)
-	return slices.SortedFunc(slices.Values(conns), func(l, r sourceConn) int {
-		ltotal, rtotal := byPeer[l.peer.id], byPeer[r.peer.id]
-		totalCmp := ltotal - rtotal
-
-		if totalCmp != 0 {
-			return int(totalCmp)
+	return slices.SortedFunc(slices.Values(conns), func(l, r peerSourceConn) int {
+		var lcount, rcount int32
+		if c, ok := byPeer[l.peerID]; ok {
+			lcount = c
 		}
-		return cmpByConns(l, r)
+		if c, ok := byPeer[r.peerID]; ok {
+			rcount = c
+		}
+
+		connCmp := lcount - rcount
+		if connCmp != 0 {
+			return int(connCmp)
+		}
+
+		return rttCompare(l.conns[0], r.conns[0])
 	})
 }
 
-func (s *Source) roundRobinSorted(conns []sourceConn) []sourceConn {
+func (s *Source) roundRobinSorted(conns []peerSourceConn) []peerSourceConn {
+	slices.SortStableFunc(conns, func(l, r peerSourceConn) int {
+		return strings.Compare(l.peerID, r.peerID)
+	})
+
 	startFrom := int(s.roundRobinIndex.Add(1)) % len(conns)
 	return append(conns[startFrom:], conns[:startFrom]...)
 }
 
-func (s *Source) randomSorted(conns []sourceConn) []sourceConn {
-	conns = slices.Clone(conns)
-	random := make([]sourceConn, 0, len(conns))
+func (s *Source) randomSorted(conns []peerSourceConn) []peerSourceConn {
+	random := make([]peerSourceConn, 0, len(conns))
 	for len(conns) > 0 {
 		ix := rand.IntN(len(conns))
 		random = append(random, conns[ix])
@@ -296,34 +291,33 @@ func (s *Source) Dial(network, address string) (net.Conn, error) {
 var ErrNoDialedDestinations = errors.New("no dialed destinations")
 
 func (s *Source) DialContext(ctx context.Context, network, address string) (net.Conn, error) {
-	conns, err := s.findActive()
+	if s.cfg.DestinationLB == model.NoLB {
+		conns, err := s.findActive()
+		if err != nil {
+			return nil, fmt.Errorf("get active conns: %w", err)
+		}
+		return s.dialInOrder(ctx, conns)
+	}
+
+	peerConns, err := s.findActiveByPeer()
 	if err != nil {
 		return nil, fmt.Errorf("get active conns: %w", err)
 	}
+	conns := make([]sourceConn, len(peerConns))
+	for i, pconn := range peerConns {
+		conns[i] = pconn.conns[0]
+	}
 
-	switch s.cfg.DestinationRetry {
+	switch s.cfg.DestinationLBRetry {
 	case model.NeverRetry:
 		conns = conns[0:1]
 	case model.CountRetry:
-		maxLen := min(len(conns), s.cfg.DestinationRetryMax)
+		maxLen := min(len(conns), s.cfg.DestinationLBRetryMax)
 		conns = conns[0:maxLen]
 	case model.TimedRetry:
-		cancelCtx, cancel := context.WithTimeout(ctx, time.Duration(s.cfg.DestinationRetryMax)*time.Second)
+		cancelCtx, cancel := context.WithTimeout(ctx, time.Duration(s.cfg.DestinationLBRetryMax)*time.Second)
 		defer cancel()
 		ctx = cancelCtx
-	}
-
-	if s.cfg.DestinationRetryByPeer {
-		byPeer := map[string]struct{}{}
-		var tryConns []sourceConn
-		for _, conn := range conns {
-			if _, ok := byPeer[conn.peer.id]; ok {
-				continue
-			}
-			byPeer[conn.peer.id] = struct{}{}
-			tryConns = append(tryConns, conn)
-		}
-		conns = tryConns
 	}
 
 	return s.dialInOrder(ctx, conns)
@@ -356,7 +350,31 @@ func (s *Source) dial(ctx context.Context, dest sourceConn) (net.Conn, error) {
 		}
 		return nil, err
 	}
-	// TODO attach conn tracking
+
+	if s.cfg.DestinationLB == model.LeastConnsLB {
+		s.connsTrackingMu.RLock()
+		counter, ok := s.connsTracking[dest.peer.id]
+		if ok {
+			counter.Add(1)
+		}
+		s.connsTrackingMu.RUnlock()
+
+		if !ok {
+			s.connsTrackingMu.Lock()
+			counter, ok = s.connsTracking[dest.peer.id]
+			if !ok {
+				counter = &atomic.Int32{}
+				s.connsTracking[dest.peer.id] = counter
+			}
+			counter.Add(1)
+			s.connsTrackingMu.Unlock()
+		}
+
+		context.AfterFunc(stream.Context(), func() {
+			counter.Add(-1)
+		})
+	}
+
 	return conn, nil
 }
 
