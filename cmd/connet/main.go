@@ -116,7 +116,7 @@ func versionCmd() *cobra.Command {
 }
 
 func addConfigsFlag(cmd *cobra.Command) *[]string {
-	return cmd.Flags().StringArray("config", nil, `configuration file(s) to load, merged when passed mulitple times
+	return cmd.Flags().StringArray("config", nil, `configuration file(s) to load, merged when passed multiple times
   any explicit flags are merged last and override values from the configuration files`)
 }
 
@@ -199,14 +199,14 @@ func (c *Config) merge(o Config) {
 	c.Relay.merge(o.Relay)
 }
 
-func override(s, o string) string {
-	if o != "" {
+func override[T comparable](s, o T) (result T) {
+	if o != result {
 		return o
 	}
 	return s
 }
 
-func overrides(s, o []string) []string {
+func overrides[T any](s, o []T) []T {
 	if len(o) > 0 {
 		return o
 	}

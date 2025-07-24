@@ -59,6 +59,10 @@ type SourceConfig struct {
 	CertFile string `toml:"cert-file"` // tls/https server cert
 	KeyFile  string `toml:"key-file"`  // tls/https server key
 	CAsFile  string `toml:"cas-file"`  // mutual tls client certificate authority
+
+	LBPolicy   string `toml:"lb-policy"`
+	LBRetry    string `toml:"lb-retry"`
+	LBRetryMax int    `toml:"lb-retry-max"`
 }
 
 func clientCmd() *cobra.Command {
@@ -402,9 +406,20 @@ func (fc SourceConfig) parse(name string, defaultRelayEncryptions []model.Encryp
 		}
 		relayEncryptions = res
 	}
+
+	lbPolicy, err := model.ParseLBPolicy(fc.LBPolicy)
+	if err != nil {
+		return retErr(fmt.Errorf("parse lb policy: %w", err))
+	}
+	lbRetry, err := model.ParseLBRetry(fc.LBRetry)
+	if err != nil {
+		return retErr(fmt.Errorf("parse lb retry: %w", err))
+	}
+
 	cfg := connet.NewSourceConfig(name).
 		WithRoute(route).
-		WithRelayEncryptions(relayEncryptions...)
+		WithRelayEncryptions(relayEncryptions...).
+		WithLoadBalance(lbPolicy, lbRetry, fc.LBRetryMax)
 
 	targetURL, err := url.Parse(fc.URL)
 	if err != nil {
@@ -573,5 +588,9 @@ func (c SourceConfig) merge(o SourceConfig) SourceConfig {
 		CAsFile:  override(c.CAsFile, o.CAsFile),
 		CertFile: override(c.CertFile, o.CertFile),
 		KeyFile:  override(c.KeyFile, o.KeyFile),
+
+		LBPolicy:   override(c.LBPolicy, o.LBPolicy),
+		LBRetry:    override(c.LBRetry, o.LBRetry),
+		LBRetryMax: override(c.LBRetryMax, o.LBRetryMax),
 	}
 }

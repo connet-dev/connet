@@ -36,19 +36,19 @@ type SourceConfig struct {
 	Route            model.RouteOption
 	RelayEncryptions []model.EncryptionScheme
 
-	DestinationLB         model.LoadBalancer
-	DestinationLBRetry    model.LoadBalancerRetry
-	DestinationLBRetryMax int
+	DestinationPolicy   model.LoadBalancePolicy
+	DestinationRetry    model.LoadBalanceRetry
+	DestinationRetryMax int
 }
 
 // NewSourceConfig creates a source config for a given name.
 func NewSourceConfig(name string) SourceConfig {
 	return SourceConfig{
-		Endpoint:           model.NewEndpoint(name),
-		Route:              model.RouteAny,
-		RelayEncryptions:   []model.EncryptionScheme{model.NoEncryption},
-		DestinationLB:      model.LeastLatencyLB,
-		DestinationLBRetry: model.AllRetry,
+		Endpoint:          model.NewEndpoint(name),
+		Route:             model.RouteAny,
+		RelayEncryptions:  []model.EncryptionScheme{model.NoEncryption},
+		DestinationPolicy: model.NoPolicy,
+		DestinationRetry:  model.NeverRetry,
 	}
 }
 
@@ -64,10 +64,10 @@ func (cfg SourceConfig) WithRelayEncryptions(schemes ...model.EncryptionScheme) 
 	return cfg
 }
 
-func (cfg SourceConfig) WithDestinationLB(lb model.LoadBalancer, retry model.LoadBalancerRetry, max int) SourceConfig {
-	cfg.DestinationLB = lb
-	cfg.DestinationLBRetry = retry
-	cfg.DestinationLBRetryMax = max
+func (cfg SourceConfig) WithLoadBalance(policy model.LoadBalancePolicy, retry model.LoadBalanceRetry, max int) SourceConfig {
+	cfg.DestinationPolicy = policy
+	cfg.DestinationRetry = retry
+	cfg.DestinationRetryMax = max
 	return cfg
 }
 
@@ -98,7 +98,7 @@ func NewSource(cfg SourceConfig, direct *DirectServer, root *certc.Cert, logger 
 		p.expectDirect()
 	}
 	var connsTracking map[string]*atomic.Int32
-	if cfg.DestinationLB == model.LeastConnsLB {
+	if cfg.DestinationPolicy == model.LeastConnsPolicy {
 		connsTracking = map[string]*atomic.Int32{}
 	}
 
@@ -217,14 +217,14 @@ func (s *Source) findActiveByPeer() ([]peerSourceConn, error) {
 		peerConns = append(peerConns, peerSourceConn{k, conns})
 	}
 
-	switch s.cfg.DestinationLB {
-	case model.LeastLatencyLB:
+	switch s.cfg.DestinationPolicy {
+	case model.LeastLatencyPolicy:
 		return s.leastLatencySorted(peerConns), nil
-	case model.LeastConnsLB:
+	case model.LeastConnsPolicy:
 		return s.leastConnsSortedByPeer(peerConns), nil
-	case model.RoundRobinLB:
+	case model.RoundRobinPolicy:
 		return s.roundRobinSorted(peerConns), nil
-	case model.RandomLB:
+	case model.RandomPolicy:
 		return s.randomSorted(peerConns), nil
 	default:
 		return s.leastLatencySorted(peerConns), nil
@@ -291,7 +291,7 @@ func (s *Source) Dial(network, address string) (net.Conn, error) {
 var ErrNoDialedDestinations = errors.New("no dialed destinations")
 
 func (s *Source) DialContext(ctx context.Context, network, address string) (net.Conn, error) {
-	if s.cfg.DestinationLB == model.NoLB {
+	if s.cfg.DestinationPolicy == model.NoPolicy {
 		conns, err := s.findActive()
 		if err != nil {
 			return nil, fmt.Errorf("get active conns: %w", err)
@@ -308,14 +308,14 @@ func (s *Source) DialContext(ctx context.Context, network, address string) (net.
 		conns[i] = pconn.conns[0]
 	}
 
-	switch s.cfg.DestinationLBRetry {
+	switch s.cfg.DestinationRetry {
 	case model.NeverRetry:
 		conns = conns[0:1]
 	case model.CountRetry:
-		maxLen := min(len(conns), s.cfg.DestinationLBRetryMax)
+		maxLen := min(len(conns), s.cfg.DestinationRetryMax)
 		conns = conns[0:maxLen]
 	case model.TimedRetry:
-		cancelCtx, cancel := context.WithTimeout(ctx, time.Duration(s.cfg.DestinationLBRetryMax)*time.Second)
+		cancelCtx, cancel := context.WithTimeout(ctx, time.Duration(s.cfg.DestinationRetryMax)*time.Second)
 		defer cancel()
 		ctx = cancelCtx
 	}
@@ -351,7 +351,7 @@ func (s *Source) dial(ctx context.Context, dest sourceConn) (net.Conn, error) {
 		return nil, err
 	}
 
-	if s.cfg.DestinationLB == model.LeastConnsLB {
+	if s.cfg.DestinationPolicy == model.LeastConnsPolicy {
 		s.connsTrackingMu.RLock()
 		counter, ok := s.connsTracking[dest.peer.id]
 		if ok {
