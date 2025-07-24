@@ -607,8 +607,9 @@ by adding account management and it is one of the easiest way to start.
  - [x] cleanup and improve cli interface/docs
 
 ### v0.10.0
- - [ ] preshared clients - controless p2p
  - [ ] destination load balance
+ - [ ] nix embed version on release
+ - [ ] preshared clients - controless p2p
  - [ ] package refactor/rename
  - [ ] UPnP/IDG and PCP for hole-punching
  - [ ] api to control client/control/relay
