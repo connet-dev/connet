@@ -178,6 +178,10 @@ url = "ws://127.0.0.1:8080" # runs websocket tcp converter that exposes the dest
 url = "wss://127.0.0.1:8083" # same as above, but exposes it on https
 cert-file = "/path/to/cert/file" # the tls/https server certificate to use
 key-file = "/path/to/key/file" # the tls/https server certificate private key to use
+cas-file = "/path/to/cas/file" # the tls/https client certificates to trust (mutual tls)
+lb-policy = "" # the load balancer policy, defaults to '' (none)
+lb-retry = "" # the load balancer retry policy, defaults to '' (never)
+lb-retry-max = 0 # when using count/timed retry, for how long to retry
 
 [client.sources.serviceY] # both sources and destinations can be defined in a single file
 route = "direct" # force only direct communication between clients, even if other end allows any
@@ -350,7 +354,27 @@ By default `connet` doesn't encrypt relay connections (`relay-encryptions = ["no
 When multiple values are set (e.g. `relay-encryptions = ["none", "dhxcp", "tls"]`) it will prefer the most secure/mature option
 (`tls` in this case, then `dhxcp`), but fallback to `none` in case the other peer is not configured to use encryption yet.
 Only setting one encryption option (for example `relay-encryptions = ["tls"]`), is the most strict configuration, which will
-require same encryption at both clients (e.g. source and destination).  
+require same encryption at both clients (e.g. source and destination).
+
+### Source load balancer
+
+By default, a peer with a source endpoint will try to connect to any active peer with a destination endpoint, trying them all
+in order of their latency, preferring direct peer-to-peer connections over the ones going through a relay. This effectively
+means that the destination peer with the best latency will receive all connections from the source peer. If you instead need
+to spread the load between all active peers, you can utilize `lb-policy/lb-retry/lb-retry-max` configuration in the source endpoint. 
+
+To configure load balancing, you start by choosing `lb-policy`, which defines in what order peer connections are attempted.
+`connet` recognizes the following values:
+ - `least-latency` - peers are ordered by their latency, lowest first (peers connected only via relay are last)
+ - `least-conns` - peers are ordered by the number of active connections, least number of connections first
+ - `round-robin` - peers are cycled through, each getting their turn
+ - `random` - peers are randomly ordered each time
+
+Next, you need to choose how many of the ordered peers will be tried, via `lb-retry` (and `lb-retry-max`):
+ - ` ` - never by default, e.g. the first peer will be attempted and if it fails, the connection will fail
+ - `count` - try as many as `lb-retry-max` peers, before giving up. If `lb-retry-max` is empty, `2` is the default
+ - `timed` - try for as long as `lb-retry-max` seconds, before giving up. If `lb-retry-max` is empty, `1` seconds is the default
+ - `all` - try all available peers
 
 ### Storage
 
@@ -608,13 +632,15 @@ by adding account management and it is one of the easiest way to start.
 
 ### v0.10.0
  - [ ] destination load balance
+
+### vNext
  - [ ] nix embed version on release
  - [ ] preshared clients - controless p2p
  - [ ] package refactor/rename
  - [ ] UPnP/IDG and PCP for hole-punching
  - [ ] api to control client/control/relay
 
-## Future
+## vFuture
  - [ ] UDP support
  - [ ] notarize mac app
  - [ ] systemd dynamic user in nixos

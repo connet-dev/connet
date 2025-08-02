@@ -227,7 +227,7 @@ func (s *Source) findActiveByPeer() ([]peerSourceConn, error) {
 	case model.RandomPolicy:
 		return s.randomSorted(peerConns), nil
 	default:
-		return s.leastLatencySorted(peerConns), nil
+		return peerConns, nil
 	}
 }
 
