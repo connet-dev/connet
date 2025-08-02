@@ -27,7 +27,7 @@ import (
 type directPeer struct {
 	local *peer
 
-	remoteID string
+	remoteID peerID
 	remote   *notify.V[*pbclient.RemotePeer]
 	incoming *directPeerIncoming
 	outgoing *directPeerOutgoing
@@ -42,7 +42,7 @@ func newPeering(local *peer, remote *pbclient.RemotePeer, logger *slog.Logger) *
 	return &directPeer{
 		local: local,
 
-		remoteID: remote.Id,
+		remoteID: peerID(remote.Id),
 		remote:   notify.New(remote),
 
 		closer: make(chan struct{}),

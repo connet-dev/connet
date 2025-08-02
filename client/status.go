@@ -36,7 +36,7 @@ func (p *peer) status() (PeerStatus, error) {
 	}
 	for key, conn := range conns {
 		stat.Connections = append(stat.Connections, PeerConnection{
-			ID:    key.id,
+			ID:    string(key.id),
 			Style: key.style.String(),
 			Addr:  conn.RemoteAddr().String(),
 		})

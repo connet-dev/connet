@@ -78,7 +78,7 @@ type Source struct {
 	peer  *peer
 	conns atomic.Pointer[[]sourceConn]
 
-	connsTracking   map[string]*atomic.Int32 // TODO add peer id type
+	connsTracking   map[peerID]*atomic.Int32
 	connsTrackingMu sync.RWMutex
 	roundRobinIndex atomic.Int32
 }
@@ -97,9 +97,9 @@ func NewSource(cfg SourceConfig, direct *DirectServer, root *certc.Cert, logger 
 	if cfg.Route.AllowDirect() {
 		p.expectDirect()
 	}
-	var connsTracking map[string]*atomic.Int32
+	var connsTracking map[peerID]*atomic.Int32
 	if cfg.DestinationPolicy == model.LeastConnsPolicy {
-		connsTracking = map[string]*atomic.Int32{}
+		connsTracking = map[peerID]*atomic.Int32{}
 	}
 
 	return &Source{
@@ -197,8 +197,8 @@ func rttCompare(l, r sourceConn) int {
 }
 
 type peerSourceConn struct {
-	peerID string
-	conns  []sourceConn
+	id    peerID
+	conns []sourceConn
 }
 
 func (s *Source) findActiveByPeer() ([]peerSourceConn, error) {
@@ -207,7 +207,7 @@ func (s *Source) findActiveByPeer() ([]peerSourceConn, error) {
 		return nil, ErrNoActiveDestinations
 	}
 
-	bypeer := map[string][]sourceConn{}
+	bypeer := map[peerID][]sourceConn{}
 	for _, conn := range *conns {
 		bypeer[conn.peer.id] = append(bypeer[conn.peer.id], conn)
 	}
@@ -242,17 +242,17 @@ func (s *Source) leastConnsSortedByPeer(conns []peerSourceConn) []peerSourceConn
 	connsTracking := maps.Clone(s.connsTracking)
 	s.connsTrackingMu.RUnlock()
 
-	byPeer := map[string]int32{}
+	byPeer := map[peerID]int32{}
 	for k, c := range connsTracking {
 		byPeer[k] = byPeer[k] + c.Load()
 	}
 
 	return slices.SortedFunc(slices.Values(conns), func(l, r peerSourceConn) int {
 		var lcount, rcount int32
-		if c, ok := byPeer[l.peerID]; ok {
+		if c, ok := byPeer[l.id]; ok {
 			lcount = c
 		}
-		if c, ok := byPeer[r.peerID]; ok {
+		if c, ok := byPeer[r.id]; ok {
 			rcount = c
 		}
 
@@ -267,7 +267,7 @@ func (s *Source) leastConnsSortedByPeer(conns []peerSourceConn) []peerSourceConn
 
 func (s *Source) roundRobinSorted(conns []peerSourceConn) []peerSourceConn {
 	slices.SortStableFunc(conns, func(l, r peerSourceConn) int {
-		return strings.Compare(l.peerID, r.peerID)
+		return strings.Compare(string(l.id), string(r.id))
 	})
 
 	startFrom := int(s.roundRobinIndex.Add(1)) % len(conns)

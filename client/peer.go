@@ -37,8 +37,10 @@ type peer struct {
 	logger     *slog.Logger
 }
 
+type peerID string
+
 type peerConnKey struct {
-	id    string
+	id    peerID
 	style peerStyle
 	key   string
 }
@@ -232,17 +234,17 @@ func (p *peer) removeRelayConn(id relayID) {
 	notify.MapDelete(p.relayConns, id)
 }
 
-func (p *peer) addActiveConn(id string, style peerStyle, key string, conn *quic.Conn) {
+func (p *peer) addActiveConn(id peerID, style peerStyle, key string, conn *quic.Conn) {
 	p.logger.Debug("add active connection", "peer", id, "style", style, "addr", conn.RemoteAddr())
 	notify.MapPut(p.peerConns, peerConnKey{id, style, key}, conn)
 }
 
-func (p *peer) removeActiveConn(id string, style peerStyle, key string) {
+func (p *peer) removeActiveConn(id peerID, style peerStyle, key string) {
 	p.logger.Debug("remove active connection", "peer", id, "style", style)
 	notify.MapDelete(p.peerConns, peerConnKey{id, style, key})
 }
 
-func (p *peer) removeActiveConns(id string) map[peerConnKey]*quic.Conn {
+func (p *peer) removeActiveConns(id peerID) map[peerConnKey]*quic.Conn {
 	p.logger.Debug("remove active peer", "peer", id)
 	removed := map[peerConnKey]*quic.Conn{}
 	notify.MapDeleteFunc(p.peerConns, func(k peerConnKey, conn *quic.Conn) bool {
