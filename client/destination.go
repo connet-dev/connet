@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"log/slog"
 	"net"
+	"time"
 
 	"github.com/connet-dev/connet/certc"
 	"github.com/connet-dev/connet/cryptoc"
@@ -27,6 +28,7 @@ type DestinationConfig struct {
 	Route            model.RouteOption
 	Proxy            model.ProxyVersion
 	RelayEncryptions []model.EncryptionScheme
+	DialTimeout      time.Duration
 }
 
 // NewDestinationConfig creates a destination config for a given name
@@ -54,6 +56,12 @@ func (cfg DestinationConfig) WithProxy(proxy model.ProxyVersion) DestinationConf
 // WithRelayEncryptions sets the relay encryptions option for this configuration.
 func (cfg DestinationConfig) WithRelayEncryptions(schemes ...model.EncryptionScheme) DestinationConfig {
 	cfg.RelayEncryptions = schemes
+	return cfg
+}
+
+// WithDialTimeout sets the dial timeout
+func (cfg DestinationConfig) WithDialTimeout(timeout time.Duration) DestinationConfig {
+	cfg.DialTimeout = timeout
 	return cfg
 }
 

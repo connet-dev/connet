@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"net/http/httputil"
 	"net/url"
+	"time"
 
 	"github.com/connet-dev/connet/netc"
 	"github.com/connet-dev/connet/slogc"
@@ -21,7 +22,7 @@ func (c *Client) DestinationTCP(ctx context.Context, cfg DestinationConfig, addr
 		return err
 	}
 	go func() {
-		dstSrv := NewTCPDestination(dst, addr, c.logger)
+		dstSrv := NewTCPDestination(dst, addr, cfg.DialTimeout, c.logger)
 		if err := dstSrv.Run(ctx); err != nil {
 			c.logger.Info("shutting down destination tcp", "err", err)
 		}
@@ -36,7 +37,7 @@ func (c *Client) DestinationTLS(ctx context.Context, cfg DestinationConfig, addr
 		return err
 	}
 	go func() {
-		dstSrv := NewTLSDestination(dst, addr, &tls.Config{RootCAs: cas}, c.logger)
+		dstSrv := NewTLSDestination(dst, addr, &tls.Config{RootCAs: cas}, cfg.DialTimeout, c.logger)
 		if err := dstSrv.Run(ctx); err != nil {
 			c.logger.Info("shutting down destination tls", "err", err)
 		}
@@ -66,7 +67,7 @@ func (c *Client) DestinationHTTPProxy(ctx context.Context, cfg DestinationConfig
 		return err
 	}
 	go func() {
-		dstSrv := NewHTTPProxyDestination(dst, dstUrl, nil)
+		dstSrv := NewHTTPProxyDestination(dst, dstUrl, nil, cfg.DialTimeout)
 		if err := dstSrv.Run(ctx); err != nil {
 			c.logger.Info("shutting down destination http", "err", err)
 		}
@@ -81,7 +82,7 @@ func (c *Client) DestinationHTTPSProxy(ctx context.Context, cfg DestinationConfi
 		return err
 	}
 	go func() {
-		dstSrv := NewHTTPProxyDestination(dst, dstUrl, &tls.Config{RootCAs: cas})
+		dstSrv := NewHTTPProxyDestination(dst, dstUrl, &tls.Config{RootCAs: cas}, cfg.DialTimeout)
 		if err := dstSrv.Run(ctx); err != nil {
 			c.logger.Info("shutting down destination http", "err", err)
 		}
@@ -109,12 +110,12 @@ func newTCPDestination(dst Destination, d dialer, addr string, logger *slog.Logg
 	}
 }
 
-func NewTCPDestination(dst Destination, addr string, logger *slog.Logger) *TCPDestination {
-	return newTCPDestination(dst, &net.Dialer{}, addr, logger)
+func NewTCPDestination(dst Destination, addr string, timeout time.Duration, logger *slog.Logger) *TCPDestination {
+	return newTCPDestination(dst, &net.Dialer{Timeout: timeout}, addr, logger)
 }
 
-func NewTLSDestination(dst Destination, addr string, cfg *tls.Config, logger *slog.Logger) *TCPDestination {
-	return newTCPDestination(dst, &tls.Dialer{NetDialer: &net.Dialer{}, Config: cfg}, addr, logger)
+func NewTLSDestination(dst Destination, addr string, cfg *tls.Config, timeout time.Duration, logger *slog.Logger) *TCPDestination {
+	return newTCPDestination(dst, &tls.Dialer{NetDialer: &net.Dialer{Timeout: timeout}, Config: cfg}, addr, logger)
 }
 
 func (d *TCPDestination) Run(ctx context.Context) error {
@@ -151,7 +152,7 @@ func NewHTTPFileDestination(dst Destination, root string) *HTTPDestination {
 	return NewHTTPDestination(dst, mux)
 }
 
-func NewHTTPProxyDestination(dst Destination, dstURL *url.URL, cfg *tls.Config) *HTTPDestination {
+func NewHTTPProxyDestination(dst Destination, dstURL *url.URL, cfg *tls.Config, timeout time.Duration) *HTTPDestination {
 	return NewHTTPDestination(dst, &httputil.ReverseProxy{
 		Rewrite: func(pr *httputil.ProxyRequest) {
 			pr.SetURL(dstURL)
@@ -159,6 +160,10 @@ func NewHTTPProxyDestination(dst Destination, dstURL *url.URL, cfg *tls.Config) 
 		},
 		Transport: &http.Transport{
 			TLSClientConfig: cfg,
+			DialContext: (&net.Dialer{
+				Timeout:   timeout,
+				KeepAlive: 30 * time.Second,
+			}).DialContext,
 		},
 	})
 }

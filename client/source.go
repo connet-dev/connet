@@ -35,6 +35,7 @@ type SourceConfig struct {
 	Endpoint         model.Endpoint
 	Route            model.RouteOption
 	RelayEncryptions []model.EncryptionScheme
+	DialTimeout      time.Duration
 
 	DestinationPolicy   model.LoadBalancePolicy
 	DestinationRetry    model.LoadBalanceRetry
@@ -64,10 +65,25 @@ func (cfg SourceConfig) WithRelayEncryptions(schemes ...model.EncryptionScheme) 
 	return cfg
 }
 
+// WithDialTimeout sets the dial timeout
+func (cfg SourceConfig) WithDialTimeout(timeout time.Duration) SourceConfig {
+	cfg.DialTimeout = timeout
+	return cfg
+}
+
+// WithLoadBalance sets the load balancing behavior for this source
 func (cfg SourceConfig) WithLoadBalance(policy model.LoadBalancePolicy, retry model.LoadBalanceRetry, max int) SourceConfig {
 	cfg.DestinationPolicy = policy
 	cfg.DestinationRetry = retry
 	cfg.DestinationRetryMax = max
+
+	switch {
+	case cfg.DestinationRetry == model.CountRetry && cfg.DestinationRetryMax == 0:
+		cfg.DestinationRetryMax = 2
+	case cfg.DestinationRetry == model.TimedRetry && cfg.DestinationRetryMax == 0:
+		cfg.DestinationRetryMax = 1000
+	}
+
 	return cfg
 }
 
@@ -315,7 +331,7 @@ func (s *Source) DialContext(ctx context.Context, network, address string) (net.
 		maxLen := min(len(conns), s.cfg.DestinationRetryMax)
 		conns = conns[0:maxLen]
 	case model.TimedRetry:
-		cancelCtx, cancel := context.WithTimeout(ctx, time.Duration(s.cfg.DestinationRetryMax)*time.Second)
+		cancelCtx, cancel := context.WithTimeout(ctx, time.Duration(s.cfg.DestinationRetryMax)*time.Millisecond)
 		defer cancel()
 		ctx = cancelCtx
 	}
@@ -339,6 +355,12 @@ func (s *Source) dialInOrder(ctx context.Context, conns []sourceConn) (net.Conn,
 }
 
 func (s *Source) dial(ctx context.Context, dest sourceConn) (net.Conn, error) {
+	if s.cfg.DialTimeout > 0 {
+		timeoutCtx, timeoutCancel := context.WithTimeout(ctx, s.cfg.DialTimeout)
+		ctx = timeoutCtx
+		defer timeoutCancel()
+	}
+
 	stream, err := dest.conn.OpenStreamSync(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("source connect open stream: %w", err)

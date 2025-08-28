@@ -373,7 +373,7 @@ To configure load balancing, you start by choosing `lb-policy`, which defines in
 Next, you need to choose how many of the ordered peers will be tried, via `lb-retry` (and `lb-retry-max`):
  - ` ` - never by default, e.g. the first peer will be attempted and if it fails, the connection will fail
  - `count` - try as many as `lb-retry-max` peers, before giving up. If `lb-retry-max` is empty, `2` is the default
- - `timed` - try for as long as `lb-retry-max` seconds, before giving up. If `lb-retry-max` is empty, `1` seconds is the default
+ - `timed` - try for as long as `lb-retry-max` milliseconds, before giving up. If `lb-retry-max` is empty, `1000` milliseconds is the default
  - `all` - try all available peers
 
 ### Storage

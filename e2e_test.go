@@ -424,17 +424,17 @@ func TestE2E(t *testing.T) {
 
 		switch {
 		case tc.isSuccessProxyProto():
-			dstSrv := NewTCPDestination(dst, ppAddr, logger)
+			dstSrv := NewTCPDestination(dst, ppAddr, 0, logger)
 			g.Go(func() error { return dstSrv.Run(ctx) })
 		case tc.isSuccessTLS():
 			clientTransport := htsServer.Client().Transport.(*http.Transport)
-			dstSrv := NewTLSDestination(dst, htsAddr, clientTransport.TLSClientConfig, logger)
+			dstSrv := NewTLSDestination(dst, htsAddr, clientTransport.TLSClientConfig, 0, logger)
 			g.Go(func() error { return dstSrv.Run(ctx) })
 		case tc.isSuccessWS():
-			dstSrv := NewTCPDestination(dst, echoAddr, logger)
+			dstSrv := NewTCPDestination(dst, echoAddr, 0, logger)
 			g.Go(func() error { return dstSrv.Run(ctx) })
 		default:
-			dstSrv := NewTCPDestination(dst, htAddr, logger)
+			dstSrv := NewTCPDestination(dst, htAddr, 0, logger)
 			g.Go(func() error { return dstSrv.Run(ctx) })
 		}
 

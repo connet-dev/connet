@@ -10,6 +10,7 @@ import (
 	"net/url"
 	"os"
 	"slices"
+	"time"
 
 	"github.com/connet-dev/connet"
 	"github.com/connet-dev/connet/model"
@@ -44,6 +45,7 @@ type DestinationConfig struct {
 	Route             string   `toml:"route"`
 	RelayEncryptions  []string `toml:"relay-encryptions"`
 	ProxyProtoVersion string   `toml:"proxy-proto-version"`
+	DialTimeout       int      `toml:"dial-timeout"`
 
 	URL      string `toml:"url"`
 	CAsFile  string `toml:"cas-file"`  // tls/https server certificate authority, literal "insecure-skip-verify" to skip
@@ -54,6 +56,7 @@ type DestinationConfig struct {
 type SourceConfig struct {
 	Route            string   `toml:"route"`
 	RelayEncryptions []string `toml:"relay-encryptions"`
+	DialTimeout      int      `toml:"dial-timeout"`
 
 	URL      string `toml:"url"`
 	CertFile string `toml:"cert-file"` // tls/https server cert
@@ -309,7 +312,8 @@ func (fc DestinationConfig) parse(name string, defaultRelayEncryptions []model.E
 	dstCfg := connet.NewDestinationConfig(name).
 		WithRoute(route).
 		WithProxy(proxy).
-		WithRelayEncryptions(relayEncryptions...)
+		WithRelayEncryptions(relayEncryptions...).
+		WithDialTimeout(time.Duration(fc.DialTimeout) * time.Millisecond)
 
 	targetURL, err := url.Parse(fc.URL)
 	if err != nil {
@@ -360,21 +364,21 @@ func (fc DestinationConfig) parse(name string, defaultRelayEncryptions []model.E
 	handler := func(dst connet.Destination) runnable {
 		switch targetURL.Scheme {
 		case "tcp":
-			return connet.NewTCPDestination(dst, targetURL.Host, logger)
+			return connet.NewTCPDestination(dst, targetURL.Host, dstCfg.DialTimeout, logger)
 		case "tls":
 			return connet.NewTLSDestination(dst, targetURL.Host, &tls.Config{
 				RootCAs:            destCAs,
 				Certificates:       destCerts,
 				InsecureSkipVerify: destInsecureSkipVerify,
-			}, logger)
+			}, dstCfg.DialTimeout, logger)
 		case "http":
-			return connet.NewHTTPProxyDestination(dst, targetURL, nil)
+			return connet.NewHTTPProxyDestination(dst, targetURL, nil, dstCfg.DialTimeout)
 		case "https":
 			return connet.NewHTTPProxyDestination(dst, targetURL, &tls.Config{
 				RootCAs:            destCAs,
 				Certificates:       destCerts,
 				InsecureSkipVerify: destInsecureSkipVerify,
-			})
+			}, dstCfg.DialTimeout)
 		case "file":
 			path := targetURL.Path
 			if path == "" {
@@ -419,6 +423,7 @@ func (fc SourceConfig) parse(name string, defaultRelayEncryptions []model.Encryp
 	cfg := connet.NewSourceConfig(name).
 		WithRoute(route).
 		WithRelayEncryptions(relayEncryptions...).
+		WithDialTimeout(time.Duration(fc.DialTimeout)*time.Millisecond).
 		WithLoadBalance(lbPolicy, lbRetry, fc.LBRetryMax)
 
 	targetURL, err := url.Parse(fc.URL)
@@ -571,6 +576,7 @@ func (c DestinationConfig) merge(o DestinationConfig) DestinationConfig {
 		Route:             override(c.Route, o.Route),
 		RelayEncryptions:  overrides(c.RelayEncryptions, o.RelayEncryptions),
 		ProxyProtoVersion: override(c.ProxyProtoVersion, o.ProxyProtoVersion),
+		DialTimeout:       override(c.DialTimeout, o.DialTimeout),
 
 		URL:      override(c.URL, o.URL),
 		CAsFile:  override(c.CAsFile, o.CAsFile),
@@ -583,6 +589,7 @@ func (c SourceConfig) merge(o SourceConfig) SourceConfig {
 	return SourceConfig{
 		Route:            override(c.Route, o.Route),
 		RelayEncryptions: overrides(c.RelayEncryptions, o.RelayEncryptions),
+		DialTimeout:      override(c.DialTimeout, o.DialTimeout),
 
 		URL:      override(c.URL, o.URL),
 		CAsFile:  override(c.CAsFile, o.CAsFile),
