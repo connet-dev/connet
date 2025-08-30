@@ -639,7 +639,7 @@ by adding account management and it is one of the easiest way to start.
  - [x] cleanup and improve cli interface/docs
 
 ### v0.10.0
- - [ ] destination load balance
+ - [x] destination load balance
 
 ### vNext
  - [ ] nix embed version on release
