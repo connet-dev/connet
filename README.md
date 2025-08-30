@@ -150,6 +150,7 @@ relay-encryptions = ["none"] # require encryption when using relay for all desti
 route = "any" # what kind of routes to use, `any` will use both `direct` and `relay`
 relay-encryptions = ["tls", "dhxcp"] # require `tls` or `dhxcp` encryption when using relay for this destination
 proxy-proto-version = "" # proxy proto version to push origin information to the server, supports `v1` and `v2`
+dial-timeout = 0 # if url is network connection, how long to wait for connection to establish, defaults to 0 (wait forever)
 url = "tcp://localhost:3000" # url to which destination connects to, over tcp
 # other options for the url field:
 url = "tls://localhost:3000" # a tls destination to connect to
@@ -179,6 +180,7 @@ url = "wss://127.0.0.1:8083" # same as above, but exposes it on https
 cert-file = "/path/to/cert/file" # the tls/https server certificate to use
 key-file = "/path/to/key/file" # the tls/https server certificate private key to use
 cas-file = "/path/to/cas/file" # the tls/https client certificates to trust (mutual tls)
+dial-timeout = 0 # how long to wait for single destination connection, defaults to 0 (wait forever)
 lb-policy = "" # the load balancer policy, defaults to '' (none)
 lb-retry = "" # the load balancer retry policy, defaults to '' (never)
 lb-retry-max = 0 # when using count/timed retry, for how long to retry
@@ -375,6 +377,12 @@ Next, you need to choose how many of the ordered peers will be tried, via `lb-re
  - `count` - try as many as `lb-retry-max` peers, before giving up. If `lb-retry-max` is empty, `2` is the default
  - `timed` - try for as long as `lb-retry-max` milliseconds, before giving up. If `lb-retry-max` is empty, `1000` milliseconds is the default
  - `all` - try all available peers
+
+#### Dial timeout
+
+By default, both source and destinations will wait forever for a connection to be established (e.g. `dial-timeout = 0`). In case
+of load balancing (especially `timed`) it is useful to set these to values lower then `lb-retry-max`, so the system can try
+to establish multiple connections within the alloted time.
 
 ### Storage
 
