@@ -57,7 +57,6 @@ Latest builds of `connet` can be acquired from our [releases](https://github.com
 We also provide [docker](https://github.com/orgs/connet-dev/packages/container/package/connet) images,
 check our [docker](#Docker) section to see how you can use them.
 For [NixOS](https://nixos.org), check the [NixOS](#NixOS) section.
-See the [Arch Linux](#Arch-Linux-community) section for Arch.
 
 To get started with `connet`, you'll need 3 devices:
 
@@ -493,13 +492,6 @@ To configure the client as a service:
     };
   };
 }
-```
-
-### Arch Linux (community)
-
-`connet` is available in the [AUR](https://aur.archlinux.org/packages/connet) and can be installed using an AUR helper (e.g. paru):
-```bash
-paru -S connet
 ```
 
 ### Docker
