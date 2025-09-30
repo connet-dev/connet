@@ -45,3 +45,10 @@ jobs:
         with:
           tag_name: v${{ steps.extract_version.outputs.version }}
           generate_release_notes: true
+
+  perform-release:
+    name: Perform release
+    needs: tag-release
+    uses: ./.github/workflows/release.yml
+    with:
+      version: ${{ steps.extract_version.outputs.version }}

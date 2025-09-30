@@ -11,6 +11,11 @@ on:
       upload:
         description: "Upload final artifacts to github"
         default: false
+  workflow_call:
+    inputs:
+      version:
+        required: true
+        type: string
   push:
     tags:
       - "v[0-9]+.[0-9]+.[0-9]+"
@@ -30,6 +35,7 @@ jobs:
     runs-on: ubuntu-latest
     outputs:
       version: ${{ steps.extract_version.outputs.version }}
+      publish: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.upload == 'true' || github.event_name == 'push' || github.event_name == 'workflow_call' }}
     steps:
       - name: Exract the Version
         id: extract_version
@@ -41,6 +47,9 @@ jobs:
           elif [[ "${{ github.event_name }}" == "workflow_dispatch" ]]; then
             VERSION=${{ github.event.inputs.version }}
             VERSION=${VERSION#v}
+            echo "version=$VERSION" >> $GITHUB_OUTPUT
+          elif [[ "${{ github.event_name }}" == "workflow_call"]]; then
+            VERSION=${{ github.event.inputs.version }}
             echo "version=$VERSION" >> $GITHUB_OUTPUT
           else
             echo "Error: Unsupported event type."
@@ -64,7 +73,7 @@ jobs:
         run: nix develop --command make release
       - name: Upload release
         uses: softprops/action-gh-release@v2
-        if: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.upload == 'true' || github.event_name == 'push' }}
+        if: ${{ needs.setup.outputs.publish }}
         with:
           tag_name: v${{ env.CONNET_VERSION }}
           files: |
@@ -93,7 +102,7 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
       - name: Docker push
-        if: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.upload == 'true' || github.event_name == 'push' }}
+        if: ${{ needs.setup.outputs.publish }}
         run: nix develop --command skopeo copy "docker-archive:result" "docker://ghcr.io/connet-dev/connet:${CONNET_VERSION}-amd64"
 
   docker-arm:
@@ -120,7 +129,7 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
       - name: Docker push
-        if: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.upload == 'true' || github.event_name == 'push' }}
+        if: ${{ needs.setup.outputs.publish }}
         run: nix develop --command skopeo copy "docker-archive:result" "docker://ghcr.io/connet-dev/connet:${CONNET_VERSION}-arm64"
 
   docker-multiarch:
@@ -143,5 +152,5 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
       - name: Docker tag
-        if: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.upload == 'true' || github.event_name == 'push' }}
+        if: ${{ needs.setup.outputs.publish }}
         run: nix develop --command manifest-tool push from-args --platforms linux/amd64,linux/arm64 --template ghcr.io/connet-dev/connet:${CONNET_VERSION}-ARCHVARIANT --target ghcr.io/connet-dev/connet:${CONNET_VERSION}
