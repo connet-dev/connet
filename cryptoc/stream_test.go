@@ -32,14 +32,14 @@ func TestStream(t *testing.T) {
 
 	t.Run("small", func(t *testing.T) {
 		go func() {
-			for i := 0; i < 10; i++ {
+			for i := range 1024 {
 				var out = []byte(fmt.Sprintf("hello world %d", i))
 				_, err := clientStream.Write(out)
 				require.NoError(t, err)
 			}
 		}()
 
-		for i := 0; i < 10; i++ {
+		for i := range 1024 {
 			var out = []byte(fmt.Sprintf("hello world %d", i))
 
 			var in = make([]byte, len(out))

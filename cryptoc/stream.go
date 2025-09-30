@@ -168,7 +168,7 @@ func (s *asymStream) SetWriteDeadline(t time.Time) error {
 }
 
 func incrementNonce(nonce []byte) {
-	for i := len(nonce) - 1; i >= 0; i++ {
+	for i := len(nonce) - 1; i >= 0; i-- {
 		nonce[i]++
 		if nonce[i] > 0 {
 			break
