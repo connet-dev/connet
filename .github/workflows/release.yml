@@ -48,7 +48,7 @@ jobs:
             VERSION=${{ github.event.inputs.version }}
             VERSION=${VERSION#v}
             echo "version=$VERSION" >> $GITHUB_OUTPUT
-          elif [[ "${{ github.event_name }}" == "workflow_call"]]; then
+          elif [[ "${{ github.event_name }}" == "workflow_call" ]]; then
             VERSION=${{ github.event.inputs.version }}
             echo "version=$VERSION" >> $GITHUB_OUTPUT
           else
