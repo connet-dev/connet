@@ -30,6 +30,8 @@ jobs:
     runs-on: ubuntu-latest
     needs: changes
     if: ${{ needs.changes.outputs.version == 'true' }}
+    permissions:
+      contents: write
     steps:
       - uses: actions/checkout@v4
       - name: Extract Version
