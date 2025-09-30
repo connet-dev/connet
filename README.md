@@ -633,7 +633,7 @@ by adding account management and it is one of the easiest way to start.
 ### v0.9.4
  - [x] destination load balance
 
-### v0.9.9
+### v0.9.10
  - [x] auto-tag release
  - [x] nix embed version on release
 
