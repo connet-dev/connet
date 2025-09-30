@@ -34,6 +34,8 @@ jobs:
     if: ${{ needs.changes.outputs.version == 'true' }}
     permissions:
       contents: write
+    outputs:
+      version: ${{ steps.extract_version.outputs.version }}
     steps:
       - uses: actions/checkout@v4
       - name: Extract Version
@@ -51,4 +53,4 @@ jobs:
     needs: tag-release
     uses: ./.github/workflows/release.yml
     with:
-      version: ${{ steps.extract_version.outputs.version }}
+      version: ${{ needs.tag-release.outputs.version }}
