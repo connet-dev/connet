@@ -35,21 +35,20 @@ jobs:
     runs-on: ubuntu-latest
     outputs:
       version: ${{ steps.extract_version.outputs.version }}
-      publish: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.upload == 'true' || github.event_name == 'push' || github.event_name == 'workflow_call' }}
+      publish: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.upload == 'true' || github.event_name == 'push' }}
     steps:
       - name: Exract the Version
         id: extract_version
         run: |
           if [[ "${{ github.event_name }}" == "push" ]]; then
+            IN_VERSION=${{ inputs.version }}
             # Remove the leading 'v' from the tag
-            VERSION=${GITHUB_REF#refs/tags/v}
+            GIT_VERSION=${GITHUB_REF#refs/tags/v}
+            VERSION=${IN_VERSION:-$GIT_VERSION}
             echo "version=$VERSION" >> $GITHUB_OUTPUT
           elif [[ "${{ github.event_name }}" == "workflow_dispatch" ]]; then
             VERSION=${{ github.event.inputs.version }}
             VERSION=${VERSION#v}
-            echo "version=$VERSION" >> $GITHUB_OUTPUT
-          elif [[ "${{ github.event_name }}" == "workflow_call" ]]; then
-            VERSION=${{ github.event.inputs.version }}
             echo "version=$VERSION" >> $GITHUB_OUTPUT
           else
             echo "Error: Unsupported event type."
