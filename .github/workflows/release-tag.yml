@@ -3,6 +3,8 @@ on:
     workflows: [ci]
     types: [completed]
     branches: [main]
+  push:
+    branches: [main]
 
 concurrency:
   group: ${{ github.workflow }}
