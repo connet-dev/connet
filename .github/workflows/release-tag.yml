@@ -1,0 +1,43 @@
+on:
+  workflow_run:
+    workflows: [ci]
+    types: [completed]
+    branches: [main]
+
+concurrency:
+  group: ${{ github.workflow }}
+  cancel-in-progress: false
+
+jobs:
+  changes:
+    name: Detect version change
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    outputs:
+      version: ${{ steps.filter.outputs.version }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dorny/paths-filter@v3
+        id: filter
+        with:
+          filters: |
+            version:
+              - 'VERSION'
+
+  tag-release:
+    name: Tag release on version change
+    runs-on: ubuntu-latest
+    needs: changes
+    if: ${{ needs.changes.outputs.version == 'true' }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Extract Version
+        id: extract_version
+        run: |
+          echo "version=$(cat VERSION)" >> $GITHUB_OUTPUT
+      - name: Create release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: v${{ steps.extract_version.outputs.version }}
+          generate_release_notes: true

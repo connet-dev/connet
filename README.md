@@ -630,14 +630,19 @@ by adding account management and it is one of the easiest way to start.
  - [x] embed version when building
  - [x] cleanup and improve cli interface/docs
 
-### v0.10.0
+### v0.9.4
  - [x] destination load balance
 
-### vNext
- - [ ] nix embed version on release
- - [ ] preshared clients - controless p2p
- - [ ] package refactor/rename
+### v0.9.5
+ - [x] auto-tag release
+ - [x] nix embed version on release
+
+### v0.10.0
  - [ ] UPnP/IDG and PCP for hole-punching
+ - [ ] package refactor/rename
+
+### vNext
+ - [ ] preshared clients - controless p2p
  - [ ] api to control client/control/relay
 
 ## vFuture
