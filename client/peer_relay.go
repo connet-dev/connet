@@ -154,7 +154,7 @@ func (r *relayPeer) keepalive(ctx context.Context, conn *quic.Conn) error {
 	r.local.addRelayConn(r.serverID, conn)
 	defer r.local.removeRelayConn(r.serverID)
 
-	quicc.RTTLogStats(conn, r.logger)
+	quicc.LogRTTStats(conn, r.logger)
 	for {
 		select {
 		case <-ctx.Done():
@@ -162,7 +162,7 @@ func (r *relayPeer) keepalive(ctx context.Context, conn *quic.Conn) error {
 		case <-conn.Context().Done():
 			return context.Cause(conn.Context())
 		case <-time.After(30 * time.Second):
-			quicc.RTTLogStats(conn, r.logger)
+			quicc.LogRTTStats(conn, r.logger)
 		}
 	}
 }

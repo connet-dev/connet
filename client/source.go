@@ -9,7 +9,6 @@ import (
 	"fmt"
 	"log/slog"
 	"maps"
-	"math"
 	"math/rand/v2"
 	"net"
 	"slices"
@@ -200,14 +199,8 @@ func rttCompare(l, r sourceConn) int {
 		return -1
 	}
 
-	var ld, rd = time.Duration(math.MaxInt64), time.Duration(math.MaxInt64)
-
-	if rtt := quicc.RTTStats(l.conn); rtt != nil {
-		ld = rtt.SmoothedRTT()
-	}
-	if rtt := quicc.RTTStats(r.conn); rtt != nil {
-		rd = rtt.SmoothedRTT()
-	}
+	ld := r.conn.ConnectionStats().SmoothedRTT
+	rd := r.conn.ConnectionStats().SmoothedRTT
 
 	return cmp.Compare(ld, rd)
 }

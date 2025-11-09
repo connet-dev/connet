@@ -230,7 +230,7 @@ func (p *directPeerIncoming) keepalive(ctx context.Context, conn *quic.Conn) err
 	p.parent.local.addActiveConn(p.parent.remoteID, peerIncoming, "", conn)
 	defer p.parent.local.removeActiveConn(p.parent.remoteID, peerIncoming, "")
 
-	quicc.RTTLogStats(conn, p.logger)
+	quicc.LogRTTStats(conn, p.logger)
 	for {
 		select {
 		case <-p.closer:
@@ -240,7 +240,7 @@ func (p *directPeerIncoming) keepalive(ctx context.Context, conn *quic.Conn) err
 		case <-conn.Context().Done():
 			return context.Cause(conn.Context())
 		case <-time.After(30 * time.Second):
-			quicc.RTTLogStats(conn, p.logger)
+			quicc.LogRTTStats(conn, p.logger)
 		}
 	}
 }
@@ -365,7 +365,7 @@ func (p *directPeerOutgoing) keepalive(ctx context.Context, conn *quic.Conn) err
 	p.parent.local.addActiveConn(p.parent.remoteID, peerOutgoing, "", conn)
 	defer p.parent.local.removeActiveConn(p.parent.remoteID, peerOutgoing, "")
 
-	quicc.RTTLogStats(conn, p.logger)
+	quicc.LogRTTStats(conn, p.logger)
 	for {
 		select {
 		case <-p.closer:
@@ -375,7 +375,7 @@ func (p *directPeerOutgoing) keepalive(ctx context.Context, conn *quic.Conn) err
 		case <-conn.Context().Done():
 			return context.Cause(conn.Context())
 		case <-time.After(30 * time.Second):
-			quicc.RTTLogStats(conn, p.logger)
+			quicc.LogRTTStats(conn, p.logger)
 		}
 	}
 }

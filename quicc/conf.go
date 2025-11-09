@@ -11,7 +11,6 @@ func ClientTransport(conn net.PacketConn, statelessResetKey *quic.StatelessReset
 	return &quic.Transport{
 		Conn:              conn,
 		StatelessResetKey: statelessResetKey,
-		ConnContext:       RTTContext,
 		// TODO review other options
 	}
 }
@@ -21,7 +20,6 @@ func ServerTransport(conn net.PacketConn, statelessResetKey *quic.StatelessReset
 		Conn:               conn,
 		ConnectionIDLength: 8,
 		StatelessResetKey:  statelessResetKey,
-		ConnContext:        RTTContext,
 		// TODO review other options
 	}
 }
@@ -29,6 +27,5 @@ func ServerTransport(conn net.PacketConn, statelessResetKey *quic.StatelessReset
 var StdConfig = &quic.Config{
 	MaxIdleTimeout:  20 * time.Second,
 	KeepAlivePeriod: 10 * time.Second,
-	Tracer:          RTTTracer,
 	// TODO review other options
 }

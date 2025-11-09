@@ -9,7 +9,6 @@ import (
 	"fmt"
 	"log/slog"
 	"maps"
-	"math"
 	"net"
 	"slices"
 	"sync"
@@ -76,14 +75,8 @@ func (d *endpointClients) getDestinations() []*clientConn {
 	defer d.mu.RUnlock()
 
 	return slices.SortedFunc(maps.Values(d.destinations), func(l, r *clientConn) int {
-		var ld, rd = time.Duration(math.MaxInt64), time.Duration(math.MaxInt64)
-
-		if rtt := quicc.RTTStats(l.conn); rtt != nil {
-			ld = rtt.SmoothedRTT()
-		}
-		if rtt := quicc.RTTStats(r.conn); rtt != nil {
-			rd = rtt.SmoothedRTT()
-		}
+		ld := l.conn.ConnectionStats().SmoothedRTT
+		rd := r.conn.ConnectionStats().SmoothedRTT
 
 		return cmp.Compare(ld, rd)
 	})
@@ -321,7 +314,7 @@ func (c *clientConn) runDestination(ctx context.Context) error {
 	fcs := c.server.addDestination(c)
 	defer c.server.removeDestination(fcs, c)
 
-	quicc.RTTLogStats(c.conn, c.logger)
+	quicc.LogRTTStats(c.conn, c.logger)
 	for {
 		select {
 		case <-ctx.Done():
@@ -329,7 +322,7 @@ func (c *clientConn) runDestination(ctx context.Context) error {
 		case <-c.conn.Context().Done():
 			return context.Cause(c.conn.Context())
 		case <-time.After(30 * time.Second):
-			quicc.RTTLogStats(c.conn, c.logger)
+			quicc.LogRTTStats(c.conn, c.logger)
 		}
 	}
 }
@@ -341,7 +334,7 @@ func (c *clientConn) runSource(ctx context.Context) error {
 	g, ctx := errgroup.WithContext(ctx)
 
 	g.Go(func() error {
-		quicc.RTTLogStats(c.conn, c.logger)
+		quicc.LogRTTStats(c.conn, c.logger)
 		for {
 			select {
 			case <-ctx.Done():
@@ -349,7 +342,7 @@ func (c *clientConn) runSource(ctx context.Context) error {
 			case <-c.conn.Context().Done():
 				return context.Cause(c.conn.Context())
 			case <-time.After(30 * time.Second):
-				quicc.RTTLogStats(c.conn, c.logger)
+				quicc.LogRTTStats(c.conn, c.logger)
 			}
 		}
 	})
