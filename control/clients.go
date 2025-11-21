@@ -580,11 +580,8 @@ func (s *clientStream) runErr(ctx context.Context) error {
 }
 
 func validatePeerCert(endpoint model.Endpoint, peer *pbclient.Peer) *pberror.Error {
-	if _, err := x509.ParseCertificate(peer.ClientCertificate); err != nil {
+	if _, err := x509.ParseCertificate(peer.Certificate); err != nil {
 		return pberror.NewError(pberror.Code_AnnounceInvalidClientCertificate, "'%s' client cert is invalid", endpoint)
-	}
-	if _, err := x509.ParseCertificate(peer.ServerCertificate); err != nil {
-		return pberror.NewError(pberror.Code_AnnounceInvalidServerCertificate, "'%s' server cert is invalid", endpoint)
 	}
 	return nil
 }

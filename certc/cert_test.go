@@ -3,6 +3,8 @@ package certc
 import (
 	"bytes"
 	"context"
+	"crypto/ed25519"
+	"crypto/rand"
 	"crypto/tls"
 	"crypto/x509"
 	"fmt"
@@ -10,19 +12,37 @@ import (
 	"net"
 	"testing"
 
+	"github.com/mr-tron/base58"
 	"github.com/quic-go/quic-go"
 	"github.com/stretchr/testify/require"
 	"golang.org/x/sync/errgroup"
 )
 
 func TestChain(t *testing.T) {
+	seed := make([]byte, ed25519.SeedSize)
+	_, err := io.ReadFull(rand.Reader, seed)
+	require.NoError(t, err)
+	fmt.Println("seed", base58.Encode(seed))
+	priv := ed25519.NewKeyFromSeed(seed)
+	require.NoError(t, err)
+	fmt.Println("priv", base58.Encode(priv))
+
+	pub := priv.Public().(ed25519.PublicKey)
+	fmt.Println("pub", base58.Encode(pub))
+
 	root, err := NewRoot()
 	require.NoError(t, err)
 
 	inter, err := root.NewIntermediate(CertOpts{
 		Domains: []string{"zzz"},
-	})
+	}, priv)
 	require.NoError(t, err)
+
+	interCert, err := inter.TLSCert()
+	require.NoError(t, err)
+	fmt.Println("inter sub", base58.Encode(interCert.Leaf.SubjectKeyId))
+	fmt.Println("inter auth", base58.Encode(interCert.Leaf.AuthorityKeyId))
+
 	caPool, err := inter.CertPool()
 	require.NoError(t, err)
 
@@ -32,6 +52,8 @@ func TestChain(t *testing.T) {
 	require.NoError(t, err)
 	serverCert, err := server.TLSCert()
 	require.NoError(t, err)
+	fmt.Println("server sub", base58.Encode(serverCert.Leaf.SubjectKeyId))
+	fmt.Println("server auth", base58.Encode(serverCert.Leaf.AuthorityKeyId))
 
 	client, err := inter.NewClient(CertOpts{
 		Domains: []string{"zzz"},
@@ -39,6 +61,8 @@ func TestChain(t *testing.T) {
 	require.NoError(t, err)
 	clientCert, err := client.TLSCert()
 	require.NoError(t, err)
+	fmt.Println("client sub", base58.Encode(clientCert.Leaf.SubjectKeyId))
+	fmt.Println("client auth", base58.Encode(clientCert.Leaf.AuthorityKeyId))
 
 	testConnectivity(t, serverCert, caPool, clientCert, caPool)
 	testConnectivityDyn(t, serverCert, caPool, clientCert, caPool)
@@ -52,7 +76,7 @@ func TestChainRoot(t *testing.T) {
 
 	inter, err := root.NewIntermediate(CertOpts{
 		Domains: []string{"zzz"},
-	})
+	}, nil)
 	require.NoError(t, err)
 	caPool, err := inter.CertPool()
 	require.NoError(t, err)
@@ -238,6 +262,10 @@ func testConnectivityTLS(t *testing.T, serverConf *tls.Config, clientConf *tls.C
 		}
 		if !bytes.Equal(peerCerts[0].Raw, clientConf.Certificates[0].Leaf.Raw) {
 			return fmt.Errorf("expected matching certs")
+		}
+		for _, c := range peerCerts {
+			fmt.Println("server sub", base58.Encode(c.SubjectKeyId))
+			fmt.Println("server auth", base58.Encode(c.AuthorityKeyId))
 		}
 
 		s, err := c.AcceptStream(ctx)

@@ -258,13 +258,14 @@ func (x *Response) GetRelay() *Response_Relays {
 }
 
 type Peer struct {
-	state             protoimpl.MessageState `protogen:"open.v1"`
-	Directs           []*pbmodel.AddrPort    `protobuf:"bytes,3,rep,name=directs,proto3" json:"directs,omitempty"`
-	RelayIds          []string               `protobuf:"bytes,6,rep,name=relayIds,proto3" json:"relayIds,omitempty"`
-	ServerCertificate []byte                 `protobuf:"bytes,4,opt,name=server_certificate,json=serverCertificate,proto3" json:"server_certificate,omitempty"` // certificate to use when connecting to this client
-	ClientCertificate []byte                 `protobuf:"bytes,5,opt,name=client_certificate,json=clientCertificate,proto3" json:"client_certificate,omitempty"` // certificate that this client uses when connecting
-	unknownFields     protoimpl.UnknownFields
-	sizeCache         protoimpl.SizeCache
+	state    protoimpl.MessageState `protogen:"open.v1"`
+	Directs  []*pbmodel.AddrPort    `protobuf:"bytes,3,rep,name=directs,proto3" json:"directs,omitempty"`
+	RelayIds []string               `protobuf:"bytes,6,rep,name=relayIds,proto3" json:"relayIds,omitempty"`
+	// bytes server_certificate = 4 [deprecated = true]; // certificate to use when connecting to this client
+	// bytes client_certificate = 5 [deprecated = true]; // certificate that this client uses when connecting
+	Certificate   []byte `protobuf:"bytes,7,opt,name=certificate,proto3" json:"certificate,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
 }
 
 func (x *Peer) Reset() {
@@ -311,16 +312,9 @@ func (x *Peer) GetRelayIds() []string {
 	return nil
 }
 
-func (x *Peer) GetServerCertificate() []byte {
+func (x *Peer) GetCertificate() []byte {
 	if x != nil {
-		return x.ServerCertificate
-	}
-	return nil
-}
-
-func (x *Peer) GetClientCertificate() []byte {
-	if x != nil {
-		return x.ClientCertificate
+		return x.Certificate
 	}
 	return nil
 }
@@ -676,12 +670,11 @@ const file_client_proto_rawDesc = "" +
 	"\bAnnounce\x12(\n" +
 	"\x05peers\x18\x01 \x03(\v2\x12.client.RemotePeerR\x05peers\x1a/\n" +
 	"\x06Relays\x12%\n" +
-	"\x06relays\x18\x01 \x03(\v2\r.client.RelayR\x06relays\"\xab\x01\n" +
+	"\x06relays\x18\x01 \x03(\v2\r.client.RelayR\x06relays\"o\n" +
 	"\x04Peer\x12)\n" +
 	"\adirects\x18\x03 \x03(\v2\x0f.model.AddrPortR\adirects\x12\x1a\n" +
-	"\brelayIds\x18\x06 \x03(\tR\brelayIds\x12-\n" +
-	"\x12server_certificate\x18\x04 \x01(\fR\x11serverCertificate\x12-\n" +
-	"\x12client_certificate\x18\x05 \x01(\fR\x11clientCertificate\">\n" +
+	"\brelayIds\x18\x06 \x03(\tR\brelayIds\x12 \n" +
+	"\vcertificate\x18\a \x01(\fR\vcertificate\">\n" +
 	"\n" +
 	"RemotePeer\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12 \n" +

@@ -3,7 +3,6 @@ package client
 import (
 	"context"
 	"crypto/tls"
-	"crypto/x509"
 	"fmt"
 	"log/slog"
 	"net"
@@ -349,21 +348,14 @@ func (d *Destination) getSourceTLS(name string) (*tls.Config, error) {
 	}
 
 	for _, remote := range remotes {
-		switch cfg, err := newServerTLSConfig(remote.Peer.ServerCertificate); {
+		switch cfg, err := newServerTLSConfig(remote.Peer.Certificate); {
 		case err != nil:
 			return nil, fmt.Errorf("source peer server cert: %w", err)
 		case cfg.name == name:
-			clientCert, err := x509.ParseCertificate(remote.Peer.ClientCertificate)
-			if err != nil {
-				return nil, fmt.Errorf("source peer client cert: %w", err)
-			}
-
-			clientCAs := x509.NewCertPool()
-			clientCAs.AddCert(clientCert)
 			return &tls.Config{
 				ClientAuth:   tls.RequireAndVerifyClientCert,
 				Certificates: []tls.Certificate{d.peer.serverCert},
-				ClientCAs:    clientCAs,
+				ClientCAs:    cfg.cas,
 			}, nil
 		}
 	}

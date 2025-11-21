@@ -32,6 +32,7 @@ type peer struct {
 	peerConns  *notify.V[map[peerConnKey]*quic.Conn]
 
 	direct     *DirectServer
+	rootCert   tls.Certificate
 	serverCert tls.Certificate
 	clientCert tls.Certificate
 	logger     *slog.Logger
@@ -67,9 +68,19 @@ func (s peerStyle) String() string {
 }
 
 func newPeer(direct *DirectServer, root *certc.Cert, logger *slog.Logger) (*peer, error) {
-	serverCert, err := root.NewServer(certc.CertOpts{
+	opts := certc.CertOpts{
 		Domains: []string{netc.GenServerName("connet-direct")},
-	})
+	}
+	interCert, err := root.NewIntermediate(opts, nil)
+	if err != nil {
+		return nil, err
+	}
+	rootTLSCert, err := interCert.TLSCert()
+	if err != nil {
+		return nil, err
+	}
+
+	serverCert, err := interCert.NewServer(opts)
 	if err != nil {
 		return nil, err
 	}
@@ -77,7 +88,7 @@ func newPeer(direct *DirectServer, root *certc.Cert, logger *slog.Logger) (*peer
 	if err != nil {
 		return nil, err
 	}
-	clientCert, err := root.NewClient(certc.CertOpts{})
+	clientCert, err := interCert.NewClient(certc.CertOpts{})
 	if err != nil {
 		return nil, err
 	}
@@ -88,8 +99,7 @@ func newPeer(direct *DirectServer, root *certc.Cert, logger *slog.Logger) (*peer
 
 	return &peer{
 		self: notify.New(&pbclient.Peer{
-			ServerCertificate: serverTLSCert.Leaf.Raw,
-			ClientCertificate: clientTLSCert.Leaf.Raw,
+			Certificate: interCert.Raw(),
 		}),
 		relays:     notify.NewEmpty[[]*pbclient.Relay](),
 		relayConns: notify.New(map[relayID]*quic.Conn{}),
@@ -97,6 +107,7 @@ func newPeer(direct *DirectServer, root *certc.Cert, logger *slog.Logger) (*peer
 		peerConns:  notify.New(map[peerConnKey]*quic.Conn{}),
 
 		direct:     direct,
+		rootCert:   rootTLSCert,
 		serverCert: serverTLSCert,
 		clientCert: clientTLSCert,
 		logger:     logger,
@@ -114,10 +125,9 @@ func (p *peer) isDirect() bool {
 func (p *peer) setDirectAddrs(addrs []netip.AddrPort) {
 	p.self.Update(func(cp *pbclient.Peer) *pbclient.Peer {
 		return &pbclient.Peer{
-			Directs:           pbmodel.AsAddrPorts(addrs),
-			RelayIds:          cp.RelayIds,
-			ServerCertificate: cp.ServerCertificate,
-			ClientCertificate: cp.ClientCertificate,
+			Directs:     pbmodel.AsAddrPorts(addrs),
+			RelayIds:    cp.RelayIds,
+			Certificate: cp.Certificate,
 		}
 	})
 }
@@ -187,10 +197,9 @@ func (p *peer) runShareRelays(ctx context.Context) error {
 		}
 		p.self.Update(func(cp *pbclient.Peer) *pbclient.Peer {
 			return &pbclient.Peer{
-				Directs:           cp.Directs,
-				RelayIds:          ids,
-				ServerCertificate: cp.ServerCertificate,
-				ClientCertificate: cp.ClientCertificate,
+				Directs:     cp.Directs,
+				RelayIds:    ids,
+				Certificate: cp.Certificate,
 			}
 		})
 		return nil
@@ -291,14 +300,14 @@ func (p *peer) newECDHConfig() (*ecdh.PrivateKey, *pbconnect.ECDHConfiguration, 
 	keyTime = append(keyTime, sk.PublicKey().Bytes()...)
 	keyTime = binary.BigEndian.AppendUint64(keyTime, uint64(time.Now().Nanosecond()))
 
-	certSK := p.serverCert.PrivateKey.(ed25519.PrivateKey)
+	certSK := p.rootCert.PrivateKey.(ed25519.PrivateKey)
 	signature, err := certSK.Sign(rand.Reader, keyTime, &ed25519.Options{})
 	if err != nil {
 		return nil, nil, fmt.Errorf("peer sign: %w", err)
 	}
 
 	return sk, &pbconnect.ECDHConfiguration{
-		ClientName: p.serverCert.Leaf.DNSNames[0],
+		ClientName: p.rootCert.Leaf.DNSNames[0],
 		KeyTime:    keyTime,
 		Signature:  signature,
 	}, nil
@@ -311,7 +320,7 @@ func (p *peer) getECDHPublicKey(cfg *pbconnect.ECDHConfiguration) (*ecdh.PublicK
 	}
 	var candidates []*x509.Certificate
 	for _, remote := range remotes {
-		cert, err := x509.ParseCertificate(remote.Peer.ServerCertificate)
+		cert, err := x509.ParseCertificate(remote.Peer.Certificate)
 		if err != nil {
 			return nil, err
 		}

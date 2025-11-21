@@ -84,7 +84,7 @@ func (p *directPeer) runRemote(ctx context.Context) error {
 	return p.remote.Listen(ctx, func(remote *pbclient.RemotePeer) error {
 		if p.local.isDirect() && len(remote.Peer.Directs) > 0 {
 			if p.incoming == nil {
-				remoteClientCert, err := x509.ParseCertificate(remote.Peer.ClientCertificate)
+				remoteClientCert, err := x509.ParseCertificate(remote.Peer.Certificate)
 				if err != nil {
 					return fmt.Errorf("parse client certificate: %w", err)
 				}
@@ -92,7 +92,7 @@ func (p *directPeer) runRemote(ctx context.Context) error {
 			}
 
 			if p.outgoing == nil {
-				remoteServerConf, err := newServerTLSConfig(remote.Peer.ServerCertificate)
+				remoteServerConf, err := newServerTLSConfig(remote.Peer.Certificate)
 				if err != nil {
 					return fmt.Errorf("parse server certificate: %w", err)
 				}

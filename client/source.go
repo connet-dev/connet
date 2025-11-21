@@ -481,7 +481,7 @@ func (s *Source) getDestinationTLS(name string) (*tls.Config, error) {
 	}
 
 	for _, remote := range remotes {
-		switch cfg, err := newServerTLSConfig(remote.Peer.ServerCertificate); {
+		switch cfg, err := newServerTLSConfig(remote.Peer.Certificate); {
 		case err != nil:
 			return nil, fmt.Errorf("destination peer server cert: %w", err)
 		case cfg.name == name:
