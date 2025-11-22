@@ -3,6 +3,8 @@ package certc
 import (
 	"bytes"
 	"context"
+	"crypto/ed25519"
+	"crypto/rand"
 	"crypto/tls"
 	"crypto/x509"
 	"fmt"
@@ -10,19 +12,32 @@ import (
 	"net"
 	"testing"
 
+	"github.com/mr-tron/base58"
 	"github.com/quic-go/quic-go"
 	"github.com/stretchr/testify/require"
 	"golang.org/x/sync/errgroup"
 )
 
 func TestChain(t *testing.T) {
+	seed := make([]byte, ed25519.SeedSize)
+	_, err := io.ReadFull(rand.Reader, seed)
+	require.NoError(t, err)
+	fmt.Println("seed", base58.Encode(seed))
+	priv := ed25519.NewKeyFromSeed(seed)
+	require.NoError(t, err)
+	fmt.Println("priv", base58.Encode(priv))
+
+	pub := priv.Public().(ed25519.PublicKey)
+	fmt.Println("pub", base58.Encode(pub))
+
 	root, err := NewRoot()
 	require.NoError(t, err)
 
 	inter, err := root.NewIntermediate(CertOpts{
 		Domains: []string{"zzz"},
-	})
+	}, priv)
 	require.NoError(t, err)
+
 	caPool, err := inter.CertPool()
 	require.NoError(t, err)
 
@@ -52,7 +67,7 @@ func TestChainRoot(t *testing.T) {
 
 	inter, err := root.NewIntermediate(CertOpts{
 		Domains: []string{"zzz"},
-	})
+	}, nil)
 	require.NoError(t, err)
 	caPool, err := inter.CertPool()
 	require.NoError(t, err)

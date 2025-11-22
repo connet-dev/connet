@@ -1,6 +1,7 @@
 package client
 
 import (
+	"bytes"
 	"context"
 	"crypto/tls"
 	"crypto/x509"
@@ -10,6 +11,7 @@ import (
 	"sync/atomic"
 
 	"github.com/connet-dev/connet/model"
+	"github.com/connet-dev/connet/netc"
 	"github.com/connet-dev/connet/proto/pberror"
 	"github.com/connet-dev/connet/quicc"
 	"github.com/connet-dev/connet/slogc"
@@ -50,7 +52,7 @@ func (s *vServer) dequeue(key model.Key, cert *x509.Certificate) *vClient {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
-	if exp, ok := s.clients[key]; ok && exp.cert.Equal(cert) {
+	if exp, ok := s.clients[key]; ok && bytes.Equal(exp.cert.SubjectKeyId, cert.AuthorityKeyId) {
 		delete(s.clients, key)
 		return exp
 	}
@@ -70,7 +72,7 @@ func (s *vServer) updateClientCA() {
 }
 
 func (s *DirectServer) addServerCert(cert tls.Certificate) {
-	serverName := cert.Leaf.DNSNames[0]
+	serverName := netc.GenServerNameData(cert.Leaf.AuthorityKeyId)
 
 	s.serversMu.Lock()
 	defer s.serversMu.Unlock()
@@ -91,8 +93,8 @@ func (s *DirectServer) getServer(serverName string) *vServer {
 }
 
 func (s *DirectServer) expect(serverCert tls.Certificate, cert *x509.Certificate) (chan *quic.Conn, func()) {
-	key := model.NewKey(cert)
-	srv := s.getServer(serverCert.Leaf.DNSNames[0])
+	key := model.NewKeyRaw(cert.SubjectKeyId)
+	srv := s.getServer(netc.GenServerNameData(serverCert.Leaf.AuthorityKeyId))
 
 	defer srv.updateClientCA()
 
@@ -161,7 +163,7 @@ func (s *DirectServer) runConn(conn *quic.Conn) {
 	}
 
 	cert := conn.ConnectionState().TLS.PeerCertificates[0]
-	key := model.NewKey(cert)
+	key := model.NewKeyRaw(cert.AuthorityKeyId)
 	s.logger.Debug("accepted conn", "server", srv.serverName, "cert", key, "remote", conn.RemoteAddr())
 
 	exp := srv.dequeue(key, cert)

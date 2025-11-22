@@ -76,7 +76,7 @@ func NewRoot() (*Cert, error) {
 	return &Cert{der, priv}, nil
 }
 
-func (c *Cert) new(opts CertOpts, typ certType) (*Cert, error) {
+func (c *Cert) new(opts CertOpts, typ certType, privateKey []byte) (*Cert, error) {
 	parent, err := x509.ParseCertificate(c.der)
 	if err != nil {
 		return nil, err
@@ -89,7 +89,11 @@ func (c *Cert) new(opts CertOpts, typ certType) (*Cert, error) {
 	case x509.ECDSA:
 		priv, err = ecdsa.GenerateKey(elliptic.P384(), rand.Reader)
 	case x509.Ed25519:
-		_, priv, err = ed25519.GenerateKey(rand.Reader)
+		if privateKey != nil {
+			priv = ed25519.PrivateKey(privateKey)
+		} else {
+			_, priv, err = ed25519.GenerateKey(rand.Reader)
+		}
 	}
 	if err != nil {
 		return nil, err
@@ -139,12 +143,18 @@ func (c *Cert) new(opts CertOpts, typ certType) (*Cert, error) {
 		certTemplate.BasicConstraintsValid = true
 		certTemplate.IsCA = true
 
+		certTemplate.SubjectKeyId = csr.PublicKey.(ed25519.PublicKey)
+
 		certTemplate.KeyUsage = x509.KeyUsageDigitalSignature | x509.KeyUsageCertSign | x509.KeyUsageCRLSign
 		certTemplate.ExtKeyUsage = []x509.ExtKeyUsage{}
 	case serverCert:
+		certTemplate.AuthorityKeyId = parent.SubjectKeyId
+
 		certTemplate.KeyUsage = x509.KeyUsageDigitalSignature | x509.KeyUsageKeyEncipherment | x509.KeyUsageContentCommitment
 		certTemplate.ExtKeyUsage = []x509.ExtKeyUsage{x509.ExtKeyUsageServerAuth}
 	case clientCert:
+		certTemplate.AuthorityKeyId = parent.SubjectKeyId
+
 		certTemplate.KeyUsage = x509.KeyUsageDigitalSignature | x509.KeyUsageKeyAgreement | x509.KeyUsageContentCommitment
 		certTemplate.ExtKeyUsage = []x509.ExtKeyUsage{x509.ExtKeyUsageClientAuth}
 	}
@@ -157,16 +167,16 @@ func (c *Cert) new(opts CertOpts, typ certType) (*Cert, error) {
 	return &Cert{der, priv}, nil
 }
 
-func (c *Cert) NewIntermediate(opts CertOpts) (*Cert, error) {
-	return c.new(opts, intermediateCert)
+func (c *Cert) NewIntermediate(opts CertOpts, privateKey []byte) (*Cert, error) {
+	return c.new(opts, intermediateCert, privateKey)
 }
 
 func (c *Cert) NewServer(opts CertOpts) (*Cert, error) {
-	return c.new(opts, serverCert)
+	return c.new(opts, serverCert, nil)
 }
 
 func (c *Cert) NewClient(opts CertOpts) (*Cert, error) {
-	return c.new(opts, clientCert)
+	return c.new(opts, clientCert, nil)
 }
 
 func (c *Cert) Cert() (*x509.Certificate, error) {
