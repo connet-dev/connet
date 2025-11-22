@@ -68,10 +68,7 @@ func (s peerStyle) String() string {
 }
 
 func newPeer(direct *DirectServer, root *certc.Cert, logger *slog.Logger) (*peer, error) {
-	opts := certc.CertOpts{
-		Domains: []string{netc.GenServerName("connet-direct")},
-	}
-	interCert, err := root.NewIntermediate(opts, nil)
+	interCert, err := root.NewIntermediate(certc.CertOpts{}, nil)
 	if err != nil {
 		return nil, err
 	}
@@ -80,6 +77,9 @@ func newPeer(direct *DirectServer, root *certc.Cert, logger *slog.Logger) (*peer
 		return nil, err
 	}
 
+	opts := certc.CertOpts{
+		Domains: []string{netc.GenServerNameData(rootTLSCert.Leaf.SubjectKeyId)},
+	}
 	serverCert, err := interCert.NewServer(opts)
 	if err != nil {
 		return nil, err
@@ -119,7 +119,8 @@ func (p *peer) expectDirect() {
 }
 
 func (p *peer) isDirect() bool {
-	return p.direct.getServer(p.serverCert.Leaf.DNSNames[0]) != nil
+	name := netc.GenServerNameData(p.serverCert.Leaf.AuthorityKeyId)
+	return p.direct.getServer(name) != nil
 }
 
 func (p *peer) setDirectAddrs(addrs []netip.AddrPort) {
@@ -164,7 +165,7 @@ func (p *peer) runRelays(ctx context.Context) error {
 
 			activeRelays[id] = struct{}{}
 
-			cfg, err := newServerTLSConfig(relay.ServerCertificate)
+			cfg, err := newServerTLSConfigPublic(relay.ServerCertificate)
 			if err != nil {
 				return err
 			}
@@ -276,7 +277,21 @@ type serverTLSConfig struct {
 	cas  *x509.CertPool
 }
 
-func newServerTLSConfig(serverCert []byte) (*serverTLSConfig, error) {
+func newServerTLSConfigInternal(serverCert []byte) (*serverTLSConfig, error) {
+	cert, err := x509.ParseCertificate(serverCert)
+	if err != nil {
+		return nil, err
+	}
+	cas := x509.NewCertPool()
+	cas.AddCert(cert)
+	return &serverTLSConfig{
+		key:  model.NewKey(cert),
+		name: netc.GenServerNameData(cert.SubjectKeyId),
+		cas:  cas,
+	}, nil
+}
+
+func newServerTLSConfigPublic(serverCert []byte) (*serverTLSConfig, error) {
 	cert, err := x509.ParseCertificate(serverCert)
 	if err != nil {
 		return nil, err
@@ -307,7 +322,7 @@ func (p *peer) newECDHConfig() (*ecdh.PrivateKey, *pbconnect.ECDHConfiguration, 
 	}
 
 	return sk, &pbconnect.ECDHConfiguration{
-		ClientName: p.rootCert.Leaf.DNSNames[0],
+		ClientName: netc.GenServerNameData(p.rootCert.Leaf.SubjectKeyId),
 		KeyTime:    keyTime,
 		Signature:  signature,
 	}, nil
@@ -324,7 +339,7 @@ func (p *peer) getECDHPublicKey(cfg *pbconnect.ECDHConfiguration) (*ecdh.PublicK
 		if err != nil {
 			return nil, err
 		}
-		if cert.DNSNames[0] == cfg.ClientName {
+		if netc.GenServerNameData(cert.SubjectKeyId) == cfg.ClientName {
 			candidates = append(candidates, cert)
 		}
 	}

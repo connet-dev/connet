@@ -11,6 +11,7 @@ import (
 	"github.com/connet-dev/connet/certc"
 	"github.com/connet-dev/connet/cryptoc"
 	"github.com/connet-dev/connet/model"
+	"github.com/connet-dev/connet/netc"
 	"github.com/connet-dev/connet/notify"
 	"github.com/connet-dev/connet/proto"
 	"github.com/connet-dev/connet/proto/pbconnect"
@@ -271,7 +272,7 @@ func (d *destinationConn) runConnect(ctx context.Context, stream *quic.Stream, r
 
 			connect.DestinationEncryption = pbconnect.RelayEncryptionScheme_TLS
 			connect.DestinationTls = &pbconnect.TLSConfiguration{
-				ClientName: d.dst.peer.serverCert.Leaf.DNSNames[0],
+				ClientName: netc.GenServerNameData(d.dst.peer.rootCert.Leaf.SubjectKeyId),
 			}
 		case encryption == model.DHXCPEncryption:
 			// get check peer public key
@@ -348,7 +349,7 @@ func (d *Destination) getSourceTLS(name string) (*tls.Config, error) {
 	}
 
 	for _, remote := range remotes {
-		switch cfg, err := newServerTLSConfig(remote.Peer.Certificate); {
+		switch cfg, err := newServerTLSConfigInternal(remote.Peer.Certificate); {
 		case err != nil:
 			return nil, fmt.Errorf("source peer server cert: %w", err)
 		case cfg.name == name:

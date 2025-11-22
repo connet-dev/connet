@@ -92,7 +92,7 @@ func (p *directPeer) runRemote(ctx context.Context) error {
 			}
 
 			if p.outgoing == nil {
-				remoteServerConf, err := newServerTLSConfig(remote.Peer.Certificate)
+				remoteServerConf, err := newServerTLSConfigInternal(remote.Peer.Certificate)
 				if err != nil {
 					return fmt.Errorf("parse server certificate: %w", err)
 				}

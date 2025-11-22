@@ -20,6 +20,7 @@ import (
 	"github.com/connet-dev/connet/certc"
 	"github.com/connet-dev/connet/cryptoc"
 	"github.com/connet-dev/connet/model"
+	"github.com/connet-dev/connet/netc"
 	"github.com/connet-dev/connet/notify"
 	"github.com/connet-dev/connet/proto"
 	"github.com/connet-dev/connet/proto/pbconnect"
@@ -402,7 +403,7 @@ func (s *Source) dialStream(ctx context.Context, dest sourceConn, stream *quic.S
 
 		if slices.Contains(s.cfg.RelayEncryptions, model.TLSEncryption) {
 			connect.SourceTls = &pbconnect.TLSConfiguration{
-				ClientName: s.peer.serverCert.Leaf.DNSNames[0],
+				ClientName: netc.GenServerNameData(s.peer.rootCert.Leaf.SubjectKeyId),
 			}
 		}
 
@@ -481,7 +482,7 @@ func (s *Source) getDestinationTLS(name string) (*tls.Config, error) {
 	}
 
 	for _, remote := range remotes {
-		switch cfg, err := newServerTLSConfig(remote.Peer.Certificate); {
+		switch cfg, err := newServerTLSConfigInternal(remote.Peer.Certificate); {
 		case err != nil:
 			return nil, fmt.Errorf("destination peer server cert: %w", err)
 		case cfg.name == name:

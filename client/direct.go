@@ -11,6 +11,7 @@ import (
 	"sync/atomic"
 
 	"github.com/connet-dev/connet/model"
+	"github.com/connet-dev/connet/netc"
 	"github.com/connet-dev/connet/proto/pberror"
 	"github.com/connet-dev/connet/quicc"
 	"github.com/connet-dev/connet/slogc"
@@ -71,7 +72,7 @@ func (s *vServer) updateClientCA() {
 }
 
 func (s *DirectServer) addServerCert(cert tls.Certificate) {
-	serverName := cert.Leaf.DNSNames[0]
+	serverName := netc.GenServerNameData(cert.Leaf.AuthorityKeyId)
 
 	s.serversMu.Lock()
 	defer s.serversMu.Unlock()
@@ -93,7 +94,7 @@ func (s *DirectServer) getServer(serverName string) *vServer {
 
 func (s *DirectServer) expect(serverCert tls.Certificate, cert *x509.Certificate) (chan *quic.Conn, func()) {
 	key := model.NewKeyRaw(cert.SubjectKeyId)
-	srv := s.getServer(serverCert.Leaf.DNSNames[0])
+	srv := s.getServer(netc.GenServerNameData(serverCert.Leaf.AuthorityKeyId))
 
 	defer srv.updateClientCA()
 

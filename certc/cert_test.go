@@ -38,11 +38,6 @@ func TestChain(t *testing.T) {
 	}, priv)
 	require.NoError(t, err)
 
-	interCert, err := inter.TLSCert()
-	require.NoError(t, err)
-	fmt.Println("inter sub", base58.Encode(interCert.Leaf.SubjectKeyId))
-	fmt.Println("inter auth", base58.Encode(interCert.Leaf.AuthorityKeyId))
-
 	caPool, err := inter.CertPool()
 	require.NoError(t, err)
 
@@ -52,8 +47,6 @@ func TestChain(t *testing.T) {
 	require.NoError(t, err)
 	serverCert, err := server.TLSCert()
 	require.NoError(t, err)
-	fmt.Println("server sub", base58.Encode(serverCert.Leaf.SubjectKeyId))
-	fmt.Println("server auth", base58.Encode(serverCert.Leaf.AuthorityKeyId))
 
 	client, err := inter.NewClient(CertOpts{
 		Domains: []string{"zzz"},
@@ -61,8 +54,6 @@ func TestChain(t *testing.T) {
 	require.NoError(t, err)
 	clientCert, err := client.TLSCert()
 	require.NoError(t, err)
-	fmt.Println("client sub", base58.Encode(clientCert.Leaf.SubjectKeyId))
-	fmt.Println("client auth", base58.Encode(clientCert.Leaf.AuthorityKeyId))
 
 	testConnectivity(t, serverCert, caPool, clientCert, caPool)
 	testConnectivityDyn(t, serverCert, caPool, clientCert, caPool)
@@ -262,10 +253,6 @@ func testConnectivityTLS(t *testing.T, serverConf *tls.Config, clientConf *tls.C
 		}
 		if !bytes.Equal(peerCerts[0].Raw, clientConf.Certificates[0].Leaf.Raw) {
 			return fmt.Errorf("expected matching certs")
-		}
-		for _, c := range peerCerts {
-			fmt.Println("server sub", base58.Encode(c.SubjectKeyId))
-			fmt.Println("server auth", base58.Encode(c.AuthorityKeyId))
 		}
 
 		s, err := c.AcceptStream(ctx)
