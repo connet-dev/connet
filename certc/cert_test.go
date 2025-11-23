@@ -34,8 +34,9 @@ func TestChain(t *testing.T) {
 	require.NoError(t, err)
 
 	inter, err := root.NewIntermediate(CertOpts{
-		Domains: []string{"zzz"},
-	}, priv)
+		Domains:    []string{"zzz"},
+		PrivateKey: priv,
+	})
 	require.NoError(t, err)
 
 	caPool, err := inter.CertPool()
@@ -67,7 +68,7 @@ func TestChainRoot(t *testing.T) {
 
 	inter, err := root.NewIntermediate(CertOpts{
 		Domains: []string{"zzz"},
-	}, nil)
+	})
 	require.NoError(t, err)
 	caPool, err := inter.CertPool()
 	require.NoError(t, err)
