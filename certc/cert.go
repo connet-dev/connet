@@ -23,6 +23,10 @@ type Cert struct {
 	sk  crypto.PrivateKey
 }
 
+func NewRootRandom() (*Cert, error) {
+	return NewRoot(nil)
+}
+
 func NewRoot(sk ed25519.PrivateKey) (*Cert, error) {
 	if sk == nil {
 		if _, priv, err := ed25519.GenerateKey(rand.Reader); err != nil {
