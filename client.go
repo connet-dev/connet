@@ -13,7 +13,6 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/connet-dev/connet/certc"
 	"github.com/connet-dev/connet/client"
 	"github.com/connet-dev/connet/model"
 	"github.com/connet-dev/connet/nat"
@@ -32,7 +31,6 @@ import (
 type Client struct {
 	clientConfig
 
-	rootCert     *certc.Cert
 	directServer *client.DirectServer
 
 	destinations   map[model.Endpoint]*clientDestination
@@ -59,16 +57,8 @@ func Connect(ctx context.Context, opts ...ClientOption) (*Client, error) {
 		return nil, err
 	}
 
-	rootCert, err := certc.NewRoot()
-	if err != nil {
-		return nil, fmt.Errorf("create root cert: %w", err)
-	}
-	cfg.logger.Debug("generated root cert")
-
 	c := &Client{
 		clientConfig: *cfg,
-
-		rootCert: rootCert,
 
 		destinations: map[model.Endpoint]*clientDestination{},
 		sources:      map[model.Endpoint]*clientSource{},

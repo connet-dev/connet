@@ -67,10 +67,8 @@ func (s peerStyle) String() string {
 	}
 }
 
-func newPeer(direct *DirectServer, root *certc.Cert, logger *slog.Logger, privateKey ed25519.PrivateKey) (*peer, error) {
-	peerCert, err := root.NewIntermediate(certc.CertOpts{
-		PrivateKey: privateKey,
-	})
+func newPeer(direct *DirectServer, logger *slog.Logger, privateKey ed25519.PrivateKey) (*peer, error) {
+	peerCert, err := certc.NewRoot(privateKey)
 	if err != nil {
 		return nil, err
 	}
@@ -89,7 +87,7 @@ func newPeer(direct *DirectServer, root *certc.Cert, logger *slog.Logger, privat
 	if err != nil {
 		return nil, err
 	}
-	clientCert, err := peerCert.NewClient(certc.CertOpts{})
+	clientCert, err := peerCert.NewClient()
 	if err != nil {
 		return nil, err
 	}

@@ -54,7 +54,7 @@ type controlClient struct {
 }
 
 func newControlClient(cfg Config, configStore logc.KV[ConfigKey, ConfigValue]) (*controlClient, error) {
-	root, err := certc.NewRoot()
+	root, err := certc.NewRoot(nil)
 	if err != nil {
 		return nil, err
 	}
