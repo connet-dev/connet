@@ -66,7 +66,12 @@ func (s peerStyle) String() string {
 	}
 }
 
-func newPeer(direct *DirectServer, root *certc.Cert, logger *slog.Logger) (*peer, error) {
+func newPeer(direct *DirectServer, logger *slog.Logger) (*peer, error) {
+	root, err := certc.NewRoot()
+	if err != nil {
+		return nil, err
+	}
+
 	serverCert, err := root.NewServer(certc.CertOpts{
 		Domains: []string{netc.GenServerName("connet-direct")},
 	})
@@ -77,7 +82,7 @@ func newPeer(direct *DirectServer, root *certc.Cert, logger *slog.Logger) (*peer
 	if err != nil {
 		return nil, err
 	}
-	clientCert, err := root.NewClient(certc.CertOpts{})
+	clientCert, err := root.NewClient()
 	if err != nil {
 		return nil, err
 	}

@@ -9,7 +9,6 @@ import (
 	"net"
 	"time"
 
-	"github.com/connet-dev/connet/certc"
 	"github.com/connet-dev/connet/cryptoc"
 	"github.com/connet-dev/connet/model"
 	"github.com/connet-dev/connet/notify"
@@ -75,9 +74,9 @@ type Destination struct {
 	acceptCh chan net.Conn
 }
 
-func NewDestination(cfg DestinationConfig, direct *DirectServer, root *certc.Cert, logger *slog.Logger) (*Destination, error) {
+func NewDestination(cfg DestinationConfig, direct *DirectServer, logger *slog.Logger) (*Destination, error) {
 	logger = logger.With("destination", cfg.Endpoint)
-	p, err := newPeer(direct, root, logger)
+	p, err := newPeer(direct, logger)
 	if err != nil {
 		return nil, err
 	}

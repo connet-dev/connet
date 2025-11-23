@@ -19,23 +19,17 @@ func TestChain(t *testing.T) {
 	root, err := NewRoot()
 	require.NoError(t, err)
 
-	inter, err := root.NewIntermediate(CertOpts{
-		Domains: []string{"zzz"},
-	})
-	require.NoError(t, err)
-	caPool, err := inter.CertPool()
+	caPool, err := root.CertPool()
 	require.NoError(t, err)
 
-	server, err := inter.NewServer(CertOpts{
+	server, err := root.NewServer(CertOpts{
 		Domains: []string{"zzz"},
 	})
 	require.NoError(t, err)
 	serverCert, err := server.TLSCert()
 	require.NoError(t, err)
 
-	client, err := inter.NewClient(CertOpts{
-		Domains: []string{"zzz"},
-	})
+	client, err := root.NewClient()
 	require.NoError(t, err)
 	clientCert, err := client.TLSCert()
 	require.NoError(t, err)
@@ -50,11 +44,7 @@ func TestChainRoot(t *testing.T) {
 	rootCert, err := root.Cert()
 	require.NoError(t, err)
 
-	inter, err := root.NewIntermediate(CertOpts{
-		Domains: []string{"zzz"},
-	})
-	require.NoError(t, err)
-	caPool, err := inter.CertPool()
+	caPool, err := root.CertPool()
 	require.NoError(t, err)
 	caPool.AddCert(rootCert)
 
@@ -65,9 +55,7 @@ func TestChainRoot(t *testing.T) {
 	serverCert, err := server.TLSCert()
 	require.NoError(t, err)
 
-	client, err := inter.NewClient(CertOpts{
-		Domains: []string{"zzz"},
-	})
+	client, err := root.NewClient()
 	require.NoError(t, err)
 	clientCert, err := client.TLSCert()
 	require.NoError(t, err)
@@ -94,9 +82,7 @@ func TestExchange(t *testing.T) {
 	clientCA, err := clientRoot.CertPool()
 	require.NoError(t, err)
 
-	clientCert, err := clientRoot.NewClient(CertOpts{
-		Domains: []string{"zzz"},
-	})
+	clientCert, err := clientRoot.NewClient()
 	require.NoError(t, err)
 	clientTLS, err := clientCert.TLSCert()
 	require.NoError(t, err)
@@ -118,9 +104,7 @@ func TestMulti(t *testing.T) {
 	serverCA1, err := serverCert1.CertPool()
 	require.NoError(t, err)
 
-	clientCert1, err := root.NewClient(CertOpts{
-		Domains: []string{"zzz1"},
-	})
+	clientCert1, err := root.NewClient()
 	require.NoError(t, err)
 	clientTLS1, err := clientCert1.TLSCert()
 	require.NoError(t, err)
@@ -134,9 +118,7 @@ func TestMulti(t *testing.T) {
 	serverCA2, err := serverCert2.CertPool()
 	require.NoError(t, err)
 
-	clientCert2, err := root.NewClient(CertOpts{
-		Domains: []string{"zzz2"},
-	})
+	clientCert2, err := root.NewClient()
 	require.NoError(t, err)
 	clientTLS2, err := clientCert2.TLSCert()
 	require.NoError(t, err)
@@ -186,7 +168,7 @@ func testConnectivity(t *testing.T, serverCert tls.Certificate, clientCA *x509.C
 	clientConf := &tls.Config{
 		Certificates: []tls.Certificate{clientCert},
 		RootCAs:      rootCA,
-		ServerName:   clientCert.Leaf.DNSNames[0],
+		ServerName:   serverCert.Leaf.DNSNames[0],
 		NextProtos:   []string{"test"},
 	}
 
@@ -208,7 +190,7 @@ func testConnectivityDyn(t *testing.T, serverCert tls.Certificate, clientCA *x50
 	clientConf := &tls.Config{
 		Certificates: []tls.Certificate{clientCert},
 		RootCAs:      rootCA,
-		ServerName:   clientCert.Leaf.DNSNames[0],
+		ServerName:   serverCert.Leaf.DNSNames[0],
 		NextProtos:   []string{"test"},
 	}
 

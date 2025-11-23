@@ -3,6 +3,7 @@ package connet
 import (
 	"bufio"
 	"context"
+	"crypto/tls"
 	"crypto/x509"
 	"fmt"
 	"io"
@@ -157,7 +158,7 @@ func TestE2E(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	cert, cas, err := certc.SelfSigned("localhost")
+	cert, cas, err := selfSigned("localhost")
 	require.NoError(t, err)
 
 	htServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -654,4 +655,26 @@ func clientControlCAs(cas *x509.CertPool) ClientOption {
 
 		return nil
 	}
+}
+
+func selfSigned(domain string) (tls.Certificate, *x509.CertPool, error) {
+	root, err := certc.NewRoot()
+	if err != nil {
+		return tls.Certificate{}, nil, err
+	}
+	cert, err := root.NewServer(certc.CertOpts{
+		Domains: []string{domain},
+	})
+	if err != nil {
+		return tls.Certificate{}, nil, err
+	}
+	tlsCert, err := cert.TLSCert()
+	if err != nil {
+		return tls.Certificate{}, nil, err
+	}
+	pool, err := cert.CertPool()
+	if err != nil {
+		return tls.Certificate{}, nil, err
+	}
+	return tlsCert, pool, nil
 }

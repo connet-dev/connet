@@ -71,7 +71,7 @@ type clientDestination struct {
 }
 
 func newClientDestination(ctx context.Context, cl *Client, cfg DestinationConfig) (*clientDestination, error) {
-	dst, err := client.NewDestination(cfg, cl.directServer, cl.rootCert, cl.logger)
+	dst, err := client.NewDestination(cfg, cl.directServer, cl.logger)
 	if err != nil {
 		return nil, err
 	}
@@ -92,7 +92,7 @@ type clientSource struct {
 }
 
 func newClientSource(ctx context.Context, cl *Client, cfg SourceConfig) (*clientSource, error) {
-	src, err := client.NewSource(cfg, cl.directServer, cl.rootCert, cl.logger)
+	src, err := client.NewSource(cfg, cl.directServer, cl.logger)
 	if err != nil {
 		return nil, err
 	}

@@ -17,7 +17,6 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/connet-dev/connet/certc"
 	"github.com/connet-dev/connet/cryptoc"
 	"github.com/connet-dev/connet/model"
 	"github.com/connet-dev/connet/notify"
@@ -103,9 +102,9 @@ type sourceConn struct {
 	conn *quic.Conn
 }
 
-func NewSource(cfg SourceConfig, direct *DirectServer, root *certc.Cert, logger *slog.Logger) (*Source, error) {
+func NewSource(cfg SourceConfig, direct *DirectServer, logger *slog.Logger) (*Source, error) {
 	logger = logger.With("source", cfg.Endpoint)
-	p, err := newPeer(direct, root, logger)
+	p, err := newPeer(direct, logger)
 	if err != nil {
 		return nil, err
 	}

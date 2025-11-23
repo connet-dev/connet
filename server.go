@@ -28,7 +28,7 @@ func NewServer(opts ...ServerOption) (*Server, error) {
 		return nil, err
 	}
 
-	rootCert, err := certc.NewRoot()
+	relayRootCert, err := certc.NewRoot()
 	if err != nil {
 		return nil, fmt.Errorf("generate relays root cert: %w", err)
 	}
@@ -37,7 +37,7 @@ func NewServer(opts ...ServerOption) (*Server, error) {
 	if err != nil {
 		return nil, fmt.Errorf("resolve relays address: %w", err)
 	}
-	relaysCert, err := rootCert.NewServer(certc.CertOpts{
+	relaysCert, err := relayRootCert.NewServer(certc.CertOpts{
 		IPs: []net.IP{relaysAddr.IP},
 	})
 	if err != nil {

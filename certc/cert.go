@@ -2,54 +2,29 @@ package certc
 
 import (
 	"crypto"
-	"crypto/ecdsa"
 	"crypto/ed25519"
-	"crypto/elliptic"
 	"crypto/rand"
-	"crypto/rsa"
 	"crypto/tls"
 	"crypto/x509"
 	"crypto/x509/pkix"
 	"encoding/pem"
 	"fmt"
-	"io"
 	"math/big"
 	"net"
 	"time"
 )
 
 var SharedSubject = pkix.Name{
-	Country:      []string{"US"},
-	Organization: []string{"Connet"},
+	CommonName: "connet",
 }
 
 type Cert struct {
 	der []byte
-	pk  crypto.PrivateKey
+	sk  crypto.PrivateKey
 }
-
-func FromTLS(tlsCert tls.Certificate) *Cert {
-	return &Cert{
-		der: tlsCert.Leaf.Raw,
-		pk:  tlsCert.PrivateKey,
-	}
-}
-
-type CertOpts struct {
-	Domains []string
-	IPs     []net.IP
-}
-
-type certType struct{ string }
-
-var (
-	intermediateCert = certType{"intermediate"}
-	serverCert       = certType{"server"}
-	clientCert       = certType{"client"}
-)
 
 func NewRoot() (*Cert, error) {
-	pub, priv, err := ed25519.GenerateKey(rand.Reader)
+	_, priv, err := ed25519.GenerateKey(rand.Reader)
 	if err != nil {
 		return nil, err
 	}
@@ -58,7 +33,7 @@ func NewRoot() (*Cert, error) {
 		SerialNumber: big.NewInt(time.Now().UnixMicro()),
 
 		NotBefore: time.Now(),
-		NotAfter:  time.Now().Add(90 * 24 * time.Hour),
+		NotAfter:  time.Now().AddDate(100, 0, 0),
 
 		Subject: SharedSubject,
 
@@ -69,87 +44,64 @@ func NewRoot() (*Cert, error) {
 		ExtKeyUsage: []x509.ExtKeyUsage{},
 	}
 
-	der, err := x509.CreateCertificate(rand.Reader, template, template, pub, priv)
+	der, err := x509.CreateCertificate(rand.Reader, template, template, priv.Public(), priv)
 	if err != nil {
 		return nil, err
 	}
 	return &Cert{der, priv}, nil
 }
 
-func (c *Cert) new(opts CertOpts, typ certType) (*Cert, error) {
+type CertOpts struct {
+	Domains []string
+	IPs     []net.IP
+}
+
+func (opts CertOpts) subject() (pkix.Name, error) {
+	if len(opts.Domains) > 0 {
+		return pkix.Name{CommonName: opts.Domains[0]}, nil
+	} else if len(opts.IPs) > 0 {
+		return pkix.Name{CommonName: opts.IPs[0].String()}, nil
+	}
+
+	return pkix.Name{}, fmt.Errorf("missing common name")
+}
+
+func (c *Cert) NewServer(opts CertOpts) (*Cert, error) {
 	parent, err := x509.ParseCertificate(c.der)
 	if err != nil {
 		return nil, err
 	}
 
-	var priv crypto.PrivateKey
-	switch parent.PublicKeyAlgorithm {
-	case x509.RSA:
-		priv, err = rsa.GenerateKey(rand.Reader, 4096)
-	case x509.ECDSA:
-		priv, err = ecdsa.GenerateKey(elliptic.P384(), rand.Reader)
-	case x509.Ed25519:
-		_, priv, err = ed25519.GenerateKey(rand.Reader)
-	}
+	pub, priv, err := ed25519.GenerateKey(rand.Reader)
 	if err != nil {
 		return nil, err
 	}
 
-	csrTemplate := &x509.CertificateRequest{
-		Subject: SharedSubject,
-
-		DNSNames:    opts.Domains,
-		IPAddresses: opts.IPs,
-	}
-
-	csrData, err := x509.CreateCertificateRequest(rand.Reader, csrTemplate, priv)
-	if err != nil {
-		return nil, err
-	}
-
-	csr, err := x509.ParseCertificateRequest(csrData)
+	subject, err := opts.subject()
 	if err != nil {
 		return nil, err
 	}
 
 	certTemplate := &x509.Certificate{
-		Signature:          csr.Signature,
-		SignatureAlgorithm: csr.SignatureAlgorithm,
-
-		PublicKey:          csr.PublicKey,
-		PublicKeyAlgorithm: csr.PublicKeyAlgorithm,
-
 		SerialNumber: big.NewInt(time.Now().UnixMicro()),
 
 		NotBefore: time.Now(),
-		NotAfter:  time.Now().Add(90 * 24 * time.Hour),
+		NotAfter:  time.Now().AddDate(2, 0, 0),
 
 		Issuer:  parent.Subject,
-		Subject: csr.Subject,
+		Subject: subject,
 
 		DNSNames:    opts.Domains,
 		IPAddresses: opts.IPs,
 
 		BasicConstraintsValid: false,
 		IsCA:                  false,
+
+		KeyUsage:    x509.KeyUsageDigitalSignature | x509.KeyUsageKeyEncipherment | x509.KeyUsageContentCommitment,
+		ExtKeyUsage: []x509.ExtKeyUsage{x509.ExtKeyUsageServerAuth},
 	}
 
-	switch typ {
-	case intermediateCert:
-		certTemplate.BasicConstraintsValid = true
-		certTemplate.IsCA = true
-
-		certTemplate.KeyUsage = x509.KeyUsageDigitalSignature | x509.KeyUsageCertSign | x509.KeyUsageCRLSign
-		certTemplate.ExtKeyUsage = []x509.ExtKeyUsage{}
-	case serverCert:
-		certTemplate.KeyUsage = x509.KeyUsageDigitalSignature | x509.KeyUsageKeyEncipherment | x509.KeyUsageContentCommitment
-		certTemplate.ExtKeyUsage = []x509.ExtKeyUsage{x509.ExtKeyUsageServerAuth}
-	case clientCert:
-		certTemplate.KeyUsage = x509.KeyUsageDigitalSignature | x509.KeyUsageKeyAgreement | x509.KeyUsageContentCommitment
-		certTemplate.ExtKeyUsage = []x509.ExtKeyUsage{x509.ExtKeyUsageClientAuth}
-	}
-
-	der, err := x509.CreateCertificate(rand.Reader, certTemplate, parent, csr.PublicKey, c.pk)
+	der, err := x509.CreateCertificate(rand.Reader, certTemplate, parent, pub, c.sk)
 	if err != nil {
 		return nil, err
 	}
@@ -157,16 +109,39 @@ func (c *Cert) new(opts CertOpts, typ certType) (*Cert, error) {
 	return &Cert{der, priv}, nil
 }
 
-func (c *Cert) NewIntermediate(opts CertOpts) (*Cert, error) {
-	return c.new(opts, intermediateCert)
-}
+func (c *Cert) NewClient() (*Cert, error) {
+	parent, err := x509.ParseCertificate(c.der)
+	if err != nil {
+		return nil, err
+	}
 
-func (c *Cert) NewServer(opts CertOpts) (*Cert, error) {
-	return c.new(opts, serverCert)
-}
+	pub, priv, err := ed25519.GenerateKey(rand.Reader)
+	if err != nil {
+		return nil, err
+	}
 
-func (c *Cert) NewClient(opts CertOpts) (*Cert, error) {
-	return c.new(opts, clientCert)
+	certTemplate := &x509.Certificate{
+		SerialNumber: big.NewInt(time.Now().UnixMicro()),
+
+		NotBefore: time.Now(),
+		NotAfter:  time.Now().AddDate(2, 0, 0),
+
+		Issuer:  parent.Subject,
+		Subject: SharedSubject,
+
+		BasicConstraintsValid: false,
+		IsCA:                  false,
+
+		KeyUsage:    x509.KeyUsageDigitalSignature | x509.KeyUsageKeyAgreement | x509.KeyUsageContentCommitment,
+		ExtKeyUsage: []x509.ExtKeyUsage{x509.ExtKeyUsageClientAuth},
+	}
+
+	der, err := x509.CreateCertificate(rand.Reader, certTemplate, parent, pub, c.sk)
+	if err != nil {
+		return nil, err
+	}
+
+	return &Cert{der, priv}, nil
 }
 
 func (c *Cert) Cert() (*x509.Certificate, error) {
@@ -195,32 +170,9 @@ func (c *Cert) TLSCert() (tls.Certificate, error) {
 	}
 	return tls.Certificate{
 		Certificate: [][]byte{c.der},
-		PrivateKey:  c.pk,
+		PrivateKey:  c.sk,
 		Leaf:        cert,
 	}, nil
-}
-
-func (c *Cert) Encode(certOut io.Writer, keyOut io.Writer) error {
-	if err := pem.Encode(certOut, &pem.Block{
-		Type:  "CERTIFICATE",
-		Bytes: c.der,
-	}); err != nil {
-		return fmt.Errorf("cert encode: %w", err)
-	}
-
-	keyData, err := x509.MarshalPKCS8PrivateKey(c.pk)
-	if err != nil {
-		return fmt.Errorf("key marshal: %w", err)
-	}
-
-	if err := pem.Encode(keyOut, &pem.Block{
-		Type:  "PRIVATE KEY",
-		Bytes: keyData,
-	}); err != nil {
-		return fmt.Errorf("key encode: %w", err)
-	}
-
-	return nil
 }
 
 func (c *Cert) EncodeToMemory() ([]byte, []byte, error) {
@@ -229,7 +181,7 @@ func (c *Cert) EncodeToMemory() ([]byte, []byte, error) {
 		Bytes: c.der,
 	})
 
-	keyData, err := x509.MarshalPKCS8PrivateKey(c.pk)
+	keyData, err := x509.MarshalPKCS8PrivateKey(c.sk)
 	if err != nil {
 		return nil, nil, fmt.Errorf("mem key marshal: %w", err)
 	}
@@ -262,27 +214,5 @@ func DecodeFromMemory(cert, key []byte) (*Cert, error) {
 		return nil, fmt.Errorf("cert parse key: %w", err)
 	}
 
-	return &Cert{der: certDER.Bytes, pk: keyValue}, nil
-}
-
-func SelfSigned(domain string) (tls.Certificate, *x509.CertPool, error) {
-	root, err := NewRoot()
-	if err != nil {
-		return tls.Certificate{}, nil, err
-	}
-	cert, err := root.NewServer(CertOpts{
-		Domains: []string{domain},
-	})
-	if err != nil {
-		return tls.Certificate{}, nil, err
-	}
-	tlsCert, err := cert.TLSCert()
-	if err != nil {
-		return tls.Certificate{}, nil, err
-	}
-	pool, err := cert.CertPool()
-	if err != nil {
-		return tls.Certificate{}, nil, err
-	}
-	return tlsCert, pool, nil
+	return &Cert{der: certDER.Bytes, sk: keyValue}, nil
 }
