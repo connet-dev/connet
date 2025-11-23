@@ -11,7 +11,6 @@ import (
 	"sync/atomic"
 
 	"github.com/connet-dev/connet/model"
-	"github.com/connet-dev/connet/netc"
 	"github.com/connet-dev/connet/proto/pberror"
 	"github.com/connet-dev/connet/quicc"
 	"github.com/connet-dev/connet/slogc"
@@ -71,16 +70,16 @@ func (s *vServer) updateClientCA() {
 	s.clientCA.Store(clientCA)
 }
 
-func (s *DirectServer) addServerCert(cert tls.Certificate) {
-	serverName := netc.GenServerNameData(cert.Leaf.AuthorityKeyId)
+func (s *DirectServer) addServerCert(localServerCert tls.Certificate) {
+	localServerName := localServerCert.Leaf.DNSNames[0]
 
 	s.serversMu.Lock()
 	defer s.serversMu.Unlock()
 
-	s.logger.Debug("add server cert", "server", serverName, "cert", model.NewKey(cert.Leaf))
-	s.servers[serverName] = &vServer{
-		serverName: serverName,
-		serverCert: cert,
+	s.logger.Debug("add server cert", "server", localServerName, "cert", model.NewKey(localServerCert.Leaf))
+	s.servers[localServerName] = &vServer{
+		serverName: localServerName,
+		serverCert: localServerCert,
 		clients:    map[model.Key]*vClient{},
 	}
 }
@@ -92,9 +91,9 @@ func (s *DirectServer) getServer(serverName string) *vServer {
 	return s.servers[serverName]
 }
 
-func (s *DirectServer) expect(serverCert tls.Certificate, cert *x509.Certificate) (chan *quic.Conn, func()) {
+func (s *DirectServer) expect(localServerCert tls.Certificate, cert *x509.Certificate) (chan *quic.Conn, func()) {
 	key := model.NewKeyRaw(cert.SubjectKeyId)
-	srv := s.getServer(netc.GenServerNameData(serverCert.Leaf.AuthorityKeyId))
+	srv := s.getServer(localServerCert.Leaf.DNSNames[0])
 
 	defer srv.updateClientCA()
 
