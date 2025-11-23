@@ -583,7 +583,7 @@ func newRelayServer(msg logc.Message[ServerKey, ServerValue]) (*relayServer, err
 
 	srv := &relayServer{
 		endpoint: msg.Key.Endpoint,
-		name:     netc.GenServerNameData(srvCert.Leaf.SubjectKeyId),
+		name:     netc.GenServerNameTLS(srvCert),
 
 		tls: []tls.Certificate{srvCert},
 

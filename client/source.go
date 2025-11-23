@@ -410,7 +410,7 @@ func (s *Source) dialStream(ctx context.Context, dest sourceConn, stream *quic.S
 
 		if slices.Contains(s.cfg.RelayEncryptions, model.TLSEncryption) {
 			connect.SourceTls = &pbconnect.TLSConfiguration{
-				ClientName: netc.GenServerNameData(s.peer.rootCert.Leaf.SubjectKeyId),
+				ClientName: netc.GenServerNameTLS(s.peer.rootCert),
 			}
 		}
 

@@ -279,7 +279,7 @@ func (d *destinationConn) runConnect(ctx context.Context, stream *quic.Stream, r
 
 			connect.DestinationEncryption = pbconnect.RelayEncryptionScheme_TLS
 			connect.DestinationTls = &pbconnect.TLSConfiguration{
-				ClientName: netc.GenServerNameData(d.dst.peer.rootCert.Leaf.SubjectKeyId),
+				ClientName: netc.GenServerNameTLS(d.dst.peer.rootCert),
 			}
 		case encryption == model.DHXCPEncryption:
 			// get check peer public key

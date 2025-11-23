@@ -68,21 +68,21 @@ func (s peerStyle) String() string {
 }
 
 func newPeer(direct *DirectServer, root *certc.Cert, logger *slog.Logger, privateKey ed25519.PrivateKey) (*peer, error) {
-	interCert, err := root.NewIntermediate(certc.CertOpts{
+	peerCert, err := root.NewIntermediate(certc.CertOpts{
 		PrivateKey: privateKey,
 	})
 	if err != nil {
 		return nil, err
 	}
-	rootTLSCert, err := interCert.TLSCert()
+	peerTLSCert, err := peerCert.TLSCert()
 	if err != nil {
 		return nil, err
 	}
 
 	opts := certc.CertOpts{
-		Domains: []string{netc.GenServerNameData(rootTLSCert.Leaf.SubjectKeyId)},
+		Domains: []string{netc.GenServerNameTLS(peerTLSCert)},
 	}
-	serverCert, err := interCert.NewServer(opts)
+	serverCert, err := peerCert.NewServer(opts)
 	if err != nil {
 		return nil, err
 	}
@@ -90,7 +90,7 @@ func newPeer(direct *DirectServer, root *certc.Cert, logger *slog.Logger, privat
 	if err != nil {
 		return nil, err
 	}
-	clientCert, err := interCert.NewClient(certc.CertOpts{})
+	clientCert, err := peerCert.NewClient(certc.CertOpts{})
 	if err != nil {
 		return nil, err
 	}
@@ -101,7 +101,7 @@ func newPeer(direct *DirectServer, root *certc.Cert, logger *slog.Logger, privat
 
 	return &peer{
 		self: notify.New(&pbclient.Peer{
-			Certificate: interCert.Raw(),
+			Certificate: peerCert.Raw(),
 		}),
 		relays:     notify.NewEmpty[[]*pbclient.Relay](),
 		relayConns: notify.New(map[relayID]*quic.Conn{}),
@@ -109,7 +109,7 @@ func newPeer(direct *DirectServer, root *certc.Cert, logger *slog.Logger, privat
 		peerConns:  notify.New(map[peerConnKey]*quic.Conn{}),
 
 		direct:     direct,
-		rootCert:   rootTLSCert,
+		rootCert:   peerTLSCert,
 		serverCert: serverTLSCert,
 		clientCert: clientTLSCert,
 		logger:     logger,
@@ -121,8 +121,7 @@ func (p *peer) expectDirect() {
 }
 
 func (p *peer) isDirect() bool {
-	name := netc.GenServerNameData(p.serverCert.Leaf.AuthorityKeyId)
-	return p.direct.getServer(name) != nil
+	return p.direct.getServer(p.serverCert.Leaf.DNSNames[0]) != nil
 }
 
 func (p *peer) setDirectAddrs(addrs []netip.AddrPort) {
@@ -288,7 +287,7 @@ func newServerTLSConfigInternal(serverCert []byte) (*serverTLSConfig, error) {
 	cas.AddCert(cert)
 	return &serverTLSConfig{
 		key:  model.NewKey(cert),
-		name: netc.GenServerNameData(cert.SubjectKeyId),
+		name: netc.GenServerNameX509(cert),
 		cas:  cas,
 	}, nil
 }
@@ -324,7 +323,7 @@ func (p *peer) newECDHConfig() (*ecdh.PrivateKey, *pbconnect.ECDHConfiguration, 
 	}
 
 	return sk, &pbconnect.ECDHConfiguration{
-		ClientName: netc.GenServerNameData(p.rootCert.Leaf.SubjectKeyId),
+		ClientName: netc.GenServerNameTLS(p.rootCert),
 		KeyTime:    keyTime,
 		Signature:  signature,
 	}, nil
@@ -341,7 +340,7 @@ func (p *peer) getECDHPublicKey(cfg *pbconnect.ECDHConfiguration) (*ecdh.PublicK
 		if err != nil {
 			return nil, err
 		}
-		if netc.GenServerNameData(cert.SubjectKeyId) == cfg.ClientName {
+		if netc.GenServerNameX509(cert) == cfg.ClientName {
 			candidates = append(candidates, cert)
 		}
 	}
