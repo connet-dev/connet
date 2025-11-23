@@ -28,13 +28,6 @@ type Cert struct {
 	sk  crypto.PrivateKey
 }
 
-func FromTLS(tlsCert tls.Certificate) *Cert {
-	return &Cert{
-		der: tlsCert.Leaf.Raw,
-		sk:  tlsCert.PrivateKey,
-	}
-}
-
 type CertOpts struct {
 	Domains    []string
 	IPs        []net.IP

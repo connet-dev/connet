@@ -79,10 +79,9 @@ func newPeer(direct *DirectServer, root *certc.Cert, logger *slog.Logger, privat
 		return nil, err
 	}
 
-	opts := certc.CertOpts{
+	serverCert, err := peerCert.NewServer(certc.CertOpts{
 		Domains: []string{netc.GenServerNameTLS(peerTLSCert)},
-	}
-	serverCert, err := peerCert.NewServer(opts)
+	})
 	if err != nil {
 		return nil, err
 	}
