@@ -2,6 +2,7 @@ package client
 
 import (
 	"context"
+	"crypto/ed25519"
 	"crypto/tls"
 	"fmt"
 	"log/slog"
@@ -29,6 +30,7 @@ type DestinationConfig struct {
 	Proxy            model.ProxyVersion
 	RelayEncryptions []model.EncryptionScheme
 	DialTimeout      time.Duration
+	PrivateKey       ed25519.PrivateKey
 }
 
 // NewDestinationConfig creates a destination config for a given name
@@ -65,6 +67,11 @@ func (cfg DestinationConfig) WithDialTimeout(timeout time.Duration) DestinationC
 	return cfg
 }
 
+func (cfg DestinationConfig) WithPrivateKey(sk ed25519.PrivateKey) DestinationConfig {
+	cfg.PrivateKey = sk
+	return cfg
+}
+
 type Destination struct {
 	cfg    DestinationConfig
 	logger *slog.Logger
@@ -77,7 +84,7 @@ type Destination struct {
 
 func NewDestination(cfg DestinationConfig, direct *DirectServer, root *certc.Cert, logger *slog.Logger) (*Destination, error) {
 	logger = logger.With("destination", cfg.Endpoint)
-	p, err := newPeer(direct, root, logger)
+	p, err := newPeer(direct, root, logger, cfg.PrivateKey)
 	if err != nil {
 		return nil, err
 	}

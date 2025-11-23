@@ -7,12 +7,12 @@ import (
 	"crypto/rand"
 	"crypto/tls"
 	"crypto/x509"
+	"encoding/hex"
 	"fmt"
 	"io"
 	"net"
 	"testing"
 
-	"github.com/mr-tron/base58"
 	"github.com/quic-go/quic-go"
 	"github.com/stretchr/testify/require"
 	"golang.org/x/sync/errgroup"
@@ -22,13 +22,13 @@ func TestChain(t *testing.T) {
 	seed := make([]byte, ed25519.SeedSize)
 	_, err := io.ReadFull(rand.Reader, seed)
 	require.NoError(t, err)
-	fmt.Println("seed", base58.Encode(seed))
+	fmt.Println("seed", hex.EncodeToString(seed))
 	priv := ed25519.NewKeyFromSeed(seed)
 	require.NoError(t, err)
-	fmt.Println("priv", base58.Encode(priv))
+	fmt.Println("priv", hex.EncodeToString(priv))
 
 	pub := priv.Public().(ed25519.PublicKey)
-	fmt.Println("pub", base58.Encode(pub))
+	fmt.Println("pub", hex.EncodeToString(pub))
 
 	root, err := NewRoot()
 	require.NoError(t, err)

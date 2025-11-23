@@ -8,3 +8,4 @@ direct-addr = ":19193"
 [client.sources.sws]
 relay-encryptions = ["tls"]
 url = "tcp://:9999"
+private-key = "nccarlqoint2fcpcsah54ids7v3r5ol63jbe4i4v5d0dt5blf5a0"
