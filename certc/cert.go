@@ -29,11 +29,11 @@ func NewRootRandom() (*Cert, error) {
 
 func NewRoot(sk ed25519.PrivateKey) (*Cert, error) {
 	if sk == nil {
-		if _, priv, err := ed25519.GenerateKey(rand.Reader); err != nil {
+		_, priv, err := ed25519.GenerateKey(rand.Reader)
+		if err != nil {
 			return nil, err
-		} else {
-			sk = priv
 		}
+		sk = priv
 	}
 
 	pk := sk.Public().(ed25519.PublicKey)
