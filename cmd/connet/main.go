@@ -3,8 +3,11 @@ package main
 import (
 	"bufio"
 	"context"
+	"crypto/ed25519"
+	"crypto/rand"
 	"errors"
 	"fmt"
+	"io"
 	"log/slog"
 	"net"
 	"os"
@@ -13,6 +16,7 @@ import (
 	"syscall"
 
 	"github.com/connet-dev/connet/model"
+	"github.com/connet-dev/connet/netc"
 	"github.com/connet-dev/connet/slogc"
 	"github.com/connet-dev/connet/statusc"
 	"github.com/pelletier/go-toml/v2"
@@ -41,6 +45,7 @@ func main() {
 	rootCmd.AddCommand(controlCmd())
 	rootCmd.AddCommand(relayCmd())
 	rootCmd.AddCommand(checkCmd())
+	rootCmd.AddCommand(generateKey())
 	rootCmd.AddCommand(versionCmd())
 
 	if err := rootCmd.ExecuteContext(ctx); err != nil {
@@ -101,13 +106,39 @@ func checkCmd() *cobra.Command {
 	return cmd
 }
 
+func generateKey() *cobra.Command {
+	cmd := &cobra.Command{
+		Use:   "gen-key",
+		Short: "Generates ed25519 private/public key",
+	}
+
+	cmd.RunE = wrapErr("generate key", func(_ *cobra.Command, args []string) error {
+		seed := make([]byte, ed25519.SeedSize)
+		n, err := io.ReadFull(rand.Reader, seed)
+		switch {
+		case err != nil:
+			return fmt.Errorf("rand read: %w", err)
+		case n != ed25519.SeedSize:
+			return fmt.Errorf("not enough data")
+		}
+
+		priv := ed25519.NewKeyFromSeed(seed)
+		pub := priv.Public().(ed25519.PublicKey)
+		fmt.Println("PRIVATE: ", netc.DNSSECEncoding.EncodeToString(seed))
+		fmt.Println("PUBLIC:  ", netc.DNSSECEncoding.EncodeToString(pub))
+		return nil
+	})
+
+	return cmd
+}
+
 func versionCmd() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "version",
 		Short: "Print version information",
 	}
 
-	cmd.RunE = wrapErr("run configuration check", func(_ *cobra.Command, args []string) error {
+	cmd.RunE = wrapErr("print version", func(_ *cobra.Command, args []string) error {
 		fmt.Println(model.BuildVersion())
 		return nil
 	})

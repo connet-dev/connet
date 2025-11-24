@@ -23,10 +23,17 @@ type Cert struct {
 	sk  crypto.PrivateKey
 }
 
-func NewRoot() (*Cert, error) {
-	_, priv, err := ed25519.GenerateKey(rand.Reader)
-	if err != nil {
-		return nil, err
+func NewRootRandom() (*Cert, error) {
+	return NewRoot(nil)
+}
+
+func NewRoot(sk ed25519.PrivateKey) (*Cert, error) {
+	if sk == nil {
+		_, priv, err := ed25519.GenerateKey(rand.Reader)
+		if err != nil {
+			return nil, err
+		}
+		sk = priv
 	}
 
 	template := &x509.Certificate{
@@ -44,11 +51,11 @@ func NewRoot() (*Cert, error) {
 		ExtKeyUsage: []x509.ExtKeyUsage{},
 	}
 
-	der, err := x509.CreateCertificate(rand.Reader, template, template, priv.Public(), priv)
+	der, err := x509.CreateCertificate(rand.Reader, template, template, sk.Public(), sk)
 	if err != nil {
 		return nil, err
 	}
-	return &Cert{der, priv}, nil
+	return &Cert{der, sk}, nil
 }
 
 type CertOpts struct {
@@ -72,7 +79,7 @@ func (c *Cert) NewServer(opts CertOpts) (*Cert, error) {
 		return nil, err
 	}
 
-	pub, priv, err := ed25519.GenerateKey(rand.Reader)
+	pk, sk, err := ed25519.GenerateKey(rand.Reader)
 	if err != nil {
 		return nil, err
 	}
@@ -101,12 +108,12 @@ func (c *Cert) NewServer(opts CertOpts) (*Cert, error) {
 		ExtKeyUsage: []x509.ExtKeyUsage{x509.ExtKeyUsageServerAuth},
 	}
 
-	der, err := x509.CreateCertificate(rand.Reader, certTemplate, parent, pub, c.sk)
+	der, err := x509.CreateCertificate(rand.Reader, certTemplate, parent, pk, c.sk)
 	if err != nil {
 		return nil, err
 	}
 
-	return &Cert{der, priv}, nil
+	return &Cert{der, sk}, nil
 }
 
 func (c *Cert) NewClient() (*Cert, error) {
@@ -115,7 +122,7 @@ func (c *Cert) NewClient() (*Cert, error) {
 		return nil, err
 	}
 
-	pub, priv, err := ed25519.GenerateKey(rand.Reader)
+	pk, sk, err := ed25519.GenerateKey(rand.Reader)
 	if err != nil {
 		return nil, err
 	}
@@ -136,12 +143,12 @@ func (c *Cert) NewClient() (*Cert, error) {
 		ExtKeyUsage: []x509.ExtKeyUsage{x509.ExtKeyUsageClientAuth},
 	}
 
-	der, err := x509.CreateCertificate(rand.Reader, certTemplate, parent, pub, c.sk)
+	der, err := x509.CreateCertificate(rand.Reader, certTemplate, parent, pk, c.sk)
 	if err != nil {
 		return nil, err
 	}
 
-	return &Cert{der, priv}, nil
+	return &Cert{der, sk}, nil
 }
 
 func (c *Cert) Cert() (*x509.Certificate, error) {

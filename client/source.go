@@ -4,6 +4,7 @@ import (
 	"cmp"
 	"context"
 	"crypto/ecdh"
+	"crypto/ed25519"
 	"crypto/tls"
 	"errors"
 	"fmt"
@@ -34,6 +35,7 @@ type SourceConfig struct {
 	Route            model.RouteOption
 	RelayEncryptions []model.EncryptionScheme
 	DialTimeout      time.Duration
+	PrivateKey       ed25519.PrivateKey
 
 	DestinationPolicy   model.LoadBalancePolicy
 	DestinationRetry    model.LoadBalanceRetry
@@ -66,6 +68,11 @@ func (cfg SourceConfig) WithRelayEncryptions(schemes ...model.EncryptionScheme) 
 // WithDialTimeout sets the dial timeout
 func (cfg SourceConfig) WithDialTimeout(timeout time.Duration) SourceConfig {
 	cfg.DialTimeout = timeout
+	return cfg
+}
+
+func (cfg SourceConfig) WithPrivateKey(sk ed25519.PrivateKey) SourceConfig {
+	cfg.PrivateKey = sk
 	return cfg
 }
 
@@ -104,7 +111,7 @@ type sourceConn struct {
 
 func NewSource(cfg SourceConfig, direct *DirectServer, logger *slog.Logger) (*Source, error) {
 	logger = logger.With("source", cfg.Endpoint)
-	p, err := newPeer(direct, logger)
+	p, err := newPeer(direct, logger, cfg.PrivateKey)
 	if err != nil {
 		return nil, err
 	}

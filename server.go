@@ -28,7 +28,7 @@ func NewServer(opts ...ServerOption) (*Server, error) {
 		return nil, err
 	}
 
-	relayRootCert, err := certc.NewRoot()
+	relayRootCert, err := certc.NewRootRandom()
 	if err != nil {
 		return nil, fmt.Errorf("generate relays root cert: %w", err)
 	}
