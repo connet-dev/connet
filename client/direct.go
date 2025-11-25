@@ -1,6 +1,7 @@
 package client
 
 import (
+	"bytes"
 	"context"
 	"crypto/tls"
 	"crypto/x509"
@@ -50,7 +51,7 @@ func (s *vServer) dequeue(key model.Key, cert *x509.Certificate) *vClient {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
-	if exp, ok := s.clients[key]; ok && exp.cert.Equal(cert) {
+	if exp, ok := s.clients[key]; ok && bytes.Equal(exp.cert.SubjectKeyId, cert.AuthorityKeyId) {
 		delete(s.clients, key)
 		return exp
 	}
@@ -69,16 +70,16 @@ func (s *vServer) updateClientCA() {
 	s.clientCA.Store(clientCA)
 }
 
-func (s *DirectServer) addServerCert(cert tls.Certificate) {
-	serverName := cert.Leaf.DNSNames[0]
+func (s *DirectServer) addServerCert(localServerCert tls.Certificate) {
+	localServerName := localServerCert.Leaf.DNSNames[0]
 
 	s.serversMu.Lock()
 	defer s.serversMu.Unlock()
 
-	s.logger.Debug("add server cert", "server", serverName, "cert", model.NewKey(cert.Leaf))
-	s.servers[serverName] = &vServer{
-		serverName: serverName,
-		serverCert: cert,
+	s.logger.Debug("add server cert", "server", localServerName, "cert", model.NewKey(localServerCert.Leaf))
+	s.servers[localServerName] = &vServer{
+		serverName: localServerName,
+		serverCert: localServerCert,
 		clients:    map[model.Key]*vClient{},
 	}
 }
@@ -90,9 +91,9 @@ func (s *DirectServer) getServer(serverName string) *vServer {
 	return s.servers[serverName]
 }
 
-func (s *DirectServer) expect(serverCert tls.Certificate, cert *x509.Certificate) (chan *quic.Conn, func()) {
-	key := model.NewKey(cert)
-	srv := s.getServer(serverCert.Leaf.DNSNames[0])
+func (s *DirectServer) expect(localServerCert tls.Certificate, cert *x509.Certificate) (chan *quic.Conn, func()) {
+	key := model.NewKeyRaw(cert.SubjectKeyId)
+	srv := s.getServer(localServerCert.Leaf.DNSNames[0])
 
 	defer srv.updateClientCA()
 
@@ -161,7 +162,7 @@ func (s *DirectServer) runConn(conn *quic.Conn) {
 	}
 
 	cert := conn.ConnectionState().TLS.PeerCertificates[0]
-	key := model.NewKey(cert)
+	key := model.NewKeyRaw(cert.AuthorityKeyId)
 	s.logger.Debug("accepted conn", "server", srv.serverName, "cert", key, "remote", conn.RemoteAddr())
 
 	exp := srv.dequeue(key, cert)

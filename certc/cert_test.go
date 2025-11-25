@@ -7,6 +7,7 @@ import (
 	"crypto/rand"
 	"crypto/tls"
 	"crypto/x509"
+	"encoding/hex"
 	"fmt"
 	"io"
 	"net"
@@ -21,8 +22,15 @@ func TestChain(t *testing.T) {
 	seed := make([]byte, ed25519.SeedSize)
 	_, err := io.ReadFull(rand.Reader, seed)
 	require.NoError(t, err)
+	fmt.Println("seed", hex.EncodeToString(seed))
+	priv := ed25519.NewKeyFromSeed(seed)
+	require.NoError(t, err)
+	fmt.Println("priv", hex.EncodeToString(priv))
 
-	root, err := NewRoot(ed25519.NewKeyFromSeed(seed))
+	pub := priv.Public().(ed25519.PublicKey)
+	fmt.Println("pub", hex.EncodeToString(pub))
+
+	root, err := NewRoot(priv)
 	require.NoError(t, err)
 
 	caPool, err := root.CertPool()

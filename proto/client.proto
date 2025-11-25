@@ -54,8 +54,9 @@ message Response {
 message Peer {
   repeated model.AddrPort directs = 3;
   repeated string relayIds = 6;
-  bytes server_certificate = 4; // certificate to use when connecting to this client
-  bytes client_certificate = 5; // certificate that this client uses when connecting
+  //bytes server_certificate = 4 [deprecated = true]; // certificate to use when connecting to this client
+  //bytes client_certificate = 5 [deprecated = true]; // certificate that this client uses when connecting
+  bytes certificate = 7;
 }
 
 message RemotePeer {

@@ -36,6 +36,8 @@ func NewRoot(sk ed25519.PrivateKey) (*Cert, error) {
 		sk = priv
 	}
 
+	pk := sk.Public().(ed25519.PublicKey)
+
 	template := &x509.Certificate{
 		SerialNumber: big.NewInt(time.Now().UnixMicro()),
 
@@ -44,6 +46,9 @@ func NewRoot(sk ed25519.PrivateKey) (*Cert, error) {
 
 		Subject: SharedSubject,
 
+		SubjectKeyId:   pk,
+		AuthorityKeyId: pk,
+
 		BasicConstraintsValid: true,
 		IsCA:                  true,
 
@@ -51,7 +56,7 @@ func NewRoot(sk ed25519.PrivateKey) (*Cert, error) {
 		ExtKeyUsage: []x509.ExtKeyUsage{},
 	}
 
-	der, err := x509.CreateCertificate(rand.Reader, template, template, sk.Public(), sk)
+	der, err := x509.CreateCertificate(rand.Reader, template, template, pk, sk)
 	if err != nil {
 		return nil, err
 	}
@@ -98,6 +103,9 @@ func (c *Cert) NewServer(opts CertOpts) (*Cert, error) {
 		Issuer:  parent.Subject,
 		Subject: subject,
 
+		AuthorityKeyId: parent.SubjectKeyId,
+		SubjectKeyId:   pk,
+
 		DNSNames:    opts.Domains,
 		IPAddresses: opts.IPs,
 
@@ -135,6 +143,9 @@ func (c *Cert) NewClient() (*Cert, error) {
 
 		Issuer:  parent.Subject,
 		Subject: SharedSubject,
+
+		AuthorityKeyId: parent.SubjectKeyId,
+		SubjectKeyId:   pk,
 
 		BasicConstraintsValid: false,
 		IsCA:                  false,
