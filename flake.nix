@@ -28,7 +28,7 @@
           default = pkgs.callPackage ./nix/package.nix { };
           docker = pkgs.callPackage ./nix/docker.nix { };
         };
-        devShells.default = pkgs.mkShellNoCC {
+        devShells.default = pkgs.mkShell {
           buildInputs = with pkgs; [
             go
             gopls
