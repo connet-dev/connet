@@ -2,7 +2,6 @@ package main
 
 import (
 	"context"
-	"crypto/ed25519"
 	"crypto/tls"
 	"crypto/x509"
 	"fmt"
@@ -16,7 +15,6 @@ import (
 	"github.com/connet-dev/connet"
 	"github.com/connet-dev/connet/model"
 	"github.com/connet-dev/connet/nat"
-	"github.com/connet-dev/connet/netc"
 	"github.com/connet-dev/connet/statusc"
 	"github.com/mr-tron/base58"
 	"github.com/quic-go/quic-go"
@@ -48,7 +46,6 @@ type DestinationConfig struct {
 	RelayEncryptions  []string `toml:"relay-encryptions"`
 	ProxyProtoVersion string   `toml:"proxy-proto-version"`
 	DialTimeout       int      `toml:"dial-timeout"`
-	PrivateKey        string   `toml:"private-key"`
 
 	URL      string `toml:"url"`
 	CAsFile  string `toml:"cas-file"`  // tls/https server certificate authority, literal "insecure-skip-verify" to skip
@@ -60,7 +57,6 @@ type SourceConfig struct {
 	Route            string   `toml:"route"`
 	RelayEncryptions []string `toml:"relay-encryptions"`
 	DialTimeout      int      `toml:"dial-timeout"`
-	PrivateKey       string   `toml:"private-key"`
 
 	URL      string `toml:"url"`
 	CertFile string `toml:"cert-file"` // tls/https server cert
@@ -314,21 +310,11 @@ func (fc DestinationConfig) parse(name string, defaultRelayEncryptions []model.E
 		relayEncryptions = res
 	}
 
-	var sk ed25519.PrivateKey
-	if fc.PrivateKey != "" {
-		if data, err := netc.DNSSECEncoding.DecodeString(fc.PrivateKey); err != nil {
-			return retErr(fmt.Errorf("parse private key: %w", err))
-		} else {
-			sk = ed25519.NewKeyFromSeed(data)
-		}
-	}
-
 	dstCfg := connet.NewDestinationConfig(name).
 		WithRoute(route).
 		WithProxy(proxy).
 		WithRelayEncryptions(relayEncryptions...).
-		WithDialTimeout(time.Duration(fc.DialTimeout) * time.Millisecond).
-		WithPrivateKey(sk)
+		WithDialTimeout(time.Duration(fc.DialTimeout) * time.Millisecond)
 
 	targetURL, err := url.Parse(fc.URL)
 	if err != nil {
@@ -435,21 +421,11 @@ func (fc SourceConfig) parse(name string, defaultRelayEncryptions []model.Encryp
 		return retErr(fmt.Errorf("parse lb retry: %w", err))
 	}
 
-	var sk ed25519.PrivateKey
-	if fc.PrivateKey != "" {
-		if data, err := netc.DNSSECEncoding.DecodeString(fc.PrivateKey); err != nil {
-			return retErr(fmt.Errorf("parse private key: %w", err))
-		} else {
-			sk = ed25519.NewKeyFromSeed(data)
-		}
-	}
-
 	cfg := connet.NewSourceConfig(name).
 		WithRoute(route).
 		WithRelayEncryptions(relayEncryptions...).
 		WithDialTimeout(time.Duration(fc.DialTimeout)*time.Millisecond).
-		WithLoadBalance(lbPolicy, lbRetry, fc.LBRetryMax).
-		WithPrivateKey(sk)
+		WithLoadBalance(lbPolicy, lbRetry, fc.LBRetryMax)
 
 	targetURL, err := url.Parse(fc.URL)
 	if err != nil {
@@ -602,7 +578,6 @@ func (c DestinationConfig) merge(o DestinationConfig) DestinationConfig {
 		RelayEncryptions:  overrides(c.RelayEncryptions, o.RelayEncryptions),
 		ProxyProtoVersion: override(c.ProxyProtoVersion, o.ProxyProtoVersion),
 		DialTimeout:       override(c.DialTimeout, o.DialTimeout),
-		PrivateKey:        override(c.PrivateKey, o.PrivateKey),
 
 		URL:      override(c.URL, o.URL),
 		CAsFile:  override(c.CAsFile, o.CAsFile),
@@ -616,7 +591,6 @@ func (c SourceConfig) merge(o SourceConfig) SourceConfig {
 		Route:            override(c.Route, o.Route),
 		RelayEncryptions: overrides(c.RelayEncryptions, o.RelayEncryptions),
 		DialTimeout:      override(c.DialTimeout, o.DialTimeout),
-		PrivateKey:       override(c.PrivateKey, o.PrivateKey),
 
 		URL:      override(c.URL, o.URL),
 		CAsFile:  override(c.CAsFile, o.CAsFile),

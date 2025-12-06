@@ -23,17 +23,10 @@ type Cert struct {
 	sk  crypto.PrivateKey
 }
 
-func NewRootRandom() (*Cert, error) {
-	return NewRoot(nil)
-}
-
-func NewRoot(sk ed25519.PrivateKey) (*Cert, error) {
-	if sk == nil {
-		_, priv, err := ed25519.GenerateKey(rand.Reader)
-		if err != nil {
-			return nil, err
-		}
-		sk = priv
+func NewRoot() (*Cert, error) {
+	_, sk, err := ed25519.GenerateKey(rand.Reader)
+	if err != nil {
+		return nil, err
 	}
 
 	template := &x509.Certificate{

@@ -658,7 +658,7 @@ func clientControlCAs(cas *x509.CertPool) ClientOption {
 }
 
 func selfSigned(domain string) (tls.Certificate, *x509.CertPool, error) {
-	root, err := certc.NewRootRandom()
+	root, err := certc.NewRoot()
 	if err != nil {
 		return tls.Certificate{}, nil, err
 	}

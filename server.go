@@ -28,7 +28,7 @@ func NewServer(opts ...ServerOption) (*Server, error) {
 		return nil, err
 	}
 
-	relayRootCert, err := certc.NewRootRandom()
+	relayRootCert, err := certc.NewRoot()
 	if err != nil {
 		return nil, fmt.Errorf("generate relays root cert: %w", err)
 	}
@@ -53,7 +53,7 @@ func NewServer(opts ...ServerOption) (*Server, error) {
 	}
 
 	relayAuth := selfhosted.RelayAuthentication{
-		Token: netc.GenServerName("relay"),
+		Token: netc.GenDomainName("relay"),
 	}
 
 	control, err := control.NewServer(control.Config{

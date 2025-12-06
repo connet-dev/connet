@@ -54,7 +54,7 @@ type controlClient struct {
 }
 
 func newControlClient(cfg Config, configStore logc.KV[ConfigKey, ConfigValue]) (*controlClient, error) {
-	root, err := certc.NewRootRandom()
+	root, err := certc.NewRoot()
 	if err != nil {
 		return nil, err
 	}
@@ -404,7 +404,7 @@ func (s *controlClient) runClientsLog(ctx context.Context) error {
 
 			switch {
 			case errors.Is(err, klevdb.ErrNotFound):
-				serverName := netc.GenServerName("connet-relay")
+				serverName := netc.GenDomainName("connet-relay")
 				serverRoot, err := s.root.NewServer(certc.CertOpts{
 					Domains: []string{serverName},
 				})

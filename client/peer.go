@@ -66,14 +66,14 @@ func (s peerStyle) String() string {
 	}
 }
 
-func newPeer(direct *DirectServer, logger *slog.Logger, privateKey ed25519.PrivateKey) (*peer, error) {
-	root, err := certc.NewRoot(privateKey)
+func newPeer(direct *DirectServer, logger *slog.Logger) (*peer, error) {
+	root, err := certc.NewRoot()
 	if err != nil {
 		return nil, err
 	}
 
 	serverCert, err := root.NewServer(certc.CertOpts{
-		Domains: []string{netc.GenServerName("connet-direct")},
+		Domains: []string{netc.GenDomainName("connet-direct")},
 	})
 	if err != nil {
 		return nil, err

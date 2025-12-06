@@ -22,7 +22,7 @@ func TestChain(t *testing.T) {
 	_, err := io.ReadFull(rand.Reader, seed)
 	require.NoError(t, err)
 
-	root, err := NewRoot(ed25519.NewKeyFromSeed(seed))
+	root, err := NewRoot()
 	require.NoError(t, err)
 
 	caPool, err := root.CertPool()
@@ -45,7 +45,7 @@ func TestChain(t *testing.T) {
 }
 
 func TestChainRoot(t *testing.T) {
-	root, err := NewRootRandom()
+	root, err := NewRoot()
 	require.NoError(t, err)
 	rootCert, err := root.Cert()
 	require.NoError(t, err)
@@ -71,7 +71,7 @@ func TestChainRoot(t *testing.T) {
 }
 
 func TestExchange(t *testing.T) {
-	serverRoot, err := NewRootRandom()
+	serverRoot, err := NewRoot()
 	require.NoError(t, err)
 	serverCA, err := serverRoot.CertPool()
 	require.NoError(t, err)
@@ -83,7 +83,7 @@ func TestExchange(t *testing.T) {
 	serverTLS, err := serverCert.TLSCert()
 	require.NoError(t, err)
 
-	clientRoot, err := NewRootRandom()
+	clientRoot, err := NewRoot()
 	require.NoError(t, err)
 	clientCA, err := clientRoot.CertPool()
 	require.NoError(t, err)
@@ -98,7 +98,7 @@ func TestExchange(t *testing.T) {
 }
 
 func TestMulti(t *testing.T) {
-	root, err := NewRootRandom()
+	root, err := NewRoot()
 	require.NoError(t, err)
 
 	serverCert1, err := root.NewServer(CertOpts{
