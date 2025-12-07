@@ -21,7 +21,6 @@ type RelayConfig struct {
 
 	ControlAddr    string `toml:"control-addr"`
 	ControlCAsFile string `toml:"control-cas-file"`
-	ControlCAs     string `toml:"control-cas"` // TODO remove in 0.11.0
 
 	StatusAddr string `toml:"status-addr"`
 	StoreDir   string `toml:"store-dir"`
@@ -57,7 +56,6 @@ func relayCmd() *cobra.Command {
 
 	cmd.Flags().StringVar(&flagsConfig.Relay.ControlAddr, "control-addr", "", "control server address (UDP/QUIC, host:port) (defaults to '127.0.0.1:19189')")
 	cmd.Flags().StringVar(&flagsConfig.Relay.ControlCAsFile, "control-cas-file", "", "control server TLS certificate authorities file, when not using public CAs")
-	cmd.Flags().StringVar(&flagsConfig.Relay.ControlCAs, "control-cas", "", "control server TLS certificate authorities file, when not using public CAs (deprecated)")
 	if err := cmd.Flags().MarkHidden("control-cas"); err != nil {
 		slog.Warn("cannot to mark hidden", "err", err)
 	}
@@ -129,10 +127,6 @@ func relayRun(ctx context.Context, cfg RelayConfig, logger *slog.Logger) error {
 	relayCfg.ControlAddr = controlAddr
 
 	controlCAs := cfg.ControlCAsFile
-	if controlCAs == "" && cfg.ControlCAs != "" {
-		logger.Warn("'control-cas' is deprecated, use 'control-cas-file' instead")
-		controlCAs = cfg.ControlCAs
-	}
 	if controlCAs != "" {
 		casData, err := os.ReadFile(controlCAs)
 		if err != nil {
@@ -202,7 +196,6 @@ func (c *RelayConfig) merge(o RelayConfig) {
 
 	c.ControlAddr = override(c.ControlAddr, o.ControlAddr)
 	c.ControlCAsFile = override(c.ControlCAsFile, o.ControlCAsFile)
-	c.ControlCAs = override(c.ControlCAs, o.ControlCAs)
 
 	c.StatusAddr = override(c.StatusAddr, o.StatusAddr)
 	c.StoreDir = override(c.StoreDir, o.StoreDir)

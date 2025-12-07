@@ -58,29 +58,6 @@ type ClientKey struct {
 	Key      model.Key      `json:"key"`
 }
 
-// TODO remove in 0.10.0
-func (v *ClientKey) UnmarshalJSON(b []byte) error {
-	s := struct {
-		Forward  model.Endpoint `json:"forward"`
-		Endpoint model.Endpoint `json:"endpoint"`
-		Role     model.Role     `json:"role"`
-		Key      model.Key      `json:"key"`
-	}{}
-
-	if err := json.Unmarshal(b, &s); err != nil {
-		return err
-	}
-
-	v.Endpoint = s.Endpoint
-	v.Role = s.Role
-	v.Key = s.Key
-	if v.Endpoint.String() == "" && s.Forward.String() != "" {
-		v.Endpoint = s.Forward
-	}
-
-	return nil
-}
-
 type ClientValue struct {
 	Cert *x509.Certificate `json:"cert"`
 }
@@ -101,25 +78,6 @@ func (v *ClientValue) UnmarshalJSON(b []byte) error {
 
 type ServerKey struct {
 	Endpoint model.Endpoint `json:"endpoint"`
-}
-
-// TODO remove in 0.10.0
-func (v *ServerKey) UnmarshalJSON(b []byte) error {
-	s := struct {
-		Forward  model.Endpoint `json:"forward"`
-		Endpoint model.Endpoint `json:"endpoint"`
-	}{}
-
-	if err := json.Unmarshal(b, &s); err != nil {
-		return err
-	}
-
-	v.Endpoint = s.Endpoint
-	if v.Endpoint.String() == "" && s.Forward.String() != "" {
-		v.Endpoint = s.Forward
-	}
-
-	return nil
 }
 
 type ServerValue struct {

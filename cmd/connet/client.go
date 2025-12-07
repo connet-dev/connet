@@ -28,7 +28,6 @@ type ClientConfig struct {
 
 	ServerAddr    string `toml:"server-addr"`
 	ServerCAsFile string `toml:"server-cas-file"`
-	ServerCAs     string `toml:"server-cas"` // TODO remove in 0.11.0
 
 	DirectAddr         string `toml:"direct-addr"`
 	DirectResetKey     string `toml:"direct-stateless-reset-key"`
@@ -89,7 +88,6 @@ func clientCmd() *cobra.Command {
 
 	cmd.Flags().StringVar(&flagsConfig.Client.ServerAddr, "server-addr", "", "control server address (UDP/QUIC, host:port) (defaults to '127.0.0.1:19190')")
 	cmd.Flags().StringVar(&flagsConfig.Client.ServerCAsFile, "server-cas-file", "", "control server TLS certificate authorities file, when not using public CAs")
-	cmd.Flags().StringVar(&flagsConfig.Client.ServerCAs, "server-cas", "", "control server TLS certificate authorities file, when not using public CAs")
 	if err := cmd.Flags().MarkHidden("server-cas"); err != nil {
 		slog.Warn("cannot to mark hidden", "err", err)
 	}
@@ -165,9 +163,6 @@ func clientRun(ctx context.Context, cfg ClientConfig, logger *slog.Logger) error
 	}
 	if cfg.ServerCAsFile != "" {
 		opts = append(opts, connet.ClientControlCAs(cfg.ServerCAsFile))
-	} else if cfg.ServerCAs != "" {
-		logger.Warn("'server-cas' is deprecated, use 'server-cas-file' instead")
-		opts = append(opts, connet.ClientControlCAs(cfg.ServerCAs))
 	}
 
 	if cfg.DirectAddr != "" {
@@ -545,7 +540,6 @@ func (c *ClientConfig) merge(o ClientConfig) {
 
 	c.ServerAddr = override(c.ServerAddr, o.ServerAddr)
 	c.ServerCAsFile = override(c.ServerCAsFile, o.ServerCAsFile)
-	c.ServerCAs = override(c.ServerCAs, o.ServerCAs)
 
 	c.DirectAddr = override(c.DirectAddr, o.DirectAddr)
 	if o.DirectResetKey != "" || o.DirectResetKeyFile != "" {
