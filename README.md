@@ -138,7 +138,7 @@ server-addr = "localhost:19190" # control server address (UDP/QUIC, host:port) (
 server-cas-file = "path/to/cert.pem" # control server TLS certificate authorities file, when not using public CAs
 
 direct-addr = ":19192" # direct server address to listen for peer connections (UDP/QUIC, [host]:port) (defaults to ':19192')
-direct-stateless-reset-key = "" # the quic stateless reset key as a literal 32 byte value in bas58 format
+direct-stateless-reset-key = "" # the quic stateless reset key as a literal 32 byte value in base32hex format
 direct-stateless-reset-key-file = "/path/to/reset/key" # the quic stateless reset key read from a file
 status-addr = "127.0.0.1:19182" # status server address to listen for connections (TCP/HTTP, [host]:port) (disabled by default)
 nat-pmp = "system" # support for NAT-PMP, defaults to `system`

@@ -5,13 +5,12 @@ go 1.24.4
 require (
 	github.com/gorilla/websocket v1.5.3
 	github.com/jackpal/gateway v1.1.1
-	github.com/klev-dev/klevdb v0.10.0
-	github.com/mr-tron/base58 v1.2.0
+	github.com/klev-dev/klevdb v0.10.1
 	github.com/pelletier/go-toml/v2 v2.2.4
 	github.com/pires/go-proxyproto v0.8.1
 	github.com/quic-go/quic-go v0.57.1
 	github.com/segmentio/ksuid v1.0.4
-	github.com/spf13/cobra v1.10.1
+	github.com/spf13/cobra v1.10.2
 	github.com/stretchr/testify v1.11.1
 	golang.org/x/crypto v0.45.0
 	golang.org/x/sync v0.18.0

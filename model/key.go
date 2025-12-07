@@ -1,26 +1,21 @@
 package model
 
 import (
-	"crypto/tls"
 	"crypto/x509"
 
-	"github.com/mr-tron/base58"
+	"github.com/connet-dev/connet/netc"
 	"golang.org/x/crypto/blake2s"
 )
 
 type Key struct{ string }
 
 func NewKey(cert *x509.Certificate) Key {
-	return NewKeyRaw(cert.Raw)
+	return newKeyRaw(cert.Raw)
 }
 
-func NewKeyTLS(cert tls.Certificate) Key {
-	return NewKeyRaw(cert.Leaf.Raw)
-}
-
-func NewKeyRaw(raw []byte) Key {
+func newKeyRaw(raw []byte) Key {
 	hash := blake2s.Sum256(raw)
-	return Key{base58.Encode(hash[:])}
+	return Key{netc.DNSSECEncoding.EncodeToString(hash[:])}
 }
 
 func NewKeyString(s string) Key {

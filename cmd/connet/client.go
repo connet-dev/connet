@@ -15,8 +15,8 @@ import (
 	"github.com/connet-dev/connet"
 	"github.com/connet-dev/connet/model"
 	"github.com/connet-dev/connet/nat"
+	"github.com/connet-dev/connet/netc"
 	"github.com/connet-dev/connet/statusc"
-	"github.com/mr-tron/base58"
 	"github.com/quic-go/quic-go"
 	"github.com/spf13/cobra"
 	"golang.org/x/sync/errgroup"
@@ -177,11 +177,11 @@ func clientRun(ctx context.Context, cfg ClientConfig, logger *slog.Logger) error
 	if cfg.DirectResetKeyFile != "" {
 		opts = append(opts, connet.ClientDirectStatelessResetKeyFile(cfg.DirectResetKeyFile))
 	} else if cfg.DirectResetKey != "" {
-		keyBytes, err := base58.Decode(cfg.DirectResetKey)
+		keyBytes, err := netc.DNSSECEncoding.DecodeString(cfg.DirectResetKey)
 		if err != nil {
 			return fmt.Errorf("decode stateless reset key: %w", err)
 		}
-		if len(keyBytes) < 32 {
+		if len(keyBytes) != 32 {
 			return fmt.Errorf("stateless reset key len %d", len(keyBytes))
 		}
 		key := quic.StatelessResetKey(keyBytes)
