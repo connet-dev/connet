@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"io"
 
-	"github.com/segmentio/ksuid"
 	"golang.org/x/crypto/nacl/secretbox"
 )
 
@@ -40,18 +39,28 @@ func (s *reconnectToken) open(encrypted []byte) ([]byte, error) {
 	return data, nil
 }
 
-func (s *reconnectToken) sealID(id ksuid.KSUID) ([]byte, error) {
-	return s.seal(id.Bytes())
+func (s *reconnectToken) sealClientID(id ClientID) ([]byte, error) {
+	return s.seal([]byte(id.string))
 }
 
-func (s *reconnectToken) openID(encrypted []byte) (ksuid.KSUID, error) {
-	data, err := s.open(encrypted)
+func (s *reconnectToken) openClientID(encryptedID []byte) (ClientID, error) {
+	data, err := s.open(encryptedID)
 	if err != nil {
-		return ksuid.Nil, err
+		return ClientIDNil, err
 	}
-	id, err := ksuid.FromBytes(data)
+	// TODO check legnth, if 20 decode?
+	return ClientID{string(data)}, nil
+}
+
+func (s *reconnectToken) sealRelayID(id RelayID) ([]byte, error) {
+	return s.seal([]byte(id.string))
+}
+
+func (s *reconnectToken) openRelayID(encryptedID []byte) (RelayID, error) {
+	data, err := s.open(encryptedID)
 	if err != nil {
-		return ksuid.Nil, fmt.Errorf("ksuid decode: %w", err)
+		return RelayIDNil, err
 	}
-	return id, nil
+	// TODO check legnth, if 20 decode?
+	return RelayID{string(data)}, nil
 }

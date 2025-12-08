@@ -22,7 +22,6 @@ import (
 	"github.com/connet-dev/connet/reliable"
 	"github.com/connet-dev/connet/slogc"
 	"github.com/quic-go/quic-go"
-	"github.com/segmentio/ksuid"
 )
 
 type RelayAuthenticateRequest struct {
@@ -71,11 +70,11 @@ func newRelayServer(
 		return nil, fmt.Errorf("relay servers snapshot: %w", err)
 	}
 
-	endpointsCache := map[model.Endpoint]map[ksuid.KSUID]relayCacheValue{}
+	endpointsCache := map[model.Endpoint]map[RelayID]relayCacheValue{}
 	for _, msg := range endpointsMsgs {
 		srv := endpointsCache[msg.Key.Endpoint]
 		if srv == nil {
-			srv = map[ksuid.KSUID]relayCacheValue{}
+			srv = map[RelayID]relayCacheValue{}
 			endpointsCache[msg.Key.Endpoint] = srv
 		}
 		rcv := relayCacheValue{Hostports: msg.Value.Hostports, Cert: msg.Value.Cert}
@@ -154,12 +153,12 @@ type relayServer struct {
 	servers       logc.KV[RelayServerKey, RelayServerValue]
 	serverOffsets logc.KV[RelayConnKey, int64]
 
-	endpointsCache  map[model.Endpoint]map[ksuid.KSUID]relayCacheValue
+	endpointsCache  map[model.Endpoint]map[RelayID]relayCacheValue
 	endpointsOffset int64
 	endpointsMu     sync.RWMutex
 }
 
-func (s *relayServer) getEndpoint(endpoint model.Endpoint) (map[ksuid.KSUID]relayCacheValue, int64) {
+func (s *relayServer) getEndpoint(endpoint model.Endpoint) (map[RelayID]relayCacheValue, int64) {
 	s.endpointsMu.RLock()
 	defer s.endpointsMu.RUnlock()
 
@@ -167,7 +166,7 @@ func (s *relayServer) getEndpoint(endpoint model.Endpoint) (map[ksuid.KSUID]rela
 }
 
 func (s *relayServer) Client(ctx context.Context, endpoint model.Endpoint, role model.Role, cert *x509.Certificate, auth ClientAuthentication,
-	notifyFn func(map[ksuid.KSUID]relayCacheValue) error) error {
+	notifyFn func(map[RelayID]relayCacheValue) error) error {
 
 	key := RelayClientKey{Endpoint: endpoint, Role: role, Key: model.NewKey(cert)}
 	val := RelayClientValue{Cert: cert, Authentication: auth}
@@ -184,7 +183,7 @@ func (s *relayServer) Client(ctx context.Context, endpoint model.Endpoint, role 
 }
 
 func (s *relayServer) listen(ctx context.Context, endpoint model.Endpoint,
-	notifyFn func(map[ksuid.KSUID]relayCacheValue) error) error {
+	notifyFn func(map[RelayID]relayCacheValue) error) error {
 
 	servers, offset := s.getEndpoint(endpoint)
 	if err := notifyFn(servers); err != nil {
@@ -207,7 +206,7 @@ func (s *relayServer) listen(ctx context.Context, endpoint model.Endpoint,
 				delete(servers, msg.Key.RelayID)
 			} else {
 				if servers == nil {
-					servers = map[ksuid.KSUID]relayCacheValue{}
+					servers = map[RelayID]relayCacheValue{}
 				}
 				servers[msg.Key.RelayID] = relayCacheValue{Hostports: msg.Value.Hostports, Cert: msg.Value.Cert}
 			}
@@ -316,7 +315,7 @@ func (s *relayServer) runEndpointsCache(ctx context.Context) error {
 			}
 		} else {
 			if srv == nil {
-				srv = map[ksuid.KSUID]relayCacheValue{}
+				srv = map[RelayID]relayCacheValue{}
 				s.endpointsCache[msg.Key.Endpoint] = srv
 			}
 			rcv := relayCacheValue{Hostports: msg.Value.Hostports, Cert: msg.Value.Cert}
@@ -350,7 +349,7 @@ func (s *relayServer) runEndpointsCache(ctx context.Context) error {
 	}
 }
 
-func (s *relayServer) getRelayServerOffset(id ksuid.KSUID) (int64, error) {
+func (s *relayServer) getRelayServerOffset(id RelayID) (int64, error) {
 	offset, err := s.serverOffsets.Get(RelayConnKey{id})
 	switch {
 	case errors.Is(err, logc.ErrNotFound):
@@ -362,7 +361,7 @@ func (s *relayServer) getRelayServerOffset(id ksuid.KSUID) (int64, error) {
 	}
 }
 
-func (s *relayServer) setRelayServerOffset(id ksuid.KSUID, offset int64) error {
+func (s *relayServer) setRelayServerOffset(id RelayID, offset int64) error {
 	return s.serverOffsets.Put(RelayConnKey{id}, offset)
 }
 
@@ -372,13 +371,13 @@ type relayConn struct {
 	logger *slog.Logger
 
 	endpoints logc.KV[RelayEndpointKey, RelayEndpointValue]
-	id        ksuid.KSUID
+	id        RelayID
 	auth      RelayAuthentication
 	hostports []model.HostPort
 }
 
 type relayConnAuth struct {
-	id        ksuid.KSUID
+	id        RelayID
 	auth      RelayAuthentication
 	hostports []model.HostPort
 }
@@ -477,15 +476,15 @@ func (c *relayConn) authenticate(ctx context.Context) (*relayConnAuth, error) {
 		return nil, fmt.Errorf("auth failed: %w", perr)
 	}
 
-	var id ksuid.KSUID
-	if sid, err := c.server.reconnect.openID(req.ReconnectToken); err != nil {
+	var id RelayID
+	if sid, err := c.server.reconnect.openRelayID(req.ReconnectToken); err != nil {
 		c.logger.Debug("decode failed", "err", err)
-		id = ksuid.New()
+		id = NewRelayID()
 	} else {
 		id = sid
 	}
 
-	retoken, err := c.server.reconnect.sealID(id)
+	retoken, err := c.server.reconnect.sealRelayID(id)
 	if err != nil {
 		c.logger.Debug("encrypting failed", "err", err)
 		retoken = nil

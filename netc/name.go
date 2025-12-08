@@ -10,9 +10,13 @@ import (
 var DNSSECEncoding = base32.NewEncoding("0123456789abcdefghijklmnopqrstuv").WithPadding(base32.NoPadding)
 
 func GenDomainName(suffix string) string {
+	return fmt.Sprintf("%s.%s.invalid", GenName(), suffix)
+}
+
+func GenName() string {
 	data := make([]byte, 32)
 	if _, err := io.ReadFull(rand.Reader, data); err != nil {
 		panic(err)
 	}
-	return fmt.Sprintf("%s.%s.invalid", DNSSECEncoding.EncodeToString(data), suffix)
+	return DNSSECEncoding.EncodeToString(data)
 }

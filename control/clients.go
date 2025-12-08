@@ -24,7 +24,6 @@ import (
 	"github.com/connet-dev/connet/reliable"
 	"github.com/connet-dev/connet/slogc"
 	"github.com/quic-go/quic-go"
-	"github.com/segmentio/ksuid"
 	"golang.org/x/sync/errgroup"
 )
 
@@ -44,7 +43,7 @@ type ClientAuthentication []byte
 
 type ClientRelays interface {
 	Client(ctx context.Context, endpoint model.Endpoint, role model.Role, cert *x509.Certificate, auth ClientAuthentication,
-		notify func(map[ksuid.KSUID]relayCacheValue) error) error
+		notify func(map[RelayID]relayCacheValue) error) error
 }
 
 func newClientServer(
@@ -85,7 +84,7 @@ func newClientServer(
 		if reactivePeers, ok := reactivate[ClientConnKey{msg.Key.ID}]; ok {
 			key := cacheKey{msg.Key.Endpoint, msg.Key.Role}
 			peersCache[key] = append(peersCache[key], &pbclient.RemotePeer{
-				Id:   msg.Key.ID.String(),
+				Id:   msg.Key.ID.string,
 				Peer: msg.Value.Peer,
 			})
 			reactivate[ClientConnKey{msg.Key.ID}] = append(reactivePeers, msg.Key)
@@ -162,7 +161,7 @@ type clientServer struct {
 	reactivateMu sync.RWMutex
 }
 
-func (s *clientServer) connected(id ksuid.KSUID, auth ClientAuthentication, remote net.Addr) error {
+func (s *clientServer) connected(id ClientID, auth ClientAuthentication, remote net.Addr) error {
 	s.reactivateMu.Lock()
 	delete(s.reactivate, ClientConnKey{id})
 	s.reactivateMu.Unlock()
@@ -170,15 +169,15 @@ func (s *clientServer) connected(id ksuid.KSUID, auth ClientAuthentication, remo
 	return s.conns.Put(ClientConnKey{id}, ClientConnValue{Authentication: auth, Addr: remote.String()})
 }
 
-func (s *clientServer) disconnected(id ksuid.KSUID) error {
+func (s *clientServer) disconnected(id ClientID) error {
 	return s.conns.Del(ClientConnKey{id})
 }
 
-func (s *clientServer) announce(endpoint model.Endpoint, role model.Role, id ksuid.KSUID, peer *pbclient.Peer) error {
+func (s *clientServer) announce(endpoint model.Endpoint, role model.Role, id ClientID, peer *pbclient.Peer) error {
 	return s.peers.Put(ClientPeerKey{endpoint, role, id}, ClientPeerValue{peer})
 }
 
-func (s *clientServer) revoke(endpoint model.Endpoint, role model.Role, id ksuid.KSUID) error {
+func (s *clientServer) revoke(endpoint model.Endpoint, role model.Role, id ClientID) error {
 	return s.peers.Del(ClientPeerKey{endpoint, role, id})
 }
 
@@ -209,14 +208,14 @@ func (s *clientServer) listen(ctx context.Context, endpoint model.Endpoint, role
 
 			if msg.Delete {
 				peers = slices.DeleteFunc(peers, func(peer *pbclient.RemotePeer) bool {
-					return peer.Id == msg.Key.ID.String()
+					return peer.Id == msg.Key.ID.string
 				})
 			} else {
 				npeer := &pbclient.RemotePeer{
-					Id:   msg.Key.ID.String(),
+					Id:   msg.Key.ID.string,
 					Peer: msg.Value.Peer,
 				}
-				idx := slices.IndexFunc(peers, func(peer *pbclient.RemotePeer) bool { return peer.Id == msg.Key.ID.String() })
+				idx := slices.IndexFunc(peers, func(peer *pbclient.RemotePeer) bool { return peer.Id == msg.Key.ID.string })
 				if idx >= 0 {
 					peers[idx] = npeer
 				} else {
@@ -323,7 +322,7 @@ func (s *clientServer) runPeerCache(ctx context.Context) error {
 		peers := s.peersCache[key]
 		if msg.Delete {
 			peers = slices.DeleteFunc(peers, func(peer *pbclient.RemotePeer) bool {
-				return peer.Id == msg.Key.ID.String()
+				return peer.Id == msg.Key.ID.string
 			})
 			if len(peers) == 0 {
 				delete(s.peersCache, key)
@@ -332,10 +331,10 @@ func (s *clientServer) runPeerCache(ctx context.Context) error {
 			}
 		} else {
 			npeer := &pbclient.RemotePeer{
-				Id:   msg.Key.ID.String(),
+				Id:   msg.Key.ID.string,
 				Peer: msg.Value.Peer,
 			}
-			idx := slices.IndexFunc(peers, func(peer *pbclient.RemotePeer) bool { return peer.Id == msg.Key.ID.String() })
+			idx := slices.IndexFunc(peers, func(peer *pbclient.RemotePeer) bool { return peer.Id == msg.Key.ID.string })
 			if idx >= 0 {
 				peers[idx] = npeer
 			} else {
@@ -423,7 +422,7 @@ type clientConn struct {
 	logger *slog.Logger
 
 	auth ClientAuthentication
-	id   ksuid.KSUID
+	id   ClientID
 }
 
 func (c *clientConn) run(ctx context.Context) {
@@ -478,11 +477,11 @@ func (c *clientConn) runErr(ctx context.Context) error {
 	}
 }
 
-func (c *clientConn) authenticate(ctx context.Context) (ClientAuthentication, ksuid.KSUID, error) {
+func (c *clientConn) authenticate(ctx context.Context) (ClientAuthentication, ClientID, error) {
 	c.logger.Debug("waiting for authentication")
 	authStream, err := c.conn.AcceptStream(ctx)
 	if err != nil {
-		return nil, ksuid.Nil, fmt.Errorf("client auth stream: %w", err)
+		return nil, ClientIDNil, fmt.Errorf("client auth stream: %w", err)
 	}
 	defer func() {
 		if err := authStream.Close(); err != nil {
@@ -492,7 +491,7 @@ func (c *clientConn) authenticate(ctx context.Context) (ClientAuthentication, ks
 
 	req := &pbclient.Authenticate{}
 	if err := proto.Read(authStream, req); err != nil {
-		return nil, ksuid.Nil, fmt.Errorf("client auth read: %w", err)
+		return nil, ClientIDNil, fmt.Errorf("client auth read: %w", err)
 	}
 
 	protocol := model.GetClientNextProto(c.conn)
@@ -508,15 +507,15 @@ func (c *clientConn) authenticate(ctx context.Context) (ClientAuthentication, ks
 			perr = pberror.NewError(pberror.Code_AuthenticationFailed, "authentication failed: %v", err)
 		}
 		if err := proto.Write(authStream, &pbclient.AuthenticateResp{Error: perr}); err != nil {
-			return nil, ksuid.Nil, fmt.Errorf("client auth err write: %w", err)
+			return nil, ClientIDNil, fmt.Errorf("client auth err write: %w", err)
 		}
-		return nil, ksuid.Nil, fmt.Errorf("auth failed: %w", perr)
+		return nil, ClientIDNil, fmt.Errorf("auth failed: %w", perr)
 	}
 
-	var id ksuid.KSUID
-	if sid, err := c.server.reconnect.openID(req.ReconnectToken); err != nil {
+	var id ClientID
+	if sid, err := c.server.reconnect.openClientID(req.ReconnectToken); err != nil {
 		c.logger.Debug("decode failed", "err", err)
-		id = ksuid.New()
+		id = NewClientID()
 	} else {
 		id = sid
 	}
@@ -525,12 +524,12 @@ func (c *clientConn) authenticate(ctx context.Context) (ClientAuthentication, ks
 	if err != nil {
 		err := pberror.NewError(pberror.Code_AuthenticationFailed, "cannot resolve origin: %v", err)
 		if err := proto.Write(authStream, &pbclient.AuthenticateResp{Error: err}); err != nil {
-			return nil, ksuid.Nil, fmt.Errorf("client auth err write: %w", err)
+			return nil, ClientIDNil, fmt.Errorf("client auth err write: %w", err)
 		}
-		return nil, ksuid.Nil, fmt.Errorf("client addr port from net: %w", err)
+		return nil, ClientIDNil, fmt.Errorf("client addr port from net: %w", err)
 	}
 
-	retoken, err := c.server.reconnect.sealID(id)
+	retoken, err := c.server.reconnect.sealClientID(id)
 	if err != nil {
 		c.logger.Debug("encrypting failed", "err", err)
 		retoken = nil
@@ -539,7 +538,7 @@ func (c *clientConn) authenticate(ctx context.Context) (ClientAuthentication, ks
 		Public:         origin,
 		ReconnectToken: retoken,
 	}); err != nil {
-		return nil, ksuid.Nil, fmt.Errorf("client auth write: %w", err)
+		return nil, ClientIDNil, fmt.Errorf("client auth write: %w", err)
 	}
 
 	c.logger.Debug("authentication completed", "local", c.conn.LocalAddr(), "remote", c.conn.RemoteAddr(), "proto", protocol, "build", req.BuildVersion)
@@ -705,13 +704,13 @@ func (s *clientStream) relay(ctx context.Context, req *pbclient.Request_Relay) e
 
 	g.Go(func() error {
 		defer s.conn.logger.Debug("completed relay notify")
-		return s.conn.server.relays.Client(ctx, endpoint, role, clientCert, s.conn.auth, func(relays map[ksuid.KSUID]relayCacheValue) error {
+		return s.conn.server.relays.Client(ctx, endpoint, role, clientCert, s.conn.auth, func(relays map[RelayID]relayCacheValue) error {
 			s.conn.logger.Debug("updated relay list", "relays", len(relays))
 
 			var addrs []*pbclient.Relay
 			for id, value := range relays {
 				addrs = append(addrs, &pbclient.Relay{
-					Id:                id.String(),
+					Id:                id.string,
 					Addresses:         iterc.MapSlice(value.Hostports, model.HostPort.PB),
 					ServerCertificate: value.Cert.Raw,
 				})

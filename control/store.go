@@ -3,16 +3,12 @@ package control
 import (
 	"crypto/x509"
 	"encoding/json"
-	"errors"
-	"io/fs"
-	"os"
 	"path/filepath"
 
 	"github.com/connet-dev/connet/certc"
 	"github.com/connet-dev/connet/logc"
 	"github.com/connet-dev/connet/model"
 	"github.com/connet-dev/connet/proto/pbclient"
-	"github.com/segmentio/ksuid"
 )
 
 type Stores interface {
@@ -23,7 +19,7 @@ type Stores interface {
 
 	RelayConns() (logc.KV[RelayConnKey, RelayConnValue], error)
 	RelayClients() (logc.KV[RelayClientKey, RelayClientValue], error)
-	RelayEndpoints(id ksuid.KSUID) (logc.KV[RelayEndpointKey, RelayEndpointValue], error)
+	RelayEndpoints(id RelayID) (logc.KV[RelayEndpointKey, RelayEndpointValue], error)
 	RelayServers() (logc.KV[RelayServerKey, RelayServerValue], error)
 	RelayServerOffsets() (logc.KV[RelayConnKey, int64], error)
 }
@@ -56,12 +52,8 @@ func (f *fileStores) RelayClients() (logc.KV[RelayClientKey, RelayClientValue], 
 	return logc.NewKV[RelayClientKey, RelayClientValue](filepath.Join(f.dir, "relay-clients"))
 }
 
-func (f *fileStores) RelayEndpoints(id ksuid.KSUID) (logc.KV[RelayEndpointKey, RelayEndpointValue], error) {
-	dir := filepath.Join(f.dir, "relay-forwards", id.String())
-	if _, err := os.Stat(dir); errors.Is(err, fs.ErrNotExist) {
-		return logc.NewKV[RelayEndpointKey, RelayEndpointValue](filepath.Join(f.dir, "relay-endpoints", id.String()))
-	}
-	return logc.NewKV[RelayEndpointKey, RelayEndpointValue](dir)
+func (f *fileStores) RelayEndpoints(id RelayID) (logc.KV[RelayEndpointKey, RelayEndpointValue], error) {
+	return logc.NewKV[RelayEndpointKey, RelayEndpointValue](filepath.Join(f.dir, "relay-endpoints", id.string))
 }
 
 func (f *fileStores) RelayServers() (logc.KV[RelayServerKey, RelayServerValue], error) {
@@ -89,7 +81,7 @@ type ConfigValue struct {
 }
 
 type ClientConnKey struct {
-	ID ksuid.KSUID `json:"id"`
+	ID ClientID `json:"id"`
 }
 
 type ClientConnValue struct {
@@ -100,7 +92,7 @@ type ClientConnValue struct {
 type ClientPeerKey struct {
 	Endpoint model.Endpoint `json:"endpoint"`
 	Role     model.Role     `json:"role"`
-	ID       ksuid.KSUID    `json:"id"` // TODO consider using the server cert key
+	ID       ClientID       `json:"id"` // TODO consider using the server cert key or peer id
 }
 
 type ClientPeerValue struct {
@@ -113,7 +105,7 @@ type cacheKey struct {
 }
 
 type RelayConnKey struct {
-	ID ksuid.KSUID `json:"id"`
+	ID RelayID `json:"id"`
 }
 
 type RelayConnValue struct {
@@ -187,7 +179,7 @@ func (v *RelayEndpointValue) UnmarshalJSON(b []byte) error {
 
 type RelayServerKey struct {
 	Endpoint model.Endpoint `json:"endpoint"`
-	RelayID  ksuid.KSUID    `json:"relay_id"`
+	RelayID  RelayID        `json:"relay_id"`
 }
 
 type RelayServerValue struct {

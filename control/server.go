@@ -9,7 +9,6 @@ import (
 	"github.com/connet-dev/connet/logc"
 	"github.com/connet-dev/connet/model"
 	"github.com/connet-dev/connet/reliable"
-	"github.com/segmentio/ksuid"
 )
 
 type Config struct {
@@ -147,17 +146,17 @@ type Status struct {
 }
 
 type StatusClient struct {
-	ID   ksuid.KSUID `json:"id"`
-	Addr string      `json:"addr"`
+	ID   ClientID `json:"id"`
+	Addr string   `json:"addr"`
 }
 
 type StatusPeer struct {
-	ID       ksuid.KSUID    `json:"id"`
+	ID       ClientID       `json:"id"`
 	Role     model.Role     `json:"role"`
 	Endpoint model.Endpoint `json:"endpoint"`
 }
 
 type StatusRelay struct {
-	ID        ksuid.KSUID `json:"id"`
-	Hostports []string    `json:"hostport"`
+	ID        RelayID  `json:"id"`
+	Hostports []string `json:"hostport"`
 }
