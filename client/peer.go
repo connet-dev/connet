@@ -208,26 +208,30 @@ func (p *peer) runPeers(ctx context.Context) error {
 		p.logger.Debug("peers updated", "len", len(peers))
 
 		activeIDs := map[string]struct{}{}
+		var toAdd []*pbclient.RemotePeer
 		for _, sp := range peers {
 			activeIDs[sp.Id] = struct{}{}
-			prg := peersByID[sp.Id]
-			if prg != nil {
-				fmt.Println(" =============== update peer", sp.Id)
+			if prg := peersByID[sp.Id]; prg != nil {
+				p.logger.Debug("updating peer", "id", sp.Id)
 				prg.remote.Set(sp)
 			} else {
-				fmt.Println(" =============== new peer", sp.Id)
-				prg = newPeering(p, sp, p.logger)
-				peersByID[sp.Id] = prg
-				go prg.run(ctx)
+				toAdd = append(toAdd, sp)
 			}
 		}
 
 		for id, prg := range peersByID {
 			if _, ok := activeIDs[id]; !ok {
-				fmt.Println(" =============== delete peer", id)
+				p.logger.Debug("deleting peer", "id", id)
 				prg.stop()
 				delete(peersByID, id)
 			}
+		}
+
+		for _, sp := range toAdd {
+			p.logger.Debug("adding peer", "id", sp.Id)
+			prg := newPeering(p, sp, p.logger)
+			peersByID[sp.Id] = prg
+			go prg.run(ctx)
 		}
 
 		return nil
