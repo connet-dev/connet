@@ -146,6 +146,18 @@ func (p *directPeer) runRemote(ctx context.Context) error {
 
 var errClosed = errors.New("closed")
 
+func isPeerTerminalError(err error) bool {
+	switch {
+	case errors.Is(err, context.Canceled):
+		return true
+	case errors.Is(err, errClosed):
+		return true
+	case errors.Is(err, errPeeringStop):
+		return true
+	}
+	return false
+}
+
 type directPeerIncoming struct {
 	parent     *directPeer
 	clientCert *x509.Certificate
@@ -170,10 +182,7 @@ func (p *directPeerIncoming) run(ctx context.Context) {
 		conn, err := p.connect(ctx)
 		if err != nil {
 			p.logger.Debug("could not connect", "err", err)
-			switch {
-			case errors.Is(err, context.Canceled):
-				return
-			case errors.Is(err, errClosed):
+			if isPeerTerminalError(err) {
 				return
 			}
 
@@ -191,12 +200,7 @@ func (p *directPeerIncoming) run(ctx context.Context) {
 
 		if err := p.keepalive(ctx, conn); err != nil {
 			p.logger.Debug("keepalive failed", "err", err)
-			switch {
-			case errors.Is(err, context.Canceled):
-				return
-			case errors.Is(err, errClosed):
-				return
-			case errors.Is(err, errPeeringStop):
+			if isPeerTerminalError(err) {
 				return
 			}
 		}
@@ -284,10 +288,7 @@ func (p *directPeerOutgoing) run(ctx context.Context) {
 		conn, err := p.connect(ctx)
 		if err != nil {
 			p.logger.Debug("could not connect", "err", err)
-			switch {
-			case errors.Is(err, context.Canceled):
-				return
-			case errors.Is(err, errPeeringStop):
+			if isPeerTerminalError(err) {
 				return
 			}
 
@@ -305,12 +306,7 @@ func (p *directPeerOutgoing) run(ctx context.Context) {
 
 		if err := p.keepalive(ctx, conn); err != nil {
 			p.logger.Debug("keepalive failed", "err", err)
-			switch {
-			case errors.Is(err, context.Canceled):
-				return
-			case errors.Is(err, errClosed):
-				return
-			case errors.Is(err, errPeeringStop):
+			if isPeerTerminalError(err) {
 				return
 			}
 		}
@@ -330,9 +326,7 @@ func (p *directPeerOutgoing) connect(ctx context.Context) (*quic.Conn, error) {
 			NextProtos:   model.ConnectDirectNextProtos,
 		}, quicc.StdConfig)
 		switch {
-		case errors.Is(err, context.Canceled):
-			return nil, err
-		case errors.Is(err, errPeeringStop):
+		case isPeerTerminalError(err):
 			return nil, err
 		case err != nil:
 			errs = append(errs, err)
