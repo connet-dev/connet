@@ -100,15 +100,16 @@ func (s *DirectServer) expect(serverCert tls.Certificate, cert *x509.Certificate
 	defer srv.mu.Unlock()
 
 	s.logger.Debug("expect client", "server", srv.serverName, "cert", key)
-	ch := make(chan *quic.Conn)
-	srv.clients[key] = &vClient{cert: cert, ch: ch}
-	return ch, func() {
+	cl := &vClient{cert: cert, ch: make(chan *quic.Conn)}
+	srv.clients[key] = cl
+	return cl.ch, func() {
+		close(cl.ch)
+
 		srv.mu.Lock()
 		defer srv.mu.Unlock()
 
-		if exp, ok := srv.clients[key]; ok {
+		if exp, ok := srv.clients[key]; ok && exp == cl {
 			s.logger.Debug("unexpect client", "server", srv.serverName, "cert", key)
-			close(exp.ch)
 			delete(srv.clients, key)
 		}
 	}
