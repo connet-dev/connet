@@ -48,7 +48,9 @@ func (s *reconnectToken) openClientID(encryptedID []byte) (ClientID, error) {
 	if err != nil {
 		return ClientIDNil, err
 	}
-	// TODO check legnth, if 20 decode?
+	if len(data) == 20 {
+		return ClientIDNil, fmt.Errorf("force rekey client id")
+	}
 	return ClientID{string(data)}, nil
 }
 
@@ -61,6 +63,8 @@ func (s *reconnectToken) openRelayID(encryptedID []byte) (RelayID, error) {
 	if err != nil {
 		return RelayIDNil, err
 	}
-	// TODO check legnth, if 20 decode?
+	if len(data) == 20 {
+		return RelayIDNil, fmt.Errorf("force rekey relay id")
+	}
 	return RelayID{string(data)}, nil
 }
