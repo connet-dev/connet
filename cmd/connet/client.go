@@ -88,9 +88,6 @@ func clientCmd() *cobra.Command {
 
 	cmd.Flags().StringVar(&flagsConfig.Client.ServerAddr, "server-addr", "", "control server address (UDP/QUIC, host:port) (defaults to '127.0.0.1:19190')")
 	cmd.Flags().StringVar(&flagsConfig.Client.ServerCAsFile, "server-cas-file", "", "control server TLS certificate authorities file, when not using public CAs")
-	if err := cmd.Flags().MarkHidden("server-cas"); err != nil {
-		slog.Warn("cannot to mark hidden", "err", err)
-	}
 
 	cmd.Flags().StringVar(&flagsConfig.Client.DirectAddr, "direct-addr", "", "direct server address to listen for peer connections (UDP/QUIC, [host]:port) (defaults to ':19192')")
 	addStatusAddrFlag(cmd, &flagsConfig.Client.StatusAddr)

@@ -56,9 +56,6 @@ func relayCmd() *cobra.Command {
 
 	cmd.Flags().StringVar(&flagsConfig.Relay.ControlAddr, "control-addr", "", "control server address (UDP/QUIC, host:port) (defaults to '127.0.0.1:19189')")
 	cmd.Flags().StringVar(&flagsConfig.Relay.ControlCAsFile, "control-cas-file", "", "control server TLS certificate authorities file, when not using public CAs")
-	if err := cmd.Flags().MarkHidden("control-cas"); err != nil {
-		slog.Warn("cannot to mark hidden", "err", err)
-	}
 
 	addStatusAddrFlag(cmd, &flagsConfig.Relay.StatusAddr)
 	addStoreDirFlag(cmd, &flagsConfig.Relay.StoreDir)
