@@ -71,9 +71,6 @@ func newClientServer(
 
 	reactivate := map[ClientConnKey][]ClientPeerKey{}
 	for _, msg := range connsMsgs {
-		if len(msg.Key.ID.string) == 27 { // TODO remove in v0.11.0
-			continue
-		}
 		reactivate[msg.Key] = []ClientPeerKey{}
 	}
 
@@ -654,13 +651,6 @@ func (s *clientStream) announce(ctx context.Context, req *pbclient.Request_Annou
 
 	g.Go(func() error {
 		defer s.conn.logger.Debug("completed sources notify")
-		// TODO remove in v0.11.0
-		if err := proto.Write(s.stream, &pbclient.Response{
-			Announce: &pbclient.Response_Announce{},
-		}); err != nil {
-			return fmt.Errorf("client announce write: %w", err)
-		}
-
 		return s.conn.server.listen(ctx, endpoint, role.Invert(), func(peers []*pbclient.RemotePeer) error {
 			s.conn.logger.Debug("updated sources list", "peers", len(peers))
 

@@ -81,6 +81,17 @@ func (p *directPeer) stop() {
 }
 
 func (p *directPeer) runRemote(ctx context.Context) error {
+	defer func() {
+		if p.incoming != nil {
+			close(p.incoming.closer)
+		}
+		if p.outgoing != nil {
+			close(p.outgoing.closer)
+		}
+		if p.relays != nil {
+			close(p.relays.closerCh)
+		}
+	}()
 	return p.remote.Listen(ctx, func(remote *pbclient.RemotePeer) error {
 		if p.local.isDirect() && len(remote.Peer.Directs) > 0 {
 			if p.incoming == nil {
@@ -185,6 +196,8 @@ func (p *directPeerIncoming) run(ctx context.Context) {
 				return
 			case errors.Is(err, errClosed):
 				return
+			case errors.Is(err, errPeeringStop):
+				return
 			}
 		}
 	}
@@ -271,7 +284,10 @@ func (p *directPeerOutgoing) run(ctx context.Context) {
 		conn, err := p.connect(ctx)
 		if err != nil {
 			p.logger.Debug("could not connect", "err", err)
-			if errors.Is(err, context.Canceled) {
+			switch {
+			case errors.Is(err, context.Canceled):
+				return
+			case errors.Is(err, errPeeringStop):
 				return
 			}
 
@@ -294,6 +310,8 @@ func (p *directPeerOutgoing) run(ctx context.Context) {
 				return
 			case errors.Is(err, errClosed):
 				return
+			case errors.Is(err, errPeeringStop):
+				return
 			}
 		}
 	}
@@ -313,6 +331,8 @@ func (p *directPeerOutgoing) connect(ctx context.Context) (*quic.Conn, error) {
 		}, quicc.StdConfig)
 		switch {
 		case errors.Is(err, context.Canceled):
+			return nil, err
+		case errors.Is(err, errPeeringStop):
 			return nil, err
 		case err != nil:
 			errs = append(errs, err)

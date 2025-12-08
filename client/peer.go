@@ -212,8 +212,10 @@ func (p *peer) runPeers(ctx context.Context) error {
 			activeIDs[sp.Id] = struct{}{}
 			prg := peersByID[sp.Id]
 			if prg != nil {
+				fmt.Println(" =============== update peer", sp.Id)
 				prg.remote.Set(sp)
 			} else {
+				fmt.Println(" =============== new peer", sp.Id)
 				prg = newPeering(p, sp, p.logger)
 				peersByID[sp.Id] = prg
 				go prg.run(ctx)
@@ -222,6 +224,7 @@ func (p *peer) runPeers(ctx context.Context) error {
 
 		for id, prg := range peersByID {
 			if _, ok := activeIDs[id]; !ok {
+				fmt.Println(" =============== delete peer", id)
 				prg.stop()
 				delete(peersByID, id)
 			}
