@@ -38,7 +38,7 @@ type remotePeer struct {
 	logger *slog.Logger
 }
 
-func newPeering(local *peer, remote *pbclient.RemotePeer, logger *slog.Logger) *remotePeer {
+func newRemotePeer(local *peer, remote *pbclient.RemotePeer, logger *slog.Logger) *remotePeer {
 	return &remotePeer{
 		local: local,
 

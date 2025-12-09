@@ -148,7 +148,7 @@ func (p *peer) run(ctx context.Context) error {
 }
 
 func (p *peer) runRelays(ctx context.Context) error {
-	relayPeers := map[relayID]*relayPeer{}
+	runningRelays := map[relayID]*relay{}
 	return p.relays.Listen(ctx, func(relays []*pbclient.Relay) error {
 		p.logger.Debug("relays updated", "len", len(relays))
 
@@ -163,22 +163,22 @@ func (p *peer) runRelays(ctx context.Context) error {
 			if err != nil {
 				return err
 			}
-			if rlg := relayPeers[id]; rlg != nil {
+			if rlg := runningRelays[id]; rlg != nil {
 				p.logger.Debug("updating relay", "id", id)
 				rlg.serverConf.Store(cfg)
 			} else {
-				p.logger.Debug("adding relay", "id", id)
-				rlg = newRelayPeer(p, id, hps, cfg, p.logger)
-				relayPeers[id] = rlg
+				p.logger.Debug("starting relay", "id", id)
+				rlg = newRelay(p, id, hps, cfg, p.logger)
+				runningRelays[id] = rlg
 				go rlg.run(ctx)
 			}
 		}
 
-		for id, relay := range relayPeers {
+		for id, relay := range runningRelays {
 			if _, ok := activeRelays[id]; !ok {
-				p.logger.Debug("deleting relay", "id", id)
+				p.logger.Debug("stopping relay", "id", id)
 				relay.stop()
-				delete(relayPeers, id)
+				delete(runningRelays, id)
 			}
 		}
 
@@ -206,34 +206,34 @@ func (p *peer) runShareRelays(ctx context.Context) error {
 }
 
 func (p *peer) runPeers(ctx context.Context) error {
-	peersByID := map[string]*remotePeer{}
+	runningPeers := map[string]*remotePeer{}
 	return p.peers.Listen(ctx, func(peers []*pbclient.RemotePeer) error {
 		p.logger.Debug("peers updated", "len", len(peers))
 
-		activeIDs := map[string]struct{}{}
+		activePeers := map[string]struct{}{}
 		var toAdd []*pbclient.RemotePeer
 		for _, sp := range peers {
-			activeIDs[sp.Id] = struct{}{}
-			if prg := peersByID[sp.Id]; prg != nil {
-				p.logger.Debug("updating peer", "id", sp.Id)
+			activePeers[sp.Id] = struct{}{}
+			if prg := runningPeers[sp.Id]; prg != nil {
+				p.logger.Debug("updating remote peer", "id", sp.Id)
 				prg.remote.Set(sp)
 			} else {
 				toAdd = append(toAdd, sp)
 			}
 		}
 
-		for id, prg := range peersByID {
-			if _, ok := activeIDs[id]; !ok {
-				p.logger.Debug("deleting peer", "id", id)
+		for id, prg := range runningPeers {
+			if _, ok := activePeers[id]; !ok {
+				p.logger.Debug("stopping remote peer", "id", id)
 				prg.stop()
-				delete(peersByID, id)
+				delete(runningPeers, id)
 			}
 		}
 
 		for _, sp := range toAdd {
-			p.logger.Debug("adding peer", "id", sp.Id)
-			prg := newPeering(p, sp, p.logger)
-			peersByID[sp.Id] = prg
+			p.logger.Debug("starting remote peer", "id", sp.Id)
+			prg := newRemotePeer(p, sp, p.logger)
+			runningPeers[sp.Id] = prg
 			go prg.run(ctx)
 		}
 

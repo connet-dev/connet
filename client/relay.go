@@ -23,7 +23,7 @@ import (
 
 type relayID string
 
-type relayPeer struct {
+type relay struct {
 	local *peer
 
 	serverID        relayID
@@ -35,8 +35,8 @@ type relayPeer struct {
 	logger *slog.Logger
 }
 
-func newRelayPeer(local *peer, id relayID, hps []model.HostPort, serverConf *serverTLSConfig, logger *slog.Logger) *relayPeer {
-	r := &relayPeer{
+func newRelay(local *peer, id relayID, hps []model.HostPort, serverConf *serverTLSConfig, logger *slog.Logger) *relay {
+	r := &relay{
 		local:           local,
 		serverID:        id,
 		serverHostports: hps,
@@ -47,7 +47,7 @@ func newRelayPeer(local *peer, id relayID, hps []model.HostPort, serverConf *ser
 	return r
 }
 
-func (r *relayPeer) run(ctx context.Context) {
+func (r *relay) run(ctx context.Context) {
 	g, ctx := errgroup.WithContext(ctx)
 
 	g.Go(func() error { return r.runConn(ctx) })
@@ -61,7 +61,7 @@ func (r *relayPeer) run(ctx context.Context) {
 	}
 }
 
-func (r *relayPeer) runConn(ctx context.Context) error {
+func (r *relay) runConn(ctx context.Context) error {
 	boff := reliable.MinBackoff
 	for {
 		conn, err := r.connectAny(ctx)
@@ -87,7 +87,7 @@ func (r *relayPeer) runConn(ctx context.Context) error {
 	}
 }
 
-func (r *relayPeer) connectAny(ctx context.Context) (*quic.Conn, error) {
+func (r *relay) connectAny(ctx context.Context) (*quic.Conn, error) {
 	for _, hp := range r.serverHostports {
 		if conn, err := r.connect(ctx, hp); err != nil {
 			r.logger.Debug("cannot connet relay", "hostport", hp, "err", err)
@@ -98,7 +98,7 @@ func (r *relayPeer) connectAny(ctx context.Context) (*quic.Conn, error) {
 	return nil, fmt.Errorf("cannot connect to relay: %s", r.serverID)
 }
 
-func (r *relayPeer) connect(ctx context.Context, hp model.HostPort) (*quic.Conn, error) {
+func (r *relay) connect(ctx context.Context, hp model.HostPort) (*quic.Conn, error) {
 	addr, err := net.ResolveUDPAddr("udp", hp.String())
 	if err != nil {
 		return nil, err
@@ -123,7 +123,7 @@ func (r *relayPeer) connect(ctx context.Context, hp model.HostPort) (*quic.Conn,
 	return conn, nil
 }
 
-func (r *relayPeer) check(ctx context.Context, conn *quic.Conn) error {
+func (r *relay) check(ctx context.Context, conn *quic.Conn) error {
 	stream, err := conn.OpenStreamSync(ctx)
 	if err != nil {
 		return err
@@ -144,7 +144,7 @@ func (r *relayPeer) check(ctx context.Context, conn *quic.Conn) error {
 	return nil
 }
 
-func (r *relayPeer) keepalive(ctx context.Context, conn *quic.Conn) error {
+func (r *relay) keepalive(ctx context.Context, conn *quic.Conn) error {
 	defer func() {
 		if err := conn.CloseWithError(quic.ApplicationErrorCode(pberror.Code_RelayKeepaliveClosed), "keepalive closed"); err != nil {
 			slogc.Fine(r.logger, "error closing connection", "err", err)
@@ -167,6 +167,6 @@ func (r *relayPeer) keepalive(ctx context.Context, conn *quic.Conn) error {
 	}
 }
 
-func (r *relayPeer) stop() {
+func (r *relay) stop() {
 	close(r.closer)
 }
