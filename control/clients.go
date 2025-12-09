@@ -421,8 +421,12 @@ type clientConn struct {
 	conn   *quic.Conn
 	logger *slog.Logger
 
-	auth ClientAuthentication
+	clientConnAuth
+}
+
+type clientConnAuth struct {
 	id   ClientID
+	auth ClientAuthentication
 }
 
 func (c *clientConn) run(ctx context.Context) {
@@ -439,7 +443,7 @@ func (c *clientConn) run(ctx context.Context) {
 }
 
 func (c *clientConn) runErr(ctx context.Context) error {
-	if auth, id, err := c.authenticate(ctx); err != nil {
+	if auth, err := c.authenticate(ctx); err != nil {
 		if perr := pberror.GetError(err); perr != nil {
 			cerr := c.conn.CloseWithError(quic.ApplicationErrorCode(perr.Code), perr.Message)
 			err = errors.Join(perr, cerr)
@@ -449,9 +453,8 @@ func (c *clientConn) runErr(ctx context.Context) error {
 		}
 		return err
 	} else {
-		c.auth = auth
-		c.id = id
-		c.logger = c.logger.With("client-id", id)
+		c.clientConnAuth = *auth
+		c.logger = c.logger.With("client-id", c.id)
 	}
 
 	if err := c.server.connected(c.id, c.auth, c.conn.RemoteAddr()); err != nil {
@@ -477,11 +480,11 @@ func (c *clientConn) runErr(ctx context.Context) error {
 	}
 }
 
-func (c *clientConn) authenticate(ctx context.Context) (ClientAuthentication, ClientID, error) {
+func (c *clientConn) authenticate(ctx context.Context) (*clientConnAuth, error) {
 	c.logger.Debug("waiting for authentication")
 	authStream, err := c.conn.AcceptStream(ctx)
 	if err != nil {
-		return nil, ClientIDNil, fmt.Errorf("client auth stream: %w", err)
+		return nil, fmt.Errorf("client auth stream: %w", err)
 	}
 	defer func() {
 		if err := authStream.Close(); err != nil {
@@ -491,7 +494,7 @@ func (c *clientConn) authenticate(ctx context.Context) (ClientAuthentication, Cl
 
 	req := &pbclient.Authenticate{}
 	if err := proto.Read(authStream, req); err != nil {
-		return nil, ClientIDNil, fmt.Errorf("client auth read: %w", err)
+		return nil, fmt.Errorf("client auth read: %w", err)
 	}
 
 	protocol := model.GetClientNextProto(c.conn)
@@ -507,9 +510,9 @@ func (c *clientConn) authenticate(ctx context.Context) (ClientAuthentication, Cl
 			perr = pberror.NewError(pberror.Code_AuthenticationFailed, "authentication failed: %v", err)
 		}
 		if err := proto.Write(authStream, &pbclient.AuthenticateResp{Error: perr}); err != nil {
-			return nil, ClientIDNil, fmt.Errorf("client auth err write: %w", err)
+			return nil, fmt.Errorf("client auth err write: %w", err)
 		}
-		return nil, ClientIDNil, fmt.Errorf("auth failed: %w", perr)
+		return nil, fmt.Errorf("auth failed: %w", perr)
 	}
 
 	var id ClientID
@@ -524,9 +527,9 @@ func (c *clientConn) authenticate(ctx context.Context) (ClientAuthentication, Cl
 	if err != nil {
 		err := pberror.NewError(pberror.Code_AuthenticationFailed, "cannot resolve origin: %v", err)
 		if err := proto.Write(authStream, &pbclient.AuthenticateResp{Error: err}); err != nil {
-			return nil, ClientIDNil, fmt.Errorf("client auth err write: %w", err)
+			return nil, fmt.Errorf("client auth err write: %w", err)
 		}
-		return nil, ClientIDNil, fmt.Errorf("client addr port from net: %w", err)
+		return nil, fmt.Errorf("client addr port from net: %w", err)
 	}
 
 	retoken, err := c.server.reconnect.sealClientID(id)
@@ -538,11 +541,11 @@ func (c *clientConn) authenticate(ctx context.Context) (ClientAuthentication, Cl
 		Public:         origin,
 		ReconnectToken: retoken,
 	}); err != nil {
-		return nil, ClientIDNil, fmt.Errorf("client auth write: %w", err)
+		return nil, fmt.Errorf("client auth write: %w", err)
 	}
 
 	c.logger.Debug("authentication completed", "local", c.conn.LocalAddr(), "remote", c.conn.RemoteAddr(), "proto", protocol, "build", req.BuildVersion)
-	return auth, id, nil
+	return &clientConnAuth{id, auth}, nil
 }
 
 type clientStream struct {

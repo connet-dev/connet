@@ -371,9 +371,7 @@ type relayConn struct {
 	logger *slog.Logger
 
 	endpoints logc.KV[RelayEndpointKey, RelayEndpointValue]
-	id        RelayID
-	auth      RelayAuthentication
-	hostports []model.HostPort
+	relayConnAuth
 }
 
 type relayConnAuth struct {
@@ -405,9 +403,7 @@ func (c *relayConn) runErr(ctx context.Context) error {
 		}
 		return err
 	} else {
-		c.id = rauth.id
-		c.auth = rauth.auth
-		c.hostports = rauth.hostports
+		c.relayConnAuth = *rauth
 		c.logger = c.logger.With("relay", c.hostports)
 	}
 

@@ -164,8 +164,10 @@ func (p *peer) runRelays(ctx context.Context) error {
 				return err
 			}
 			if rlg := relayPeers[id]; rlg != nil {
+				p.logger.Debug("updating relay", "id", id)
 				rlg.serverConf.Store(cfg)
 			} else {
+				p.logger.Debug("adding relay", "id", id)
 				rlg = newRelayPeer(p, id, hps, cfg, p.logger)
 				relayPeers[id] = rlg
 				go rlg.run(ctx)
@@ -174,6 +176,7 @@ func (p *peer) runRelays(ctx context.Context) error {
 
 		for id, relay := range relayPeers {
 			if _, ok := activeRelays[id]; !ok {
+				p.logger.Debug("deleting relay", "id", id)
 				relay.stop()
 				delete(relayPeers, id)
 			}
@@ -203,7 +206,7 @@ func (p *peer) runShareRelays(ctx context.Context) error {
 }
 
 func (p *peer) runPeers(ctx context.Context) error {
-	peersByID := map[string]*directPeer{}
+	peersByID := map[string]*remotePeer{}
 	return p.peers.Listen(ctx, func(peers []*pbclient.RemotePeer) error {
 		p.logger.Debug("peers updated", "len", len(peers))
 
