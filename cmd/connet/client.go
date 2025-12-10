@@ -159,7 +159,7 @@ func clientRun(ctx context.Context, cfg ClientConfig, logger *slog.Logger) error
 		opts = append(opts, connet.ClientControlAddress(cfg.ServerAddr))
 	}
 	if cfg.ServerCAsFile != "" {
-		opts = append(opts, connet.ClientControlCAs(cfg.ServerCAsFile))
+		opts = append(opts, connet.ClientControlCAsFile(cfg.ServerCAsFile))
 	}
 
 	if cfg.DirectAddr != "" {

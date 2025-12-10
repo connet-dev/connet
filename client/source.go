@@ -85,7 +85,7 @@ func (cfg SourceConfig) WithLoadBalance(policy model.LoadBalancePolicy, retry mo
 	return cfg
 }
 
-type Source struct {
+type source struct {
 	cfg    SourceConfig
 	logger *slog.Logger
 
@@ -102,7 +102,7 @@ type sourceConn struct {
 	conn *quic.Conn
 }
 
-func NewSource(cfg SourceConfig, direct *DirectServer, logger *slog.Logger) (*Source, error) {
+func newSource(cfg SourceConfig, direct *DirectServer, logger *slog.Logger) (*source, error) {
 	logger = logger.With("source", cfg.Endpoint)
 	p, err := newPeer(direct, logger)
 	if err != nil {
@@ -116,7 +116,7 @@ func NewSource(cfg SourceConfig, direct *DirectServer, logger *slog.Logger) (*So
 		connsTracking = map[peerID]*atomic.Int32{}
 	}
 
-	return &Source{
+	return &source{
 		cfg:    cfg,
 		logger: logger,
 
@@ -126,18 +126,18 @@ func NewSource(cfg SourceConfig, direct *DirectServer, logger *slog.Logger) (*So
 	}, nil
 }
 
-func (s *Source) Config() SourceConfig {
+func (s *source) Config() SourceConfig {
 	return s.cfg
 }
 
-func (s *Source) RunPeer(ctx context.Context) error {
+func (s *source) RunPeer(ctx context.Context) error {
 	return reliable.RunGroup(ctx,
 		s.peer.run,
 		s.runActive,
 	)
 }
 
-func (s *Source) RunAnnounce(ctx context.Context, conn *quic.Conn, directAddrs *notify.V[AdvertiseAddrs], notifyResponse func(error)) error {
+func (s *source) RunAnnounce(ctx context.Context, conn *quic.Conn, directAddrs *notify.V[AdvertiseAddrs], notifyResponse func(error)) error {
 	pc := &peerControl{
 		local:    s.peer,
 		endpoint: s.cfg.Endpoint,
@@ -162,11 +162,11 @@ func (s *Source) RunAnnounce(ctx context.Context, conn *quic.Conn, directAddrs *
 	return pc.run(ctx)
 }
 
-func (s *Source) PeerStatus() (PeerStatus, error) {
+func (s *source) PeerStatus() (PeerStatus, error) {
 	return s.peer.status()
 }
 
-func (s *Source) runActive(ctx context.Context) error {
+func (s *source) runActive(ctx context.Context) error {
 	return s.peer.activeConnsListen(ctx, func(active map[peerConnKey]*quic.Conn) error {
 		s.logger.Debug("active conns", "len", len(active))
 
@@ -181,7 +181,7 @@ func (s *Source) runActive(ctx context.Context) error {
 
 var ErrNoActiveDestinations = errors.New("no active destinations")
 
-func (s *Source) findActive() ([]sourceConn, error) {
+func (s *source) findActive() ([]sourceConn, error) {
 	conns := s.conns.Load()
 	if conns == nil || len(*conns) == 0 {
 		return nil, ErrNoActiveDestinations
@@ -209,7 +209,7 @@ type peerSourceConn struct {
 	conns []sourceConn
 }
 
-func (s *Source) findActiveByPeer() ([]peerSourceConn, error) {
+func (s *source) findActiveByPeer() ([]peerSourceConn, error) {
 	conns := s.conns.Load()
 	if conns == nil || len(*conns) == 0 {
 		return nil, ErrNoActiveDestinations
@@ -239,13 +239,13 @@ func (s *Source) findActiveByPeer() ([]peerSourceConn, error) {
 	}
 }
 
-func (s *Source) leastLatencySorted(conns []peerSourceConn) []peerSourceConn {
+func (s *source) leastLatencySorted(conns []peerSourceConn) []peerSourceConn {
 	return slices.SortedFunc(slices.Values(conns), func(l, r peerSourceConn) int {
 		return rttCompare(l.conns[0], r.conns[0])
 	})
 }
 
-func (s *Source) leastConnsSortedByPeer(conns []peerSourceConn) []peerSourceConn {
+func (s *source) leastConnsSortedByPeer(conns []peerSourceConn) []peerSourceConn {
 	s.connsTrackingMu.RLock()
 	connsTracking := maps.Clone(s.connsTracking)
 	s.connsTrackingMu.RUnlock()
@@ -273,7 +273,7 @@ func (s *Source) leastConnsSortedByPeer(conns []peerSourceConn) []peerSourceConn
 	})
 }
 
-func (s *Source) roundRobinSorted(conns []peerSourceConn) []peerSourceConn {
+func (s *source) roundRobinSorted(conns []peerSourceConn) []peerSourceConn {
 	slices.SortStableFunc(conns, func(l, r peerSourceConn) int {
 		return strings.Compare(string(l.id), string(r.id))
 	})
@@ -282,7 +282,7 @@ func (s *Source) roundRobinSorted(conns []peerSourceConn) []peerSourceConn {
 	return append(conns[startFrom:], conns[:startFrom]...)
 }
 
-func (s *Source) randomSorted(conns []peerSourceConn) []peerSourceConn {
+func (s *source) randomSorted(conns []peerSourceConn) []peerSourceConn {
 	random := make([]peerSourceConn, 0, len(conns))
 	for len(conns) > 0 {
 		ix := rand.IntN(len(conns))
@@ -292,13 +292,13 @@ func (s *Source) randomSorted(conns []peerSourceConn) []peerSourceConn {
 	return random
 }
 
-func (s *Source) Dial(network, address string) (net.Conn, error) {
+func (s *source) Dial(network, address string) (net.Conn, error) {
 	return s.DialContext(context.Background(), network, address)
 }
 
 var ErrNoDialedDestinations = errors.New("no dialed destinations")
 
-func (s *Source) DialContext(ctx context.Context, network, address string) (net.Conn, error) {
+func (s *source) DialContext(ctx context.Context, network, address string) (net.Conn, error) {
 	if s.cfg.DestinationPolicy == model.NoPolicy {
 		conns, err := s.findActive()
 		if err != nil {
@@ -331,7 +331,7 @@ func (s *Source) DialContext(ctx context.Context, network, address string) (net.
 	return s.dialInOrder(ctx, conns)
 }
 
-func (s *Source) dialInOrder(ctx context.Context, conns []sourceConn) (net.Conn, error) {
+func (s *source) dialInOrder(ctx context.Context, conns []sourceConn) (net.Conn, error) {
 	var errs []error
 	for _, dest := range conns {
 		if conn, err := s.dial(ctx, dest); err != nil {
@@ -346,7 +346,7 @@ func (s *Source) dialInOrder(ctx context.Context, conns []sourceConn) (net.Conn,
 	return nil, fmt.Errorf("%w: %w", ErrNoDialedDestinations, errors.Join(errs...))
 }
 
-func (s *Source) dial(ctx context.Context, dest sourceConn) (net.Conn, error) {
+func (s *source) dial(ctx context.Context, dest sourceConn) (net.Conn, error) {
 	if s.cfg.DialTimeout > 0 {
 		timeoutCtx, timeoutCancel := context.WithTimeout(ctx, s.cfg.DialTimeout)
 		ctx = timeoutCtx
@@ -392,7 +392,7 @@ func (s *Source) dial(ctx context.Context, dest sourceConn) (net.Conn, error) {
 	return conn, nil
 }
 
-func (s *Source) dialStream(ctx context.Context, dest sourceConn, stream *quic.Stream) (net.Conn, error) {
+func (s *source) dialStream(ctx context.Context, dest sourceConn, stream *quic.Stream) (net.Conn, error) {
 	var srcSecret *ecdh.PrivateKey
 
 	connect := &pbconnect.Request_Connect{}
@@ -473,7 +473,7 @@ func (s *Source) dialStream(ctx context.Context, dest sourceConn, stream *quic.S
 	return proxyProto.Wrap(encStream), nil
 }
 
-func (s *Source) getDestinationTLS(name string) (*tls.Config, error) {
+func (s *source) getDestinationTLS(name string) (*tls.Config, error) {
 	remotes, err := s.peer.peers.Peek()
 	if err != nil {
 		return nil, fmt.Errorf("destination peers list: %w", err)

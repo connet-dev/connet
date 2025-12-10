@@ -1,4 +1,4 @@
-package connet
+package client
 
 import (
 	"context"
@@ -8,17 +8,10 @@ import (
 	"sync"
 	"sync/atomic"
 
-	"github.com/connet-dev/connet/client"
 	"github.com/connet-dev/connet/notify"
 	"github.com/connet-dev/connet/statusc"
 	"github.com/quic-go/quic-go"
 )
-
-// DestinationConfig structure represents destination configuration. See [Client.DestinationConfig]
-type DestinationConfig = client.DestinationConfig
-
-// NewDestinationConfig creates a destination config for a given name. See [client.NewDestinationConfig]
-var NewDestinationConfig = client.NewDestinationConfig
 
 // Destination is type of endpoint that can receive remote connections and traffic.
 // It implements net.Listener interface, so it
@@ -36,12 +29,6 @@ type Destination interface {
 	Close() error
 }
 
-// SourceConfig structure represents source configuration. See [Client.SourceConfig]
-type SourceConfig = client.SourceConfig
-
-// NewSourceConfig creates a destination config for a given name. See [client.NewSourceConfig]
-var NewSourceConfig = client.NewSourceConfig
-
 type Source interface {
 	Config() SourceConfig
 	Context() context.Context
@@ -57,21 +44,16 @@ type Source interface {
 
 type EndpointStatus struct {
 	Status statusc.Status
-	Peer   client.PeerStatus
+	Peer   PeerStatus
 }
 
-var (
-	ErrNoActiveDestinations = client.ErrNoActiveDestinations
-	ErrNoDialedDestinations = client.ErrNoDialedDestinations
-)
-
 type clientDestination struct {
-	*client.Destination
+	*destination
 	*clientEndpoint
 }
 
 func newClientDestination(ctx context.Context, cl *Client, cfg DestinationConfig) (*clientDestination, error) {
-	dst, err := client.NewDestination(cfg, cl.directServer, cl.logger)
+	dst, err := newDestination(cfg, cl.directServer, cl.logger)
 	if err != nil {
 		return nil, err
 	}
@@ -87,12 +69,12 @@ func newClientDestination(ctx context.Context, cl *Client, cfg DestinationConfig
 }
 
 type clientSource struct {
-	*client.Source
+	*source
 	*clientEndpoint
 }
 
 func newClientSource(ctx context.Context, cl *Client, cfg SourceConfig) (*clientSource, error) {
-	src, err := client.NewSource(cfg, cl.directServer, cl.logger)
+	src, err := newSource(cfg, cl.directServer, cl.logger)
 	if err != nil {
 		return nil, err
 	}
@@ -109,8 +91,8 @@ func newClientSource(ctx context.Context, cl *Client, cfg SourceConfig) (*client
 
 type endpoint interface {
 	RunPeer(ctx context.Context) error
-	RunAnnounce(ctx context.Context, conn *quic.Conn, directAddrs *notify.V[client.AdvertiseAddrs], firstReport func(error)) error
-	PeerStatus() (client.PeerStatus, error)
+	RunAnnounce(ctx context.Context, conn *quic.Conn, directAddrs *notify.V[AdvertiseAddrs], firstReport func(error)) error
+	PeerStatus() (PeerStatus, error)
 }
 
 type clientEndpoint struct {

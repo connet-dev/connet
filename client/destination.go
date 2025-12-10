@@ -64,7 +64,7 @@ func (cfg DestinationConfig) WithDialTimeout(timeout time.Duration) DestinationC
 	return cfg
 }
 
-type Destination struct {
+type destination struct {
 	cfg    DestinationConfig
 	logger *slog.Logger
 
@@ -74,7 +74,7 @@ type Destination struct {
 	acceptCh chan net.Conn
 }
 
-func NewDestination(cfg DestinationConfig, direct *DirectServer, logger *slog.Logger) (*Destination, error) {
+func newDestination(cfg DestinationConfig, direct *DirectServer, logger *slog.Logger) (*destination, error) {
 	logger = logger.With("destination", cfg.Endpoint)
 	p, err := newPeer(direct, logger)
 	if err != nil {
@@ -84,7 +84,7 @@ func NewDestination(cfg DestinationConfig, direct *DirectServer, logger *slog.Lo
 		p.expectDirect()
 	}
 
-	return &Destination{
+	return &destination{
 		cfg:    cfg,
 		logger: logger,
 
@@ -95,11 +95,11 @@ func NewDestination(cfg DestinationConfig, direct *DirectServer, logger *slog.Lo
 	}, nil
 }
 
-func (d *Destination) Config() DestinationConfig {
+func (d *destination) Config() DestinationConfig {
 	return d.cfg
 }
 
-func (d *Destination) RunPeer(ctx context.Context) error {
+func (d *destination) RunPeer(ctx context.Context) error {
 	defer close(d.acceptCh)
 
 	return reliable.RunGroup(ctx,
@@ -108,7 +108,7 @@ func (d *Destination) RunPeer(ctx context.Context) error {
 	)
 }
 
-func (d *Destination) RunAnnounce(ctx context.Context, conn *quic.Conn, directAddrs *notify.V[AdvertiseAddrs], notifyResponse func(error)) error {
+func (d *destination) RunAnnounce(ctx context.Context, conn *quic.Conn, directAddrs *notify.V[AdvertiseAddrs], notifyResponse func(error)) error {
 	pc := &peerControl{
 		local:    d.peer,
 		endpoint: d.cfg.Endpoint,
@@ -133,11 +133,11 @@ func (d *Destination) RunAnnounce(ctx context.Context, conn *quic.Conn, directAd
 	return pc.run(ctx)
 }
 
-func (d *Destination) Accept() (net.Conn, error) {
+func (d *destination) Accept() (net.Conn, error) {
 	return d.AcceptContext(context.Background())
 }
 
-func (d *Destination) AcceptContext(ctx context.Context) (net.Conn, error) {
+func (d *destination) AcceptContext(ctx context.Context) (net.Conn, error) {
 	select {
 	case <-ctx.Done():
 		return nil, ctx.Err()
@@ -149,11 +149,11 @@ func (d *Destination) AcceptContext(ctx context.Context) (net.Conn, error) {
 	}
 }
 
-func (d *Destination) PeerStatus() (PeerStatus, error) {
+func (d *destination) PeerStatus() (PeerStatus, error) {
 	return d.peer.status()
 }
 
-func (d *Destination) runActive(ctx context.Context) error {
+func (d *destination) runActive(ctx context.Context) error {
 	return d.peer.activeConnsListen(ctx, func(active map[peerConnKey]*quic.Conn) error {
 		d.logger.Debug("active conns", "len", len(active))
 		for peer, conn := range active {
@@ -181,7 +181,7 @@ func (d *Destination) runActive(ctx context.Context) error {
 }
 
 type destinationConn struct {
-	dst    *Destination
+	dst    *destination
 	peer   peerConnKey
 	conn   *quic.Conn
 	logger *slog.Logger
@@ -189,7 +189,7 @@ type destinationConn struct {
 	closer chan struct{}
 }
 
-func newDestinationConn(dst *Destination, peer peerConnKey, conn *quic.Conn, logger *slog.Logger) *destinationConn {
+func newDestinationConn(dst *destination, peer peerConnKey, conn *quic.Conn, logger *slog.Logger) *destinationConn {
 	return &destinationConn{
 		dst, peer, conn,
 		logger.With("peer", peer.id, "style", peer.style),
@@ -341,7 +341,7 @@ func (d *destinationConn) close() {
 	close(d.closer)
 }
 
-func (d *Destination) getSourceTLS(name string) (*tls.Config, error) {
+func (d *destination) getSourceTLS(name string) (*tls.Config, error) {
 	remotes, err := d.peer.peers.Peek()
 	if err != nil {
 		return nil, fmt.Errorf("source peers list: %w", err)

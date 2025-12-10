@@ -222,7 +222,7 @@ func TestE2E(t *testing.T) {
 		clIPDeny, err := Connect(ctx,
 			ClientToken("test-token-deny-ip"),
 			ClientControlAddress("localhost:20000"),
-			clientControlCAs(cas),
+			ClientControlCAs(cas),
 			ClientDirectAddress(":20002"),
 			ClientLogger(logger.With("test", "cl-ip-deny")),
 		)
@@ -233,7 +233,7 @@ func TestE2E(t *testing.T) {
 		clNameDeny, err := Connect(ctx,
 			ClientToken("test-token-deny-name"),
 			ClientControlAddress("localhost:20000"),
-			clientControlCAs(cas),
+			ClientControlCAs(cas),
 			ClientDirectAddress(":20002"),
 			ClientLogger(logger.With("test", "cl-name-deny")),
 		)
@@ -248,7 +248,7 @@ func TestE2E(t *testing.T) {
 		clRoleDeny, err := Connect(ctx,
 			ClientToken("test-token-deny-role"),
 			ClientControlAddress("localhost:20000"),
-			clientControlCAs(cas),
+			ClientControlCAs(cas),
 			ClientDirectAddress(":20003"),
 			ClientLogger(logger.With("test", "cl-role-deny")),
 		)
@@ -263,7 +263,7 @@ func TestE2E(t *testing.T) {
 		cl, err := Connect(ctx,
 			ClientToken("test-token-dst"),
 			ClientControlAddress("localhost:20000"),
-			clientControlCAs(cas),
+			ClientControlCAs(cas),
 			ClientDirectAddress(":20002"),
 			ClientLogger(logger.With("test", "cl-dst")),
 		)
@@ -307,7 +307,7 @@ func TestE2E(t *testing.T) {
 		cl, err := Connect(clCtx,
 			ClientToken("test-token-dst"),
 			ClientControlAddress("localhost:20000"),
-			clientControlCAs(cas),
+			ClientControlCAs(cas),
 			ClientDirectAddress(":20002"),
 			ClientLogger(logger.With("test", "cl-dst")),
 		)
@@ -358,7 +358,7 @@ func TestE2E(t *testing.T) {
 		cl, err := Connect(ctx,
 			ClientToken("test-token-dst"),
 			ClientControlAddress("localhost:20000"),
-			clientControlCAs(cas),
+			ClientControlCAs(cas),
 			ClientDirectAddress(":20002"),
 			ClientLogger(logger.With("test", "cl-dst")),
 		)
@@ -375,7 +375,7 @@ func TestE2E(t *testing.T) {
 		cl, err := Connect(ctx,
 			ClientToken("test-token-dst"),
 			ClientControlAddress("localhost:20000"),
-			clientControlCAs(cas),
+			ClientControlCAs(cas),
 			ClientDirectAddress(":20002"),
 			ClientLogger(logger.With("test", "cl-dst")),
 		)
@@ -401,7 +401,7 @@ func TestE2E(t *testing.T) {
 	clDst, err := Connect(ctx,
 		ClientToken("test-token-dst"),
 		ClientControlAddress("localhost:20000"),
-		clientControlCAs(cas),
+		ClientControlCAs(cas),
 		ClientDirectAddress(":20002"),
 		ClientLogger(logger.With("test", "cl-dst")),
 	)
@@ -410,7 +410,7 @@ func TestE2E(t *testing.T) {
 	clSrc, err := Connect(ctx,
 		ClientToken("test-token-src"),
 		ClientControlAddress("localhost:20000"),
-		clientControlCAs(cas),
+		ClientControlCAs(cas),
 		ClientDirectAddress(":20003"),
 		ClientLogger(logger.With("test", "cl-src")),
 	)
@@ -646,14 +646,6 @@ func echoServer(ctx context.Context, l net.Listener) error {
 
 			_ = netc.Join(conn, conn)
 		}()
-	}
-}
-
-func clientControlCAs(cas *x509.CertPool) ClientOption {
-	return func(cfg *clientConfig) error {
-		cfg.controlCAs = cas
-
-		return nil
 	}
 }
 

@@ -1,4 +1,4 @@
-package connet
+package client
 
 import (
 	"crypto/rand"
@@ -16,7 +16,7 @@ import (
 	"github.com/quic-go/quic-go"
 )
 
-type clientConfig struct {
+type config struct {
 	token string
 
 	controlAddr *net.UDPAddr
@@ -31,8 +31,8 @@ type clientConfig struct {
 	logger *slog.Logger
 }
 
-func newClientConfig(opts []ClientOption) (*clientConfig, error) {
-	cfg := &clientConfig{
+func newConfig(opts []Option) (*config, error) {
+	cfg := &config{
 		natPMP: nat.PMPConfig{
 			LocalResolver:   nat.LocalIPSystemResolver(),
 			GatewayResolver: nat.GatewayIPSystemResolver(),
@@ -75,17 +75,17 @@ func newClientConfig(opts []ClientOption) (*clientConfig, error) {
 	return cfg, nil
 }
 
-type ClientOption func(cfg *clientConfig) error
+type Option func(cfg *config) error
 
-func ClientToken(token string) ClientOption {
-	return func(cfg *clientConfig) error {
+func ClientToken(token string) Option {
+	return func(cfg *config) error {
 		cfg.token = token
 		return nil
 	}
 }
 
-func ClientTokenFromEnv() ClientOption {
-	return func(cfg *clientConfig) error {
+func ClientTokenFromEnv() Option {
+	return func(cfg *config) error {
 		if connetToken := os.Getenv("CONNET_TOKEN"); connetToken != "" {
 			cfg.token = connetToken
 		}
@@ -93,8 +93,8 @@ func ClientTokenFromEnv() ClientOption {
 	}
 }
 
-func ClientControlAddress(address string) ClientOption {
-	return func(cfg *clientConfig) error {
+func ClientControlAddress(address string) Option {
+	return func(cfg *config) error {
 		if i := strings.LastIndex(address, ":"); i < 0 {
 			// missing :port, lets give it the default
 			address = fmt.Sprintf("%s:%d", address, 19190)
@@ -115,8 +115,8 @@ func ClientControlAddress(address string) ClientOption {
 	}
 }
 
-func ClientControlCAs(certFile string) ClientOption {
-	return func(cfg *clientConfig) error {
+func ClientControlCAsFile(certFile string) Option {
+	return func(cfg *config) error {
 		casData, err := os.ReadFile(certFile)
 		if err != nil {
 			return fmt.Errorf("read server CAs: %w", err)
@@ -133,8 +133,16 @@ func ClientControlCAs(certFile string) ClientOption {
 	}
 }
 
-func ClientDirectAddress(address string) ClientOption {
-	return func(cfg *clientConfig) error {
+func ClientControlCAs(cas *x509.CertPool) Option {
+	return func(cfg *config) error {
+		cfg.controlCAs = cas
+
+		return nil
+	}
+}
+
+func ClientDirectAddress(address string) Option {
+	return func(cfg *config) error {
 		addr, err := net.ResolveUDPAddr("udp", address)
 		if err != nil {
 			return fmt.Errorf("resolve direct address: %w", err)
@@ -146,15 +154,15 @@ func ClientDirectAddress(address string) ClientOption {
 	}
 }
 
-func ClientDirectStatelessResetKey(key *quic.StatelessResetKey) ClientOption {
-	return func(cfg *clientConfig) error {
+func ClientDirectStatelessResetKey(key *quic.StatelessResetKey) Option {
+	return func(cfg *config) error {
 		cfg.directResetKey = key
 		return nil
 	}
 }
 
-func ClientDirectStatelessResetKeyFile(path string) ClientOption {
-	return func(cfg *clientConfig) error {
+func ClientDirectStatelessResetKeyFile(path string) Option {
+	return func(cfg *config) error {
 		keyBytes, err := os.ReadFile(path)
 		if err != nil {
 			return fmt.Errorf("read stateless reset key: %w", err)
@@ -170,8 +178,8 @@ func ClientDirectStatelessResetKeyFile(path string) ClientOption {
 	}
 }
 
-func ClientDirectStatelessResetKeyFromEnv() ClientOption {
-	return func(cfg *clientConfig) error {
+func ClientDirectStatelessResetKeyFromEnv() Option {
+	return func(cfg *config) error {
 		var name = fmt.Sprintf("stateless-reset-%s.key",
 			strings.TrimPrefix(strings.ReplaceAll(cfg.directAddr.String(), ":", "-"), "-"))
 
@@ -230,15 +238,15 @@ func ClientDirectStatelessResetKeyFromEnv() ClientOption {
 	}
 }
 
-func ClientNatPMPConfig(pmp nat.PMPConfig) ClientOption {
-	return func(cfg *clientConfig) error {
+func ClientNatPMPConfig(pmp nat.PMPConfig) Option {
+	return func(cfg *config) error {
 		cfg.natPMP = pmp
 		return nil
 	}
 }
 
-func ClientLogger(logger *slog.Logger) ClientOption {
-	return func(cfg *clientConfig) error {
+func ClientLogger(logger *slog.Logger) Option {
+	return func(cfg *config) error {
 		cfg.logger = logger
 		return nil
 	}

@@ -1,4 +1,4 @@
-package connet
+package client
 
 import (
 	"context"
