@@ -214,7 +214,7 @@ func clientRun(ctx context.Context, cfg ClientConfig, logger *slog.Logger) error
 	}
 
 	destinations := map[string]connet.DestinationConfig{}
-	destinationHandlers := map[string]newrunnable[connet.Destination]{}
+	destinationHandlers := map[string]newrunnable[*connet.Destination]{}
 	for name, fc := range cfg.Destinations {
 		dstCfg, handler, err := fc.parse(name, defaultRelayEncryptions, logger)
 		if err != nil {
@@ -224,7 +224,7 @@ func clientRun(ctx context.Context, cfg ClientConfig, logger *slog.Logger) error
 	}
 
 	sources := map[string]connet.SourceConfig{}
-	sourceHandlers := map[string]newrunnable[connet.Source]{}
+	sourceHandlers := map[string]newrunnable[*connet.Source]{}
 	for name, fc := range cfg.Sources {
 		srcCfg, handler, err := fc.parse(name, defaultRelayEncryptions, logger)
 		if err != nil {
@@ -280,8 +280,8 @@ func clientRun(ctx context.Context, cfg ClientConfig, logger *slog.Logger) error
 	return g.Wait()
 }
 
-func (fc DestinationConfig) parse(name string, defaultRelayEncryptions []model.EncryptionScheme, logger *slog.Logger) (connet.DestinationConfig, newrunnable[connet.Destination], error) {
-	var retErr = func(err error) (connet.DestinationConfig, newrunnable[connet.Destination], error) {
+func (fc DestinationConfig) parse(name string, defaultRelayEncryptions []model.EncryptionScheme, logger *slog.Logger) (connet.DestinationConfig, newrunnable[*connet.Destination], error) {
+	var retErr = func(err error) (connet.DestinationConfig, newrunnable[*connet.Destination], error) {
 		return connet.DestinationConfig{}, nil, err
 	}
 
@@ -354,7 +354,7 @@ func (fc DestinationConfig) parse(name string, defaultRelayEncryptions []model.E
 		}
 	}
 
-	handler := func(dst connet.Destination) runnable {
+	handler := func(dst *connet.Destination) runnable {
 		switch targetURL.Scheme {
 		case "tcp":
 			return connet.NewTCPDestination(dst, targetURL.Host, dstCfg.DialTimeout, logger)
@@ -386,8 +386,8 @@ func (fc DestinationConfig) parse(name string, defaultRelayEncryptions []model.E
 	return dstCfg, handler, nil
 }
 
-func (fc SourceConfig) parse(name string, defaultRelayEncryptions []model.EncryptionScheme, logger *slog.Logger) (connet.SourceConfig, newrunnable[connet.Source], error) {
-	var retErr = func(err error) (connet.SourceConfig, newrunnable[connet.Source], error) {
+func (fc SourceConfig) parse(name string, defaultRelayEncryptions []model.EncryptionScheme, logger *slog.Logger) (connet.SourceConfig, newrunnable[*connet.Source], error) {
+	var retErr = func(err error) (connet.SourceConfig, newrunnable[*connet.Source], error) {
 		return connet.SourceConfig{}, nil, err
 	}
 
@@ -462,7 +462,7 @@ func (fc SourceConfig) parse(name string, defaultRelayEncryptions []model.Encryp
 		}
 	}
 
-	handler := func(src connet.Source) runnable {
+	handler := func(src *connet.Source) runnable {
 		switch targetURL.Scheme {
 		case "tcp":
 			return connet.NewTCPSource(src, targetURL.Host, logger)

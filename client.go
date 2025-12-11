@@ -32,9 +32,9 @@ type Client struct {
 
 	directServer *directServer
 
-	destinations   map[model.Endpoint]*clientDestination
+	destinations   map[model.Endpoint]*Destination
 	destinationsMu sync.RWMutex
-	sources        map[model.Endpoint]*clientSource
+	sources        map[model.Endpoint]*Source
 	sourcesMu      sync.RWMutex
 
 	connStatus     atomic.Value
@@ -59,8 +59,8 @@ func Connect(ctx context.Context, opts ...Option) (*Client, error) {
 	c := &Client{
 		config: *cfg,
 
-		destinations: map[model.Endpoint]*clientDestination{},
-		sources:      map[model.Endpoint]*clientSource{},
+		destinations: map[model.Endpoint]*Destination{},
+		sources:      map[model.Endpoint]*Source{},
 
 		currentSession: notify.New[*session](nil),
 		closer:         make(chan struct{}),
@@ -136,7 +136,7 @@ func (c *Client) Destinations() []string {
 }
 
 // GetDestination returns a destination by its name. Returns an error if the destination was not found.
-func (c *Client) GetDestination(name string) (Destination, error) {
+func (c *Client) GetDestination(name string) (*Destination, error) {
 	c.destinationsMu.RLock()
 	defer c.destinationsMu.RUnlock()
 
@@ -150,7 +150,7 @@ func (c *Client) GetDestination(name string) (Destination, error) {
 // Destination starts a new destination with a given configuration.
 // This call blocks until it is successfully announced to the control server.
 // The destination can be closed either via cancelling the context or calling its close func.
-func (c *Client) Destination(ctx context.Context, cfg DestinationConfig) (Destination, error) {
+func (c *Client) Destination(ctx context.Context, cfg DestinationConfig) (*Destination, error) {
 	c.destinationsMu.Lock()
 	defer c.destinationsMu.Unlock()
 
@@ -158,7 +158,7 @@ func (c *Client) Destination(ctx context.Context, cfg DestinationConfig) (Destin
 		return nil, fmt.Errorf("destination %s already exists, remove old one first", cfg.Endpoint)
 	}
 
-	clDst, err := newClientDestination(ctx, c, cfg)
+	clDst, err := newDestination(ctx, c, cfg)
 	if err != nil {
 		return nil, err
 	}
@@ -185,7 +185,7 @@ func (c *Client) Sources() []string {
 }
 
 // GetSource returns a source by its name. Returns an error if the source was not found.
-func (c *Client) GetSource(name string) (Source, error) {
+func (c *Client) GetSource(name string) (*Source, error) {
 	c.sourcesMu.RLock()
 	defer c.sourcesMu.RUnlock()
 
@@ -199,7 +199,7 @@ func (c *Client) GetSource(name string) (Source, error) {
 // Source starts a new source with a given configuration.
 // This call blocks until it is successfully announced to the control server.
 // The source can be closed either via cancelling the context or calling its close func.
-func (c *Client) Source(ctx context.Context, cfg SourceConfig) (Source, error) {
+func (c *Client) Source(ctx context.Context, cfg SourceConfig) (*Source, error) {
 	c.sourcesMu.Lock()
 	defer c.sourcesMu.Unlock()
 
@@ -207,7 +207,7 @@ func (c *Client) Source(ctx context.Context, cfg SourceConfig) (Source, error) {
 		return nil, fmt.Errorf("source %s already exists, remove old one first", cfg.Endpoint)
 	}
 
-	clSrc, err := newClientSource(ctx, c, cfg)
+	clSrc, err := newSource(ctx, c, cfg)
 	if err != nil {
 		return nil, err
 	}
@@ -416,12 +416,12 @@ type ClientStatus struct {
 func (c *Client) Status(ctx context.Context) (ClientStatus, error) {
 	stat := c.connStatus.Load().(statusc.Status)
 
-	dsts, err := c.destinationsStatus(ctx)
+	dsts, err := c.destinationsStatus()
 	if err != nil {
 		return ClientStatus{}, err
 	}
 
-	srcs, err := c.sourcesStatus(ctx)
+	srcs, err := c.sourcesStatus()
 	if err != nil {
 		return ClientStatus{}, err
 	}
@@ -433,7 +433,7 @@ func (c *Client) Status(ctx context.Context) (ClientStatus, error) {
 	}, nil
 }
 
-func (c *Client) destinationsStatus(ctx context.Context) (map[model.Endpoint]EndpointStatus, error) {
+func (c *Client) destinationsStatus() (map[model.Endpoint]EndpointStatus, error) {
 	var err error
 	statuses := map[model.Endpoint]EndpointStatus{}
 
@@ -441,7 +441,7 @@ func (c *Client) destinationsStatus(ctx context.Context) (map[model.Endpoint]End
 	defer c.destinationsMu.RUnlock()
 
 	for ep, dst := range c.destinations {
-		statuses[ep], err = dst.Status(ctx)
+		statuses[ep], err = dst.Status()
 		if err != nil {
 			return nil, err
 		}
@@ -450,7 +450,7 @@ func (c *Client) destinationsStatus(ctx context.Context) (map[model.Endpoint]End
 	return statuses, nil
 }
 
-func (c *Client) sourcesStatus(ctx context.Context) (map[model.Endpoint]EndpointStatus, error) {
+func (c *Client) sourcesStatus() (map[model.Endpoint]EndpointStatus, error) {
 	var err error
 	statuses := map[model.Endpoint]EndpointStatus{}
 
@@ -458,7 +458,7 @@ func (c *Client) sourcesStatus(ctx context.Context) (map[model.Endpoint]Endpoint
 	defer c.sourcesMu.RUnlock()
 
 	for ep, src := range c.sources {
-		statuses[ep], err = src.Status(ctx)
+		statuses[ep], err = src.Status()
 		if err != nil {
 			return nil, err
 		}

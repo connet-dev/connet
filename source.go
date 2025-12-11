@@ -85,12 +85,13 @@ func (cfg SourceConfig) WithLoadBalance(policy model.LoadBalancePolicy, retry mo
 	return cfg
 }
 
-type source struct {
+type Source struct {
 	cfg    SourceConfig
 	logger *slog.Logger
 
 	peer  *peer
 	conns atomic.Pointer[[]sourceConn]
+	ep    *clientEndpoint
 
 	connsTracking   map[peerID]*atomic.Int32
 	connsTrackingMu sync.RWMutex
@@ -102,9 +103,9 @@ type sourceConn struct {
 	conn *quic.Conn
 }
 
-func newSource(cfg SourceConfig, direct *directServer, logger *slog.Logger) (*source, error) {
-	logger = logger.With("source", cfg.Endpoint)
-	p, err := newPeer(direct, logger)
+func newSource(ctx context.Context, cl *Client, cfg SourceConfig) (*Source, error) {
+	logger := cl.logger.With("source", cfg.Endpoint)
+	p, err := newPeer(cl.directServer, logger)
 	if err != nil {
 		return nil, err
 	}
@@ -116,28 +117,50 @@ func newSource(cfg SourceConfig, direct *directServer, logger *slog.Logger) (*so
 		connsTracking = map[peerID]*atomic.Int32{}
 	}
 
-	return &source{
+	src := &Source{
 		cfg:    cfg,
 		logger: logger,
 
 		peer: p,
 
 		connsTracking: connsTracking,
-	}, nil
+	}
+
+	ep, err := newClientEndpoint(ctx, cl, src, cl.logger.With("source", cfg.Endpoint), func() {
+		cl.removeSource(cfg.Endpoint)
+	})
+	if err != nil {
+		return nil, err
+	}
+	src.ep = ep
+
+	return src, nil
 }
 
-func (s *source) Config() SourceConfig {
+func (s *Source) Config() SourceConfig {
 	return s.cfg
 }
 
-func (s *source) runPeerErr(ctx context.Context) error {
+func (s *Source) Context() context.Context {
+	return s.ep.ctx
+}
+
+func (s *Source) Status() (EndpointStatus, error) {
+	return s.ep.status()
+}
+
+func (s *Source) Close() error {
+	return s.ep.close()
+}
+
+func (s *Source) runPeerErr(ctx context.Context) error {
 	return reliable.RunGroup(ctx,
 		s.peer.run,
 		s.runActive,
 	)
 }
 
-func (s *source) runAnnounceErr(ctx context.Context, conn *quic.Conn, directAddrs *notify.V[advertiseAddrs], notifyResponse func(error)) error {
+func (s *Source) runAnnounceErr(ctx context.Context, conn *quic.Conn, directAddrs *notify.V[advertiseAddrs], notifyResponse func(error)) error {
 	pc := &peerControl{
 		local:    s.peer,
 		endpoint: s.cfg.Endpoint,
@@ -162,11 +185,11 @@ func (s *source) runAnnounceErr(ctx context.Context, conn *quic.Conn, directAddr
 	return pc.run(ctx)
 }
 
-func (s *source) peerStatus() (PeerStatus, error) {
+func (s *Source) peerStatus() (PeerStatus, error) {
 	return s.peer.status()
 }
 
-func (s *source) runActive(ctx context.Context) error {
+func (s *Source) runActive(ctx context.Context) error {
 	return s.peer.activeConnsListen(ctx, func(active map[peerConnKey]*quic.Conn) error {
 		s.logger.Debug("active conns", "len", len(active))
 
@@ -181,7 +204,7 @@ func (s *source) runActive(ctx context.Context) error {
 
 var ErrNoActiveDestinations = errors.New("no active destinations")
 
-func (s *source) findActive() ([]sourceConn, error) {
+func (s *Source) findActive() ([]sourceConn, error) {
 	conns := s.conns.Load()
 	if conns == nil || len(*conns) == 0 {
 		return nil, ErrNoActiveDestinations
@@ -209,7 +232,7 @@ type peerSourceConn struct {
 	conns []sourceConn
 }
 
-func (s *source) findActiveByPeer() ([]peerSourceConn, error) {
+func (s *Source) findActiveByPeer() ([]peerSourceConn, error) {
 	conns := s.conns.Load()
 	if conns == nil || len(*conns) == 0 {
 		return nil, ErrNoActiveDestinations
@@ -239,13 +262,13 @@ func (s *source) findActiveByPeer() ([]peerSourceConn, error) {
 	}
 }
 
-func (s *source) leastLatencySorted(conns []peerSourceConn) []peerSourceConn {
+func (s *Source) leastLatencySorted(conns []peerSourceConn) []peerSourceConn {
 	return slices.SortedFunc(slices.Values(conns), func(l, r peerSourceConn) int {
 		return rttCompare(l.conns[0], r.conns[0])
 	})
 }
 
-func (s *source) leastConnsSortedByPeer(conns []peerSourceConn) []peerSourceConn {
+func (s *Source) leastConnsSortedByPeer(conns []peerSourceConn) []peerSourceConn {
 	s.connsTrackingMu.RLock()
 	connsTracking := maps.Clone(s.connsTracking)
 	s.connsTrackingMu.RUnlock()
@@ -273,7 +296,7 @@ func (s *source) leastConnsSortedByPeer(conns []peerSourceConn) []peerSourceConn
 	})
 }
 
-func (s *source) roundRobinSorted(conns []peerSourceConn) []peerSourceConn {
+func (s *Source) roundRobinSorted(conns []peerSourceConn) []peerSourceConn {
 	slices.SortStableFunc(conns, func(l, r peerSourceConn) int {
 		return strings.Compare(string(l.id), string(r.id))
 	})
@@ -282,7 +305,7 @@ func (s *source) roundRobinSorted(conns []peerSourceConn) []peerSourceConn {
 	return append(conns[startFrom:], conns[:startFrom]...)
 }
 
-func (s *source) randomSorted(conns []peerSourceConn) []peerSourceConn {
+func (s *Source) randomSorted(conns []peerSourceConn) []peerSourceConn {
 	random := make([]peerSourceConn, 0, len(conns))
 	for len(conns) > 0 {
 		ix := rand.IntN(len(conns))
@@ -292,13 +315,13 @@ func (s *source) randomSorted(conns []peerSourceConn) []peerSourceConn {
 	return random
 }
 
-func (s *source) Dial(network, address string) (net.Conn, error) {
+func (s *Source) Dial(network, address string) (net.Conn, error) {
 	return s.DialContext(context.Background(), network, address)
 }
 
 var ErrNoDialedDestinations = errors.New("no dialed destinations")
 
-func (s *source) DialContext(ctx context.Context, network, address string) (net.Conn, error) {
+func (s *Source) DialContext(ctx context.Context, network, address string) (net.Conn, error) {
 	if s.cfg.DestinationPolicy == model.NoPolicy {
 		conns, err := s.findActive()
 		if err != nil {
@@ -331,7 +354,7 @@ func (s *source) DialContext(ctx context.Context, network, address string) (net.
 	return s.dialInOrder(ctx, conns)
 }
 
-func (s *source) dialInOrder(ctx context.Context, conns []sourceConn) (net.Conn, error) {
+func (s *Source) dialInOrder(ctx context.Context, conns []sourceConn) (net.Conn, error) {
 	var errs []error
 	for _, dest := range conns {
 		if conn, err := s.dial(ctx, dest); err != nil {
@@ -346,7 +369,7 @@ func (s *source) dialInOrder(ctx context.Context, conns []sourceConn) (net.Conn,
 	return nil, fmt.Errorf("%w: %w", ErrNoDialedDestinations, errors.Join(errs...))
 }
 
-func (s *source) dial(ctx context.Context, dest sourceConn) (net.Conn, error) {
+func (s *Source) dial(ctx context.Context, dest sourceConn) (net.Conn, error) {
 	if s.cfg.DialTimeout > 0 {
 		timeoutCtx, timeoutCancel := context.WithTimeout(ctx, s.cfg.DialTimeout)
 		ctx = timeoutCtx
@@ -392,7 +415,7 @@ func (s *source) dial(ctx context.Context, dest sourceConn) (net.Conn, error) {
 	return conn, nil
 }
 
-func (s *source) dialStream(ctx context.Context, dest sourceConn, stream *quic.Stream) (net.Conn, error) {
+func (s *Source) dialStream(ctx context.Context, dest sourceConn, stream *quic.Stream) (net.Conn, error) {
 	var srcSecret *ecdh.PrivateKey
 
 	connect := &pbconnect.Request_Connect{}
@@ -473,7 +496,7 @@ func (s *source) dialStream(ctx context.Context, dest sourceConn, stream *quic.S
 	return proxyProto.Wrap(encStream), nil
 }
 
-func (s *source) getDestinationTLS(name string) (*tls.Config, error) {
+func (s *Source) getDestinationTLS(name string) (*tls.Config, error) {
 	remotes, err := s.peer.peers.Peek()
 	if err != nil {
 		return nil, fmt.Errorf("destination peers list: %w", err)

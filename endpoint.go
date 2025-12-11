@@ -13,80 +13,9 @@ import (
 	"github.com/quic-go/quic-go"
 )
 
-// Destination is type of endpoint that can receive remote connections and traffic.
-// It implements net.Listener interface, so it
-type Destination interface {
-	Config() DestinationConfig
-	Context() context.Context
-
-	Accept() (net.Conn, error)
-	AcceptContext(ctx context.Context) (net.Conn, error)
-
-	Client() *Client
-	Status(ctx context.Context) (EndpointStatus, error)
-
-	Addr() net.Addr
-	Close() error
-}
-
-type Source interface {
-	Config() SourceConfig
-	Context() context.Context
-
-	Dial(network, address string) (net.Conn, error)
-	DialContext(ctx context.Context, network, address string) (net.Conn, error)
-
-	Client() *Client
-	Status(ctx context.Context) (EndpointStatus, error)
-
-	Close() error
-}
-
 type EndpointStatus struct {
 	Status statusc.Status
 	Peer   PeerStatus
-}
-
-type clientDestination struct {
-	*destination
-	*clientEndpoint
-}
-
-func newClientDestination(ctx context.Context, cl *Client, cfg DestinationConfig) (*clientDestination, error) {
-	dst, err := newDestination(cfg, cl.directServer, cl.logger)
-	if err != nil {
-		return nil, err
-	}
-
-	ep, err := newClientEndpoint(ctx, cl, dst, cl.logger.With("destination", cfg.Endpoint), func() {
-		cl.removeDestination(cfg.Endpoint)
-	})
-	if err != nil {
-		return nil, err
-	}
-
-	return &clientDestination{dst, ep}, nil
-}
-
-type clientSource struct {
-	*source
-	*clientEndpoint
-}
-
-func newClientSource(ctx context.Context, cl *Client, cfg SourceConfig) (*clientSource, error) {
-	src, err := newSource(cfg, cl.directServer, cl.logger)
-	if err != nil {
-		return nil, err
-	}
-
-	ep, err := newClientEndpoint(ctx, cl, src, cl.logger.With("source", cfg.Endpoint), func() {
-		cl.removeSource(cfg.Endpoint)
-	})
-	if err != nil {
-		return nil, err
-	}
-
-	return &clientSource{src, ep}, nil
 }
 
 type endpoint interface {
@@ -160,15 +89,7 @@ func newClientEndpoint(ctx context.Context, cl *Client, ep endpoint, logger *slo
 	return cep, nil
 }
 
-func (e *clientEndpoint) Context() context.Context {
-	return e.ctx
-}
-
-func (e *clientEndpoint) Client() *Client {
-	return e.client
-}
-
-func (e *clientEndpoint) Status(ctx context.Context) (EndpointStatus, error) {
+func (e *clientEndpoint) status() (EndpointStatus, error) {
 	peerStatus, err := e.ep.peerStatus()
 	if err != nil {
 		return EndpointStatus{}, err
@@ -179,11 +100,7 @@ func (e *clientEndpoint) Status(ctx context.Context) (EndpointStatus, error) {
 	}, nil
 }
 
-func (e *clientEndpoint) Addr() net.Addr {
-	return e.client.directAddr
-}
-
-func (e *clientEndpoint) Close() error {
+func (e *clientEndpoint) close() error {
 	e.ctxCancel(net.ErrClosed)
 	<-e.closer
 	return nil

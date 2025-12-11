@@ -390,7 +390,7 @@ func TestE2E(t *testing.T) {
 
 		for {
 			time.Sleep(time.Millisecond)
-			stat, err := dst.Status(ctx)
+			stat, err := dst.Status()
 			require.NoError(t, err)
 			if stat.Status == statusc.Disconnected {
 				break

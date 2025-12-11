@@ -95,13 +95,13 @@ type dialer interface {
 }
 
 type TCPDestination struct {
-	dst    Destination
+	dst    *Destination
 	dialer dialer
 	addr   string
 	logger *slog.Logger
 }
 
-func newTCPDestination(dst Destination, d dialer, addr string, logger *slog.Logger) *TCPDestination {
+func newTCPDestination(dst *Destination, d dialer, addr string, logger *slog.Logger) *TCPDestination {
 	return &TCPDestination{
 		dst:    dst,
 		addr:   addr,
@@ -110,11 +110,11 @@ func newTCPDestination(dst Destination, d dialer, addr string, logger *slog.Logg
 	}
 }
 
-func NewTCPDestination(dst Destination, addr string, timeout time.Duration, logger *slog.Logger) *TCPDestination {
+func NewTCPDestination(dst *Destination, addr string, timeout time.Duration, logger *slog.Logger) *TCPDestination {
 	return newTCPDestination(dst, &net.Dialer{Timeout: timeout}, addr, logger)
 }
 
-func NewTLSDestination(dst Destination, addr string, cfg *tls.Config, timeout time.Duration, logger *slog.Logger) *TCPDestination {
+func NewTLSDestination(dst *Destination, addr string, cfg *tls.Config, timeout time.Duration, logger *slog.Logger) *TCPDestination {
 	return newTCPDestination(dst, &tls.Dialer{NetDialer: &net.Dialer{Timeout: timeout}, Config: cfg}, addr, logger)
 }
 
@@ -138,21 +138,22 @@ func (d *TCPDestination) Run(ctx context.Context) error {
 }
 
 type HTTPDestination struct {
-	dst     Destination
+	dst *Destination
+
 	handler http.Handler
 }
 
-func NewHTTPDestination(dst Destination, handler http.Handler) *HTTPDestination {
+func NewHTTPDestination(dst *Destination, handler http.Handler) *HTTPDestination {
 	return &HTTPDestination{dst, handler}
 }
 
-func NewHTTPFileDestination(dst Destination, root string) *HTTPDestination {
+func NewHTTPFileDestination(dst *Destination, root string) *HTTPDestination {
 	mux := http.NewServeMux()
 	mux.Handle("/", http.FileServer(http.Dir(root)))
 	return NewHTTPDestination(dst, mux)
 }
 
-func NewHTTPProxyDestination(dst Destination, dstURL *url.URL, cfg *tls.Config, timeout time.Duration) *HTTPDestination {
+func NewHTTPProxyDestination(dst *Destination, dstURL *url.URL, cfg *tls.Config, timeout time.Duration) *HTTPDestination {
 	return NewHTTPDestination(dst, &httputil.ReverseProxy{
 		Rewrite: func(pr *httputil.ProxyRequest) {
 			pr.SetURL(dstURL)

@@ -79,12 +79,12 @@ func (c *Client) SourceHTTPS(ctx context.Context, cfg SourceConfig, srcURL *url.
 }
 
 type TCPSource struct {
-	src    Source
+	src    *Source
 	bind   func(ctx context.Context) (net.Listener, error)
 	logger *slog.Logger
 }
 
-func NewTCPSource(src Source, addr string, logger *slog.Logger) *TCPSource {
+func NewTCPSource(src *Source, addr string, logger *slog.Logger) *TCPSource {
 	return &TCPSource{
 		src: src,
 		bind: func(ctx context.Context) (net.Listener, error) {
@@ -94,7 +94,7 @@ func NewTCPSource(src Source, addr string, logger *slog.Logger) *TCPSource {
 	}
 }
 
-func NewTLSSource(src Source, addr string, cfg *tls.Config, logger *slog.Logger) *TCPSource {
+func NewTLSSource(src *Source, addr string, cfg *tls.Config, logger *slog.Logger) *TCPSource {
 	return &TCPSource{
 		src: src,
 		bind: func(ctx context.Context) (net.Listener, error) {
@@ -150,12 +150,12 @@ func (s *TCPSource) Run(ctx context.Context) error {
 }
 
 type HTTPSource struct {
-	src    Source
+	src    *Source
 	srcURL *url.URL
 	cfg    *tls.Config
 }
 
-func NewHTTPSource(src Source, srcURL *url.URL, cfg *tls.Config) *HTTPSource {
+func NewHTTPSource(src *Source, srcURL *url.URL, cfg *tls.Config) *HTTPSource {
 	return &HTTPSource{src, srcURL, cfg}
 }
 
@@ -210,14 +210,14 @@ func (s *HTTPSource) Run(ctx context.Context) error {
 }
 
 type WSSource struct {
-	src      Source
+	src      *Source
 	srcURL   *url.URL
 	cfg      *tls.Config
 	logger   *slog.Logger
 	upgrader websocket.Upgrader
 }
 
-func NewWSSource(src Source, srcURL *url.URL, cfg *tls.Config, logger *slog.Logger) *WSSource {
+func NewWSSource(src *Source, srcURL *url.URL, cfg *tls.Config, logger *slog.Logger) *WSSource {
 	return &WSSource{
 		src, srcURL, cfg, logger, websocket.Upgrader{},
 	}
