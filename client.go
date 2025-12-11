@@ -49,7 +49,7 @@ type Client struct {
 // Connect starts a new client and connects it to the control server.
 // This call blocks until the server is connected or an error is detected.
 // The client can be stopped either by canceling this context or via calling Close. Stopping the client will also
-// stop all active source/destinations associated with this client
+// stop all active endpoints (destinations/sources) associated with this client
 func Connect(ctx context.Context, opts ...Option) (*Client, error) {
 	cfg, err := newConfig(opts)
 	if err != nil {
@@ -412,7 +412,7 @@ type ClientStatus struct {
 	Sources      map[model.Endpoint]EndpointStatus `json:"sources"`
 }
 
-// Status returns the client and all added peers statuses
+// Status returns status of the client and all active endpoints
 func (c *Client) Status(ctx context.Context) (ClientStatus, error) {
 	stat := c.connStatus.Load().(statusc.Status)
 
