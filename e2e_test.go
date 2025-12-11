@@ -221,22 +221,22 @@ func TestE2E(t *testing.T) {
 
 	t.Run("deny-ip", func(t *testing.T) {
 		clIPDeny, err := Connect(ctx,
-			ClientToken("test-token-deny-ip"),
-			ClientControlAddress("localhost:20000"),
-			ClientControlCAs(cas),
-			ClientDirectAddress(":20002"),
-			ClientLogger(logger.With("test", "cl-ip-deny")),
+			Token("test-token-deny-ip"),
+			ControlAddress("localhost:20000"),
+			ControlCAs(cas),
+			DirectAddress(":20002"),
+			Logger(logger.With("test", "cl-ip-deny")),
 		)
 		require.ErrorContains(t, err, "address not allowed")
 		require.Nil(t, clIPDeny)
 	})
 	t.Run("deny-name", func(t *testing.T) {
 		clNameDeny, err := Connect(ctx,
-			ClientToken("test-token-deny-name"),
-			ClientControlAddress("localhost:20000"),
-			ClientControlCAs(cas),
-			ClientDirectAddress(":20002"),
-			ClientLogger(logger.With("test", "cl-name-deny")),
+			Token("test-token-deny-name"),
+			ControlAddress("localhost:20000"),
+			ControlCAs(cas),
+			DirectAddress(":20002"),
+			Logger(logger.With("test", "cl-name-deny")),
 		)
 		require.NoError(t, err)
 		defer clNameDeny.Close()
@@ -247,11 +247,11 @@ func TestE2E(t *testing.T) {
 	})
 	t.Run("deny-role", func(t *testing.T) {
 		clRoleDeny, err := Connect(ctx,
-			ClientToken("test-token-deny-role"),
-			ClientControlAddress("localhost:20000"),
-			ClientControlCAs(cas),
-			ClientDirectAddress(":20003"),
-			ClientLogger(logger.With("test", "cl-role-deny")),
+			Token("test-token-deny-role"),
+			ControlAddress("localhost:20000"),
+			ControlCAs(cas),
+			DirectAddress(":20003"),
+			Logger(logger.With("test", "cl-role-deny")),
 		)
 		require.NoError(t, err)
 		defer clRoleDeny.Close()
@@ -262,11 +262,11 @@ func TestE2E(t *testing.T) {
 	})
 	t.Run("close-client", func(t *testing.T) {
 		cl, err := Connect(ctx,
-			ClientToken("test-token-dst"),
-			ClientControlAddress("localhost:20000"),
-			ClientControlCAs(cas),
-			ClientDirectAddress(":20002"),
-			ClientLogger(logger.With("test", "cl-dst")),
+			Token("test-token-dst"),
+			ControlAddress("localhost:20000"),
+			ControlCAs(cas),
+			DirectAddress(":20002"),
+			Logger(logger.With("test", "cl-dst")),
 		)
 		require.NoError(t, err)
 		require.NotNil(t, cl)
@@ -306,11 +306,11 @@ func TestE2E(t *testing.T) {
 	t.Run("cancel-client", func(t *testing.T) {
 		clCtx, clCancel := context.WithCancel(ctx)
 		cl, err := Connect(clCtx,
-			ClientToken("test-token-dst"),
-			ClientControlAddress("localhost:20000"),
-			ClientControlCAs(cas),
-			ClientDirectAddress(":20002"),
-			ClientLogger(logger.With("test", "cl-dst")),
+			Token("test-token-dst"),
+			ControlAddress("localhost:20000"),
+			ControlCAs(cas),
+			DirectAddress(":20002"),
+			Logger(logger.With("test", "cl-dst")),
 		)
 		require.NoError(t, err)
 		require.NotNil(t, cl)
@@ -357,11 +357,11 @@ func TestE2E(t *testing.T) {
 	})
 	t.Run("close-dst", func(t *testing.T) {
 		cl, err := Connect(ctx,
-			ClientToken("test-token-dst"),
-			ClientControlAddress("localhost:20000"),
-			ClientControlCAs(cas),
-			ClientDirectAddress(":20002"),
-			ClientLogger(logger.With("test", "cl-dst")),
+			Token("test-token-dst"),
+			ControlAddress("localhost:20000"),
+			ControlCAs(cas),
+			DirectAddress(":20002"),
+			Logger(logger.With("test", "cl-dst")),
 		)
 		require.NoError(t, err)
 		defer cl.Close()
@@ -374,11 +374,11 @@ func TestE2E(t *testing.T) {
 	})
 	t.Run("cancel-dst", func(t *testing.T) {
 		cl, err := Connect(ctx,
-			ClientToken("test-token-dst"),
-			ClientControlAddress("localhost:20000"),
-			ClientControlCAs(cas),
-			ClientDirectAddress(":20002"),
-			ClientLogger(logger.With("test", "cl-dst")),
+			Token("test-token-dst"),
+			ControlAddress("localhost:20000"),
+			ControlCAs(cas),
+			DirectAddress(":20002"),
+			Logger(logger.With("test", "cl-dst")),
 		)
 		require.NoError(t, err)
 		defer cl.Close()
@@ -400,20 +400,20 @@ func TestE2E(t *testing.T) {
 	})
 
 	clDst, err := Connect(ctx,
-		ClientToken("test-token-dst"),
-		ClientControlAddress("localhost:20000"),
-		ClientControlCAs(cas),
-		ClientDirectAddress(":20002"),
-		ClientLogger(logger.With("test", "cl-dst")),
+		Token("test-token-dst"),
+		ControlAddress("localhost:20000"),
+		ControlCAs(cas),
+		DirectAddress(":20002"),
+		Logger(logger.With("test", "cl-dst")),
 	)
 	require.NoError(t, err)
 
 	clSrc, err := Connect(ctx,
-		ClientToken("test-token-src"),
-		ClientControlAddress("localhost:20000"),
-		ClientControlCAs(cas),
-		ClientDirectAddress(":20003"),
-		ClientLogger(logger.With("test", "cl-src")),
+		Token("test-token-src"),
+		ControlAddress("localhost:20000"),
+		ControlCAs(cas),
+		DirectAddress(":20003"),
+		Logger(logger.With("test", "cl-src")),
 	)
 	require.NoError(t, err)
 

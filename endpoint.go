@@ -92,7 +92,7 @@ func newClientSource(ctx context.Context, cl *Client, cfg SourceConfig) (*client
 type endpoint interface {
 	runPeerErr(ctx context.Context) error
 	runAnnounceErr(ctx context.Context, conn *quic.Conn, directAddrs *notify.V[advertiseAddrs], firstReport func(error)) error
-	PeerStatus() (PeerStatus, error)
+	peerStatus() (PeerStatus, error)
 }
 
 type clientEndpoint struct {
@@ -169,7 +169,7 @@ func (e *clientEndpoint) Client() *Client {
 }
 
 func (e *clientEndpoint) Status(ctx context.Context) (EndpointStatus, error) {
-	peerStatus, err := e.ep.PeerStatus()
+	peerStatus, err := e.ep.peerStatus()
 	if err != nil {
 		return EndpointStatus{}, err
 	}

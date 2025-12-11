@@ -162,7 +162,7 @@ func (s *source) runAnnounceErr(ctx context.Context, conn *quic.Conn, directAddr
 	return pc.run(ctx)
 }
 
-func (s *source) PeerStatus() (PeerStatus, error) {
+func (s *source) peerStatus() (PeerStatus, error) {
 	return s.peer.status()
 }
 

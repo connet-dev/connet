@@ -46,25 +46,25 @@ func newConfig(opts []Option) (*config, error) {
 	}
 
 	if cfg.token == "" {
-		if err := ClientTokenFromEnv()(cfg); err != nil {
+		if err := TokenFromEnv()(cfg); err != nil {
 			return nil, fmt.Errorf("default token: %w", err)
 		}
 	}
 
 	if cfg.controlAddr == nil {
-		if err := ClientControlAddress("127.0.0.1:19190")(cfg); err != nil {
+		if err := ControlAddress("127.0.0.1:19190")(cfg); err != nil {
 			return nil, fmt.Errorf("default control address: %w", err)
 		}
 	}
 
 	if cfg.directAddr == nil {
-		if err := ClientDirectAddress(":19192")(cfg); err != nil {
+		if err := DirectAddress(":19192")(cfg); err != nil {
 			return nil, fmt.Errorf("default direct address: %w", err)
 		}
 	}
 
 	if cfg.directResetKey == nil {
-		if err := ClientDirectStatelessResetKeyFromEnv()(cfg); err != nil {
+		if err := DirectStatelessResetKeyFromEnv()(cfg); err != nil {
 			return nil, fmt.Errorf("default stateless reset key: %w", err)
 		}
 		if cfg.directResetKey == nil {
@@ -77,14 +77,14 @@ func newConfig(opts []Option) (*config, error) {
 
 type Option func(cfg *config) error
 
-func ClientToken(token string) Option {
+func Token(token string) Option {
 	return func(cfg *config) error {
 		cfg.token = token
 		return nil
 	}
 }
 
-func ClientTokenFromEnv() Option {
+func TokenFromEnv() Option {
 	return func(cfg *config) error {
 		if connetToken := os.Getenv("CONNET_TOKEN"); connetToken != "" {
 			cfg.token = connetToken
@@ -93,7 +93,7 @@ func ClientTokenFromEnv() Option {
 	}
 }
 
-func ClientControlAddress(address string) Option {
+func ControlAddress(address string) Option {
 	return func(cfg *config) error {
 		if i := strings.LastIndex(address, ":"); i < 0 {
 			// missing :port, lets give it the default
@@ -115,7 +115,7 @@ func ClientControlAddress(address string) Option {
 	}
 }
 
-func ClientControlCAsFile(certFile string) Option {
+func ControlCAsFile(certFile string) Option {
 	return func(cfg *config) error {
 		casData, err := os.ReadFile(certFile)
 		if err != nil {
@@ -133,7 +133,7 @@ func ClientControlCAsFile(certFile string) Option {
 	}
 }
 
-func ClientControlCAs(cas *x509.CertPool) Option {
+func ControlCAs(cas *x509.CertPool) Option {
 	return func(cfg *config) error {
 		cfg.controlCAs = cas
 
@@ -141,7 +141,7 @@ func ClientControlCAs(cas *x509.CertPool) Option {
 	}
 }
 
-func ClientDirectAddress(address string) Option {
+func DirectAddress(address string) Option {
 	return func(cfg *config) error {
 		addr, err := net.ResolveUDPAddr("udp", address)
 		if err != nil {
@@ -154,14 +154,14 @@ func ClientDirectAddress(address string) Option {
 	}
 }
 
-func ClientDirectStatelessResetKey(key *quic.StatelessResetKey) Option {
+func DirectStatelessResetKey(key *quic.StatelessResetKey) Option {
 	return func(cfg *config) error {
 		cfg.directResetKey = key
 		return nil
 	}
 }
 
-func ClientDirectStatelessResetKeyFile(path string) Option {
+func DirectStatelessResetKeyFile(path string) Option {
 	return func(cfg *config) error {
 		keyBytes, err := os.ReadFile(path)
 		if err != nil {
@@ -178,7 +178,7 @@ func ClientDirectStatelessResetKeyFile(path string) Option {
 	}
 }
 
-func ClientDirectStatelessResetKeyFromEnv() Option {
+func DirectStatelessResetKeyFromEnv() Option {
 	return func(cfg *config) error {
 		var name = fmt.Sprintf("stateless-reset-%s.key",
 			strings.TrimPrefix(strings.ReplaceAll(cfg.directAddr.String(), ":", "-"), "-"))
@@ -238,14 +238,14 @@ func ClientDirectStatelessResetKeyFromEnv() Option {
 	}
 }
 
-func ClientNatPMPConfig(pmp nat.PMPConfig) Option {
+func NatPMPConfig(pmp nat.PMPConfig) Option {
 	return func(cfg *config) error {
 		cfg.natPMP = pmp
 		return nil
 	}
 }
 
-func ClientLogger(logger *slog.Logger) Option {
+func Logger(logger *slog.Logger) Option {
 	return func(cfg *config) error {
 		cfg.logger = logger
 		return nil

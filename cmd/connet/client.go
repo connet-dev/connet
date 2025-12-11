@@ -150,24 +150,24 @@ func clientRun(ctx context.Context, cfg ClientConfig, logger *slog.Logger) error
 		if err != nil {
 			return err
 		}
-		opts = append(opts, connet.ClientToken(tokens[0]))
+		opts = append(opts, connet.Token(tokens[0]))
 	} else {
-		opts = append(opts, connet.ClientToken(cfg.Token))
+		opts = append(opts, connet.Token(cfg.Token))
 	}
 
 	if cfg.ServerAddr != "" {
-		opts = append(opts, connet.ClientControlAddress(cfg.ServerAddr))
+		opts = append(opts, connet.ControlAddress(cfg.ServerAddr))
 	}
 	if cfg.ServerCAsFile != "" {
-		opts = append(opts, connet.ClientControlCAsFile(cfg.ServerCAsFile))
+		opts = append(opts, connet.ControlCAsFile(cfg.ServerCAsFile))
 	}
 
 	if cfg.DirectAddr != "" {
-		opts = append(opts, connet.ClientDirectAddress(cfg.DirectAddr))
+		opts = append(opts, connet.DirectAddress(cfg.DirectAddr))
 	}
 
 	if cfg.DirectResetKeyFile != "" {
-		opts = append(opts, connet.ClientDirectStatelessResetKeyFile(cfg.DirectResetKeyFile))
+		opts = append(opts, connet.DirectStatelessResetKeyFile(cfg.DirectResetKeyFile))
 	} else if cfg.DirectResetKey != "" {
 		keyBytes, err := netc.DNSSECEncoding.DecodeString(cfg.DirectResetKey)
 		if err != nil {
@@ -177,7 +177,7 @@ func clientRun(ctx context.Context, cfg ClientConfig, logger *slog.Logger) error
 			return fmt.Errorf("stateless reset key len %d", len(keyBytes))
 		}
 		key := quic.StatelessResetKey(keyBytes)
-		opts = append(opts, connet.ClientDirectStatelessResetKey(&key))
+		opts = append(opts, connet.DirectStatelessResetKey(&key))
 	}
 
 	var statusAddr *net.TCPAddr
@@ -202,7 +202,7 @@ func clientRun(ctx context.Context, cfg ClientConfig, logger *slog.Logger) error
 	default:
 		return fmt.Errorf("invalid Nat-PMP config option: %s", cfg.NatPMP)
 	}
-	opts = append(opts, connet.ClientNatPMPConfig(pmpCfg))
+	opts = append(opts, connet.NatPMPConfig(pmpCfg))
 
 	var defaultRelayEncryptions = []model.EncryptionScheme{model.NoEncryption}
 	if len(cfg.RelayEncryptions) > 0 {
@@ -233,7 +233,7 @@ func clientRun(ctx context.Context, cfg ClientConfig, logger *slog.Logger) error
 		sources[name], sourceHandlers[name] = srcCfg, handler
 	}
 
-	opts = append(opts, connet.ClientLogger(logger))
+	opts = append(opts, connet.Logger(logger))
 
 	cl, err := connet.Connect(ctx, opts...)
 	if err != nil {
