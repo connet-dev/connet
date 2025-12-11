@@ -1,4 +1,4 @@
-package client
+package connet
 
 import (
 	"crypto/rand"

@@ -1,4 +1,4 @@
-package client
+package connet
 
 type PeerStatus struct {
 	Relays      []RelayConnection `json:"relays"`

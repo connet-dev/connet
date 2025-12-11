@@ -6,10 +6,10 @@ import (
 	"log/slog"
 	"net"
 
-	"github.com/connet-dev/connet"
 	"github.com/connet-dev/connet/control"
 	"github.com/connet-dev/connet/restr"
 	"github.com/connet-dev/connet/selfhosted"
+	"github.com/connet-dev/connet/server"
 	"github.com/spf13/cobra"
 )
 
@@ -181,7 +181,7 @@ func controlRun(ctx context.Context, cfg ControlConfig, logger *slog.Logger) err
 	}
 
 	if cfg.StoreDir == "" {
-		dir, err := connet.StoreDirFromEnv("connet-control-")
+		dir, err := server.StoreDirFromEnvPrefixed("connet-control-")
 		if err != nil {
 			return fmt.Errorf("store dir from env: %w", err)
 		}

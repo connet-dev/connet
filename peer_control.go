@@ -1,4 +1,4 @@
-package client
+package connet
 
 import (
 	"context"
@@ -14,13 +14,13 @@ import (
 	"golang.org/x/sync/errgroup"
 )
 
-type AdvertiseAddrs struct {
+type advertiseAddrs struct {
 	STUN  []netip.AddrPort
 	PMP   []netip.AddrPort
 	Local []netip.AddrPort
 }
 
-func (d AdvertiseAddrs) All() []netip.AddrPort {
+func (d advertiseAddrs) all() []netip.AddrPort {
 	addrs := make([]netip.AddrPort, 0, len(d.STUN)+len(d.PMP)+len(d.Local))
 	addrs = append(addrs, d.STUN...)
 	addrs = append(addrs, d.PMP...)

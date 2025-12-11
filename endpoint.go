@@ -1,4 +1,4 @@
-package client
+package connet
 
 import (
 	"context"
@@ -90,8 +90,8 @@ func newClientSource(ctx context.Context, cl *Client, cfg SourceConfig) (*client
 }
 
 type endpoint interface {
-	RunPeer(ctx context.Context) error
-	RunAnnounce(ctx context.Context, conn *quic.Conn, directAddrs *notify.V[AdvertiseAddrs], firstReport func(error)) error
+	runPeerErr(ctx context.Context) error
+	runAnnounceErr(ctx context.Context, conn *quic.Conn, directAddrs *notify.V[advertiseAddrs], firstReport func(error)) error
 	PeerStatus() (PeerStatus, error)
 }
 
@@ -190,7 +190,7 @@ func (e *clientEndpoint) Close() error {
 }
 
 func (e *clientEndpoint) runPeer(ctx context.Context) {
-	if err := e.ep.RunPeer(ctx); err != nil {
+	if err := e.ep.runPeerErr(ctx); err != nil {
 		e.ctxCancel(err)
 	}
 }
@@ -209,7 +209,7 @@ func (e *clientEndpoint) runAnnounce(ctx context.Context) {
 
 func (e *clientEndpoint) runAnnounceSession(ctx context.Context, sess *session) {
 	for {
-		err := e.ep.RunAnnounce(ctx, sess.conn, sess.addrs, func(err error) {
+		err := e.ep.runAnnounceErr(ctx, sess.conn, sess.addrs, func(err error) {
 			if err == nil {
 				e.connStatus.Store(statusc.Connected)
 			}

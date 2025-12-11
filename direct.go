@@ -1,4 +1,4 @@
-package client
+package connet
 
 import (
 	"context"
@@ -16,7 +16,7 @@ import (
 	"github.com/quic-go/quic-go"
 )
 
-type DirectServer struct {
+type directServer struct {
 	transport *quic.Transport
 	logger    *slog.Logger
 
@@ -24,8 +24,8 @@ type DirectServer struct {
 	serversMu sync.RWMutex
 }
 
-func NewDirectServer(transport *quic.Transport, logger *slog.Logger) (*DirectServer, error) {
-	return &DirectServer{
+func newDirectServer(transport *quic.Transport, logger *slog.Logger) (*directServer, error) {
+	return &directServer{
 		transport: transport,
 		logger:    logger.With("component", "direct-server"),
 
@@ -69,7 +69,7 @@ func (s *vServer) updateClientCA() {
 	s.clientCA.Store(clientCA)
 }
 
-func (s *DirectServer) addServerCert(cert tls.Certificate) {
+func (s *directServer) addServerCert(cert tls.Certificate) {
 	serverName := cert.Leaf.DNSNames[0]
 
 	s.serversMu.Lock()
@@ -83,14 +83,14 @@ func (s *DirectServer) addServerCert(cert tls.Certificate) {
 	}
 }
 
-func (s *DirectServer) getServer(serverName string) *vServer {
+func (s *directServer) getServer(serverName string) *vServer {
 	s.serversMu.RLock()
 	defer s.serversMu.RUnlock()
 
 	return s.servers[serverName]
 }
 
-func (s *DirectServer) expect(serverCert tls.Certificate, cert *x509.Certificate) (chan *quic.Conn, func()) {
+func (s *directServer) expect(serverCert tls.Certificate, cert *x509.Certificate) (chan *quic.Conn, func()) {
 	key := model.NewKey(cert)
 	srv := s.getServer(serverCert.Leaf.DNSNames[0])
 
@@ -115,7 +115,7 @@ func (s *DirectServer) expect(serverCert tls.Certificate, cert *x509.Certificate
 	}
 }
 
-func (s *DirectServer) Run(ctx context.Context) error {
+func (s *directServer) Run(ctx context.Context) error {
 	tlsConf := &tls.Config{
 		ClientAuth: tls.RequireAndVerifyClientCert,
 		NextProtos: model.ConnectDirectNextProtos,
@@ -152,7 +152,7 @@ func (s *DirectServer) Run(ctx context.Context) error {
 	}
 }
 
-func (s *DirectServer) runConn(conn *quic.Conn) {
+func (s *directServer) runConn(conn *quic.Conn) {
 	srv := s.getServer(conn.ConnectionState().TLS.ServerName)
 	if srv == nil {
 		if err := conn.CloseWithError(quic.ApplicationErrorCode(pberror.Code_AuthenticationFailed), "unknown server"); err != nil {

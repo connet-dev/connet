@@ -1,4 +1,4 @@
-package client
+package connet
 
 import (
 	"context"
@@ -78,11 +78,9 @@ func (c *Client) SourceHTTPS(ctx context.Context, cfg SourceConfig, srcURL *url.
 	return nil
 }
 
-type Binder func(ctx context.Context) (net.Listener, error)
-
 type TCPSource struct {
 	src    Source
-	bind   Binder
+	bind   func(ctx context.Context) (net.Listener, error)
 	logger *slog.Logger
 }
 

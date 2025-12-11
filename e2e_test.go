@@ -24,9 +24,10 @@ import (
 	"github.com/connet-dev/connet/control"
 	"github.com/connet-dev/connet/model"
 	"github.com/connet-dev/connet/netc"
-	"github.com/connet-dev/connet/relay"
+	relaysrv "github.com/connet-dev/connet/relay"
 	"github.com/connet-dev/connet/restr"
 	"github.com/connet-dev/connet/selfhosted"
+	"github.com/connet-dev/connet/server"
 	"github.com/connet-dev/connet/statusc"
 	"github.com/gorilla/websocket"
 	"github.com/pires/go-proxyproto"
@@ -200,14 +201,14 @@ func TestE2E(t *testing.T) {
 	clientsIngress, err := control.NewIngressBuilder().
 		WithAddrFrom(":20000").WithTLSCert(cert).Ingress()
 	require.NoError(t, err)
-	relayIngress, err := relay.NewIngressBuilder().
+	relayIngress, err := relaysrv.NewIngressBuilder().
 		WithAddrFrom(":20001").WithHostportFrom("localhost").Ingress()
 	require.NoError(t, err)
-	srv, err := NewServer(
-		ServerClientsAuthenticator(clientAuth),
-		ServerClientsIngress(clientsIngress),
-		ServerRelayIngress(relayIngress),
-		ServerLogger(logger.With("test", "server")),
+	srv, err := server.New(
+		server.ClientsAuthenticator(clientAuth),
+		server.ClientsIngress(clientsIngress),
+		server.RelayIngress(relayIngress),
+		server.Logger(logger.With("test", "server")),
 	)
 	require.NoError(t, err)
 

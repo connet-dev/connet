@@ -1,4 +1,4 @@
-package client
+package connet
 
 import (
 	"cmp"
@@ -102,7 +102,7 @@ type sourceConn struct {
 	conn *quic.Conn
 }
 
-func newSource(cfg SourceConfig, direct *DirectServer, logger *slog.Logger) (*source, error) {
+func newSource(cfg SourceConfig, direct *directServer, logger *slog.Logger) (*source, error) {
 	logger = logger.With("source", cfg.Endpoint)
 	p, err := newPeer(direct, logger)
 	if err != nil {
@@ -130,14 +130,14 @@ func (s *source) Config() SourceConfig {
 	return s.cfg
 }
 
-func (s *source) RunPeer(ctx context.Context) error {
+func (s *source) runPeerErr(ctx context.Context) error {
 	return reliable.RunGroup(ctx,
 		s.peer.run,
 		s.runActive,
 	)
 }
 
-func (s *source) RunAnnounce(ctx context.Context, conn *quic.Conn, directAddrs *notify.V[AdvertiseAddrs], notifyResponse func(error)) error {
+func (s *source) runAnnounceErr(ctx context.Context, conn *quic.Conn, directAddrs *notify.V[advertiseAddrs], notifyResponse func(error)) error {
 	pc := &peerControl{
 		local:    s.peer,
 		endpoint: s.cfg.Endpoint,
@@ -150,8 +150,8 @@ func (s *source) RunAnnounce(ctx context.Context, conn *quic.Conn, directAddrs *
 	if s.cfg.Route.AllowDirect() {
 		g, ctx := errgroup.WithContext(ctx)
 		g.Go(func() error {
-			return directAddrs.Listen(ctx, func(t AdvertiseAddrs) error {
-				s.peer.setDirectAddrs(t.All())
+			return directAddrs.Listen(ctx, func(t advertiseAddrs) error {
+				s.peer.setDirectAddrs(t.all())
 				return nil
 			})
 		})

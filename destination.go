@@ -1,4 +1,4 @@
-package client
+package connet
 
 import (
 	"context"
@@ -74,7 +74,7 @@ type destination struct {
 	acceptCh chan net.Conn
 }
 
-func newDestination(cfg DestinationConfig, direct *DirectServer, logger *slog.Logger) (*destination, error) {
+func newDestination(cfg DestinationConfig, direct *directServer, logger *slog.Logger) (*destination, error) {
 	logger = logger.With("destination", cfg.Endpoint)
 	p, err := newPeer(direct, logger)
 	if err != nil {
@@ -99,7 +99,7 @@ func (d *destination) Config() DestinationConfig {
 	return d.cfg
 }
 
-func (d *destination) RunPeer(ctx context.Context) error {
+func (d *destination) runPeerErr(ctx context.Context) error {
 	defer close(d.acceptCh)
 
 	return reliable.RunGroup(ctx,
@@ -108,7 +108,7 @@ func (d *destination) RunPeer(ctx context.Context) error {
 	)
 }
 
-func (d *destination) RunAnnounce(ctx context.Context, conn *quic.Conn, directAddrs *notify.V[AdvertiseAddrs], notifyResponse func(error)) error {
+func (d *destination) runAnnounceErr(ctx context.Context, conn *quic.Conn, directAddrs *notify.V[advertiseAddrs], notifyResponse func(error)) error {
 	pc := &peerControl{
 		local:    d.peer,
 		endpoint: d.cfg.Endpoint,
@@ -121,8 +121,8 @@ func (d *destination) RunAnnounce(ctx context.Context, conn *quic.Conn, directAd
 	if d.cfg.Route.AllowDirect() {
 		g, ctx := errgroup.WithContext(ctx)
 		g.Go(func() error {
-			return directAddrs.Listen(ctx, func(t AdvertiseAddrs) error {
-				d.peer.setDirectAddrs(t.All())
+			return directAddrs.Listen(ctx, func(t advertiseAddrs) error {
+				d.peer.setDirectAddrs(t.all())
 				return nil
 			})
 		})

@@ -1,4 +1,4 @@
-package client
+package connet
 
 import (
 	"context"
@@ -31,7 +31,7 @@ type peer struct {
 	peers      *notify.V[[]*pbclient.RemotePeer]
 	peerConns  *notify.V[map[peerConnKey]*quic.Conn]
 
-	direct     *DirectServer
+	direct     *directServer
 	serverCert tls.Certificate
 	clientCert tls.Certificate
 	logger     *slog.Logger
@@ -66,7 +66,7 @@ func (s peerStyle) String() string {
 	}
 }
 
-func newPeer(direct *DirectServer, logger *slog.Logger) (*peer, error) {
+func newPeer(direct *directServer, logger *slog.Logger) (*peer, error) {
 	root, err := certc.NewRoot()
 	if err != nil {
 		return nil, err

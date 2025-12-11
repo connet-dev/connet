@@ -1,4 +1,4 @@
-package connet
+package server
 
 import (
 	"fmt"
@@ -22,7 +22,7 @@ type serverConfig struct {
 	logger *slog.Logger
 }
 
-func newServerConfig(opts []ServerOption) (*serverConfig, error) {
+func newServerConfig(opts []Option) (*serverConfig, error) {
 	cfg := &serverConfig{
 		logger: slog.Default(),
 	}
@@ -37,7 +37,7 @@ func newServerConfig(opts []ServerOption) (*serverConfig, error) {
 		if err != nil {
 			return nil, fmt.Errorf("resolve clients address: %w", err)
 		}
-		if err := ServerClientsIngress(control.Ingress{Addr: addr})(cfg); err != nil {
+		if err := ClientsIngress(control.Ingress{Addr: addr})(cfg); err != nil {
 			return nil, fmt.Errorf("default clients address: %w", err)
 		}
 	}
@@ -54,13 +54,13 @@ func newServerConfig(opts []ServerOption) (*serverConfig, error) {
 			return nil, fmt.Errorf("resolve clients relay address: %w", err)
 		}
 		hps := []model.HostPort{{Host: "localhost", Port: 19191}}
-		if err := ServerRelayIngress(relay.Ingress{Addr: addr, Hostports: hps})(cfg); err != nil {
+		if err := RelayIngress(relay.Ingress{Addr: addr, Hostports: hps})(cfg); err != nil {
 			return nil, fmt.Errorf("default clients relay address: %w", err)
 		}
 	}
 
 	if cfg.dir == "" {
-		if err := ServerStoreDirFromEnv()(cfg); err != nil {
+		if err := StoreDirFromEnv()(cfg); err != nil {
 			return nil, fmt.Errorf("default store dir: %w", err)
 		}
 		cfg.logger.Info("using default store directory", "dir", cfg.dir)
@@ -69,9 +69,9 @@ func newServerConfig(opts []ServerOption) (*serverConfig, error) {
 	return cfg, nil
 }
 
-type ServerOption func(*serverConfig) error
+type Option func(*serverConfig) error
 
-func ServerClientsIngress(icfg control.Ingress) ServerOption {
+func ClientsIngress(icfg control.Ingress) Option {
 	return func(cfg *serverConfig) error {
 		cfg.clientsIngresses = append(cfg.clientsIngresses, icfg)
 
@@ -79,7 +79,7 @@ func ServerClientsIngress(icfg control.Ingress) ServerOption {
 	}
 }
 
-func ServerClientsTokens(tokens ...string) ServerOption {
+func ClientsTokens(tokens ...string) Option {
 	return func(cfg *serverConfig) error {
 		auths := make([]selfhosted.ClientAuthentication, len(tokens))
 		for i, t := range tokens {
@@ -92,7 +92,7 @@ func ServerClientsTokens(tokens ...string) ServerOption {
 	}
 }
 
-func ServerClientsAuthenticator(clientsAuth control.ClientAuthenticator) ServerOption {
+func ClientsAuthenticator(clientsAuth control.ClientAuthenticator) Option {
 	return func(cfg *serverConfig) error {
 		cfg.clientsAuth = clientsAuth
 
@@ -100,7 +100,7 @@ func ServerClientsAuthenticator(clientsAuth control.ClientAuthenticator) ServerO
 	}
 }
 
-func ServerRelayIngress(icfg relay.Ingress) ServerOption {
+func RelayIngress(icfg relay.Ingress) Option {
 	return func(cfg *serverConfig) error {
 		cfg.relayIngresses = append(cfg.relayIngresses, icfg)
 
@@ -108,16 +108,16 @@ func ServerRelayIngress(icfg relay.Ingress) ServerOption {
 	}
 }
 
-func ServerStoreDir(dir string) ServerOption {
+func StoreDir(dir string) Option {
 	return func(cfg *serverConfig) error {
 		cfg.dir = dir
 		return nil
 	}
 }
 
-func ServerStoreDirFromEnv() ServerOption {
+func StoreDirFromEnv() Option {
 	return func(cfg *serverConfig) error {
-		stateDir, err := StoreDirFromEnv("connet-server-")
+		stateDir, err := StoreDirFromEnvPrefixed("connet-server-")
 		if err != nil {
 			return err
 		}
@@ -126,14 +126,14 @@ func ServerStoreDirFromEnv() ServerOption {
 	}
 }
 
-func ServerLogger(logger *slog.Logger) ServerOption {
+func Logger(logger *slog.Logger) Option {
 	return func(cfg *serverConfig) error {
 		cfg.logger = logger
 		return nil
 	}
 }
 
-func StoreDirFromEnv(prefix string) (string, error) {
+func StoreDirFromEnvPrefixed(prefix string) (string, error) {
 	if stateDir := os.Getenv("CONNET_STATE_DIR"); stateDir != "" {
 		// Support direct override if necessary, currently used in docker
 		return stateDir, nil

@@ -1,4 +1,4 @@
-package connet
+package server
 
 import (
 	"context"
@@ -22,7 +22,7 @@ type Server struct {
 	relay   *relay.Server
 }
 
-func NewServer(opts ...ServerOption) (*Server, error) {
+func New(opts ...Option) (*Server, error) {
 	cfg, err := newServerConfig(opts)
 	if err != nil {
 		return nil, err

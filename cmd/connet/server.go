@@ -6,7 +6,7 @@ import (
 	"log/slog"
 	"net"
 
-	"github.com/connet-dev/connet"
+	"github.com/connet-dev/connet/server"
 	"github.com/spf13/cobra"
 )
 
@@ -87,7 +87,7 @@ func addStoreDirFlag(cmd *cobra.Command, ref *string) {
 }
 
 func serverRun(ctx context.Context, cfg ServerConfig, logger *slog.Logger) error {
-	var opts []connet.ServerOption
+	var opts []server.Option
 
 	var usedClientDefault bool
 	for ix, ingressCfg := range cfg.Ingresses {
@@ -98,7 +98,7 @@ func serverRun(ctx context.Context, cfg ServerConfig, logger *slog.Logger) error
 		if ingress, err := ingressCfg.parse(); err != nil {
 			return fmt.Errorf("parse ingress at %d: %w", ix, err)
 		} else {
-			opts = append(opts, connet.ServerClientsIngress(ingress))
+			opts = append(opts, server.ClientsIngress(ingress))
 		}
 	}
 
@@ -114,7 +114,7 @@ func serverRun(ctx context.Context, cfg ServerConfig, logger *slog.Logger) error
 	if err != nil {
 		return err
 	}
-	opts = append(opts, connet.ServerClientsAuthenticator(clientAuth))
+	opts = append(opts, server.ClientsAuthenticator(clientAuth))
 
 	var usedRelayDefault bool
 	for ix, ingressCfg := range cfg.RelayIngresses {
@@ -125,7 +125,7 @@ func serverRun(ctx context.Context, cfg ServerConfig, logger *slog.Logger) error
 		if ingress, err := ingressCfg.parse(); err != nil {
 			return fmt.Errorf("parse ingress at %d: %w", ix, err)
 		} else {
-			opts = append(opts, connet.ServerRelayIngress(ingress))
+			opts = append(opts, server.RelayIngress(ingress))
 		}
 	}
 
@@ -139,12 +139,12 @@ func serverRun(ctx context.Context, cfg ServerConfig, logger *slog.Logger) error
 	}
 
 	if cfg.StoreDir != "" {
-		opts = append(opts, connet.ServerStoreDir(cfg.StoreDir))
+		opts = append(opts, server.StoreDir(cfg.StoreDir))
 	}
 
-	opts = append(opts, connet.ServerLogger(logger))
+	opts = append(opts, server.Logger(logger))
 
-	srv, err := connet.NewServer(opts...)
+	srv, err := server.New(opts...)
 	if err != nil {
 		return fmt.Errorf("create server: %w", err)
 	}

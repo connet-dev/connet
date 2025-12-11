@@ -143,7 +143,7 @@ type runnable interface {
 type newrunnable[T any] func(t T) runnable
 
 func clientRun(ctx context.Context, cfg ClientConfig, logger *slog.Logger) error {
-	var opts []connet.ClientOption
+	var opts []connet.Option
 
 	if cfg.TokenFile != "" {
 		tokens, err := loadTokens(cfg.TokenFile)

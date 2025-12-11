@@ -8,8 +8,8 @@ import (
 	"net"
 	"os"
 
-	"github.com/connet-dev/connet"
 	"github.com/connet-dev/connet/relay"
+	"github.com/connet-dev/connet/server"
 	"github.com/spf13/cobra"
 )
 
@@ -153,7 +153,7 @@ func relayRun(ctx context.Context, cfg RelayConfig, logger *slog.Logger) error {
 	}
 
 	if cfg.StoreDir == "" {
-		dir, err := connet.StoreDirFromEnv("connet-relay-")
+		dir, err := server.StoreDirFromEnvPrefixed("connet-relay-")
 		if err != nil {
 			return fmt.Errorf("store dir from env: %w", err)
 		}
