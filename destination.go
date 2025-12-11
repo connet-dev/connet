@@ -165,7 +165,14 @@ func (d *Destination) Context() context.Context {
 }
 
 func (d *Destination) Status() (EndpointStatus, error) {
-	return d.ep.status()
+	peerStatus, err := d.peer.status()
+	if err != nil {
+		return EndpointStatus{}, err
+	}
+	return EndpointStatus{
+		Status: d.ep.status(),
+		Peer:   peerStatus,
+	}, nil
 }
 
 func (d *Destination) Addr() net.Addr {
@@ -174,10 +181,6 @@ func (d *Destination) Addr() net.Addr {
 
 func (d *Destination) Close() error {
 	return d.ep.close()
-}
-
-func (d *Destination) peerStatus() (PeerStatus, error) {
-	return d.peer.status()
 }
 
 func (d *Destination) runActive(ctx context.Context) error {

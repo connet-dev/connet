@@ -146,7 +146,14 @@ func (s *Source) Context() context.Context {
 }
 
 func (s *Source) Status() (EndpointStatus, error) {
-	return s.ep.status()
+	peerStatus, err := s.peer.status()
+	if err != nil {
+		return EndpointStatus{}, err
+	}
+	return EndpointStatus{
+		Status: s.ep.status(),
+		Peer:   peerStatus,
+	}, nil
 }
 
 func (s *Source) Close() error {
@@ -183,10 +190,6 @@ func (s *Source) runAnnounceErr(ctx context.Context, conn *quic.Conn, directAddr
 	}
 
 	return pc.run(ctx)
-}
-
-func (s *Source) peerStatus() (PeerStatus, error) {
-	return s.peer.status()
 }
 
 func (s *Source) runActive(ctx context.Context) error {

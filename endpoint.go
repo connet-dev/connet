@@ -21,7 +21,6 @@ type EndpointStatus struct {
 type endpoint interface {
 	runPeerErr(ctx context.Context) error
 	runAnnounceErr(ctx context.Context, conn *quic.Conn, directAddrs *notify.V[advertiseAddrs], firstReport func(error)) error
-	peerStatus() (PeerStatus, error)
 }
 
 type clientEndpoint struct {
@@ -89,15 +88,8 @@ func newClientEndpoint(ctx context.Context, cl *Client, ep endpoint, logger *slo
 	return cep, nil
 }
 
-func (e *clientEndpoint) status() (EndpointStatus, error) {
-	peerStatus, err := e.ep.peerStatus()
-	if err != nil {
-		return EndpointStatus{}, err
-	}
-	return EndpointStatus{
-		Status: e.connStatus.Load().(statusc.Status),
-		Peer:   peerStatus,
-	}, nil
+func (e *clientEndpoint) status() statusc.Status {
+	return e.connStatus.Load().(statusc.Status)
 }
 
 func (e *clientEndpoint) close() error {
