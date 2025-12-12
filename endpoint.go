@@ -3,12 +3,20 @@ package connet
 import (
 	"context"
 	"errors"
+	"fmt"
 	"log/slog"
 	"net"
+	"net/netip"
 	"sync"
 	"sync/atomic"
 
+	"github.com/connet-dev/connet/model"
+	"github.com/connet-dev/connet/proto"
+	"github.com/connet-dev/connet/proto/pbclient"
+	"github.com/connet-dev/connet/reliable"
+	"github.com/connet-dev/connet/slogc"
 	"github.com/connet-dev/connet/statusc"
+	"golang.org/x/sync/errgroup"
 )
 
 type EndpointStatus struct {
@@ -16,15 +24,30 @@ type EndpointStatus struct {
 	Peer   PeerStatus
 }
 
-type endpoint interface {
-	runPeerErr(ctx context.Context) error
-	runAnnounceErr(ctx context.Context, sess *session, firstReport func(error)) error
+type endpointConfig struct {
+	endpoint model.Endpoint
+	role     model.Role
+	route    model.RouteOption
 }
 
-type clientEndpoint struct {
-	client        *Client
-	ep            endpoint
-	clientCleanup func()
+type advertiseAddrs struct {
+	STUN  []netip.AddrPort
+	PMP   []netip.AddrPort
+	Local []netip.AddrPort
+}
+
+func (d advertiseAddrs) all() []netip.AddrPort {
+	addrs := make([]netip.AddrPort, 0, len(d.STUN)+len(d.PMP)+len(d.Local))
+	addrs = append(addrs, d.STUN...)
+	addrs = append(addrs, d.PMP...)
+	addrs = append(addrs, d.Local...)
+	return addrs
+}
+
+type endpoint struct {
+	client *Client
+	cfg    endpointConfig
+	peer   *peer
 
 	ctx       context.Context
 	ctxCancel context.CancelCauseFunc
@@ -42,12 +65,17 @@ type clientEndpoint struct {
 //   - the parent client is closing, so it calls close on the endpoint too. Session might be closing at the same time.
 //   - an error happens in runPeer
 //   - a terminal error happens in runAnnounce
-func newClientEndpoint(ctx context.Context, cl *Client, ep endpoint, logger *slog.Logger, clientCleanup func()) (*clientEndpoint, error) {
+func newEndpoint(ctx context.Context, cl *Client, cfg endpointConfig, logger *slog.Logger) (*endpoint, error) {
+	p, err := newPeer(cl.directServer, cfg.route.AllowDirect(), logger)
+	if err != nil {
+		return nil, err
+	}
+
 	ctx, ctxCancel := context.WithCancelCause(ctx)
-	cep := &clientEndpoint{
-		client:        cl,
-		ep:            ep,
-		clientCleanup: clientCleanup,
+	ep := &endpoint{
+		client: cl,
+		cfg:    cfg,
+		peer:   p,
 
 		ctx:       ctx,
 		ctxCancel: ctxCancel,
@@ -55,12 +83,15 @@ func newClientEndpoint(ctx context.Context, cl *Client, ep endpoint, logger *slo
 
 		logger: logger,
 	}
-	cep.connStatus.Store(statusc.NotConnected)
-	context.AfterFunc(ctx, cep.cleanup)
+	ep.connStatus.Store(statusc.NotConnected)
+	context.AfterFunc(ctx, ep.cleanup)
 
 	errCh := make(chan error)
 	var reportOnce sync.Once
-	cep.onlineReport = func(err error) {
+	ep.onlineReport = func(err error) {
+		if err == nil {
+			ep.connStatus.Store(statusc.Connected)
+		}
 		reportOnce.Do(func() {
 			if err != nil {
 				errCh <- err
@@ -69,60 +100,62 @@ func newClientEndpoint(ctx context.Context, cl *Client, ep endpoint, logger *slo
 		})
 	}
 
-	go cep.runPeer(ctx)
-	go cep.runAnnounce(ctx)
+	go ep.runPeer(ctx)
+	go ep.runSession(ctx)
 
 	select {
 	case <-ctx.Done():
-		cep.ctxCancel(ctx.Err())
+		ep.ctxCancel(ctx.Err())
 		return nil, ctx.Err()
 	case err := <-errCh:
 		if err != nil {
-			cep.ctxCancel(err)
+			ep.ctxCancel(err)
 			return nil, err
 		}
 	}
 
-	return cep, nil
+	return ep, nil
 }
 
-func (e *clientEndpoint) status() statusc.Status {
-	return e.connStatus.Load().(statusc.Status)
+func (ep *endpoint) Status() (EndpointStatus, error) {
+	peerStatus, err := ep.peer.status()
+	if err != nil {
+		return EndpointStatus{}, err
+	}
+	return EndpointStatus{
+		Status: ep.connStatus.Load().(statusc.Status),
+		Peer:   peerStatus,
+	}, nil
 }
 
-func (e *clientEndpoint) close() error {
-	e.ctxCancel(net.ErrClosed)
-	<-e.closer
+func (ep *endpoint) close() error {
+	ep.ctxCancel(net.ErrClosed)
+	<-ep.closer
 	return nil
 }
 
-func (e *clientEndpoint) runPeer(ctx context.Context) {
-	if err := e.ep.runPeerErr(ctx); err != nil {
-		e.ctxCancel(err)
+func (ep *endpoint) runPeer(ctx context.Context) {
+	if err := ep.peer.run(ctx); err != nil {
+		ep.ctxCancel(err)
 	}
 }
 
-func (e *clientEndpoint) runAnnounce(ctx context.Context) {
-	err := e.client.currentSession.Listen(ctx, func(sess *session) error {
+func (ep *endpoint) runSession(ctx context.Context) {
+	err := ep.client.currentSession.Listen(ctx, func(sess *session) error {
 		if sess != nil {
-			go e.runAnnounceSession(ctx, sess)
+			go ep.runSessionAnnounce(ctx, sess)
 		}
 		return nil
 	})
 	if err != nil {
-		e.ctxCancel(err)
+		ep.ctxCancel(err)
 	}
 }
 
-func (e *clientEndpoint) runAnnounceSession(ctx context.Context, sess *session) {
+func (ep *endpoint) runSessionAnnounce(ctx context.Context, sess *session) {
 	for {
-		err := e.ep.runAnnounceErr(ctx, sess, func(err error) {
-			if err == nil {
-				e.connStatus.Store(statusc.Connected)
-			}
-			e.onlineReport(err)
-		})
-		e.connStatus.CompareAndSwap(statusc.Connected, statusc.Reconnecting)
+		err := ep.runSessionAnnounceErr(ctx, sess)
+		ep.connStatus.CompareAndSwap(statusc.Connected, statusc.Reconnecting)
 
 		switch {
 		case err == nil:
@@ -131,13 +164,142 @@ func (e *clientEndpoint) runAnnounceSession(ctx context.Context, sess *session) 
 		case sess.conn.Context().Err() != nil:
 			return
 		default:
-			e.logger.Debug("announce stopped", "err", err)
+			ep.logger.Debug("announce stopped", "err", err)
 		}
 	}
 }
 
-func (e *clientEndpoint) cleanup() {
-	defer close(e.closer)
-	defer e.connStatus.Store(statusc.Disconnected)
-	e.clientCleanup()
+func (ep *endpoint) runSessionAnnounceErr(ctx context.Context, sess *session) error {
+	g := reliable.NewGroup(ctx)
+
+	g.Go(reliable.Bind(sess, ep.runAnnounce))
+
+	if ep.cfg.route.AllowDirect() {
+		g.Go(reliable.Bind(sess, ep.runDirectAddrs))
+	}
+
+	if ep.cfg.route.AllowRelay() {
+		g.Go(reliable.Bind(sess, ep.runRelay))
+	}
+
+	return g.Wait()
+}
+
+func (ep *endpoint) runAnnounce(ctx context.Context, sess *session) error {
+	stream, err := sess.conn.OpenStreamSync(ctx)
+	if err != nil {
+		return fmt.Errorf("announce open stream: %w", err)
+	}
+	defer func() {
+		if err := stream.Close(); err != nil {
+			slogc.Fine(ep.logger, "error closing announce stream", "err", err)
+		}
+	}()
+
+	g, ctx := errgroup.WithContext(ctx)
+
+	g.Go(func() error {
+		<-ctx.Done()
+		stream.CancelRead(0)
+		return nil
+	})
+
+	g.Go(func() error {
+		defer ep.logger.Debug("completed announce notify")
+		return ep.peer.selfListen(ctx, func(peer *pbclient.Peer) error {
+			ep.logger.Debug("updated announce", "direct", len(peer.Directs), "relays", len(peer.RelayIds))
+			return proto.Write(stream, &pbclient.Request{
+				Announce: &pbclient.Request_Announce{
+					Endpoint: ep.cfg.endpoint.PB(),
+					Role:     ep.cfg.role.PB(),
+					Peer:     peer,
+				},
+			})
+		})
+	})
+
+	g.Go(func() error {
+		for {
+			resp, err := pbclient.ReadResponse(stream)
+			ep.onlineReport(err)
+			if err != nil {
+				return err
+			}
+			if resp.Announce == nil {
+				return fmt.Errorf("announce unexpected response")
+			}
+
+			// TODO on server restart peers is reset and client loses active peers
+			// only for them to come back at the next tick, with different ID
+			ep.peer.setPeers(resp.Announce.Peers)
+		}
+	})
+
+	return g.Wait()
+}
+
+func (ep *endpoint) runDirectAddrs(ctx context.Context, sess *session) error {
+	return sess.addrs.Listen(ctx, func(t advertiseAddrs) error {
+		ep.peer.setDirectAddrs(t.all())
+		return nil
+	})
+}
+
+func (ep *endpoint) runRelay(ctx context.Context, sess *session) error {
+	stream, err := sess.conn.OpenStreamSync(ctx)
+	if err != nil {
+		return fmt.Errorf("relay open stream: %w", err)
+	}
+	defer func() {
+		if err := stream.Close(); err != nil {
+			slogc.Fine(ep.logger, "error closing relay stream", "err", err)
+		}
+	}()
+
+	if err := proto.Write(stream, &pbclient.Request{
+		Relay: &pbclient.Request_Relay{
+			Endpoint:          ep.cfg.endpoint.PB(),
+			Role:              ep.cfg.role.PB(),
+			ClientCertificate: ep.peer.clientCert.Leaf.Raw,
+		},
+	}); err != nil {
+		return err
+	}
+
+	g, ctx := errgroup.WithContext(ctx)
+
+	g.Go(func() error {
+		<-ctx.Done()
+		stream.CancelRead(0)
+		return nil
+	})
+
+	g.Go(func() error {
+		for {
+			resp, err := pbclient.ReadResponse(stream)
+			if err != nil {
+				ep.onlineReport(err)
+				return err
+			}
+			if resp.Relay == nil {
+				return fmt.Errorf("relay unexpected response")
+			}
+
+			ep.peer.setRelays(resp.Relay.Relays)
+		}
+	})
+
+	return g.Wait()
+}
+
+func (ep *endpoint) cleanup() {
+	defer close(ep.closer)
+	defer ep.connStatus.Store(statusc.Disconnected)
+
+	switch ep.cfg.role {
+	case model.Destination:
+		ep.client.removeDestination(ep.cfg.endpoint)
+	case model.Source:
+		ep.client.removeSource(ep.cfg.endpoint)
+	}
 }

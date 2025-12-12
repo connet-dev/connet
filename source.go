@@ -22,7 +22,6 @@ import (
 	"github.com/connet-dev/connet/proto"
 	"github.com/connet-dev/connet/proto/pbconnect"
 	"github.com/connet-dev/connet/quicc"
-	"github.com/connet-dev/connet/reliable"
 	"github.com/quic-go/quic-go"
 )
 
@@ -67,6 +66,14 @@ func (cfg SourceConfig) WithDialTimeout(timeout time.Duration) SourceConfig {
 	return cfg
 }
 
+func (cfg SourceConfig) endpointConfig() endpointConfig {
+	return endpointConfig{
+		endpoint: cfg.Endpoint,
+		role:     model.Source,
+		route:    cfg.Route,
+	}
+}
+
 // WithLoadBalance sets the load balancing behavior for this source
 func (cfg SourceConfig) WithLoadBalance(policy model.LoadBalancePolicy, retry model.LoadBalanceRetry, max int) SourceConfig {
 	cfg.DestinationPolicy = policy
@@ -84,16 +91,15 @@ func (cfg SourceConfig) WithLoadBalance(policy model.LoadBalancePolicy, retry mo
 }
 
 type Source struct {
-	cfg    SourceConfig
-	logger *slog.Logger
-
-	peer *peer
-	ep   *clientEndpoint
+	cfg SourceConfig
+	ep  *endpoint
 
 	conns           atomic.Pointer[[]sourceConn]
 	connsTracking   map[peerID]*atomic.Int32
 	connsTrackingMu sync.RWMutex
 	roundRobinIndex atomic.Int32
+
+	logger *slog.Logger
 }
 
 type sourceConn struct {
@@ -103,31 +109,27 @@ type sourceConn struct {
 
 func newSource(ctx context.Context, cl *Client, cfg SourceConfig) (*Source, error) {
 	logger := cl.logger.With("source", cfg.Endpoint)
-	p, err := newPeer(cl.directServer, cfg.Route.AllowDirect(), logger)
+
+	ep, err := newEndpoint(ctx, cl, cfg.endpointConfig(), logger)
 	if err != nil {
 		return nil, err
 	}
+
 	var connsTracking map[peerID]*atomic.Int32
 	if cfg.DestinationPolicy == model.LeastConnsPolicy {
 		connsTracking = map[peerID]*atomic.Int32{}
 	}
 
 	src := &Source{
-		cfg:    cfg,
-		logger: logger,
-
-		peer: p,
+		cfg: cfg,
+		ep:  ep,
 
 		connsTracking: connsTracking,
+
+		logger: logger,
 	}
 
-	ep, err := newClientEndpoint(ctx, cl, src, logger, func() {
-		cl.removeSource(cfg.Endpoint)
-	})
-	if err != nil {
-		return nil, err
-	}
-	src.ep = ep
+	go src.runActive(ep.ctx)
 
 	return src, nil
 }
@@ -141,43 +143,21 @@ func (s *Source) Context() context.Context {
 }
 
 func (s *Source) Status() (EndpointStatus, error) {
-	peerStatus, err := s.peer.status()
-	if err != nil {
-		return EndpointStatus{}, err
-	}
-	return EndpointStatus{
-		Status: s.ep.status(),
-		Peer:   peerStatus,
-	}, nil
+	return s.ep.Status()
 }
 
 func (s *Source) Close() error {
 	return s.ep.close()
 }
 
-func (s *Source) runPeerErr(ctx context.Context) error {
-	return reliable.RunGroup(ctx,
-		s.peer.run,
-		s.runActive,
-	)
-}
-
-func (s *Source) runAnnounceErr(ctx context.Context, sess *session, notifyResponse func(error)) error {
-	pc := &peerControl{
-		local: s.peer,
-
-		endpoint: s.cfg.Endpoint,
-		role:     model.Source,
-		opt:      s.cfg.Route,
-
-		sess:   sess,
-		notify: notifyResponse,
+func (s *Source) runActive(ctx context.Context) {
+	if err := s.runActiveErr(ctx); err != nil {
+		s.logger.Debug("run active exited", "err", err) // TODO
 	}
-	return pc.run(ctx)
 }
 
-func (s *Source) runActive(ctx context.Context) error {
-	return s.peer.activeConnsListen(ctx, func(active map[peerConnKey]*quic.Conn) error {
+func (s *Source) runActiveErr(ctx context.Context) error {
+	return s.ep.peer.activeConnsListen(ctx, func(active map[peerConnKey]*quic.Conn) error {
 		s.logger.Debug("active conns", "len", len(active))
 
 		var conns = make([]sourceConn, 0, len(active))
@@ -411,12 +391,12 @@ func (s *Source) dialStream(ctx context.Context, dest sourceConn, stream *quic.S
 
 		if slices.Contains(s.cfg.RelayEncryptions, model.TLSEncryption) {
 			connect.SourceTls = &pbconnect.TLSConfiguration{
-				ClientName: s.peer.serverCert.Leaf.DNSNames[0],
+				ClientName: s.ep.peer.serverCert.Leaf.DNSNames[0],
 			}
 		}
 
 		if slices.Contains(s.cfg.RelayEncryptions, model.DHXCPEncryption) {
-			secret, cfg, err := s.peer.newECDHConfig()
+			secret, cfg, err := s.ep.peer.newECDHConfig()
 			if err != nil {
 				return nil, fmt.Errorf("new ecdh config: %w", err)
 			}
@@ -460,7 +440,7 @@ func (s *Source) dialStream(ctx context.Context, dest sourceConn, stream *quic.S
 			encStream = tlsConn
 		case model.DHXCPEncryption:
 			s.logger.Debug("upgrading relay connection to DHXCP", "peer", dest.peer.id)
-			dstPublic, err := s.peer.getECDHPublicKey(resp.Connect.DestinationDhX25519)
+			dstPublic, err := s.ep.peer.getECDHPublicKey(resp.Connect.DestinationDhX25519)
 			if err != nil {
 				return nil, fmt.Errorf("source public key: %w", err)
 			}
@@ -484,7 +464,7 @@ func (s *Source) dialStream(ctx context.Context, dest sourceConn, stream *quic.S
 }
 
 func (s *Source) getDestinationTLS(name string) (*tls.Config, error) {
-	remotes, err := s.peer.peers.Peek()
+	remotes, err := s.ep.peer.peers.Peek()
 	if err != nil {
 		return nil, fmt.Errorf("destination peers list: %w", err)
 	}
@@ -495,7 +475,7 @@ func (s *Source) getDestinationTLS(name string) (*tls.Config, error) {
 			return nil, fmt.Errorf("destination peer server cert: %w", err)
 		case cfg.name == name:
 			return &tls.Config{
-				Certificates: []tls.Certificate{s.peer.clientCert},
+				Certificates: []tls.Certificate{s.ep.peer.clientCert},
 				RootCAs:      cfg.cas,
 				ServerName:   cfg.name,
 			}, nil

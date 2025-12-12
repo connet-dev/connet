@@ -62,68 +62,47 @@ func (cfg DestinationConfig) WithDialTimeout(timeout time.Duration) DestinationC
 	return cfg
 }
 
-type Destination struct {
-	cfg    DestinationConfig
-	logger *slog.Logger
+func (cfg DestinationConfig) endpointConfig() endpointConfig {
+	return endpointConfig{
+		endpoint: cfg.Endpoint,
+		role:     model.Destination,
+		route:    cfg.Route,
+	}
+}
 
-	peer *peer
-	ep   *clientEndpoint
+type Destination struct {
+	cfg DestinationConfig
+	ep  *endpoint
 
 	acceptCh chan net.Conn
+
+	logger *slog.Logger
 }
 
 func newDestination(ctx context.Context, cl *Client, cfg DestinationConfig) (*Destination, error) {
 	logger := cl.logger.With("destination", cfg.Endpoint)
-	p, err := newPeer(cl.directServer, cfg.Route.AllowDirect(), logger)
+
+	ep, err := newEndpoint(ctx, cl, cfg.endpointConfig(), logger)
 	if err != nil {
 		return nil, err
 	}
 
 	dst := &Destination{
-		cfg:    cfg,
-		logger: logger,
-
-		peer: p,
+		cfg: cfg,
+		ep:  ep,
 
 		acceptCh: make(chan net.Conn),
+
+		logger: logger,
 	}
 
-	ep, err := newClientEndpoint(ctx, cl, dst, logger, func() {
-		cl.removeDestination(cfg.Endpoint)
-	})
-	if err != nil {
-		return nil, err
-	}
-	dst.ep = ep
+	go dst.runActive(ep.ctx)
 
 	return dst, nil
 }
 
 func (d *Destination) Config() DestinationConfig {
 	return d.cfg
-}
-
-func (d *Destination) runPeerErr(ctx context.Context) error {
-	defer close(d.acceptCh)
-
-	return reliable.RunGroup(ctx,
-		d.peer.run,
-		d.runActive,
-	)
-}
-
-func (d *Destination) runAnnounceErr(ctx context.Context, sess *session, notifyResponse func(error)) error {
-	pc := &peerControl{
-		local: d.peer,
-
-		endpoint: d.cfg.Endpoint,
-		role:     model.Destination,
-		opt:      d.cfg.Route,
-
-		sess:   sess,
-		notify: notifyResponse,
-	}
-	return pc.run(ctx)
 }
 
 func (d *Destination) Accept() (net.Conn, error) {
@@ -147,14 +126,7 @@ func (d *Destination) Context() context.Context {
 }
 
 func (d *Destination) Status() (EndpointStatus, error) {
-	peerStatus, err := d.peer.status()
-	if err != nil {
-		return EndpointStatus{}, err
-	}
-	return EndpointStatus{
-		Status: d.ep.status(),
-		Peer:   peerStatus,
-	}, nil
+	return d.ep.Status()
 }
 
 func (d *Destination) Addr() net.Addr {
@@ -165,7 +137,15 @@ func (d *Destination) Close() error {
 	return d.ep.close()
 }
 
-func (d *Destination) runActive(ctx context.Context) error {
+func (d *Destination) runActive(ctx context.Context) {
+	defer close(d.acceptCh)
+
+	if err := d.runActiveErr(ctx); err != nil {
+		d.logger.Debug("run active exited", "err", err) // TODO
+	}
+}
+
+func (d *Destination) runActiveErr(ctx context.Context) error {
 	var conns = map[peerConnKey]*destinationConn{}
 	defer func() {
 		for peer, conn := range conns {
@@ -174,7 +154,7 @@ func (d *Destination) runActive(ctx context.Context) error {
 		}
 	}()
 
-	return d.peer.activeConnsListen(ctx, func(active map[peerConnKey]*quic.Conn) error {
+	return d.ep.peer.activeConnsListen(ctx, func(active map[peerConnKey]*quic.Conn) error {
 		d.logger.Debug("active conns", "len", len(active))
 		for peer, conn := range active {
 			if dc := conns[peer]; dc != nil {
@@ -291,16 +271,16 @@ func (d *destinationConn) runConnect(ctx context.Context, stream *quic.Stream, r
 
 			connect.DestinationEncryption = pbconnect.RelayEncryptionScheme_TLS
 			connect.DestinationTls = &pbconnect.TLSConfiguration{
-				ClientName: d.dst.peer.serverCert.Leaf.DNSNames[0],
+				ClientName: d.dst.ep.peer.serverCert.Leaf.DNSNames[0],
 			}
 		case encryption == model.DHXCPEncryption:
 			// get check peer public key
-			srcPublic, err := d.dst.peer.getECDHPublicKey(req.Connect.SourceDhX25519)
+			srcPublic, err := d.dst.ep.peer.getECDHPublicKey(req.Connect.SourceDhX25519)
 			if err != nil {
 				return pbconnect.WriteError(stream, pberror.Code_DestinationRelayEncryptionError, "destination public key: %v", err)
 			}
 
-			dstSecret, ecdhCfg, err := d.dst.peer.newECDHConfig()
+			dstSecret, ecdhCfg, err := d.dst.ep.peer.newECDHConfig()
 			if err != nil {
 				return pbconnect.WriteError(stream, pberror.Code_DestinationRelayEncryptionError, "new ecdh config: %v", err)
 			}
@@ -362,7 +342,7 @@ func (d *destinationConn) close() {
 }
 
 func (d *Destination) getSourceTLS(name string) (*tls.Config, error) {
-	remotes, err := d.peer.peers.Peek()
+	remotes, err := d.ep.peer.peers.Peek()
 	if err != nil {
 		return nil, fmt.Errorf("source peers list: %w", err)
 	}
@@ -381,7 +361,7 @@ func (d *Destination) getSourceTLS(name string) (*tls.Config, error) {
 			clientCAs.AddCert(clientCert)
 			return &tls.Config{
 				ClientAuth:   tls.RequireAndVerifyClientCert,
-				Certificates: []tls.Certificate{d.peer.serverCert},
+				Certificates: []tls.Certificate{d.ep.peer.serverCert},
 				ClientCAs:    clientCAs,
 			}, nil
 		}
