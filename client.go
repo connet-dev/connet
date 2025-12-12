@@ -24,7 +24,6 @@ import (
 	"github.com/connet-dev/connet/slogc"
 	"github.com/connet-dev/connet/statusc"
 	"github.com/quic-go/quic-go"
-	"golang.org/x/sync/errgroup"
 )
 
 type Client struct {
@@ -42,6 +41,7 @@ type Client struct {
 	ctxCancel      context.CancelCauseFunc
 	closer         chan struct{}
 
+	addrs    *notify.V[advertiseAddrs]
 	natlocal *nat.Local
 	natpmp   *nat.PMP
 }
@@ -64,6 +64,8 @@ func Connect(ctx context.Context, opts ...Option) (*Client, error) {
 
 		currentSession: notify.New[*session](nil),
 		closer:         make(chan struct{}),
+
+		addrs: notify.NewEmpty[advertiseAddrs](),
 	}
 	c.connStatus.Store(statusc.NotConnected)
 
@@ -116,11 +118,13 @@ func (c *Client) runClient(ctx context.Context, errCh chan error) {
 	c.natlocal = nat.NewLocal(uint16(c.directAddr.Port), c.logger)
 	c.natpmp = nat.NewPMP(c.natPMP, transport, uint16(c.directAddr.Port), c.logger)
 
-	g, ctx := errgroup.WithContext(ctx)
+	g := reliable.NewGroup(ctx)
 
-	g.Go(func() error { return ds.Run(ctx) })
-	g.Go(func() error { return c.natpmp.Run(ctx) })
-	g.Go(func() error { return c.run(ctx, transport, errCh) })
+	g.Go(ds.Run)
+	g.Go(c.natpmp.Run)
+	g.Go(c.listenNatlocal)
+	g.Go(c.listenNatpmp)
+	g.Go(func(ctx context.Context) error { return c.run(ctx, transport, errCh) })
 
 	if err := g.Wait(); err != nil {
 		c.logger.Warn("shutting down client", "err", err)
@@ -278,7 +282,6 @@ func (c *Client) run(ctx context.Context, transport *quic.Transport, errCh chan 
 
 type session struct {
 	conn    *quic.Conn
-	addrs   *notify.V[advertiseAddrs]
 	retoken []byte
 }
 
@@ -321,14 +324,14 @@ func (c *Client) connect(ctx context.Context, transport *quic.Transport, retoken
 		return nil, fmt.Errorf("authentication failed: %w", resp.Error)
 	}
 
-	addrs := advertiseAddrs{
-		STUN:  []netip.AddrPort{resp.Public.AsNetip()},
-		Local: c.natlocal.Get(),
-		PMP:   c.natpmp.Get(),
-	}
+	c.addrs.Update(func(t advertiseAddrs) advertiseAddrs {
+		c.logger.Debug("updating nat stun", "addr", resp.Public.AsNetip())
+		t.STUN = []netip.AddrPort{resp.Public.AsNetip()}
+		return t
+	})
 
-	c.logger.Info("authenticated to server", "addr", c.controlAddr, "direct", addrs)
-	return &session{conn, notify.New(addrs), resp.ReconnectToken}, nil
+	c.logger.Info("authenticated to server", "addr", c.controlAddr, "direct", resp.Public.AsNetip())
+	return &session{conn, resp.ReconnectToken}, nil
 }
 
 func (c *Client) reconnect(ctx context.Context, transport *quic.Transport, retoken []byte) (*session, error) {
@@ -364,34 +367,6 @@ func (c *Client) runSession(ctx context.Context, sess *session) error {
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
 
-	go func() {
-		err := c.natlocal.Listen(ctx, func(ap []netip.AddrPort) error {
-			c.logger.Debug("updating nat local", "addrs", ap)
-			sess.addrs.Update(func(d advertiseAddrs) advertiseAddrs {
-				d.Local = ap
-				return d
-			})
-			return nil
-		})
-		if err != nil {
-			slogc.Fine(c.logger, "closing nat local listener", "err", err)
-		}
-	}()
-
-	go func() {
-		err := c.natpmp.Listen(ctx, func(ap []netip.AddrPort) error {
-			c.logger.Debug("updating nat pmp", "addrs", ap)
-			sess.addrs.Update(func(d advertiseAddrs) advertiseAddrs {
-				d.PMP = ap
-				return d
-			})
-			return nil
-		})
-		if err != nil {
-			slogc.Fine(c.logger, "closing nat pmp listener", "err", err)
-		}
-	}()
-
 	c.currentSession.Set(sess)
 	defer c.currentSession.Set(nil)
 
@@ -404,6 +379,28 @@ func (c *Client) runSession(ctx context.Context, sess *session) error {
 	case <-sess.conn.Context().Done():
 		return context.Cause(sess.conn.Context())
 	}
+}
+
+func (c *Client) listenNatlocal(ctx context.Context) error {
+	return c.natlocal.Listen(ctx, func(ap []netip.AddrPort) error {
+		c.logger.Debug("updating nat local", "addrs", ap)
+		c.addrs.Update(func(d advertiseAddrs) advertiseAddrs {
+			d.Local = ap
+			return d
+		})
+		return nil
+	})
+}
+
+func (c *Client) listenNatpmp(ctx context.Context) error {
+	return c.natpmp.Listen(ctx, func(ap []netip.AddrPort) error {
+		c.logger.Debug("updating nat pmp", "addrs", ap)
+		c.addrs.Update(func(d advertiseAddrs) advertiseAddrs {
+			d.PMP = ap
+			return d
+		})
+		return nil
+	})
 }
 
 type ClientStatus struct {

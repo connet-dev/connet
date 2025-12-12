@@ -66,7 +66,7 @@ type endpoint struct {
 //   - an error happens in runPeer
 //   - a terminal error happens in runAnnounce
 func newEndpoint(ctx context.Context, cl *Client, cfg endpointConfig, logger *slog.Logger) (*endpoint, error) {
-	p, err := newPeer(cl.directServer, cfg.route.AllowDirect(), logger)
+	p, err := newPeer(cl.directServer, cl.addrs, cfg.route.AllowDirect(), logger)
 	if err != nil {
 		return nil, err
 	}
@@ -174,10 +174,6 @@ func (ep *endpoint) runSessionAnnounceErr(ctx context.Context, sess *session) er
 
 	g.Go(reliable.Bind(sess, ep.runAnnounce))
 
-	if ep.cfg.route.AllowDirect() {
-		g.Go(reliable.Bind(sess, ep.runDirectAddrs))
-	}
-
 	if ep.cfg.route.AllowRelay() {
 		g.Go(reliable.Bind(sess, ep.runRelay))
 	}
@@ -236,13 +232,6 @@ func (ep *endpoint) runAnnounce(ctx context.Context, sess *session) error {
 	})
 
 	return g.Wait()
-}
-
-func (ep *endpoint) runDirectAddrs(ctx context.Context, sess *session) error {
-	return sess.addrs.Listen(ctx, func(t advertiseAddrs) error {
-		ep.peer.setDirectAddrs(t.all())
-		return nil
-	})
 }
 
 func (ep *endpoint) runRelay(ctx context.Context, sess *session) error {

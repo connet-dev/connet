@@ -10,7 +10,6 @@ import (
 	"encoding/binary"
 	"fmt"
 	"log/slog"
-	"net/netip"
 	"time"
 
 	"github.com/connet-dev/connet/certc"
@@ -31,7 +30,10 @@ type peer struct {
 	peers      *notify.V[[]*pbclient.RemotePeer]
 	peerConns  *notify.V[map[peerConnKey]*quic.Conn]
 
-	direct     *directServer
+	direct      *directServer
+	addrs       *notify.V[advertiseAddrs]
+	allowDirect bool
+
 	serverCert tls.Certificate
 	clientCert tls.Certificate
 	logger     *slog.Logger
@@ -66,7 +68,7 @@ func (s peerStyle) String() string {
 	}
 }
 
-func newPeer(direct *directServer, allowDirect bool, logger *slog.Logger) (*peer, error) {
+func newPeer(direct *directServer, addrs *notify.V[advertiseAddrs], allowDirect bool, logger *slog.Logger) (*peer, error) {
 	root, err := certc.NewRoot()
 	if err != nil {
 		return nil, err
@@ -105,26 +107,14 @@ func newPeer(direct *directServer, allowDirect bool, logger *slog.Logger) (*peer
 		peers:      notify.NewEmpty[[]*pbclient.RemotePeer](),
 		peerConns:  notify.New(map[peerConnKey]*quic.Conn{}),
 
-		direct:     direct,
+		direct:      direct,
+		addrs:       addrs,
+		allowDirect: allowDirect,
+
 		serverCert: serverTLSCert,
 		clientCert: clientTLSCert,
 		logger:     logger,
 	}, nil
-}
-
-func (p *peer) isDirect() bool {
-	return p.direct.getServer(p.serverCert.Leaf.DNSNames[0]) != nil
-}
-
-func (p *peer) setDirectAddrs(addrs []netip.AddrPort) {
-	p.self.Update(func(cp *pbclient.Peer) *pbclient.Peer {
-		return &pbclient.Peer{
-			Directs:           pbmodel.AsAddrPorts(addrs),
-			RelayIds:          cp.RelayIds,
-			ServerCertificate: cp.ServerCertificate,
-			ClientCertificate: cp.ClientCertificate,
-		}
-	})
 }
 
 func (p *peer) setRelays(relays []*pbclient.Relay) {
@@ -141,10 +131,29 @@ func (p *peer) setPeers(peers []*pbclient.RemotePeer) {
 
 func (p *peer) run(ctx context.Context) error {
 	return reliable.RunGroup(ctx,
+		p.runDirectAddrs,
 		p.runRelays,
 		p.runShareRelays,
 		p.runPeers,
 	)
+}
+
+func (p *peer) runDirectAddrs(ctx context.Context) error {
+	if !p.allowDirect {
+		return nil
+	}
+
+	return p.addrs.Listen(ctx, func(t advertiseAddrs) error {
+		p.self.Update(func(cp *pbclient.Peer) *pbclient.Peer {
+			return &pbclient.Peer{
+				Directs:           pbmodel.AsAddrPorts(t.all()),
+				RelayIds:          cp.RelayIds,
+				ServerCertificate: cp.ServerCertificate,
+				ClientCertificate: cp.ClientCertificate,
+			}
+		})
+		return nil
+	})
 }
 
 func (p *peer) runRelays(ctx context.Context) error {
