@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"log/slog"
 	"net"
-	"net/netip"
 	"sync"
 	"sync/atomic"
 
@@ -16,6 +15,7 @@ import (
 	"github.com/connet-dev/connet/reliable"
 	"github.com/connet-dev/connet/slogc"
 	"github.com/connet-dev/connet/statusc"
+	"github.com/quic-go/quic-go"
 	"golang.org/x/sync/errgroup"
 )
 
@@ -28,20 +28,6 @@ type endpointConfig struct {
 	endpoint model.Endpoint
 	role     model.Role
 	route    model.RouteOption
-}
-
-type advertiseAddrs struct {
-	STUN  []netip.AddrPort
-	PMP   []netip.AddrPort
-	Local []netip.AddrPort
-}
-
-func (d advertiseAddrs) all() []netip.AddrPort {
-	addrs := make([]netip.AddrPort, 0, len(d.STUN)+len(d.PMP)+len(d.Local))
-	addrs = append(addrs, d.STUN...)
-	addrs = append(addrs, d.PMP...)
-	addrs = append(addrs, d.Local...)
-	return addrs
 }
 
 type endpoint struct {
@@ -170,19 +156,18 @@ func (ep *endpoint) runSessionAnnounce(ctx context.Context, sess *session) {
 }
 
 func (ep *endpoint) runSessionAnnounceErr(ctx context.Context, sess *session) error {
-	g := reliable.NewGroup(ctx)
-
-	g.Go(reliable.Bind(sess, ep.runAnnounce))
-
 	if ep.cfg.route.AllowRelay() {
-		g.Go(reliable.Bind(sess, ep.runRelay))
+		g := reliable.NewGroup(ctx)
+		g.Go(reliable.Bind(sess.conn, ep.runAnnounce))
+		g.Go(reliable.Bind(sess.conn, ep.runRelay))
+		return g.Wait()
 	}
 
-	return g.Wait()
+	return ep.runAnnounce(ctx, sess.conn)
 }
 
-func (ep *endpoint) runAnnounce(ctx context.Context, sess *session) error {
-	stream, err := sess.conn.OpenStreamSync(ctx)
+func (ep *endpoint) runAnnounce(ctx context.Context, conn *quic.Conn) error {
+	stream, err := conn.OpenStreamSync(ctx)
 	if err != nil {
 		return fmt.Errorf("announce open stream: %w", err)
 	}
@@ -234,8 +219,8 @@ func (ep *endpoint) runAnnounce(ctx context.Context, sess *session) error {
 	return g.Wait()
 }
 
-func (ep *endpoint) runRelay(ctx context.Context, sess *session) error {
-	stream, err := sess.conn.OpenStreamSync(ctx)
+func (ep *endpoint) runRelay(ctx context.Context, conn *quic.Conn) error {
+	stream, err := conn.OpenStreamSync(ctx)
 	if err != nil {
 		return fmt.Errorf("relay open stream: %w", err)
 	}

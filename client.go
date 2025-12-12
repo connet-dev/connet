@@ -46,6 +46,20 @@ type Client struct {
 	natpmp   *nat.PMP
 }
 
+type advertiseAddrs struct {
+	STUN  []netip.AddrPort
+	PMP   []netip.AddrPort
+	Local []netip.AddrPort
+}
+
+func (d advertiseAddrs) all() []netip.AddrPort {
+	addrs := make([]netip.AddrPort, 0, len(d.STUN)+len(d.PMP)+len(d.Local))
+	addrs = append(addrs, d.STUN...)
+	addrs = append(addrs, d.PMP...)
+	addrs = append(addrs, d.Local...)
+	return addrs
+}
+
 // Connect starts a new client and connects it to the control server.
 // This call blocks until the server is connected or an error is detected.
 // The client can be stopped either by canceling this context or via calling Close. Stopping the client will also
