@@ -21,7 +21,7 @@ import (
 
 type endpointStatus struct {
 	Status statusc.Status
-	Peer   PeerStatus
+	StatusPeer
 }
 
 type endpointConfig struct {
@@ -109,8 +109,8 @@ func (ep *endpoint) status() (endpointStatus, error) {
 		return endpointStatus{}, err
 	}
 	return endpointStatus{
-		Status: ep.connStatus.Load().(statusc.Status),
-		Peer:   peerStatus,
+		Status:     ep.connStatus.Load().(statusc.Status),
+		StatusPeer: peerStatus,
 	}, nil
 }
 

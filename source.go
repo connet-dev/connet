@@ -22,6 +22,7 @@ import (
 	"github.com/connet-dev/connet/proto"
 	"github.com/connet-dev/connet/proto/pbconnect"
 	"github.com/connet-dev/connet/quicc"
+	"github.com/connet-dev/connet/statusc"
 	"github.com/quic-go/quic-go"
 )
 
@@ -115,6 +116,11 @@ func (s *Source) Config() SourceConfig {
 
 func (s *Source) Context() context.Context {
 	return s.ep.ctx
+}
+
+type SourceStatus struct {
+	Status statusc.Status `json:"status"`
+	StatusPeer
 }
 
 func (s *Source) Status() (SourceStatus, error) {

@@ -10,6 +10,8 @@ import (
 	"encoding/binary"
 	"fmt"
 	"log/slog"
+	"slices"
+	"strings"
 	"time"
 
 	"github.com/connet-dev/connet/certc"
@@ -369,4 +371,58 @@ func (p *peer) getECDHPublicKey(cfg *pbconnect.ECDHConfiguration) (*ecdh.PublicK
 		return nil, fmt.Errorf("new public key: %w", err)
 	}
 	return pk, nil
+}
+
+type StatusPeer struct {
+	Relays []StatusRelayConnection `json:"relays"`
+	Peers  []StatusPeerConnection  `json:"peers"`
+}
+
+type StatusRelayConnection struct {
+	ID   string `json:"id"`
+	Addr string `json:"addr"`
+}
+
+type StatusPeerConnection struct {
+	ID    string `json:"id"`
+	Style string `json:"style"`
+	Addr  string `json:"addr"`
+}
+
+func (p *peer) status() (StatusPeer, error) {
+	stat := StatusPeer{}
+
+	relays, err := p.relayConns.Peek()
+	if err != nil {
+		return StatusPeer{}, err
+	}
+	for id, conn := range relays {
+		stat.Relays = append(stat.Relays, StatusRelayConnection{
+			ID:   string(id),
+			Addr: conn.RemoteAddr().String(),
+		})
+	}
+	slices.SortFunc(stat.Relays, func(l, r StatusRelayConnection) int {
+		return strings.Compare(l.ID, r.ID)
+	})
+
+	conns, err := p.peerConns.Peek()
+	if err != nil {
+		return StatusPeer{}, err
+	}
+	for key, conn := range conns {
+		stat.Peers = append(stat.Peers, StatusPeerConnection{
+			ID:    string(key.id),
+			Style: key.style.String(),
+			Addr:  conn.RemoteAddr().String(),
+		})
+	}
+	slices.SortFunc(stat.Peers, func(l, r StatusPeerConnection) int {
+		if diff := strings.Compare(l.ID, r.ID); diff != 0 {
+			return diff
+		}
+		return strings.Compare(l.Style, r.Style)
+	})
+
+	return stat, nil
 }

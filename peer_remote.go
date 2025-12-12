@@ -411,7 +411,7 @@ func (p *remotePeerRelays) run(ctx context.Context) {
 		remotes map[relayID]struct{}
 	)
 
-	active := map[relayID]model.HostPort{}
+	active := map[relayID]struct{}{}
 	defer func() {
 		for id := range active {
 			p.parent.local.removeActiveConn(p.parent.remoteID, peerRelay, string(id))
@@ -431,6 +431,7 @@ func (p *remotePeerRelays) run(ctx context.Context) {
 		for id := range remotes {
 			if conn, ok := locals[id]; ok {
 				if _, ok := active[id]; !ok {
+					active[id] = struct{}{}
 					p.parent.local.addActiveConn(p.parent.remoteID, peerRelay, string(id), conn)
 				}
 			}

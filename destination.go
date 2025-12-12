@@ -15,6 +15,7 @@ import (
 	"github.com/connet-dev/connet/proto/pberror"
 	"github.com/connet-dev/connet/quicc"
 	"github.com/connet-dev/connet/reliable"
+	"github.com/connet-dev/connet/statusc"
 	"github.com/quic-go/quic-go"
 )
 
@@ -71,6 +72,11 @@ func (d *Destination) Config() DestinationConfig {
 
 func (d *Destination) Context() context.Context {
 	return d.ep.ctx
+}
+
+type DestinationStatus struct {
+	Status statusc.Status `json:"status"`
+	StatusPeer
 }
 
 func (d *Destination) Status() (DestinationStatus, error) {
