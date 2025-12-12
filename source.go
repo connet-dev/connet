@@ -22,6 +22,7 @@ import (
 	"github.com/connet-dev/connet/proto"
 	"github.com/connet-dev/connet/proto/pbconnect"
 	"github.com/connet-dev/connet/quicc"
+	"github.com/connet-dev/connet/statusc"
 	"github.com/quic-go/quic-go"
 )
 
@@ -90,6 +91,11 @@ func (cfg SourceConfig) WithLoadBalance(policy model.LoadBalancePolicy, retry mo
 	return cfg
 }
 
+type SourceStatus struct {
+	Status statusc.Status
+	Peer   PeerStatus
+}
+
 type Source struct {
 	cfg SourceConfig
 	ep  *endpoint
@@ -142,8 +148,9 @@ func (s *Source) Context() context.Context {
 	return s.ep.ctx
 }
 
-func (s *Source) Status() (EndpointStatus, error) {
-	return s.ep.Status()
+func (s *Source) Status() (SourceStatus, error) {
+	stat, err := s.ep.status()
+	return SourceStatus(stat), err
 }
 
 func (s *Source) Close() error {

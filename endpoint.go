@@ -19,7 +19,7 @@ import (
 	"golang.org/x/sync/errgroup"
 )
 
-type EndpointStatus struct {
+type endpointStatus struct {
 	Status statusc.Status
 	Peer   PeerStatus
 }
@@ -117,12 +117,12 @@ func newEndpoint(ctx context.Context, cl *Client, cfg endpointConfig, logger *sl
 	return ep, nil
 }
 
-func (ep *endpoint) Status() (EndpointStatus, error) {
+func (ep *endpoint) status() (endpointStatus, error) {
 	peerStatus, err := ep.peer.status()
 	if err != nil {
-		return EndpointStatus{}, err
+		return endpointStatus{}, err
 	}
-	return EndpointStatus{
+	return endpointStatus{
 		Status: ep.connStatus.Load().(statusc.Status),
 		Peer:   peerStatus,
 	}, nil

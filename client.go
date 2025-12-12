@@ -407,9 +407,9 @@ func (c *Client) runSession(ctx context.Context, sess *session) error {
 }
 
 type ClientStatus struct {
-	Status       statusc.Status                    `json:"status"`
-	Destinations map[model.Endpoint]EndpointStatus `json:"destinations"`
-	Sources      map[model.Endpoint]EndpointStatus `json:"sources"`
+	Status       statusc.Status                       `json:"status"`
+	Destinations map[model.Endpoint]DestinationStatus `json:"destinations"`
+	Sources      map[model.Endpoint]SourceStatus      `json:"sources"`
 }
 
 // Status returns status of the client and all active endpoints
@@ -433,9 +433,9 @@ func (c *Client) Status(ctx context.Context) (ClientStatus, error) {
 	}, nil
 }
 
-func (c *Client) destinationsStatus() (map[model.Endpoint]EndpointStatus, error) {
+func (c *Client) destinationsStatus() (map[model.Endpoint]DestinationStatus, error) {
 	var err error
-	statuses := map[model.Endpoint]EndpointStatus{}
+	statuses := map[model.Endpoint]DestinationStatus{}
 
 	c.destinationsMu.RLock()
 	defer c.destinationsMu.RUnlock()
@@ -450,9 +450,9 @@ func (c *Client) destinationsStatus() (map[model.Endpoint]EndpointStatus, error)
 	return statuses, nil
 }
 
-func (c *Client) sourcesStatus() (map[model.Endpoint]EndpointStatus, error) {
+func (c *Client) sourcesStatus() (map[model.Endpoint]SourceStatus, error) {
 	var err error
-	statuses := map[model.Endpoint]EndpointStatus{}
+	statuses := map[model.Endpoint]SourceStatus{}
 
 	c.sourcesMu.RLock()
 	defer c.sourcesMu.RUnlock()

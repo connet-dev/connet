@@ -16,6 +16,7 @@ import (
 	"github.com/connet-dev/connet/proto/pberror"
 	"github.com/connet-dev/connet/quicc"
 	"github.com/connet-dev/connet/reliable"
+	"github.com/connet-dev/connet/statusc"
 	"github.com/quic-go/quic-go"
 )
 
@@ -68,6 +69,11 @@ func (cfg DestinationConfig) endpointConfig() endpointConfig {
 		role:     model.Destination,
 		route:    cfg.Route,
 	}
+}
+
+type DestinationStatus struct {
+	Status statusc.Status
+	Peer   PeerStatus
 }
 
 type Destination struct {
@@ -125,8 +131,9 @@ func (d *Destination) Context() context.Context {
 	return d.ep.ctx
 }
 
-func (d *Destination) Status() (EndpointStatus, error) {
-	return d.ep.Status()
+func (d *Destination) Status() (DestinationStatus, error) {
+	stat, err := d.ep.status()
+	return DestinationStatus(stat), err
 }
 
 func (d *Destination) Addr() net.Addr {
