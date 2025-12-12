@@ -66,7 +66,7 @@ func (s peerStyle) String() string {
 	}
 }
 
-func newPeer(direct *directServer, logger *slog.Logger) (*peer, error) {
+func newPeer(direct *directServer, allowDirect bool, logger *slog.Logger) (*peer, error) {
 	root, err := certc.NewRoot()
 	if err != nil {
 		return nil, err
@@ -91,6 +91,10 @@ func newPeer(direct *directServer, logger *slog.Logger) (*peer, error) {
 		return nil, err
 	}
 
+	if allowDirect {
+		direct.addServerCert(serverTLSCert)
+	}
+
 	return &peer{
 		self: notify.New(&pbclient.Peer{
 			ServerCertificate: serverTLSCert.Leaf.Raw,
@@ -106,10 +110,6 @@ func newPeer(direct *directServer, logger *slog.Logger) (*peer, error) {
 		clientCert: clientTLSCert,
 		logger:     logger,
 	}, nil
-}
-
-func (p *peer) expectDirect() {
-	p.direct.addServerCert(p.serverCert)
 }
 
 func (p *peer) isDirect() bool {

@@ -11,14 +11,12 @@ import (
 
 	"github.com/connet-dev/connet/cryptoc"
 	"github.com/connet-dev/connet/model"
-	"github.com/connet-dev/connet/notify"
 	"github.com/connet-dev/connet/proto"
 	"github.com/connet-dev/connet/proto/pbconnect"
 	"github.com/connet-dev/connet/proto/pberror"
 	"github.com/connet-dev/connet/quicc"
 	"github.com/connet-dev/connet/reliable"
 	"github.com/quic-go/quic-go"
-	"golang.org/x/sync/errgroup"
 )
 
 // DestinationConfig structure represents destination configuration.
@@ -68,29 +66,24 @@ type Destination struct {
 	cfg    DestinationConfig
 	logger *slog.Logger
 
-	peer  *peer
-	conns map[peerConnKey]*destinationConn
-	ep    *clientEndpoint
+	peer *peer
+	ep   *clientEndpoint
 
 	acceptCh chan net.Conn
 }
 
 func newDestination(ctx context.Context, cl *Client, cfg DestinationConfig) (*Destination, error) {
 	logger := cl.logger.With("destination", cfg.Endpoint)
-	p, err := newPeer(cl.directServer, logger)
+	p, err := newPeer(cl.directServer, cfg.Route.AllowDirect(), logger)
 	if err != nil {
 		return nil, err
-	}
-	if cfg.Route.AllowDirect() {
-		p.expectDirect()
 	}
 
 	dst := &Destination{
 		cfg:    cfg,
 		logger: logger,
 
-		peer:  p,
-		conns: map[peerConnKey]*destinationConn{},
+		peer: p,
 
 		acceptCh: make(chan net.Conn),
 	}
@@ -119,28 +112,17 @@ func (d *Destination) runPeerErr(ctx context.Context) error {
 	)
 }
 
-func (d *Destination) runAnnounceErr(ctx context.Context, conn *quic.Conn, directAddrs *notify.V[advertiseAddrs], notifyResponse func(error)) error {
+func (d *Destination) runAnnounceErr(ctx context.Context, sess *session, notifyResponse func(error)) error {
 	pc := &peerControl{
-		local:    d.peer,
+		local: d.peer,
+
 		endpoint: d.cfg.Endpoint,
 		role:     model.Destination,
 		opt:      d.cfg.Route,
-		conn:     conn,
-		notify:   notifyResponse,
-	}
 
-	if d.cfg.Route.AllowDirect() {
-		g, ctx := errgroup.WithContext(ctx)
-		g.Go(func() error {
-			return directAddrs.Listen(ctx, func(t advertiseAddrs) error {
-				d.peer.setDirectAddrs(t.all())
-				return nil
-			})
-		})
-		g.Go(func() error { return pc.run(ctx) })
-		return g.Wait()
+		sess:   sess,
+		notify: notifyResponse,
 	}
-
 	return pc.run(ctx)
 }
 
@@ -184,26 +166,34 @@ func (d *Destination) Close() error {
 }
 
 func (d *Destination) runActive(ctx context.Context) error {
+	var conns = map[peerConnKey]*destinationConn{}
+	defer func() {
+		for peer, conn := range conns {
+			conn.close()
+			delete(conns, peer)
+		}
+	}()
+
 	return d.peer.activeConnsListen(ctx, func(active map[peerConnKey]*quic.Conn) error {
 		d.logger.Debug("active conns", "len", len(active))
 		for peer, conn := range active {
-			if dc := d.conns[peer]; dc != nil {
+			if dc := conns[peer]; dc != nil {
 				if dc.conn == conn {
 					continue
 				}
 				dc.close()
-				delete(d.conns, peer)
+				delete(conns, peer)
 			}
 
 			dc := newDestinationConn(d, peer, conn, d.logger)
-			d.conns[peer] = dc
+			conns[peer] = dc
 			go dc.run(ctx)
 		}
 
-		for peer, conn := range d.conns {
+		for peer, conn := range conns {
 			if _, ok := active[peer]; !ok {
 				conn.close()
-				delete(d.conns, peer)
+				delete(conns, peer)
 			}
 		}
 		return nil
@@ -227,9 +217,9 @@ func newDestinationConn(dst *Destination, peer peerConnKey, conn *quic.Conn, log
 }
 
 func (d *destinationConn) run(ctx context.Context) {
-	g, ctx := errgroup.WithContext(ctx)
+	g := reliable.NewGroup(ctx)
 
-	g.Go(func() error {
+	g.Go(func(ctx context.Context) error {
 		for {
 			stream, err := d.conn.AcceptStream(ctx)
 			if err != nil {
@@ -240,7 +230,7 @@ func (d *destinationConn) run(ctx context.Context) {
 			go d.runDestination(ctx, stream)
 		}
 	})
-	g.Go(func() error {
+	g.Go(func(ctx context.Context) error {
 		<-d.closer
 		return errPeeringStop
 	})

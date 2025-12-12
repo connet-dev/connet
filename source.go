@@ -19,13 +19,11 @@ import (
 
 	"github.com/connet-dev/connet/cryptoc"
 	"github.com/connet-dev/connet/model"
-	"github.com/connet-dev/connet/notify"
 	"github.com/connet-dev/connet/proto"
 	"github.com/connet-dev/connet/proto/pbconnect"
 	"github.com/connet-dev/connet/quicc"
 	"github.com/connet-dev/connet/reliable"
 	"github.com/quic-go/quic-go"
-	"golang.org/x/sync/errgroup"
 )
 
 // SourceConfig structure represents source configuration.
@@ -89,10 +87,10 @@ type Source struct {
 	cfg    SourceConfig
 	logger *slog.Logger
 
-	peer  *peer
-	conns atomic.Pointer[[]sourceConn]
-	ep    *clientEndpoint
+	peer *peer
+	ep   *clientEndpoint
 
+	conns           atomic.Pointer[[]sourceConn]
 	connsTracking   map[peerID]*atomic.Int32
 	connsTrackingMu sync.RWMutex
 	roundRobinIndex atomic.Int32
@@ -105,12 +103,9 @@ type sourceConn struct {
 
 func newSource(ctx context.Context, cl *Client, cfg SourceConfig) (*Source, error) {
 	logger := cl.logger.With("source", cfg.Endpoint)
-	p, err := newPeer(cl.directServer, logger)
+	p, err := newPeer(cl.directServer, cfg.Route.AllowDirect(), logger)
 	if err != nil {
 		return nil, err
-	}
-	if cfg.Route.AllowDirect() {
-		p.expectDirect()
 	}
 	var connsTracking map[peerID]*atomic.Int32
 	if cfg.DestinationPolicy == model.LeastConnsPolicy {
@@ -126,7 +121,7 @@ func newSource(ctx context.Context, cl *Client, cfg SourceConfig) (*Source, erro
 		connsTracking: connsTracking,
 	}
 
-	ep, err := newClientEndpoint(ctx, cl, src, cl.logger.With("source", cfg.Endpoint), func() {
+	ep, err := newClientEndpoint(ctx, cl, src, logger, func() {
 		cl.removeSource(cfg.Endpoint)
 	})
 	if err != nil {
@@ -167,28 +162,17 @@ func (s *Source) runPeerErr(ctx context.Context) error {
 	)
 }
 
-func (s *Source) runAnnounceErr(ctx context.Context, conn *quic.Conn, directAddrs *notify.V[advertiseAddrs], notifyResponse func(error)) error {
+func (s *Source) runAnnounceErr(ctx context.Context, sess *session, notifyResponse func(error)) error {
 	pc := &peerControl{
-		local:    s.peer,
+		local: s.peer,
+
 		endpoint: s.cfg.Endpoint,
 		role:     model.Source,
 		opt:      s.cfg.Route,
-		conn:     conn,
-		notify:   notifyResponse,
-	}
 
-	if s.cfg.Route.AllowDirect() {
-		g, ctx := errgroup.WithContext(ctx)
-		g.Go(func() error {
-			return directAddrs.Listen(ctx, func(t advertiseAddrs) error {
-				s.peer.setDirectAddrs(t.all())
-				return nil
-			})
-		})
-		g.Go(func() error { return pc.run(ctx) })
-		return g.Wait()
+		sess:   sess,
+		notify: notifyResponse,
 	}
-
 	return pc.run(ctx)
 }
 

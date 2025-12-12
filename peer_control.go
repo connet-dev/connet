@@ -10,7 +10,6 @@ import (
 	"github.com/connet-dev/connet/proto/pbclient"
 	"github.com/connet-dev/connet/reliable"
 	"github.com/connet-dev/connet/slogc"
-	"github.com/quic-go/quic-go"
 	"golang.org/x/sync/errgroup"
 )
 
@@ -29,27 +28,34 @@ func (d advertiseAddrs) all() []netip.AddrPort {
 }
 
 type peerControl struct {
-	local    *peer
+	local *peer
+
 	endpoint model.Endpoint
 	role     model.Role
 	opt      model.RouteOption
-	conn     *quic.Conn
-	notify   func(error)
+
+	sess   *session
+	notify func(error)
 }
 
 func (d *peerControl) run(ctx context.Context) error {
-	if d.opt.AllowRelay() {
-		return reliable.RunGroup(ctx,
-			d.runAnnounce,
-			d.runRelay,
-		)
+	g := reliable.NewGroup(ctx)
+
+	g.Go(d.runAnnounce)
+
+	if d.opt.AllowDirect() {
+		g.Go(d.runDirectAddrs)
 	}
 
-	return d.runAnnounce(ctx)
+	if d.opt.AllowRelay() {
+		g.Go(d.runRelay)
+	}
+
+	return g.Wait()
 }
 
 func (d *peerControl) runAnnounce(ctx context.Context) error {
-	stream, err := d.conn.OpenStreamSync(ctx)
+	stream, err := d.sess.conn.OpenStreamSync(ctx)
 	if err != nil {
 		return fmt.Errorf("announce open stream: %w", err)
 	}
@@ -101,8 +107,15 @@ func (d *peerControl) runAnnounce(ctx context.Context) error {
 	return g.Wait()
 }
 
+func (d *peerControl) runDirectAddrs(ctx context.Context) error {
+	return d.sess.addrs.Listen(ctx, func(t advertiseAddrs) error {
+		d.local.setDirectAddrs(t.all())
+		return nil
+	})
+}
+
 func (d *peerControl) runRelay(ctx context.Context) error {
-	stream, err := d.conn.OpenStreamSync(ctx)
+	stream, err := d.sess.conn.OpenStreamSync(ctx)
 	if err != nil {
 		return fmt.Errorf("relay open stream: %w", err)
 	}

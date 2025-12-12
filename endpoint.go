@@ -8,9 +8,7 @@ import (
 	"sync"
 	"sync/atomic"
 
-	"github.com/connet-dev/connet/notify"
 	"github.com/connet-dev/connet/statusc"
-	"github.com/quic-go/quic-go"
 )
 
 type EndpointStatus struct {
@@ -20,7 +18,7 @@ type EndpointStatus struct {
 
 type endpoint interface {
 	runPeerErr(ctx context.Context) error
-	runAnnounceErr(ctx context.Context, conn *quic.Conn, directAddrs *notify.V[advertiseAddrs], firstReport func(error)) error
+	runAnnounceErr(ctx context.Context, sess *session, firstReport func(error)) error
 }
 
 type clientEndpoint struct {
@@ -118,7 +116,7 @@ func (e *clientEndpoint) runAnnounce(ctx context.Context) {
 
 func (e *clientEndpoint) runAnnounceSession(ctx context.Context, sess *session) {
 	for {
-		err := e.ep.runAnnounceErr(ctx, sess.conn, sess.addrs, func(err error) {
+		err := e.ep.runAnnounceErr(ctx, sess, func(err error) {
 			if err == nil {
 				e.connStatus.Store(statusc.Connected)
 			}
