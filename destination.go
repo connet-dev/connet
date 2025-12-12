@@ -7,7 +7,6 @@ import (
 	"fmt"
 	"log/slog"
 	"net"
-	"time"
 
 	"github.com/connet-dev/connet/cryptoc"
 	"github.com/connet-dev/connet/model"
@@ -16,65 +15,8 @@ import (
 	"github.com/connet-dev/connet/proto/pberror"
 	"github.com/connet-dev/connet/quicc"
 	"github.com/connet-dev/connet/reliable"
-	"github.com/connet-dev/connet/statusc"
 	"github.com/quic-go/quic-go"
 )
-
-// DestinationConfig structure represents destination configuration.
-type DestinationConfig struct {
-	Endpoint         model.Endpoint
-	Route            model.RouteOption
-	Proxy            model.ProxyVersion
-	RelayEncryptions []model.EncryptionScheme
-	DialTimeout      time.Duration
-}
-
-// NewDestinationConfig creates a destination config for a given name
-func NewDestinationConfig(name string) DestinationConfig {
-	return DestinationConfig{
-		Endpoint:         model.NewEndpoint(name),
-		Route:            model.RouteAny,
-		Proxy:            model.ProxyNone,
-		RelayEncryptions: []model.EncryptionScheme{model.NoEncryption},
-	}
-}
-
-// WithRoute sets the route option for this configuration.
-func (cfg DestinationConfig) WithRoute(route model.RouteOption) DestinationConfig {
-	cfg.Route = route
-	return cfg
-}
-
-// WithProxy sets the proxy version option for this configuration.
-func (cfg DestinationConfig) WithProxy(proxy model.ProxyVersion) DestinationConfig {
-	cfg.Proxy = proxy
-	return cfg
-}
-
-// WithRelayEncryptions sets the relay encryptions option for this configuration.
-func (cfg DestinationConfig) WithRelayEncryptions(schemes ...model.EncryptionScheme) DestinationConfig {
-	cfg.RelayEncryptions = schemes
-	return cfg
-}
-
-// WithDialTimeout sets the dial timeout
-func (cfg DestinationConfig) WithDialTimeout(timeout time.Duration) DestinationConfig {
-	cfg.DialTimeout = timeout
-	return cfg
-}
-
-func (cfg DestinationConfig) endpointConfig() endpointConfig {
-	return endpointConfig{
-		endpoint: cfg.Endpoint,
-		role:     model.Destination,
-		route:    cfg.Route,
-	}
-}
-
-type DestinationStatus struct {
-	Status statusc.Status
-	Peer   PeerStatus
-}
 
 type Destination struct {
 	cfg DestinationConfig
@@ -107,10 +49,6 @@ func newDestination(ctx context.Context, cl *Client, cfg DestinationConfig) (*De
 	return dst, nil
 }
 
-func (d *Destination) Config() DestinationConfig {
-	return d.cfg
-}
-
 func (d *Destination) Accept() (net.Conn, error) {
 	return d.AcceptContext(context.Background())
 }
@@ -125,6 +63,10 @@ func (d *Destination) AcceptContext(ctx context.Context) (net.Conn, error) {
 		}
 		return conn, nil
 	}
+}
+
+func (d *Destination) Config() DestinationConfig {
+	return d.cfg
 }
 
 func (d *Destination) Context() context.Context {
@@ -185,6 +127,35 @@ func (d *Destination) runActiveErr(ctx context.Context) error {
 		}
 		return nil
 	})
+}
+
+func (d *Destination) getSourceTLS(name string) (*tls.Config, error) {
+	remotes, err := d.ep.peer.peers.Peek()
+	if err != nil {
+		return nil, fmt.Errorf("source peers list: %w", err)
+	}
+
+	for _, remote := range remotes {
+		switch cfg, err := newServerTLSConfig(remote.Peer.ServerCertificate); {
+		case err != nil:
+			return nil, fmt.Errorf("source peer server cert: %w", err)
+		case cfg.name == name:
+			clientCert, err := x509.ParseCertificate(remote.Peer.ClientCertificate)
+			if err != nil {
+				return nil, fmt.Errorf("source peer client cert: %w", err)
+			}
+
+			clientCAs := x509.NewCertPool()
+			clientCAs.AddCert(clientCert)
+			return &tls.Config{
+				ClientAuth:   tls.RequireAndVerifyClientCert,
+				Certificates: []tls.Certificate{d.ep.peer.serverCert},
+				ClientCAs:    clientCAs,
+			}, nil
+		}
+	}
+
+	return nil, fmt.Errorf("source peer %s not found", name)
 }
 
 type destinationConn struct {
@@ -346,33 +317,4 @@ func (d *destinationConn) runConnect(ctx context.Context, stream *quic.Stream, r
 
 func (d *destinationConn) close() {
 	close(d.closer)
-}
-
-func (d *Destination) getSourceTLS(name string) (*tls.Config, error) {
-	remotes, err := d.ep.peer.peers.Peek()
-	if err != nil {
-		return nil, fmt.Errorf("source peers list: %w", err)
-	}
-
-	for _, remote := range remotes {
-		switch cfg, err := newServerTLSConfig(remote.Peer.ServerCertificate); {
-		case err != nil:
-			return nil, fmt.Errorf("source peer server cert: %w", err)
-		case cfg.name == name:
-			clientCert, err := x509.ParseCertificate(remote.Peer.ClientCertificate)
-			if err != nil {
-				return nil, fmt.Errorf("source peer client cert: %w", err)
-			}
-
-			clientCAs := x509.NewCertPool()
-			clientCAs.AddCert(clientCert)
-			return &tls.Config{
-				ClientAuth:   tls.RequireAndVerifyClientCert,
-				Certificates: []tls.Certificate{d.ep.peer.serverCert},
-				ClientCAs:    clientCAs,
-			}, nil
-		}
-	}
-
-	return nil, fmt.Errorf("source peer %s not found", name)
 }

@@ -1,5 +1,17 @@
 package connet
 
+import "github.com/connet-dev/connet/statusc"
+
+type DestinationStatus struct {
+	Status statusc.Status
+	Peer   PeerStatus
+}
+
+type SourceStatus struct {
+	Status statusc.Status
+	Peer   PeerStatus
+}
+
 type PeerStatus struct {
 	Relays      []RelayConnection `json:"relays"`
 	Connections []PeerConnection  `json:"connections"`

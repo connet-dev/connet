@@ -22,79 +22,11 @@ import (
 	"github.com/connet-dev/connet/proto"
 	"github.com/connet-dev/connet/proto/pbconnect"
 	"github.com/connet-dev/connet/quicc"
-	"github.com/connet-dev/connet/statusc"
 	"github.com/quic-go/quic-go"
 )
 
-// SourceConfig structure represents source configuration.
-type SourceConfig struct {
-	Endpoint         model.Endpoint
-	Route            model.RouteOption
-	RelayEncryptions []model.EncryptionScheme
-	DialTimeout      time.Duration
-
-	DestinationPolicy   model.LoadBalancePolicy
-	DestinationRetry    model.LoadBalanceRetry
-	DestinationRetryMax int
-}
-
-// NewSourceConfig creates a source config for a given name.
-func NewSourceConfig(name string) SourceConfig {
-	return SourceConfig{
-		Endpoint:          model.NewEndpoint(name),
-		Route:             model.RouteAny,
-		RelayEncryptions:  []model.EncryptionScheme{model.NoEncryption},
-		DestinationPolicy: model.NoPolicy,
-		DestinationRetry:  model.NeverRetry,
-	}
-}
-
-// WithRoute sets the route option for this configuration.
-func (cfg SourceConfig) WithRoute(route model.RouteOption) SourceConfig {
-	cfg.Route = route
-	return cfg
-}
-
-// WithRelayEncryptions sets the relay encryptions option for this configuration.
-func (cfg SourceConfig) WithRelayEncryptions(schemes ...model.EncryptionScheme) SourceConfig {
-	cfg.RelayEncryptions = schemes
-	return cfg
-}
-
-// WithDialTimeout sets the dial timeout
-func (cfg SourceConfig) WithDialTimeout(timeout time.Duration) SourceConfig {
-	cfg.DialTimeout = timeout
-	return cfg
-}
-
-func (cfg SourceConfig) endpointConfig() endpointConfig {
-	return endpointConfig{
-		endpoint: cfg.Endpoint,
-		role:     model.Source,
-		route:    cfg.Route,
-	}
-}
-
-// WithLoadBalance sets the load balancing behavior for this source
-func (cfg SourceConfig) WithLoadBalance(policy model.LoadBalancePolicy, retry model.LoadBalanceRetry, max int) SourceConfig {
-	cfg.DestinationPolicy = policy
-	cfg.DestinationRetry = retry
-	cfg.DestinationRetryMax = max
-
-	switch {
-	case cfg.DestinationRetry == model.CountRetry && cfg.DestinationRetryMax == 0:
-		cfg.DestinationRetryMax = 2
-	case cfg.DestinationRetry == model.TimedRetry && cfg.DestinationRetryMax == 0:
-		cfg.DestinationRetryMax = 1000
-	}
-
-	return cfg
-}
-
-type SourceStatus struct {
-	Status statusc.Status
-	Peer   PeerStatus
-}
+var ErrNoDialedDestinations = errors.New("no dialed destinations")
+var ErrNoActiveDestinations = errors.New("no active destinations")
 
 type Source struct {
 	cfg SourceConfig
@@ -140,6 +72,43 @@ func newSource(ctx context.Context, cl *Client, cfg SourceConfig) (*Source, erro
 	return src, nil
 }
 
+func (s *Source) Dial(network, address string) (net.Conn, error) {
+	return s.DialContext(context.Background(), network, address)
+}
+
+func (s *Source) DialContext(ctx context.Context, network, address string) (net.Conn, error) {
+	if s.cfg.DestinationPolicy == model.NoPolicy {
+		conns, err := s.findActive()
+		if err != nil {
+			return nil, fmt.Errorf("get active conns: %w", err)
+		}
+		return s.dialInOrder(ctx, conns)
+	}
+
+	peerConns, err := s.findActiveByPeer()
+	if err != nil {
+		return nil, fmt.Errorf("get active conns: %w", err)
+	}
+	conns := make([]sourceConn, len(peerConns))
+	for i, pconn := range peerConns {
+		conns[i] = pconn.conns[0]
+	}
+
+	switch s.cfg.DestinationRetry {
+	case model.NeverRetry:
+		conns = conns[0:1]
+	case model.CountRetry:
+		maxLen := min(len(conns), s.cfg.DestinationRetryMax)
+		conns = conns[0:maxLen]
+	case model.TimedRetry:
+		cancelCtx, cancel := context.WithTimeout(ctx, time.Duration(s.cfg.DestinationRetryMax)*time.Millisecond)
+		defer cancel()
+		ctx = cancelCtx
+	}
+
+	return s.dialInOrder(ctx, conns)
+}
+
 func (s *Source) Config() SourceConfig {
 	return s.cfg
 }
@@ -176,7 +145,27 @@ func (s *Source) runActiveErr(ctx context.Context) error {
 	})
 }
 
-var ErrNoActiveDestinations = errors.New("no active destinations")
+func (s *Source) getDestinationTLS(name string) (*tls.Config, error) {
+	remotes, err := s.ep.peer.peers.Peek()
+	if err != nil {
+		return nil, fmt.Errorf("destination peers list: %w", err)
+	}
+
+	for _, remote := range remotes {
+		switch cfg, err := newServerTLSConfig(remote.Peer.ServerCertificate); {
+		case err != nil:
+			return nil, fmt.Errorf("destination peer server cert: %w", err)
+		case cfg.name == name:
+			return &tls.Config{
+				Certificates: []tls.Certificate{s.ep.peer.clientCert},
+				RootCAs:      cfg.cas,
+				ServerName:   cfg.name,
+			}, nil
+		}
+	}
+
+	return nil, fmt.Errorf("destination peer %s not found", name)
+}
 
 func (s *Source) findActive() ([]sourceConn, error) {
 	conns := s.conns.Load()
@@ -287,45 +276,6 @@ func (s *Source) randomSorted(conns []peerSourceConn) []peerSourceConn {
 		conns = slices.Delete(conns, ix, ix+1)
 	}
 	return random
-}
-
-func (s *Source) Dial(network, address string) (net.Conn, error) {
-	return s.DialContext(context.Background(), network, address)
-}
-
-var ErrNoDialedDestinations = errors.New("no dialed destinations")
-
-func (s *Source) DialContext(ctx context.Context, network, address string) (net.Conn, error) {
-	if s.cfg.DestinationPolicy == model.NoPolicy {
-		conns, err := s.findActive()
-		if err != nil {
-			return nil, fmt.Errorf("get active conns: %w", err)
-		}
-		return s.dialInOrder(ctx, conns)
-	}
-
-	peerConns, err := s.findActiveByPeer()
-	if err != nil {
-		return nil, fmt.Errorf("get active conns: %w", err)
-	}
-	conns := make([]sourceConn, len(peerConns))
-	for i, pconn := range peerConns {
-		conns[i] = pconn.conns[0]
-	}
-
-	switch s.cfg.DestinationRetry {
-	case model.NeverRetry:
-		conns = conns[0:1]
-	case model.CountRetry:
-		maxLen := min(len(conns), s.cfg.DestinationRetryMax)
-		conns = conns[0:maxLen]
-	case model.TimedRetry:
-		cancelCtx, cancel := context.WithTimeout(ctx, time.Duration(s.cfg.DestinationRetryMax)*time.Millisecond)
-		defer cancel()
-		ctx = cancelCtx
-	}
-
-	return s.dialInOrder(ctx, conns)
 }
 
 func (s *Source) dialInOrder(ctx context.Context, conns []sourceConn) (net.Conn, error) {
@@ -468,26 +418,4 @@ func (s *Source) dialStream(ctx context.Context, dest sourceConn, stream *quic.S
 	s.logger.Debug("dialed conn", "style", dest.peer.style)
 	proxyProto := model.ProxyVersionFromPB(resp.GetConnect().GetProxyProto())
 	return proxyProto.Wrap(encStream), nil
-}
-
-func (s *Source) getDestinationTLS(name string) (*tls.Config, error) {
-	remotes, err := s.ep.peer.peers.Peek()
-	if err != nil {
-		return nil, fmt.Errorf("destination peers list: %w", err)
-	}
-
-	for _, remote := range remotes {
-		switch cfg, err := newServerTLSConfig(remote.Peer.ServerCertificate); {
-		case err != nil:
-			return nil, fmt.Errorf("destination peer server cert: %w", err)
-		case cfg.name == name:
-			return &tls.Config{
-				Certificates: []tls.Certificate{s.ep.peer.clientCert},
-				RootCAs:      cfg.cas,
-				ServerName:   cfg.name,
-			}, nil
-		}
-	}
-
-	return nil, fmt.Errorf("destination peer %s not found", name)
 }
