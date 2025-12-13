@@ -154,13 +154,13 @@ url = "tcp://localhost:3000" # URL to which destination connects to, over tcp
 # other options for the url field:
 url = "tls://localhost:3000" # a TLS destination to connect to
 url = "http://localhost:3000/path" # an HTTP destination to connect to as a reverse proxy, path rewrite included
-url = "https://localhost:3000" # an https destination to connect to as a reverse proxy
-url = "file:///absolute/path" # an absolute file path to serve over http
-url = "file:./relative/path" # a relativefile path to serve over http
-cas-file = "/path/to/cas/file" # if connecting via tls/https, certificate authorities if not publicly trusted
+url = "https://localhost:3000" # an HTTPS destination to connect to as a reverse proxy
+url = "file:///absolute/path" # an absolute file path to serve over HTTP
+url = "file:./relative/path" # a relative file path to serve over HTTP
+cas-file = "/path/to/cas/file" # if connecting via TLS/HTTPS, certificate authorities if not publicly trusted
                                # `insecure-skip-verify` is a special value, to not verify self-signed certificates
-cert-file = "/path/to/cert/file" # when connecting via tls/https, client certificate to present (mutual tls)
-key-file = "/path/to/key/file" # when connecting via tls/https, client certificate private key to present (mutual tls)
+cert-file = "/path/to/cert/file" # when connecting via TLS/HTTPS, client certificate to present (mutual TLS)
+key-file = "/path/to/key/file" # when connecting via TLS/HTTPS, client certificate private key to present (mutual TLS)
 
 [client.destinations.serviceY]
 route = "direct" # force only direct communication between clients
@@ -169,16 +169,16 @@ url = "tcp://192.168.1.100:8000"
 [client.sources.serviceX] # matches destinations.serviceX
 route = "relay" # the kind of route to use
 relay-encryptions = ["dhxcp"] # require `dhxcp` encryption when using relay for this source
-url = "tcp://:8000" # url for the source to listen for incoming connections to be forwarded
+url = "tcp://:8000" # URL for the source to listen for incoming connections to be forwarded
 # other options for the url field:
-url = "tls://:8003" # runs a tls source server
-url = "http://:8080/path" # runs an http reverse proxy source server, path rewrite
-url = "https://:8443" # runs an https reverse proxy source server
+url = "tls://:8003" # runs a TLS source server
+url = "http://:8080/path" # runs an HTTP reverse proxy source server, path rewrite
+url = "https://:8443" # runs an HTTPS reverse proxy source server
 url = "ws://127.0.0.1:8080" # runs websocket tcp converter that exposes the destinations conn as a websocket
-url = "wss://127.0.0.1:8083" # same as above, but exposes it on https
-cert-file = "/path/to/cert/file" # the tls/https server certificate to use
-key-file = "/path/to/key/file" # the tls/https server certificate private key to use
-cas-file = "/path/to/cas/file" # the tls/https client certificates to trust (mutual tls)
+url = "wss://127.0.0.1:8083" # same as above, but exposes it on HTTPS
+cert-file = "/path/to/cert/file" # the TLS/HTTPS server certificate to use
+key-file = "/path/to/key/file" # the TLS/HTTPS server certificate private key to use
+cas-file = "/path/to/cas/file" # the TLS/HTTPS client certificates to trust (mutual TLS)
 dial-timeout = 0 # how long to wait for single destination connection, defaults to 0 (wait forever)
 lb-policy = "" # the load balancer policy, defaults to '' (none)
 lb-retry = "" # the load balancer retry policy, defaults to '' (never)
@@ -186,7 +186,7 @@ lb-retry-max = 0 # when using count/timed retry, for how long to retry
 
 [client.sources.serviceY] # both sources and destinations can be defined in a single file
 route = "direct" # force only direct communication between clients, even if other end allows any
-url = "tcp://:8001" # again, mulitple sources can be defined
+url = "tcp://:8001" # again, multiple sources can be defined
 ```
 
 #### Client environment
@@ -212,25 +212,25 @@ tokens = ["client-token-1", "client-token-n"] # set of recognized client auth to
 status-addr = "127.0.0.1:19180" # address to listen for incoming status connections (TCP/HTTP, [host]:port) (disabled by default)
 store-dir = "path/to/server-store" # directory for this server to persist runtime information, see Storage section for more info
 
-[[server.ingress]] # defines how to accept client connections, can define mulitple
+[[server.ingress]] # defines how to accept client connections, can define multiple
 addr = ":19190" # the address at which the control server will listen for client connections, defaults to :19190
 cert-file = "path/to/cert.pem" # the client server certificate file, in pem format
 key-file = "path/to/key.pem" # the client server certificate private key file
-allow-cidrs = [] # set of networks in CIDR format, to allow client connetctions from
-deny-cidrs = [] # set of networks in CIDR format, to deny client connetctions from
+allow-cidrs = [] # set of networks in CIDR format, to allow client connections from
+deny-cidrs = [] # set of networks in CIDR format, to deny client connections from
 
 [[server.token-restriction]] # defines restriction per client token, if specified must match the number of client tokens
-allow-cidrs = [] # set of networks in CIDR format, to allow token client connetctions from
-deny-cidrs = [] # set of networks in CIDR format, to deny token client connetctions from
+allow-cidrs = [] # set of networks in CIDR format, to allow token client connections from
+deny-cidrs = [] # set of networks in CIDR format, to deny token client connections from
 name-matches = "" # regular expression to check the name of the destination/source against
 role-matches = "" # only allow specific role for this token, either 'source' or 'destination'
 
 [[server.relay-ingress]]
-addr = ":19191" # the address at which the relay will listen for connectsion, defaults to :19191
-hostports = ["localhost"] # list of host[:port] (e.g. domain, ip address) advertised by the control server for clients to connect to this relay
+addr = ":19191" # the address at which the relay will listen for connection, defaults to :19191
+hostports = ["localhost"] # list of host[:port] (e.g. domain, IP address) advertised by the control server for clients to connect to this relay
                           #   defaults to 'localhost:<port of addr>', if port is not set will use <port of addr>
-allow-cidrs = [] # set of networks in CIDR format, to allow client relay connetctions from
-deny-cidrs = [] # set of networks in CIDR format, to deny client relay connetctions from
+allow-cidrs = [] # set of networks in CIDR format, to allow client relay connections from
+deny-cidrs = [] # set of networks in CIDR format, to deny client relay connections from
 ```
 
 #### Control server
@@ -250,29 +250,29 @@ relays-tokens = ["relay-token-1", "relay-token-n"] # list of recognized relay au
 status-addr = "127.0.0.1:19180" # address to listen for incoming status connections (TCP/HTTP, [host]:port) (disabled by default)
 store-dir = "path/to/control-store" # directory for this control server to persist runtime information, see Storage section for more info
 
-[[control.clients-ingress]] # defines how client connections will be accepted, can add mulitple ingresses
+[[control.clients-ingress]] # defines how client connections will be accepted, can add multiple ingresses
 addr = ":19190" # the address at which the control server will listen for client connections, defaults to :19190
 cert-file = "path/to/cert.pem" # the clients server certificate file, in pem format
 key-file = "path/to/key.pem" # the clients server certificate private key file
-allow-cidrs = [] # set of networks in CIDR format, to allow client connetctions from
-deny-cidrs = [] # set of networks in CIDR format, to deny client connetctions from
+allow-cidrs = [] # set of networks in CIDR format, to allow client connections from
+deny-cidrs = [] # set of networks in CIDR format, to deny client connections from
 
 [[control.clients-token-restriction]] # defines restriction per client token, if specified must match the number of client tokens
-allow-cidrs = [] # set of networks in CIDR format, to allow client connetctions from
-deny-cidrs = [] # set of networks in CIDR format, to deny client connetctions from
+allow-cidrs = [] # set of networks in CIDR format, to allow client connections from
+deny-cidrs = [] # set of networks in CIDR format, to deny client connections from
 name-matches = "" # regular expression to check the name of the destination/source against
 role-matches = "" # only allow specific role for this token, either 'source' or 'destination'
 
-[[control.relays-ingress]] # defines how relay connections will be accepted, can add mulitple ingresses
+[[control.relays-ingress]] # defines how relay connections will be accepted, can add multiple ingresses
 addr = ":19189" # the address at which the control server will listen for relay connections, defaults to :19189
 cert-file = "path/to/cert.pem" # relays server TLS certificate file (pem format)
 key-file = "path/to/key.pem" # relays server TLS certificate private key file (pem format)
-allow-cidrs = [] # set of networks in CIDR format, to allow relay connetctions from
-deny-cidrs = [] # set of networks in CIDR format, to deny relay connetctions from
+allow-cidrs = [] # set of networks in CIDR format, to allow relay connections from
+deny-cidrs = [] # set of networks in CIDR format, to deny relay connections from
 
 [[control.relays-token-restriction]] # defines restriction per relay token, if specified must match the number of relay tokens
-allow-cidrs = [] # set of networks in CIDR format, to allow relay connetctions from
-deny-cidrs = [] # set of networks in CIDR format, to deny relay connetctions from
+allow-cidrs = [] # set of networks in CIDR format, to allow relay connections from
+deny-cidrs = [] # set of networks in CIDR format, to deny relay connections from
 ```
 
 #### Relay server
@@ -292,11 +292,11 @@ status-addr = "127.0.0.1:19181" # address to listen for incoming status connecti
 store-dir = "path/to/relay-store" # directory for this relay server to persist runtime information, see Storage section for more info
 
 [[relay.ingress]] # defines how relay server will accept client connections, defaults to ":19191"
-addr = ":19191" # the address at which the relay will listen for connectsion, defaults to :19191
-hostports = ["localhost:19191"] # list of host[:port]s (e.g. domain, ip address) advertised by the control server for clients to connect to this relay
+addr = ":19191" # the address at which the relay will listen for connection, defaults to :19191
+hostports = ["localhost:19191"] # list of host[:port]s (e.g. domain, IP address) advertised by the control server for clients to connect to this relay
                                 #   defaults to 'localhost:<port of addr>', if port is not set will use <port of addr>
-allow-cidrs = [] # list of networks in CIDR format, to allow client connetctions from
-deny-cidrs = [] # list of networks in CIDR format, to deny client connetctions from
+allow-cidrs = [] # list of networks in CIDR format, to allow client connections from
+deny-cidrs = [] # list of networks in CIDR format, to deny client connections from
 ```
 
 #### Servers environment
@@ -311,8 +311,8 @@ the config file are empty:
 
 `connet` can detect and control a nat device, to provide additional routes to connect clients. Currently it implements:
  - NAT-PMP (rfc6886), controlled by `nat-pmp` option. By default, the option is configured as `system`
-(e.g. using the local system to detect local ip and router). You can use `disabled` to completely disable nat-pmp. On
-some systems (for example android), access to ip/router information is restricted, in which case you can try the `dial` option
+(e.g. using the local system to detect local IP and router). You can use `disabled` to completely disable nat-pmp. On
+some systems (for example android), access to IP/router information is restricted, in which case you can try the `dial` option
 which will try to dynamically determine this information by dialing in the control server.
 
 ### IP Restrictions
@@ -349,7 +349,7 @@ the contents of what is transferred between them. The possible values for `relay
  - `tls` - setup TLS based on the exchanged client/server certificates. Well understood and mature option, but requires additional
 roundtrips between client and server to setup TLS within the TLS connection to the relay.
  - `dhxcp` - new option which does ephemeral (e.g. per connection) ECDH/X25519 exchange as part of the source/destination connect
-and asymmetrically encrypts data with Chacha20Poly1305. A good comporimse between maturity, security, and performance.
+and asymmetrically encrypts data with Chacha20Poly1305. A good compromise between maturity, security, and performance.
 
 By default `connet` doesn't encrypt relay connections (`relay-encryptions = ["none"]`) (e.g. you are running your own trusted relay).
 When multiple values are set (e.g. `relay-encryptions = ["none", "dhxcp", "tls"]`) it will prefer the most secure/mature option
@@ -381,7 +381,7 @@ Next, you need to choose how many of the ordered peers will be tried, via `lb-re
 
 By default, both source and destinations will wait forever for a connection to be established (e.g. `dial-timeout = 0`). In case
 of load balancing (especially `timed`) it is useful to set these to values lower then `lb-retry-max`, so the system can try
-to establish multiple connections within the alloted time.
+to establish multiple connections within the allotted time.
 
 ### Storage
 
@@ -389,9 +389,9 @@ to establish multiple connections within the alloted time.
 `store-dir` in the configuration, it will try to use the following:
  - check if `CONNET_STATE_DIR` environment variable is not empty, and use that location
  - then check if `STATE_DIRECTORY` environment variable is not empty, and use that location
- - finally, try to create a new subdirectory in the current's system temporary directory (`TMPDIR`)
+ - finally, try to create a new sub-directory in the current's system temporary directory (`TMPDIR`)
 
-When using a temporary subdirectory, every time the server restarts it will loose any state and identity. To prevent this,
+When using a temporary sub-directory, every time the server restarts it will loose any state and identity. To prevent this,
 you can specify an explicit `store-dir` location, which can be reused between runs.
 
 ### Logging
@@ -402,7 +402,7 @@ log-level = "info" # supports fine, debug, info, warn, error, defaults to info
 log-format = "text" # supports text and json, defaults to text
 ```
 
-### Tunning
+### Tuning
 
 On some systems, if you might see the following line in the logs:
 ```
@@ -574,7 +574,7 @@ by adding account management and it is one of the easiest way to start.
 ### v0.5.0
  - [x] Stateless reset key for the server
  - [x] Name access restrictions for clients
- - [x] File http server
+ - [x] File HTTP server
  - [x] Use quic-go tracer, instead of ping (and duration estimation)
  - [x] Optimize global IP restrictions - check earlier
  - [x] Role restrictions for clients
@@ -582,7 +582,7 @@ by adding account management and it is one of the easiest way to start.
  - [x] update nix modules with new config options
 
 ### v0.6.0
- - [x] nixos testing
+ - [x] NixOS testing
  - [x] error wrapping
  - [x] support for multiple config files
  - [x] token passed from cmd should override tokenfile from config
@@ -595,11 +595,11 @@ by adding account management and it is one of the easiest way to start.
 
 ### v0.7.0
  - [x] dynamic source/destination in the client
- - [x] tls source/destination
+ - [x] TLS source/destination
  - [x] docs section for embedding into golang programs
  - [x] sni rewrite
- - [x] http source
- - [x] http host rewrite
+ - [x] HTTP source
+ - [x] HTTP host rewrite
  - [x] websocket tcp converter
  - [x] client versioning support
 
@@ -619,7 +619,7 @@ by adding account management and it is one of the easiest way to start.
  - [x] Support for NAT-PMP (rfc 6886)
 
 ### v0.9.1
- - [x] compact mulitple segments in stores
+ - [x] compact multiple segments in stores
 
 ### v0.9.2
  - [x] fix docker stateless reset file error
