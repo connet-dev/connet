@@ -75,6 +75,7 @@ func newConfig(opts []Option) (*config, error) {
 	return cfg, nil
 }
 
+// Option is a functional option to configure the client
 type Option func(cfg *config) error
 
 // Token configures which token the client will use to connect to the control server

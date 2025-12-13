@@ -19,7 +19,7 @@ import (
 	"github.com/quic-go/quic-go"
 )
 
-// Destination represents an endpoint that accepts dials from remote endpoints
+// Destination represents an endpoint that accepts connections from remote endpoints
 // It implements [net.Listener] on top of connet infrastructure
 type Destination struct {
 	cfg DestinationConfig
@@ -57,7 +57,8 @@ func (d *Destination) Accept() (net.Conn, error) {
 	return d.AcceptContext(context.Background())
 }
 
-// AcceptContext waits for a new connection from remote sources
+// AcceptContext waits for a new connection from remote sources. It blocks until
+// a new connection comes it or the destination is closed
 func (d *Destination) AcceptContext(ctx context.Context) (net.Conn, error) {
 	select {
 	case <-ctx.Done():
@@ -75,11 +76,13 @@ func (d *Destination) Config() DestinationConfig {
 	return d.cfg
 }
 
-// Context returns [context.Context] associated with the lifetime of this destination
+// Context returns [context.Context] associated with the lifetime of this destination.
+// Once the destination is closed, this context will be canceled
 func (d *Destination) Context() context.Context {
 	return d.ep.ctx
 }
 
+// DestinationStatus describes the status of a destination
 type DestinationStatus struct {
 	// Overall status of this destination
 	Status statusc.Status `json:"status"`

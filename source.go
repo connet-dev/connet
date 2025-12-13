@@ -29,7 +29,7 @@ import (
 var ErrNoDialedDestinations = errors.New("no dialed destinations")
 var ErrNoActiveDestinations = errors.New("no active destinations")
 
-// Source represents an endpoint that can dial into remote endpoints
+// Source represents an endpoint that can connect to remote destinations.
 // It is compatible with [net.Dialer] on top of connet infrastructure
 type Source struct {
 	cfg SourceConfig
@@ -120,11 +120,13 @@ func (s *Source) Config() SourceConfig {
 	return s.cfg
 }
 
-// Context returns [context.Context] associated with the lifetime of this source
+// Context returns [context.Context] associated with the lifetime of this source.
+// Once the source is closed, this context will be canceled
 func (s *Source) Context() context.Context {
 	return s.ep.ctx
 }
 
+// SourceStatus describes the status of a source
 type SourceStatus struct {
 	// Overall status of this source
 	Status statusc.Status `json:"status"`
