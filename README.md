@@ -25,7 +25,7 @@ can use a relay server to maintain connectivity.
 and are required and verified to establish connectivity. Clients and relays need to present a mandatory token when communicating
 with the control server, allowing tight control over who can use `connet`.
  - **Embeddable** In case you want `connet` running as part of another (golang) program (as opposed to a separate executable), 
-`connet` has a well defined api for running both the client and the server.
+`connet` has a well defined API for running both the client and the server.
 
 ## Architecture
 
@@ -121,7 +121,7 @@ url = "tcp://:8000"
 ## Configuration
 
 You can use both a toml config file as well as command line when running `connet`. If you use both a config file and 
-command line options, the latter takes precence, overriding any config file options. For simplicity, command line options 
+command line options, the latter takes precedence, overriding any config file options. For simplicity, command line options 
 only support a single `destination` or `source` configuration. 
 
 ### Client
@@ -138,8 +138,8 @@ server-addr = "localhost:19190" # control server address (UDP/QUIC, host:port) (
 server-cas-file = "path/to/cert.pem" # control server TLS certificate authorities file, when not using public CAs
 
 direct-addr = ":19192" # direct server address to listen for peer connections (UDP/QUIC, [host]:port) (defaults to ':19192')
-direct-stateless-reset-key = "" # the quic stateless reset key as a literal 32 byte value in base32hex format
-direct-stateless-reset-key-file = "/path/to/reset/key" # the quic stateless reset key read from a file
+direct-stateless-reset-key = "" # the QUIC stateless reset key as a literal 32 byte value in base32hex format
+direct-stateless-reset-key-file = "/path/to/reset/key" # the QUIC stateless reset key read from a file
 status-addr = "127.0.0.1:19182" # status server address to listen for connections (TCP/HTTP, [host]:port) (disabled by default)
 nat-pmp = "system" # support for NAT-PMP, defaults to `system`
 
@@ -149,11 +149,11 @@ relay-encryptions = ["none"] # require encryption when using relay for all desti
 route = "any" # what kind of routes to use, `any` will use both `direct` and `relay`
 relay-encryptions = ["tls", "dhxcp"] # require `tls` or `dhxcp` encryption when using relay for this destination
 proxy-proto-version = "" # proxy proto version to push origin information to the server, supports `v1` and `v2`
-dial-timeout = 0 # if url is network connection, how long to wait for connection to establish, defaults to 0 (wait forever)
-url = "tcp://localhost:3000" # url to which destination connects to, over tcp
+dial-timeout = 0 # if URL is network connection, how long to wait for connection to establish, defaults to 0 (wait forever)
+url = "tcp://localhost:3000" # URL to which destination connects to, over tcp
 # other options for the url field:
-url = "tls://localhost:3000" # a tls destination to connect to
-url = "http://localhost:3000/path" # an http destination to connect to as a reverse proxy, path rewrite included
+url = "tls://localhost:3000" # a TLS destination to connect to
+url = "http://localhost:3000/path" # an HTTP destination to connect to as a reverse proxy, path rewrite included
 url = "https://localhost:3000" # an https destination to connect to as a reverse proxy
 url = "file:///absolute/path" # an absolute file path to serve over http
 url = "file:./relative/path" # a relativefile path to serve over http

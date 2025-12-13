@@ -29,6 +29,8 @@ import (
 var ErrNoDialedDestinations = errors.New("no dialed destinations")
 var ErrNoActiveDestinations = errors.New("no active destinations")
 
+// Source represents an endpoint that can dial into remote endpoints
+// It is compatible with [net.Dialer] on top of connet infrastructure
 type Source struct {
 	cfg SourceConfig
 	ep  *endpoint
@@ -73,10 +75,13 @@ func newSource(ctx context.Context, cl *Client, cfg SourceConfig) (*Source, erro
 	return src, nil
 }
 
+// Dial calls [Source.DialContext] with [context.Background]
 func (s *Source) Dial(network, address string) (net.Conn, error) {
 	return s.DialContext(context.Background(), network, address)
 }
 
+// DialContext dials into any available destination. Both network and address are ignored.
+// Blocks until connection can be established.
 func (s *Source) DialContext(ctx context.Context, network, address string) (net.Conn, error) {
 	if s.cfg.DestinationPolicy == model.NoPolicy {
 		conns, err := s.findActive()
@@ -110,24 +115,30 @@ func (s *Source) DialContext(ctx context.Context, network, address string) (net.
 	return s.dialInOrder(ctx, conns)
 }
 
+// Config returns the original [SourceConfig] used to start this source
 func (s *Source) Config() SourceConfig {
 	return s.cfg
 }
 
+// Context returns [context.Context] associated with the lifetime of this source
 func (s *Source) Context() context.Context {
 	return s.ep.ctx
 }
 
 type SourceStatus struct {
+	// Overall status of this source
 	Status statusc.Status `json:"status"`
+	// Peer status for this source
 	StatusPeer
 }
 
+// Status returns the current status of this source
 func (s *Source) Status() (SourceStatus, error) {
 	stat, err := s.ep.status()
 	return SourceStatus(stat), err
 }
 
+// Close closes this source. Any active connections are also closed.
 func (s *Source) Close() error {
 	return s.ep.close()
 }

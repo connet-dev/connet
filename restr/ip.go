@@ -38,10 +38,10 @@ func (r IP) IsNotEmpty() bool {
 
 // IsAllowed checks if an IP address is allowed according to Allows and Denies rules.
 //
-// If the ip matches any of the Denies rules, IsAllowed returns false.
-// If the ip matches any of the Allows rules (after checking all Denies rules), IsAllowed returns true.
+// If the IP matches any of the Denies rules, IsAllowed returns false.
+// If the IP matches any of the Allows rules (after checking all Denies rules), IsAllowed returns true.
 //
-// Finally, if the ip matches no Allows or Denies rules, IsAllowed returns true only if no explicit Allows rules were defined.
+// Finally, if the IP matches no Allows or Denies rules, IsAllowed returns true only if no explicit Allows rules were defined.
 func (r IP) IsAllowed(ip netip.Addr) bool {
 	ip = ip.Unmap() // remove any ipv6 prefix for ipv4
 

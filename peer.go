@@ -374,8 +374,10 @@ func (p *peer) getECDHPublicKey(cfg *pbconnect.ECDHConfiguration) (*ecdh.PublicK
 }
 
 type StatusPeer struct {
+	// Status of each relay this peer is connected to
 	Relays []StatusRelayConnection `json:"relays"`
-	Peers  []StatusPeerConnection  `json:"peers"`
+	// Status of each peer this peer is connected to
+	Peers []StatusPeerConnection `json:"peers"`
 }
 
 type StatusRelayConnection struct {

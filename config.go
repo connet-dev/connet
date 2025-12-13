@@ -77,6 +77,7 @@ func newConfig(opts []Option) (*config, error) {
 
 type Option func(cfg *config) error
 
+// Token configures which token the client will use to connect to the control server
 func Token(token string) Option {
 	return func(cfg *config) error {
 		cfg.token = token
@@ -84,6 +85,7 @@ func Token(token string) Option {
 	}
 }
 
+// TokenFromEnv reads from $CONNET_TOKEN and configures the client token
 func TokenFromEnv() Option {
 	return func(cfg *config) error {
 		if connetToken := os.Getenv("CONNET_TOKEN"); connetToken != "" {
@@ -93,6 +95,7 @@ func TokenFromEnv() Option {
 	}
 }
 
+// ControlAddress configures the control server address
 func ControlAddress(address string) Option {
 	return func(cfg *config) error {
 		if i := strings.LastIndex(address, ":"); i < 0 {
@@ -115,6 +118,7 @@ func ControlAddress(address string) Option {
 	}
 }
 
+// ControlCAsFile reads from a file and configures the control server CAs. Used in cases where control server is not using PKIX.
 func ControlCAsFile(certFile string) Option {
 	return func(cfg *config) error {
 		casData, err := os.ReadFile(certFile)
@@ -133,6 +137,7 @@ func ControlCAsFile(certFile string) Option {
 	}
 }
 
+// ControlCAsFile configures the control server CAs. Used in cases where control server is not using PKIX.
 func ControlCAs(cas *x509.CertPool) Option {
 	return func(cfg *config) error {
 		cfg.controlCAs = cas
@@ -141,6 +146,7 @@ func ControlCAs(cas *x509.CertPool) Option {
 	}
 }
 
+// DirectAddress configures the address on which this client will listen from peer connections
 func DirectAddress(address string) Option {
 	return func(cfg *config) error {
 		addr, err := net.ResolveUDPAddr("udp", address)
@@ -154,6 +160,7 @@ func DirectAddress(address string) Option {
 	}
 }
 
+// DirectStatelessResetKey configures the stateless reset key for the direct server
 func DirectStatelessResetKey(key *quic.StatelessResetKey) Option {
 	return func(cfg *config) error {
 		cfg.directResetKey = key
@@ -161,6 +168,7 @@ func DirectStatelessResetKey(key *quic.StatelessResetKey) Option {
 	}
 }
 
+// DirectStatelessResetKeyFile reads from a file and configures the stateless reset key for the direct server
 func DirectStatelessResetKeyFile(path string) Option {
 	return func(cfg *config) error {
 		keyBytes, err := os.ReadFile(path)
@@ -178,6 +186,7 @@ func DirectStatelessResetKeyFile(path string) Option {
 	}
 }
 
+// DirectStatelessResetKeyFromEnv reads stateless reset key file from the env and configures it for the direct server
 func DirectStatelessResetKeyFromEnv() Option {
 	return func(cfg *config) error {
 		var name = fmt.Sprintf("stateless-reset-%s.key",
@@ -238,6 +247,7 @@ func DirectStatelessResetKeyFromEnv() Option {
 	}
 }
 
+// NatPMPConfig configures NATPMP behavior
 func NatPMPConfig(pmp nat.PMPConfig) Option {
 	return func(cfg *config) error {
 		cfg.natPMP = pmp
@@ -245,6 +255,7 @@ func NatPMPConfig(pmp nat.PMPConfig) Option {
 	}
 }
 
+// Logger configures the root logger for the client
 func Logger(logger *slog.Logger) Option {
 	return func(cfg *config) error {
 		cfg.logger = logger

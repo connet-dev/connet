@@ -19,6 +19,8 @@ import (
 	"github.com/quic-go/quic-go"
 )
 
+// Destination represents an endpoint that accepts dials from remote endpoints
+// It implements [net.Listener] on top of connet infrastructure
 type Destination struct {
 	cfg DestinationConfig
 	ep  *endpoint
@@ -50,10 +52,12 @@ func newDestination(ctx context.Context, cl *Client, cfg DestinationConfig) (*De
 	return dst, nil
 }
 
+// Accept calls [Destination.AcceptContext] with [context.Background]
 func (d *Destination) Accept() (net.Conn, error) {
 	return d.AcceptContext(context.Background())
 }
 
+// AcceptContext waits for a new connection from remote sources
 func (d *Destination) AcceptContext(ctx context.Context) (net.Conn, error) {
 	select {
 	case <-ctx.Done():
@@ -66,28 +70,36 @@ func (d *Destination) AcceptContext(ctx context.Context) (net.Conn, error) {
 	}
 }
 
+// Config returns the original [DestinationConfig] used to start this destination
 func (d *Destination) Config() DestinationConfig {
 	return d.cfg
 }
 
+// Context returns [context.Context] associated with the lifetime of this destination
 func (d *Destination) Context() context.Context {
 	return d.ep.ctx
 }
 
 type DestinationStatus struct {
+	// Overall status of this destination
 	Status statusc.Status `json:"status"`
+	// Peer status for this destination
 	StatusPeer
 }
 
+// Status returns the current status of this destination
 func (d *Destination) Status() (DestinationStatus, error) {
 	stat, err := d.ep.status()
 	return DestinationStatus(stat), err
 }
 
+// Addr returns the local address that client listens on
 func (d *Destination) Addr() net.Addr {
 	return d.ep.client.directAddr
 }
 
+// Close closes this destination. Any active connections are also closed.
+// Any blocked accept operations will be unblocked and return errors.
 func (d *Destination) Close() error {
 	return d.ep.close()
 }

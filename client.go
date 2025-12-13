@@ -167,7 +167,7 @@ func (c *Client) GetDestination(name string) (*Destination, error) {
 
 // Destination starts a new destination with a given configuration.
 // This call blocks until it is successfully announced to the control server.
-// The destination can be closed either via cancelling the context or calling its close func.
+// The destination can be closed either via canceling the context or calling its close func.
 func (c *Client) Destination(ctx context.Context, cfg DestinationConfig) (*Destination, error) {
 	c.destinationsMu.Lock()
 	defer c.destinationsMu.Unlock()
@@ -216,7 +216,7 @@ func (c *Client) GetSource(name string) (*Source, error) {
 
 // Source starts a new source with a given configuration.
 // This call blocks until it is successfully announced to the control server.
-// The source can be closed either via cancelling the context or calling its close func.
+// The source can be closed either via canceling the context or calling its close func.
 func (c *Client) Source(ctx context.Context, cfg SourceConfig) (*Source, error) {
 	c.sourcesMu.Lock()
 	defer c.sourcesMu.Unlock()
@@ -418,9 +418,12 @@ func (c *Client) listenNatpmp(ctx context.Context) error {
 }
 
 type ClientStatus struct {
-	Status       statusc.Status                       `json:"status"`
+	// Overall status of this client
+	Status statusc.Status `json:"status"`
+	// Status of each active destination for this client
 	Destinations map[model.Endpoint]DestinationStatus `json:"destinations"`
-	Sources      map[model.Endpoint]SourceStatus      `json:"sources"`
+	// Status of each active source for this client
+	Sources map[model.Endpoint]SourceStatus `json:"sources"`
 }
 
 // Status returns status of the client and all active endpoints
