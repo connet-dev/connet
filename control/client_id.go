@@ -10,6 +10,10 @@ func NewClientID() ClientID {
 	return ClientID{netc.GenName()}
 }
 
+func (k ClientID) String() string {
+	return k.string
+}
+
 func (k ClientID) MarshalText() ([]byte, error) {
 	return []byte(k.string), nil
 }

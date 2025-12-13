@@ -10,6 +10,10 @@ func NewRelayID() RelayID {
 	return RelayID{netc.GenName()}
 }
 
+func (k RelayID) String() string {
+	return k.string
+}
+
 func (k RelayID) MarshalText() ([]byte, error) {
 	return []byte(k.string), nil
 }
