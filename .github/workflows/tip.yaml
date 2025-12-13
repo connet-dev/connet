@@ -8,6 +8,19 @@ permissions:
   contents: read
 
 jobs:
+  binary:
+    name: Binaries
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: DeterminateSystems/nix-installer-action@main
+        with:
+          determinate: true
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+      - uses: DeterminateSystems/flakehub-cache-action@main
+      - name: Build release
+        run: nix develop --command make release
+
   docker-build-x86:
     name: Build x86 image
     runs-on: ubuntu-latest

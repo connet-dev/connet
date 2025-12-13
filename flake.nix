@@ -28,7 +28,7 @@
           default = pkgs.callPackage ./nix/package.nix { };
           docker = pkgs.callPackage ./nix/docker.nix { };
         };
-        devShells.default = pkgs.mkShell {
+        devShells.default = pkgs.mkShellNoCC {
           buildInputs = with pkgs; [
             go
             gopls
@@ -53,6 +53,7 @@
               rm .direnv/minica-key.pem
             '')
           ];
+          CGO_ENABLED = 0;
         };
         checks = {
           moduleTest = pkgs.testers.runNixOSTest {
