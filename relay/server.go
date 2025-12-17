@@ -109,6 +109,14 @@ func (s *Server) Run(ctx context.Context) error {
 	return g.Wait()
 }
 
+type Status struct {
+	Status            statusc.Status   `json:"status"`
+	Hostports         []string         `json:"hostports"`
+	ControlServerAddr string           `json:"control_server_addr"`
+	ControlServerID   string           `json:"control_server_id"`
+	Endpoints         []model.Endpoint `json:"endpoints"`
+}
+
 func (s *Server) Status(ctx context.Context) (Status, error) {
 	stat := s.control.connStatus.Load().(statusc.Status)
 
@@ -141,12 +149,4 @@ func (s *Server) getEndpoints() []model.Endpoint {
 	defer s.clients.endpointsMu.RUnlock()
 
 	return slices.Collect(maps.Keys(s.clients.endpoints))
-}
-
-type Status struct {
-	Status            statusc.Status   `json:"status"`
-	Hostports         []string         `json:"hostports"`
-	ControlServerAddr string           `json:"control_server_addr"`
-	ControlServerID   string           `json:"control_server_id"`
-	Endpoints         []model.Endpoint `json:"endpoints"`
 }
