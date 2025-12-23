@@ -109,9 +109,41 @@ type RelayConnKey struct {
 }
 
 type RelayConnValue struct {
-	Authentication RelayAuthentication `json:"authentication"`
-	Hostport       model.HostPort      `json:"hostport"`
-	Hostports      []model.HostPort    `json:"hostports"`
+	Authentication    RelayAuthentication `json:"authentication"`
+	Hostports         []model.HostPort    `json:"hostports"`
+	DirectHostports   []model.HostPort    `json:"direct_hostports"`
+	ServerCertificate *x509.Certificate   `json:"server_certificate"`
+}
+
+type jsonRelayConnValue struct {
+	Authentication    RelayAuthentication `json:"authentication"`
+	Hostports         []model.HostPort    `json:"hostports"`
+	DirectHostports   []model.HostPort    `json:"direct_hostports"`
+	ServerCertificate []byte              `json:"server_certificate"`
+}
+
+func (v RelayConnValue) MarshalJSON() ([]byte, error) {
+	return json.Marshal(jsonRelayConnValue{
+		Authentication:    v.Authentication,
+		Hostports:         v.Hostports,
+		DirectHostports:   v.DirectHostports,
+		ServerCertificate: v.ServerCertificate.Raw,
+	})
+}
+
+func (v *RelayConnValue) UnmarshalJSON(b []byte) error {
+	s := jsonRelayConnValue{}
+	if err := json.Unmarshal(b, &s); err != nil {
+		return err
+	}
+
+	cert, err := x509.ParseCertificate(s.ServerCertificate)
+	if err != nil {
+		return err
+	}
+
+	*v = RelayConnValue{s.Authentication, s.Hostports, s.DirectHostports, cert}
+	return nil
 }
 
 type RelayClientKey struct {
@@ -125,23 +157,20 @@ type RelayClientValue struct {
 	Authentication ClientAuthentication `json:"authentication"`
 }
 
+type jsonRelayClientValue struct {
+	Cert           []byte `json:"cert"`
+	Authentication []byte `json:"authentication"`
+}
+
 func (v RelayClientValue) MarshalJSON() ([]byte, error) {
-	s := struct {
-		Cert           []byte `json:"cert"`
-		Authentication []byte `json:"authentication"`
-	}{
+	return json.Marshal(jsonRelayClientValue{
 		Cert:           v.Cert.Raw,
 		Authentication: v.Authentication,
-	}
-	return json.Marshal(s)
+	})
 }
 
 func (v *RelayClientValue) UnmarshalJSON(b []byte) error {
-	s := struct {
-		Cert           []byte `json:"cert"`
-		Authentication []byte `json:"authentication"`
-	}{}
-
+	s := jsonRelayClientValue{}
 	if err := json.Unmarshal(b, &s); err != nil {
 		return err
 	}
@@ -183,31 +212,24 @@ type RelayServerKey struct {
 }
 
 type RelayServerValue struct {
-	Hostport  model.HostPort    `json:"hostport"`
 	Hostports []model.HostPort  `json:"hostports"`
 	Cert      *x509.Certificate `json:"cert"`
 }
 
+type jsonRelayServerValue struct {
+	Hostports []model.HostPort `json:"hostports"`
+	Cert      []byte           `json:"cert"`
+}
+
 func (v RelayServerValue) MarshalJSON() ([]byte, error) {
-	s := struct {
-		Hostport  model.HostPort   `json:"hostport"`
-		Hostports []model.HostPort `json:"hostports"`
-		Cert      []byte           `json:"cert"`
-	}{
-		Hostport:  v.Hostport,
+	return json.Marshal(jsonRelayServerValue{
 		Hostports: v.Hostports,
 		Cert:      v.Cert.Raw,
-	}
-	return json.Marshal(s)
+	})
 }
 
 func (v *RelayServerValue) UnmarshalJSON(b []byte) error {
-	s := struct {
-		Hostport  model.HostPort   `json:"hostport"`
-		Hostports []model.HostPort `json:"hostports"`
-		Cert      []byte           `json:"cert"`
-	}{}
-
+	s := jsonRelayServerValue{}
 	if err := json.Unmarshal(b, &s); err != nil {
 		return err
 	}
@@ -217,7 +239,7 @@ func (v *RelayServerValue) UnmarshalJSON(b []byte) error {
 		return err
 	}
 
-	*v = RelayServerValue{Hostport: s.Hostport, Hostports: s.Hostports, Cert: cert}
+	*v = RelayServerValue{Hostports: s.Hostports, Cert: cert}
 	return nil
 }
 

@@ -21,124 +21,9 @@ import (
 	"github.com/connet-dev/connet/reliable"
 	"github.com/connet-dev/connet/slogc"
 	"github.com/quic-go/quic-go"
-	"golang.org/x/sync/errgroup"
 )
 
-type remotePeer struct {
-	local *peer
-
-	remoteID peerID
-	remote   *notify.V[*pbclient.RemotePeer]
-	incoming *remotePeerIncoming
-	outgoing *remotePeerOutgoing
-	relays   *remotePeerRelays
-
-	closer chan struct{}
-
-	logger *slog.Logger
-}
-
-func newRemotePeer(local *peer, remote *pbclient.RemotePeer, logger *slog.Logger) *remotePeer {
-	return &remotePeer{
-		local: local,
-
-		remoteID: peerID(remote.Id),
-		remote:   notify.New(remote),
-
-		closer: make(chan struct{}),
-
-		logger: logger.With("peer", remote.Id),
-	}
-}
-
 var errPeeringStop = errors.New("peering stopped")
-
-func (p *remotePeer) run(ctx context.Context) {
-	defer func() {
-		p.local.removeActiveConns(p.remoteID)
-	}()
-
-	g, ctx := errgroup.WithContext(ctx)
-
-	g.Go(func() error { return p.runRemote(ctx) })
-	g.Go(func() error {
-		<-p.closer
-		return errPeeringStop
-	})
-
-	if err := g.Wait(); err != nil {
-		p.logger.Debug("error while running peering", "err", err)
-	}
-}
-
-func (p *remotePeer) stop() {
-	close(p.closer)
-}
-
-func (p *remotePeer) runRemote(ctx context.Context) error {
-	defer func() {
-		if p.incoming != nil {
-			close(p.incoming.closer)
-		}
-		if p.outgoing != nil {
-			close(p.outgoing.closer)
-		}
-		if p.relays != nil {
-			close(p.relays.closerCh)
-		}
-	}()
-	return p.remote.Listen(ctx, func(remote *pbclient.RemotePeer) error {
-		if p.local.allowDirect && len(remote.Peer.Directs) > 0 {
-			if p.incoming == nil {
-				remoteClientCert, err := x509.ParseCertificate(remote.Peer.ClientCertificate)
-				if err != nil {
-					return fmt.Errorf("parse client certificate: %w", err)
-				}
-				p.incoming = newRemotePeerIncoming(ctx, p, remoteClientCert)
-			}
-
-			if p.outgoing == nil {
-				remoteServerConf, err := newServerTLSConfig(remote.Peer.ServerCertificate)
-				if err != nil {
-					return fmt.Errorf("parse server certificate: %w", err)
-				}
-
-				addrs := map[netip.AddrPort]struct{}{}
-				for _, addr := range remote.Peer.Directs {
-					addrs[addr.AsNetip()] = struct{}{}
-				}
-				p.outgoing = newRemotePeerOutgoing(ctx, p, remoteServerConf, addrs)
-			}
-		} else {
-			if p.incoming != nil {
-				close(p.incoming.closer)
-				p.incoming = nil
-			}
-			if p.outgoing != nil {
-				close(p.outgoing.closer)
-				p.outgoing = nil
-			}
-		}
-
-		remotes := map[relayID]struct{}{}
-		for _, id := range remote.Peer.RelayIds {
-			remotes[relayID(id)] = struct{}{}
-		}
-
-		switch {
-		case p.relays == nil:
-			p.relays = newRemotePeerRelays(ctx, p, remotes)
-		case len(remotes) == 0:
-			close(p.relays.closerCh)
-			p.relays = nil
-		default:
-			p.relays.remotes.Set(remotes)
-		}
-
-		return nil
-	})
-}
-
 var errClosed = errors.New("closed")
 
 func isPeerTerminalError(err error) bool {
@@ -153,18 +38,148 @@ func isPeerTerminalError(err error) bool {
 	return false
 }
 
+type remotePeer struct {
+	local *peer
+
+	remoteID peerID
+	remote   *notify.V[*pbclient.RemotePeer]
+	incoming *remotePeerIncoming
+	outgoing *remotePeerOutgoing
+	relays   *remotePeerRelays
+	directs  *remotePeerDirectRelays
+
+	cancel context.CancelFunc
+	logger *slog.Logger
+}
+
+func runRemotePeer(ctx context.Context, local *peer, remote *pbclient.RemotePeer, logger *slog.Logger) *remotePeer {
+	ctx, cancel := context.WithCancel(ctx)
+	r := &remotePeer{
+		local: local,
+
+		remoteID: peerID(remote.Id),
+		remote:   notify.New(remote),
+
+		cancel: cancel,
+		logger: logger.With("peer", remote.Id),
+	}
+	go r.run(ctx)
+	return r
+}
+
+func (p *remotePeer) run(ctx context.Context) {
+	defer func() {
+		p.local.removeActiveConns(p.remoteID)
+	}()
+
+	if err := p.runErr(ctx); err != nil {
+		p.logger.Debug("error while running peering", "err", err)
+	}
+}
+
+func (p *remotePeer) runErr(ctx context.Context) error {
+	defer func() {
+		if p.incoming != nil {
+			p.incoming.cancel()
+		}
+		if p.outgoing != nil {
+			p.outgoing.cancel()
+		}
+		if p.relays != nil {
+			p.relays.cancel()
+		}
+		if p.directs != nil {
+			p.directs.cancel()
+		}
+	}()
+	return p.remote.Listen(ctx, func(remote *pbclient.RemotePeer) error {
+		if p.local.allowDirect && len(remote.Peer.Directs) > 0 {
+			if p.incoming == nil {
+				remoteClientCert, err := x509.ParseCertificate(remote.Peer.ClientCertificate)
+				if err != nil {
+					return fmt.Errorf("parse client certificate: %w", err)
+				}
+				p.incoming = runRemotePeerIncoming(ctx, p, remoteClientCert)
+			}
+
+			if p.outgoing == nil {
+				remoteServerConf, err := newServerTLSConfig(remote.Peer.ServerCertificate)
+				if err != nil {
+					return fmt.Errorf("parse server certificate: %w", err)
+				}
+
+				addrs := map[netip.AddrPort]struct{}{}
+				for _, addr := range remote.Peer.Directs {
+					addrs[addr.AsNetip()] = struct{}{}
+				}
+				p.outgoing = runRemotePeerOutgoing(ctx, p, remoteServerConf, addrs)
+			}
+		} else {
+			if p.incoming != nil {
+				p.incoming.cancel()
+				p.incoming = nil
+			}
+			if p.outgoing != nil {
+				p.outgoing.cancel()
+				p.outgoing = nil
+			}
+		}
+
+		remotes := map[relayID]struct{}{}
+		for _, id := range remote.Peer.RelayIds {
+			remotes[relayID(id)] = struct{}{}
+		}
+
+		switch {
+		case len(remotes) > 0 && p.relays == nil:
+			p.relays = runRemotePeerRelays(ctx, p, remotes)
+		case len(remotes) > 0 && p.relays != nil:
+			p.relays.remotes.Set(remotes)
+		case len(remotes) == 0 && p.relays != nil:
+			p.relays.cancel()
+			p.relays = nil
+		case len(remotes) == 0 && p.relays == nil:
+			// do nothing, since remote is not running
+		}
+
+		directRemotes := map[relayID]*serverTLSConfig{}
+		for _, direct := range remote.Peer.DirectRelays {
+			tlsConfig, err := newServerTLSConfig(direct.ServerCertificate)
+			if err != nil {
+				return fmt.Errorf("parse direct relay server certificate: %w", err)
+			}
+			directRemotes[relayID(direct.Id)] = tlsConfig
+		}
+
+		switch {
+		case len(directRemotes) > 0 && p.directs == nil:
+			p.directs = runRemotePeerDirectRelays(ctx, p, directRemotes)
+		case len(directRemotes) > 0 && p.directs != nil:
+			p.directs.remotes.Set(directRemotes)
+		case len(directRemotes) == 0 && p.directs != nil:
+			p.directs.cancel()
+			p.directs = nil
+		case len(directRemotes) == 0 && p.directs == nil:
+			// do nothing, since remote is not running
+		}
+
+		return nil
+	})
+}
+
 type remotePeerIncoming struct {
 	parent     *remotePeer
 	clientCert *x509.Certificate
-	closer     chan struct{}
+	cancel     context.CancelFunc
 	logger     *slog.Logger
 }
 
-func newRemotePeerIncoming(ctx context.Context, parent *remotePeer, clientCert *x509.Certificate) *remotePeerIncoming {
+func runRemotePeerIncoming(ctx context.Context, parent *remotePeer, clientCert *x509.Certificate) *remotePeerIncoming {
+	ctx, cancel := context.WithCancel(ctx)
 	p := &remotePeerIncoming{
 		parent:     parent,
 		clientCert: clientCert,
-		closer:     make(chan struct{}),
+		cancel:     cancel,
 		logger:     parent.logger.With("style", "incoming"),
 	}
 	go p.run(ctx)
@@ -183,8 +198,6 @@ func (p *remotePeerIncoming) run(ctx context.Context) {
 
 			select {
 			case <-ctx.Done():
-				return
-			case <-p.closer:
 				return
 			case <-time.After(boff):
 				boff = reliable.NextBackoff(boff)
@@ -205,9 +218,6 @@ func (p *remotePeerIncoming) run(ctx context.Context) {
 func (p *remotePeerIncoming) connect(ctx context.Context) (*quic.Conn, error) {
 	ch, cancel := p.parent.local.direct.expect(p.parent.local.serverCert, p.clientCert)
 	select {
-	case <-p.closer:
-		cancel()
-		return nil, errClosed
 	case <-ctx.Done():
 		cancel()
 		return nil, ctx.Err()
@@ -245,8 +255,6 @@ func (p *remotePeerIncoming) keepalive(ctx context.Context, conn *quic.Conn) err
 	quicc.LogRTTStats(conn, p.logger)
 	for {
 		select {
-		case <-p.closer:
-			return errClosed
 		case <-ctx.Done():
 			return context.Cause(ctx)
 		case <-conn.Context().Done():
@@ -261,16 +269,17 @@ type remotePeerOutgoing struct {
 	parent     *remotePeer
 	serverConf *serverTLSConfig
 	addrs      map[netip.AddrPort]struct{}
-	closer     chan struct{}
+	cancel     context.CancelFunc
 	logger     *slog.Logger
 }
 
-func newRemotePeerOutgoing(ctx context.Context, parent *remotePeer, serverConfg *serverTLSConfig, addrs map[netip.AddrPort]struct{}) *remotePeerOutgoing {
+func runRemotePeerOutgoing(ctx context.Context, parent *remotePeer, serverConfg *serverTLSConfig, addrs map[netip.AddrPort]struct{}) *remotePeerOutgoing {
+	ctx, cancel := context.WithCancel(ctx)
 	p := &remotePeerOutgoing{
 		parent:     parent,
 		serverConf: serverConfg,
 		addrs:      addrs,
-		closer:     make(chan struct{}),
+		cancel:     cancel,
 		logger:     parent.logger.With("style", "outgoing"),
 	}
 	go p.run(ctx)
@@ -289,8 +298,6 @@ func (p *remotePeerOutgoing) run(ctx context.Context) {
 
 			select {
 			case <-ctx.Done():
-				return
-			case <-p.closer:
 				return
 			case <-time.After(boff):
 				boff = reliable.NextBackoff(boff)
@@ -377,8 +384,6 @@ func (p *remotePeerOutgoing) keepalive(ctx context.Context, conn *quic.Conn) err
 	quicc.LogRTTStats(conn, p.logger)
 	for {
 		select {
-		case <-p.closer:
-			return errClosed
 		case <-ctx.Done():
 			return context.Cause(ctx)
 		case <-conn.Context().Done():
@@ -390,27 +395,25 @@ func (p *remotePeerOutgoing) keepalive(ctx context.Context, conn *quic.Conn) err
 }
 
 type remotePeerRelays struct {
-	parent   *remotePeer
-	remotes  *notify.V[map[relayID]struct{}]
-	closerCh chan struct{}
+	parent  *remotePeer
+	remotes *notify.V[map[relayID]struct{}]
+	cancel  context.CancelFunc
+	logger  *slog.Logger
 }
 
-func newRemotePeerRelays(ctx context.Context, parent *remotePeer, remotes map[relayID]struct{}) *remotePeerRelays {
+func runRemotePeerRelays(ctx context.Context, parent *remotePeer, remotes map[relayID]struct{}) *remotePeerRelays {
+	ctx, cancel := context.WithCancel(ctx)
 	p := &remotePeerRelays{
-		parent:   parent,
-		remotes:  notify.New(remotes),
-		closerCh: make(chan struct{}),
+		parent:  parent,
+		remotes: notify.New(remotes),
+		cancel:  cancel,
+		logger:  parent.logger.With("style", "relay"),
 	}
 	go p.run(ctx)
 	return p
 }
 
 func (p *remotePeerRelays) run(ctx context.Context) {
-	var (
-		locals  map[relayID]*quic.Conn
-		remotes map[relayID]struct{}
-	)
-
 	active := map[relayID]struct{}{}
 	defer func() {
 		for id := range active {
@@ -418,7 +421,7 @@ func (p *remotePeerRelays) run(ctx context.Context) {
 		}
 	}()
 
-	update := func() {
+	update := func(ctx context.Context, locals map[relayID]*quic.Conn, remotes map[relayID]struct{}) error {
 		for id := range active {
 			_, relayed := locals[id]
 			_, remoteByID := remotes[id]
@@ -436,23 +439,232 @@ func (p *remotePeerRelays) run(ctx context.Context) {
 				}
 			}
 		}
+
+		return nil
 	}
 
-	ctx, cancel := context.WithCancel(ctx)
-	defer cancel()
+	if err := notify.ListenMulti(ctx, p.parent.local.relayConns, p.remotes, update); err != nil {
+		p.logger.Debug("error running peer relays", "err", err)
+	}
+}
 
-	relaysCh := p.parent.local.relayConns.Notify(ctx)
-	remoteCh := p.remotes.Notify(ctx)
+type remotePeerDirectRelays struct {
+	parent  *remotePeer
+	remotes *notify.V[map[relayID]*serverTLSConfig]
+	cancel  context.CancelFunc
+	logger  *slog.Logger
+}
+
+func runRemotePeerDirectRelays(ctx context.Context, parent *remotePeer, remotes map[relayID]*serverTLSConfig) *remotePeerDirectRelays {
+	ctx, cancel := context.WithCancel(ctx)
+	p := &remotePeerDirectRelays{
+		parent:  parent,
+		remotes: notify.New(remotes),
+		cancel:  cancel,
+		logger:  parent.logger.With("style", "direct-relay"),
+	}
+	go p.run(ctx)
+	return p
+}
+
+func (p *remotePeerDirectRelays) run(ctx context.Context) {
+	running := map[relayID]*remotePeerDirectRelayConn{}
+	defer func() {
+		for rid, conn := range running {
+			conn.cancel()
+			delete(running, rid)
+		}
+	}()
+
+	var findRelayAddrs = func(id relayID, relays []*pbclient.DirectRelay) []model.HostPort {
+		for _, relay := range relays {
+			if id == relayID(relay.Id) {
+				return model.HostPortFromPBs(relay.Addresses)
+			}
+		}
+		return nil
+	}
+
+	err := notify.ListenMulti(ctx, p.parent.local.directRelays, p.remotes,
+		func(ctx context.Context, relaysAddrs []*pbclient.DirectRelay, peerCerts map[relayID]*serverTLSConfig) error {
+			active := map[relayID]struct{}{}
+
+			for rid, cert := range peerCerts {
+				active[rid] = struct{}{}
+
+				switch addrs, conn := findRelayAddrs(rid, relaysAddrs), running[rid]; {
+				case len(addrs) > 0 && conn == nil:
+					conn = runRemotePeerDirectRelayConn(ctx, p, rid, addrs, cert)
+					running[rid] = conn
+				case len(addrs) > 0 && conn != nil:
+					conn.spec.Set(remotePeerDirectRelayConnSpec{addrs, cert})
+				case len(addrs) == 0 && conn != nil:
+					conn.cancel()
+					delete(running, rid)
+				case len(addrs) == 0 && conn == nil:
+					// do nothing, conn is not running
+				}
+			}
+
+			for rid, conn := range running {
+				if _, ok := active[rid]; !ok {
+					p.parent.logger.Debug("stopping direct peer relay", "id", rid)
+					conn.cancel()
+					delete(running, rid)
+				}
+			}
+
+			return nil
+		})
+	if err != nil {
+		p.logger.Debug("error running direct peer relays", "err", err)
+	}
+}
+
+type remotePeerDirectRelayConn struct {
+	parent *remotePeerDirectRelays
+	remote relayID
+	spec   *notify.V[remotePeerDirectRelayConnSpec]
+	cancel context.CancelFunc
+	logger *slog.Logger
+}
+
+type remotePeerDirectRelayConnSpec struct {
+	addrs      []model.HostPort
+	serverConf *serverTLSConfig
+}
+
+func runRemotePeerDirectRelayConn(
+	ctx context.Context,
+	parent *remotePeerDirectRelays,
+	remote relayID,
+	addrs []model.HostPort,
+	cert *serverTLSConfig,
+) *remotePeerDirectRelayConn {
+	ctx, cancel := context.WithCancel(ctx)
+	c := &remotePeerDirectRelayConn{
+		parent,
+		remote,
+		notify.New(remotePeerDirectRelayConnSpec{addrs, cert}),
+		cancel,
+		parent.logger.With("direct-peer", remote),
+	}
+	go c.run(ctx)
+	return c
+}
+
+func (c *remotePeerDirectRelayConn) run(ctx context.Context) {
+	if err := c.runErr(ctx); err != nil {
+		c.logger.Debug("error while running peer", "err", err)
+	}
+}
+
+func (c *remotePeerDirectRelayConn) runErr(ctx context.Context) error {
+	boff := reliable.MinBackoff
+	for {
+		spec, _, err := c.spec.GetAny(ctx)
+		if err != nil {
+			return fmt.Errorf("cannot get any: %w", err)
+		}
+
+		conn, err := c.connect(ctx, spec)
+		if err != nil {
+			c.logger.Debug("could not connect", "err", err)
+			if isPeerTerminalError(err) {
+				return err
+			}
+
+			select {
+			case <-ctx.Done():
+				return ctx.Err()
+			case <-time.After(boff):
+				boff = reliable.NextBackoff(boff)
+			}
+			continue
+		}
+		boff = reliable.MinBackoff
+
+		if err := c.keepalive(ctx, conn); err != nil {
+			c.logger.Debug("keepalive failed", "err", err)
+			if isPeerTerminalError(err) {
+				return err
+			}
+		}
+	}
+}
+
+func (c *remotePeerDirectRelayConn) connect(ctx context.Context, spec remotePeerDirectRelayConnSpec) (*quic.Conn, error) {
+	var errs []error
+	for _, paddr := range spec.addrs {
+		addr, err := net.ResolveUDPAddr("udp", paddr.String())
+		if err != nil {
+			errs = append(errs, err)
+			continue
+		}
+
+		c.logger.Debug("dialing direct relay", "addr", addr, "server", spec.serverConf.name, "cert", spec.serverConf.key)
+		conn, err := c.parent.parent.local.direct.transport.Dial(ctx, addr, &tls.Config{
+			Certificates: []tls.Certificate{c.parent.parent.local.clientCert},
+			RootCAs:      spec.serverConf.cas,
+			ServerName:   spec.serverConf.name,
+			NextProtos:   model.ConnectRelayNextProtos,
+		}, quicc.StdConfig)
+		if err != nil {
+			errs = append(errs, err)
+			continue
+		}
+
+		if err := c.check(ctx, conn); err != nil {
+			errs = append(errs, err)
+			continue
+		}
+
+		return conn, nil
+	}
+
+	return nil, fmt.Errorf("could not connect relay: %w", errors.Join(errs...))
+}
+
+func (c *remotePeerDirectRelayConn) check(ctx context.Context, conn *quic.Conn) error {
+	stream, err := conn.OpenStreamSync(ctx)
+	if err != nil {
+		return err
+	}
+	defer func() {
+		if err := stream.Close(); err != nil {
+			slogc.Fine(c.logger, "error closing check stream", "err", err)
+		}
+	}()
+
+	if err := proto.Write(stream, &pbconnect.Request{}); err != nil {
+		return err
+	}
+	if _, err := pbconnect.ReadResponse(stream); err != nil {
+		return err
+	}
+
+	return nil
+}
+
+func (c *remotePeerDirectRelayConn) keepalive(ctx context.Context, conn *quic.Conn) error {
+	defer func() {
+		if err := conn.CloseWithError(quic.ApplicationErrorCode(pberror.Code_DirectKeepaliveClosed), "keepalive closed"); err != nil {
+			slogc.Fine(c.logger, "error closing connection", "err", err)
+		}
+	}()
+
+	c.parent.parent.local.addActiveConn(c.parent.parent.remoteID, peerRelayOutgoing, string(c.remote), conn)
+	defer c.parent.parent.local.removeActiveConn(c.parent.parent.remoteID, peerRelayOutgoing, string(c.remote))
+
+	quicc.LogRTTStats(conn, c.logger)
 	for {
 		select {
 		case <-ctx.Done():
-			return
-		case <-p.closerCh:
-			return
-		case locals = <-relaysCh:
-			update()
-		case remotes = <-remoteCh:
-			update()
+			return context.Cause(ctx)
+		case <-conn.Context().Done():
+			return context.Cause(conn.Context())
+		case <-time.After(30 * time.Second):
+			quicc.LogRTTStats(conn, c.logger)
 		}
 	}
 }

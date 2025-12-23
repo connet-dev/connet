@@ -73,13 +73,15 @@ func (ChangeType) EnumDescriptor() ([]byte, []int) {
 }
 
 type AuthenticateReq struct {
-	state          protoimpl.MessageState `protogen:"open.v1"`
-	Token          string                 `protobuf:"bytes,1,opt,name=token,proto3" json:"token,omitempty"`
-	Addresses      []*pbmodel.HostPort    `protobuf:"bytes,5,rep,name=addresses,proto3" json:"addresses,omitempty"`
-	ReconnectToken []byte                 `protobuf:"bytes,3,opt,name=reconnect_token,json=reconnectToken,proto3" json:"reconnect_token,omitempty"`
-	BuildVersion   string                 `protobuf:"bytes,4,opt,name=build_version,json=buildVersion,proto3" json:"build_version,omitempty"`
-	unknownFields  protoimpl.UnknownFields
-	sizeCache      protoimpl.SizeCache
+	state             protoimpl.MessageState `protogen:"open.v1"`
+	Token             string                 `protobuf:"bytes,1,opt,name=token,proto3" json:"token,omitempty"`
+	Addresses         []*pbmodel.HostPort    `protobuf:"bytes,5,rep,name=addresses,proto3" json:"addresses,omitempty"`
+	ReconnectToken    []byte                 `protobuf:"bytes,3,opt,name=reconnect_token,json=reconnectToken,proto3" json:"reconnect_token,omitempty"`
+	BuildVersion      string                 `protobuf:"bytes,4,opt,name=build_version,json=buildVersion,proto3" json:"build_version,omitempty"`
+	DirectAddresses   []*pbmodel.HostPort    `protobuf:"bytes,6,rep,name=direct_addresses,json=directAddresses,proto3" json:"direct_addresses,omitempty"`
+	ServerCertificate []byte                 `protobuf:"bytes,7,opt,name=server_certificate,json=serverCertificate,proto3" json:"server_certificate,omitempty"`
+	unknownFields     protoimpl.UnknownFields
+	sizeCache         protoimpl.SizeCache
 }
 
 func (x *AuthenticateReq) Reset() {
@@ -138,6 +140,20 @@ func (x *AuthenticateReq) GetBuildVersion() string {
 		return x.BuildVersion
 	}
 	return ""
+}
+
+func (x *AuthenticateReq) GetDirectAddresses() []*pbmodel.HostPort {
+	if x != nil {
+		return x.DirectAddresses
+	}
+	return nil
+}
+
+func (x *AuthenticateReq) GetServerCertificate() []byte {
+	if x != nil {
+		return x.ServerCertificate
+	}
+	return nil
 }
 
 type AuthenticateResp struct {
@@ -548,12 +564,14 @@ var File_relay_proto protoreflect.FileDescriptor
 
 const file_relay_proto_rawDesc = "" +
 	"\n" +
-	"\vrelay.proto\x12\x05relay\x1a\verror.proto\x1a\vmodel.proto\"\xa4\x01\n" +
+	"\vrelay.proto\x12\x05relay\x1a\verror.proto\x1a\vmodel.proto\"\x8f\x02\n" +
 	"\x0fAuthenticateReq\x12\x14\n" +
 	"\x05token\x18\x01 \x01(\tR\x05token\x12-\n" +
 	"\taddresses\x18\x05 \x03(\v2\x0f.model.HostPortR\taddresses\x12'\n" +
 	"\x0freconnect_token\x18\x03 \x01(\fR\x0ereconnectToken\x12#\n" +
-	"\rbuild_version\x18\x04 \x01(\tR\fbuildVersion\"~\n" +
+	"\rbuild_version\x18\x04 \x01(\tR\fbuildVersion\x12:\n" +
+	"\x10direct_addresses\x18\x06 \x03(\v2\x0f.model.HostPortR\x0fdirectAddresses\x12-\n" +
+	"\x12server_certificate\x18\a \x01(\fR\x11serverCertificate\"~\n" +
 	"\x10AuthenticateResp\x12\"\n" +
 	"\x05error\x18\x01 \x01(\v2\f.error.ErrorR\x05error\x12\x1d\n" +
 	"\n" +
@@ -620,19 +638,20 @@ var file_relay_proto_goTypes = []any{
 }
 var file_relay_proto_depIdxs = []int32{
 	9,  // 0: relay.AuthenticateReq.addresses:type_name -> model.HostPort
-	10, // 1: relay.AuthenticateResp.error:type_name -> error.Error
-	7,  // 2: relay.ClientsResp.changes:type_name -> relay.ClientsResp.Change
-	8,  // 3: relay.ServersResp.changes:type_name -> relay.ServersResp.Change
-	0,  // 4: relay.ClientsResp.Change.change:type_name -> relay.ChangeType
-	11, // 5: relay.ClientsResp.Change.endpoint:type_name -> model.Endpoint
-	12, // 6: relay.ClientsResp.Change.role:type_name -> model.Role
-	0,  // 7: relay.ServersResp.Change.change:type_name -> relay.ChangeType
-	11, // 8: relay.ServersResp.Change.endpoint:type_name -> model.Endpoint
-	9,  // [9:9] is the sub-list for method output_type
-	9,  // [9:9] is the sub-list for method input_type
-	9,  // [9:9] is the sub-list for extension type_name
-	9,  // [9:9] is the sub-list for extension extendee
-	0,  // [0:9] is the sub-list for field type_name
+	9,  // 1: relay.AuthenticateReq.direct_addresses:type_name -> model.HostPort
+	10, // 2: relay.AuthenticateResp.error:type_name -> error.Error
+	7,  // 3: relay.ClientsResp.changes:type_name -> relay.ClientsResp.Change
+	8,  // 4: relay.ServersResp.changes:type_name -> relay.ServersResp.Change
+	0,  // 5: relay.ClientsResp.Change.change:type_name -> relay.ChangeType
+	11, // 6: relay.ClientsResp.Change.endpoint:type_name -> model.Endpoint
+	12, // 7: relay.ClientsResp.Change.role:type_name -> model.Role
+	0,  // 8: relay.ServersResp.Change.change:type_name -> relay.ChangeType
+	11, // 9: relay.ServersResp.Change.endpoint:type_name -> model.Endpoint
+	10, // [10:10] is the sub-list for method output_type
+	10, // [10:10] is the sub-list for method input_type
+	10, // [10:10] is the sub-list for extension type_name
+	10, // [10:10] is the sub-list for extension extendee
+	0,  // [0:10] is the sub-list for field type_name
 }
 
 func init() { file_relay_proto_init() }

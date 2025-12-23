@@ -11,8 +11,10 @@ import (
 	"net"
 	"slices"
 
+	"github.com/connet-dev/connet/certc"
 	"github.com/connet-dev/connet/iterc"
 	"github.com/connet-dev/connet/model"
+	"github.com/connet-dev/connet/netc"
 	"github.com/connet-dev/connet/notify"
 	"github.com/connet-dev/connet/statusc"
 	"github.com/quic-go/quic-go"
@@ -25,7 +27,8 @@ type Config struct {
 	ControlToken string
 	ControlCAs   *x509.CertPool
 
-	Ingress []Ingress
+	Ingress       []Ingress
+	DirectIngress []DirectIngress
 
 	Stores Stores
 
@@ -55,28 +58,49 @@ func NewServer(cfg Config) (*Server, error) {
 	var statelessResetKey quic.StatelessResetKey
 	copy(statelessResetKey[:], statelessResetVal.Bytes)
 
-	control, err := newControlClient(cfg, configStore)
+	rootCert, err := certc.NewRoot()
+	if err != nil {
+		return nil, fmt.Errorf("generate relay cert: %w", err)
+	}
+
+	directCert, err := rootCert.NewServer(certc.CertOpts{
+		Domains: []string{netc.GenDomainName("reserve.relay")},
+	})
+	if err != nil {
+		return nil, fmt.Errorf("generate direct relay cert: %w", err)
+	}
+
+	control, err := newControlClient(cfg, rootCert, directCert, configStore)
 	if err != nil {
 		return nil, fmt.Errorf("relay control client: %w", err)
 	}
 
 	clients := newClientsServer(cfg, control.tlsAuthenticate, control.authenticate)
 
+	direct, err := newDirectServer(rootCert, directCert, cfg.Logger)
+	if err != nil {
+		return nil, fmt.Errorf("relay direct server: %w", err)
+	}
+
 	return &Server{
 		ingress:           cfg.Ingress,
+		directs:           cfg.DirectIngress,
 		statelessResetKey: &statelessResetKey,
 
 		control: control,
 		clients: clients,
+		direct:  direct,
 	}, nil
 }
 
 type Server struct {
 	ingress           []Ingress
+	directs           []DirectIngress
 	statelessResetKey *quic.StatelessResetKey
 
 	control *controlClient
 	clients *clientsServer
+	direct  *directServer
 }
 
 func (s *Server) Run(ctx context.Context) error {
@@ -87,6 +111,21 @@ func (s *Server) Run(ctx context.Context) error {
 	for _, ingress := range s.ingress {
 		g.Go(func() error {
 			return s.clients.run(ctx, clientsServerCfg{
+				ingress:           ingress,
+				statelessResetKey: s.statelessResetKey,
+				addedTransport: func(t *quic.Transport) {
+					notify.SliceAppend(transports, t)
+				},
+				removeTransport: func(t *quic.Transport) {
+					notify.SliceRemove(transports, t)
+				},
+			})
+		})
+	}
+
+	for _, ingress := range s.directs {
+		g.Go(func() error {
+			return s.direct.run(ctx, directServerIngress{
 				ingress:           ingress,
 				statelessResetKey: s.statelessResetKey,
 				addedTransport: func(t *quic.Transport) {

@@ -81,7 +81,8 @@ func New(opts ...Option) (*Server, error) {
 		ControlToken: relayAuth.Token,
 		ControlCAs:   relaysCAs,
 
-		Ingress: cfg.relayIngresses,
+		Ingress:       cfg.relayIngresses,
+		DirectIngress: cfg.directRelayIngresses,
 
 		Stores: relay.NewFileStores(filepath.Join(cfg.dir, "relay")),
 		Logger: cfg.logger,

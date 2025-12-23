@@ -44,6 +44,7 @@ type ClientAuthentication []byte
 type ClientRelays interface {
 	Client(ctx context.Context, endpoint model.Endpoint, role model.Role, cert *x509.Certificate, auth ClientAuthentication,
 		notify func(map[RelayID]relayCacheValue) error) error
+	Active(ctx context.Context, auth ClientAuthentication, notify func(map[RelayID]activeRelay) error) error
 }
 
 func newClientServer(
@@ -492,7 +493,7 @@ func (c *clientConn) authenticate(ctx context.Context) (*clientConnAuth, error) 
 		}
 	}()
 
-	req := &pbclient.Authenticate{}
+	req := &pbclient.AuthenticateReq{}
 	if err := proto.Read(authStream, req); err != nil {
 		return nil, fmt.Errorf("client auth read: %w", err)
 	}
@@ -576,6 +577,8 @@ func (s *clientStream) runErr(ctx context.Context) error {
 		return s.announce(ctx, req.Announce)
 	case req.Relay != nil:
 		return s.relay(ctx, req.Relay)
+	case req.DirectRelay != nil:
+		return s.directRelay(ctx)
 	default:
 		return s.unknown(ctx, req)
 	}
@@ -725,6 +728,43 @@ func (s *clientStream) relay(ctx context.Context, req *pbclient.Request_Relay) e
 				},
 			}); err != nil {
 				return fmt.Errorf("client relay response: %w", err)
+			}
+			return nil
+		})
+	})
+
+	return g.Wait()
+}
+
+func (s *clientStream) directRelay(ctx context.Context) error {
+	g, ctx := errgroup.WithContext(ctx)
+
+	g.Go(func() error {
+		connCtx := s.conn.conn.Context()
+		<-connCtx.Done()
+		return context.Cause(connCtx)
+	})
+
+	g.Go(func() error {
+		defer s.conn.logger.Debug("completed direct relay notify")
+		return s.conn.server.relays.Active(ctx, s.conn.auth, func(relays map[RelayID]activeRelay) error {
+			s.conn.logger.Debug("updated direct relay list", "relays", len(relays))
+
+			var send []*pbclient.DirectRelay
+			for id, ar := range relays {
+				send = append(send, &pbclient.DirectRelay{
+					Id:                id.string,
+					Addresses:         iterc.MapSlice(ar.hostports, model.HostPort.PB),
+					ServerCertificate: ar.certificate.Raw,
+				})
+			}
+
+			if err := proto.Write(s.stream, &pbclient.Response{
+				DirectRelays: &pbclient.Response_DirectRelays{
+					Relays: send,
+				},
+			}); err != nil {
+				return fmt.Errorf("direct relay response: %w", err)
 			}
 			return nil
 		})

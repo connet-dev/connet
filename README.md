@@ -637,16 +637,18 @@ by adding account management and it is one of the easiest way to start.
  - [x] auto-tag release
  - [x] nix embed version on release
 
-### V0.10.0
+### v0.10.0
  - [x] package refactor/rename - move all clients in main connet package
  - [x] fix issue with disconnecting from relay when peer dissapears
  - [x] fix issue with not closing relay connection when relay dissapears
 
-### v0.10.0
- - [ ] UPnP/IDG and PCP for hole-punching
- - [ ] package refactor/rename
+### v0.11.0
+ - [ ] rewrite relay protocol to not depend on control connection
 
 ### vNext
+ - [ ] peer identity and support for options in p2p
+ - [ ] raw endpoint protocols
+ - [ ] UPnP/IDG and PCP for hole-punching
  - [ ] preshared clients - controless p2p
  - [ ] api to control client/control/relay
 

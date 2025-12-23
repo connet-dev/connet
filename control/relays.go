@@ -77,12 +77,7 @@ func newRelayServer(
 			srv = map[RelayID]relayCacheValue{}
 			endpointsCache[msg.Key.Endpoint] = srv
 		}
-		rcv := relayCacheValue{Hostports: msg.Value.Hostports, Cert: msg.Value.Cert}
-		if len(rcv.Hostports) == 0 {
-			// compat: old values contain single hostport, use it
-			rcv.Hostports = append(rcv.Hostports, msg.Value.Hostport)
-		}
-		srv[msg.Key.RelayID] = rcv
+		srv[msg.Key.RelayID] = relayCacheValue{Hostports: msg.Value.Hostports, Cert: msg.Value.Cert}
 	}
 
 	serverIDConfig, err := config.GetOrInit(configServerID, func(_ ConfigKey) (ConfigValue, error) {
@@ -223,6 +218,49 @@ func (s *relayServer) listen(ctx context.Context, endpoint model.Endpoint,
 	}
 }
 
+type activeRelay struct {
+	hostports   []model.HostPort
+	certificate *x509.Certificate
+}
+
+func (s *relayServer) Active(ctx context.Context, auth ClientAuthentication, notifyFn func(map[RelayID]activeRelay) error) error {
+	conns, offset, err := s.conns.Snapshot()
+	if err != nil {
+		return err
+	}
+
+	var activeRelays = map[RelayID]activeRelay{}
+	for _, conn := range conns {
+		activeRelays[conn.Key.ID] = activeRelay{conn.Value.DirectHostports, conn.Value.ServerCertificate}
+	}
+	if err := notifyFn(activeRelays); err != nil {
+		return err
+	}
+
+	for {
+		changes, nextOffset, err := s.conns.Consume(ctx, offset)
+		if err != nil {
+			return err
+		}
+
+		for _, msg := range changes {
+			if msg.Delete {
+				delete(activeRelays, msg.Key.ID)
+			} else {
+				activeRelays[msg.Key.ID] = activeRelay{msg.Value.DirectHostports, msg.Value.ServerCertificate}
+			}
+		}
+
+		if len(changes) > 0 {
+			if err := notifyFn(activeRelays); err != nil {
+				return err
+			}
+		}
+
+		offset = nextOffset
+	}
+}
+
 func (s *relayServer) run(ctx context.Context) error {
 	g := reliable.NewGroup(ctx)
 
@@ -318,12 +356,7 @@ func (s *relayServer) runEndpointsCache(ctx context.Context) error {
 				srv = map[RelayID]relayCacheValue{}
 				s.endpointsCache[msg.Key.Endpoint] = srv
 			}
-			rcv := relayCacheValue{Hostports: msg.Value.Hostports, Cert: msg.Value.Cert}
-			if len(rcv.Hostports) == 0 {
-				// compat: old values are missing hostports, use single to cache
-				rcv.Hostports = append(rcv.Hostports, msg.Value.Hostport)
-			}
-			srv[msg.Key.RelayID] = rcv
+			srv[msg.Key.RelayID] = relayCacheValue{Hostports: msg.Value.Hostports, Cert: msg.Value.Cert}
 		}
 
 		s.endpointsOffset = msg.Offset + 1
@@ -378,6 +411,9 @@ type relayConnAuth struct {
 	id        RelayID
 	auth      RelayAuthentication
 	hostports []model.HostPort
+
+	directHostports []model.HostPort
+	directCert      *x509.Certificate
 }
 
 func (c *relayConn) run(ctx context.Context) {
@@ -419,7 +455,7 @@ func (c *relayConn) runErr(ctx context.Context) error {
 	c.endpoints = endpoints
 
 	key := RelayConnKey{ID: c.id}
-	value := RelayConnValue{Authentication: c.auth, Hostport: c.hostports[0], Hostports: c.hostports}
+	value := RelayConnValue{c.auth, c.hostports, c.directHostports, c.directCert}
 	if err := c.server.conns.Put(key, value); err != nil {
 		return err
 	}
@@ -452,6 +488,18 @@ func (c *relayConn) authenticate(ctx context.Context) (*relayConnAuth, error) {
 	req := &pbrelay.AuthenticateReq{}
 	if err := proto.Read(authStream, req); err != nil {
 		return nil, fmt.Errorf("auth read request: %w", err)
+	}
+
+	cert, err := x509.ParseCertificate(req.ServerCertificate)
+	if err != nil {
+		perr := pberror.GetError(err)
+		if perr == nil {
+			perr = pberror.NewError(pberror.Code_AuthenticationFailed, "authentication failed: %v", err)
+		}
+		if err := proto.Write(authStream, &pbrelay.AuthenticateResp{Error: perr}); err != nil {
+			return nil, fmt.Errorf("relay auth err write: %w", err)
+		}
+		return nil, fmt.Errorf("auth failed: %w", perr)
 	}
 
 	protocol := model.GetRelayNextProto(c.conn)
@@ -494,7 +542,8 @@ func (c *relayConn) authenticate(ctx context.Context) (*relayConnAuth, error) {
 
 	c.logger.Debug("authentication completed", "local", c.conn.LocalAddr(), "remote", c.conn.RemoteAddr(), "proto", protocol, "build", req.BuildVersion)
 	hostports := model.HostPortFromPBs(req.Addresses)
-	return &relayConnAuth{id, auth, hostports}, nil
+	directHostports := model.HostPortFromPBs(req.DirectAddresses)
+	return &relayConnAuth{id, auth, hostports, directHostports, cert}, nil
 }
 
 func (c *relayConn) runRelayClients(ctx context.Context) error {
@@ -629,7 +678,7 @@ func (c *relayConn) runRelayEndpoints(ctx context.Context) error {
 
 	for _, msg := range initialMsgs {
 		key := RelayServerKey{Endpoint: msg.Key.Endpoint, RelayID: c.id}
-		value := RelayServerValue{Hostport: c.hostports[0], Hostports: c.hostports, Cert: msg.Value.Cert}
+		value := RelayServerValue{Hostports: c.hostports, Cert: msg.Value.Cert}
 		if err := c.server.servers.Put(key, value); err != nil {
 			return err
 		}
@@ -663,7 +712,7 @@ func (c *relayConn) runRelayEndpoints(ctx context.Context) error {
 					return err
 				}
 			} else {
-				value := RelayServerValue{Hostport: c.hostports[0], Hostports: c.hostports, Cert: msg.Value.Cert}
+				value := RelayServerValue{Hostports: c.hostports, Cert: msg.Value.Cert}
 				if err := c.server.servers.Put(key, value); err != nil {
 					return err
 				}

@@ -12,11 +12,11 @@ import (
 	"github.com/connet-dev/connet/model"
 	"github.com/connet-dev/connet/proto"
 	"github.com/connet-dev/connet/proto/pbclient"
+	"github.com/connet-dev/connet/quicc"
 	"github.com/connet-dev/connet/reliable"
 	"github.com/connet-dev/connet/slogc"
 	"github.com/connet-dev/connet/statusc"
 	"github.com/quic-go/quic-go"
-	"golang.org/x/sync/errgroup"
 )
 
 type endpointStatus struct {
@@ -122,6 +122,7 @@ func (ep *endpoint) close() error {
 
 func (ep *endpoint) runPeer(ctx context.Context) {
 	if err := ep.peer.run(ctx); err != nil {
+		ep.logger.Debug("peer stopped", "err", err)
 		ep.ctxCancel(err)
 	}
 }
@@ -160,6 +161,7 @@ func (ep *endpoint) runSessionAnnounceErr(ctx context.Context, sess *session) er
 		g := reliable.NewGroup(ctx)
 		g.Go(reliable.Bind(sess.conn, ep.runAnnounce))
 		g.Go(reliable.Bind(sess.conn, ep.runRelay))
+		g.Go(reliable.Bind(sess.conn, ep.runDirectRelays))
 		return g.Wait()
 	}
 
@@ -177,18 +179,13 @@ func (ep *endpoint) runAnnounce(ctx context.Context, conn *quic.Conn) error {
 		}
 	}()
 
-	g, ctx := errgroup.WithContext(ctx)
+	g := reliable.NewGroup(ctx)
+	g.Go(quicc.WaitStream(stream))
 
-	g.Go(func() error {
-		<-ctx.Done()
-		stream.CancelRead(0)
-		return nil
-	})
-
-	g.Go(func() error {
+	g.Go(func(ctx context.Context) error {
 		defer ep.logger.Debug("completed announce notify")
 		return ep.peer.selfListen(ctx, func(peer *pbclient.Peer) error {
-			ep.logger.Debug("updated announce", "direct", len(peer.Directs), "relays", len(peer.RelayIds))
+			ep.logger.Debug("updated announce", "direct", len(peer.Directs), "relays", len(peer.RelayIds), "direct-relays", len(peer.DirectRelays))
 			return proto.Write(stream, &pbclient.Request{
 				Announce: &pbclient.Request_Announce{
 					Endpoint: ep.cfg.endpoint.PB(),
@@ -199,7 +196,7 @@ func (ep *endpoint) runAnnounce(ctx context.Context, conn *quic.Conn) error {
 		})
 	})
 
-	g.Go(func() error {
+	g.Go(func(ctx context.Context) error {
 		for {
 			resp, err := pbclient.ReadResponse(stream)
 			ep.onlineReport(err)
@@ -240,15 +237,10 @@ func (ep *endpoint) runRelay(ctx context.Context, conn *quic.Conn) error {
 		return err
 	}
 
-	g, ctx := errgroup.WithContext(ctx)
+	g := reliable.NewGroup(ctx)
+	g.Go(quicc.WaitStream(stream))
 
-	g.Go(func() error {
-		<-ctx.Done()
-		stream.CancelRead(0)
-		return nil
-	})
-
-	g.Go(func() error {
+	g.Go(func(ctx context.Context) error {
 		for {
 			resp, err := pbclient.ReadResponse(stream)
 			if err != nil {
@@ -260,6 +252,44 @@ func (ep *endpoint) runRelay(ctx context.Context, conn *quic.Conn) error {
 			}
 
 			ep.peer.setRelays(resp.Relay.Relays)
+		}
+	})
+
+	return g.Wait()
+}
+
+func (ep *endpoint) runDirectRelays(ctx context.Context, conn *quic.Conn) error {
+	stream, err := conn.OpenStreamSync(ctx)
+	if err != nil {
+		return fmt.Errorf("relay open stream: %w", err)
+	}
+	defer func() {
+		if err := stream.Close(); err != nil {
+			slogc.Fine(ep.logger, "error closing relay stream", "err", err)
+		}
+	}()
+
+	if err := proto.Write(stream, &pbclient.Request{
+		DirectRelay: &pbclient.Request_DirectRelay{},
+	}); err != nil {
+		return err
+	}
+
+	g := reliable.NewGroup(ctx)
+	g.Go(quicc.WaitStream(stream))
+
+	g.Go(func(ctx context.Context) error {
+		for {
+			resp, err := pbclient.ReadResponse(stream)
+			if err != nil {
+				ep.onlineReport(err)
+				return fmt.Errorf("direct relay error: %w", err)
+			}
+			if resp.DirectRelays == nil {
+				return fmt.Errorf("direct relay unexpected response")
+			}
+
+			ep.peer.setDirectRelays(resp.DirectRelays.Relays)
 		}
 	})
 

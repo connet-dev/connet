@@ -250,7 +250,7 @@ func (d *destinationConn) runConnect(ctx context.Context, stream *quic.Stream, r
 		ProxyProto: d.dst.cfg.Proxy.PB(),
 	}
 
-	if d.peer.style == peerRelay {
+	if d.peer.style.isRelay() {
 		srcEncryptions := model.EncryptionsFromPB(req.Connect.SourceEncryption)
 		if len(srcEncryptions) == 0 {
 			// source doesn't include encryption logic, none is the only possible choice
@@ -306,7 +306,7 @@ func (d *destinationConn) runConnect(ctx context.Context, stream *quic.Stream, r
 	}
 
 	var encStream = quicc.StreamConn(stream, d.conn)
-	if d.peer.style == peerRelay {
+	if d.peer.style.isRelay() {
 		switch connect.DestinationEncryption {
 		case pbconnect.RelayEncryptionScheme_TLS:
 			d.logger.Debug("upgrading relay connection to TLS")
