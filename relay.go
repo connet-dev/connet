@@ -18,7 +18,6 @@ import (
 	"github.com/connet-dev/connet/reliable"
 	"github.com/connet-dev/connet/slogc"
 	"github.com/quic-go/quic-go"
-	"golang.org/x/sync/errgroup"
 )
 
 type relayID string
@@ -48,10 +47,10 @@ func newRelay(local *peer, id relayID, hps []model.HostPort, serverConf *serverT
 }
 
 func (r *relay) run(ctx context.Context) {
-	g, ctx := errgroup.WithContext(ctx)
+	g := reliable.NewGroup(ctx)
 
-	g.Go(func() error { return r.runConn(ctx) })
-	g.Go(func() error {
+	g.Go(r.runConn)
+	g.Go(func(ctx context.Context) error {
 		<-r.closer
 		return errPeeringStop
 	})

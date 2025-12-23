@@ -20,9 +20,9 @@ import (
 	"github.com/connet-dev/connet/proto/pbconnect"
 	"github.com/connet-dev/connet/proto/pberror"
 	"github.com/connet-dev/connet/quicc"
+	"github.com/connet-dev/connet/reliable"
 	"github.com/connet-dev/connet/slogc"
 	"github.com/quic-go/quic-go"
-	"golang.org/x/sync/errgroup"
 )
 
 type clientAuth struct {
@@ -331,9 +331,9 @@ func (c *clientConn) runSource(ctx context.Context) error {
 	fcs := c.server.addSource(c)
 	defer c.server.removeSource(fcs, c)
 
-	g, ctx := errgroup.WithContext(ctx)
+	g := reliable.NewGroup(ctx)
 
-	g.Go(func() error {
+	g.Go(func(ctx context.Context) error {
 		quicc.LogRTTStats(c.conn, c.logger)
 		for {
 			select {
@@ -347,7 +347,7 @@ func (c *clientConn) runSource(ctx context.Context) error {
 		}
 	})
 
-	g.Go(func() error {
+	g.Go(func(ctx context.Context) error {
 		for {
 			stream, err := c.conn.AcceptStream(ctx)
 			if err != nil {

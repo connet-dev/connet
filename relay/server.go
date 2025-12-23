@@ -14,9 +14,9 @@ import (
 	"github.com/connet-dev/connet/iterc"
 	"github.com/connet-dev/connet/model"
 	"github.com/connet-dev/connet/notify"
+	"github.com/connet-dev/connet/reliable"
 	"github.com/connet-dev/connet/statusc"
 	"github.com/quic-go/quic-go"
-	"golang.org/x/sync/errgroup"
 )
 
 type Config struct {
@@ -80,31 +80,29 @@ type Server struct {
 }
 
 func (s *Server) Run(ctx context.Context) error {
-	g, ctx := errgroup.WithContext(ctx)
-
 	transports := notify.NewEmpty[[]*quic.Transport]()
-
-	for _, ingress := range s.ingress {
-		g.Go(func() error {
-			return s.clients.run(ctx, clientsServerCfg{
-				ingress:           ingress,
-				statelessResetKey: s.statelessResetKey,
-				addedTransport: func(t *quic.Transport) {
-					notify.SliceAppend(transports, t)
-				},
-				removeTransport: func(t *quic.Transport) {
-					notify.SliceRemove(transports, t)
-				},
-			})
-		})
+	var waitForTransport TransportsFn = func(ctx context.Context) ([]*quic.Transport, error) {
+		t, _, err := transports.GetAny(ctx)
+		return t, err
 	}
 
-	g.Go(func() error {
-		return s.control.run(ctx, func(ctx context.Context) ([]*quic.Transport, error) {
-			t, _, err := transports.GetAny(ctx)
-			return t, err
-		})
-	})
+	g := reliable.NewGroup(ctx)
+
+	for _, ingress := range s.ingress {
+		cfg := clientsServerCfg{
+			ingress:           ingress,
+			statelessResetKey: s.statelessResetKey,
+			addedTransport: func(t *quic.Transport) {
+				notify.SliceAppend(transports, t)
+			},
+			removeTransport: func(t *quic.Transport) {
+				notify.SliceRemove(transports, t)
+			},
+		}
+		g.Go(reliable.Bind(cfg, s.clients.run))
+	}
+
+	g.Go(reliable.Bind(waitForTransport, s.control.run))
 
 	return g.Wait()
 }

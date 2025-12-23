@@ -12,11 +12,11 @@ import (
 	"github.com/connet-dev/connet/model"
 	"github.com/connet-dev/connet/proto"
 	"github.com/connet-dev/connet/proto/pbclient"
+	"github.com/connet-dev/connet/quicc"
 	"github.com/connet-dev/connet/reliable"
 	"github.com/connet-dev/connet/slogc"
 	"github.com/connet-dev/connet/statusc"
 	"github.com/quic-go/quic-go"
-	"golang.org/x/sync/errgroup"
 )
 
 type endpointStatus struct {
@@ -177,15 +177,10 @@ func (ep *endpoint) runAnnounce(ctx context.Context, conn *quic.Conn) error {
 		}
 	}()
 
-	g, ctx := errgroup.WithContext(ctx)
+	g := reliable.NewGroup(ctx)
+	g.Go(quicc.CancelStream(stream))
 
-	g.Go(func() error {
-		<-ctx.Done()
-		stream.CancelRead(0)
-		return nil
-	})
-
-	g.Go(func() error {
+	g.Go(func(ctx context.Context) error {
 		defer ep.logger.Debug("completed announce notify")
 		return ep.peer.selfListen(ctx, func(peer *pbclient.Peer) error {
 			ep.logger.Debug("updated announce", "direct", len(peer.Directs), "relays", len(peer.RelayIds))
@@ -199,7 +194,7 @@ func (ep *endpoint) runAnnounce(ctx context.Context, conn *quic.Conn) error {
 		})
 	})
 
-	g.Go(func() error {
+	g.Go(func(ctx context.Context) error {
 		for {
 			resp, err := pbclient.ReadResponse(stream)
 			ep.onlineReport(err)
@@ -240,15 +235,10 @@ func (ep *endpoint) runRelay(ctx context.Context, conn *quic.Conn) error {
 		return err
 	}
 
-	g, ctx := errgroup.WithContext(ctx)
+	g := reliable.NewGroup(ctx)
+	g.Go(quicc.CancelStream(stream))
 
-	g.Go(func() error {
-		<-ctx.Done()
-		stream.CancelRead(0)
-		return nil
-	})
-
-	g.Go(func() error {
+	g.Go(func(ctx context.Context) error {
 		for {
 			resp, err := pbclient.ReadResponse(stream)
 			if err != nil {

@@ -25,6 +25,7 @@ import (
 	"github.com/connet-dev/connet/model"
 	"github.com/connet-dev/connet/netc"
 	relaysrv "github.com/connet-dev/connet/relay"
+	"github.com/connet-dev/connet/reliable"
 	"github.com/connet-dev/connet/restr"
 	"github.com/connet-dev/connet/selfhosted"
 	"github.com/connet-dev/connet/server"
@@ -32,7 +33,6 @@ import (
 	"github.com/gorilla/websocket"
 	"github.com/pires/go-proxyproto"
 	"github.com/stretchr/testify/require"
-	"golang.org/x/sync/errgroup"
 )
 
 type connectedTestCase struct {
@@ -212,10 +212,10 @@ func TestE2E(t *testing.T) {
 	)
 	require.NoError(t, err)
 
-	g, ctx := errgroup.WithContext(ctx)
-	g.Go(func() error { return proxyProtoServer(ctx, ppListen) })
-	g.Go(func() error { return echoServer(ctx, echoListen) })
-	g.Go(func() error { return srv.Run(ctx) })
+	g := reliable.NewGroup(ctx)
+	g.Go(reliable.Bind(ppListen, proxyProtoServer))
+	g.Go(reliable.Bind(echoListen, echoServer))
+	g.Go(srv.Run)
 
 	time.Sleep(time.Millisecond) // time for server to come online
 
@@ -427,17 +427,17 @@ func TestE2E(t *testing.T) {
 		switch {
 		case tc.isSuccessProxyProto():
 			dstSrv := NewTCPDestination(dst, ppAddr, 0, logger)
-			g.Go(func() error { return dstSrv.Run(ctx) })
+			g.Go(dstSrv.Run)
 		case tc.isSuccessTLS():
 			clientTransport := htsServer.Client().Transport.(*http.Transport)
 			dstSrv := NewTLSDestination(dst, htsAddr, clientTransport.TLSClientConfig, 0, logger)
-			g.Go(func() error { return dstSrv.Run(ctx) })
+			g.Go(dstSrv.Run)
 		case tc.isSuccessWS():
 			dstSrv := NewTCPDestination(dst, echoAddr, 0, logger)
-			g.Go(func() error { return dstSrv.Run(ctx) })
+			g.Go(dstSrv.Run)
 		default:
 			dstSrv := NewTCPDestination(dst, htAddr, 0, logger)
-			g.Go(func() error { return dstSrv.Run(ctx) })
+			g.Go(dstSrv.Run)
 		}
 
 		src, err := clSrc.Source(ctx, tc.s)
@@ -446,20 +446,20 @@ func TestE2E(t *testing.T) {
 		switch {
 		case tc.isSuccessTLS():
 			srcSrv := NewTLSSource(src, fmt.Sprintf(":%d", tc.sport), htsServer.TLS, logger)
-			g.Go(func() error { return srcSrv.Run(ctx) })
+			g.Go(srcSrv.Run)
 		case tc.isSuccessWS():
 			srcURL, err := url.Parse(fmt.Sprintf("ws://:%d", tc.sport))
 			require.NoError(t, err)
 			srcSrv := NewWSSource(src, srcURL, nil, logger)
-			g.Go(func() error { return srcSrv.Run(ctx) })
+			g.Go(srcSrv.Run)
 		case tc.isFail():
 			srcURL, err := url.Parse(fmt.Sprintf("http://:%d", tc.sport))
 			require.NoError(t, err)
 			srcSrv := NewHTTPSource(src, srcURL, nil)
-			g.Go(func() error { return srcSrv.Run(ctx) })
+			g.Go(srcSrv.Run)
 		default:
 			srcSrv := NewTCPSource(src, fmt.Sprintf(":%d", tc.sport), logger)
-			g.Go(func() error { return srcSrv.Run(ctx) })
+			g.Go(srcSrv.Run)
 		}
 	}
 

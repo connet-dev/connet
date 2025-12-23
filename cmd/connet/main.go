@@ -17,11 +17,11 @@ import (
 
 	"github.com/connet-dev/connet/model"
 	"github.com/connet-dev/connet/netc"
+	"github.com/connet-dev/connet/reliable"
 	"github.com/connet-dev/connet/slogc"
 	"github.com/connet-dev/connet/statusc"
 	"github.com/pelletier/go-toml/v2"
 	"github.com/spf13/cobra"
-	"golang.org/x/sync/errgroup"
 )
 
 type Config struct {
@@ -269,9 +269,9 @@ func runWithStatus[T any](ctx context.Context, srv withStatus[T], statusAddr *ne
 		return srv.Run(ctx)
 	}
 
-	g, ctx := errgroup.WithContext(ctx)
-	g.Go(func() error { return srv.Run(ctx) })
-	g.Go(func() error {
+	g := reliable.NewGroup(ctx)
+	g.Go(srv.Run)
+	g.Go(func(ctx context.Context) error {
 		logger.Debug("running status server", "addr", statusAddr)
 		return statusc.Run(ctx, statusAddr, srv.Status)
 	})

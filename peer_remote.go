@@ -21,7 +21,6 @@ import (
 	"github.com/connet-dev/connet/reliable"
 	"github.com/connet-dev/connet/slogc"
 	"github.com/quic-go/quic-go"
-	"golang.org/x/sync/errgroup"
 )
 
 type remotePeer struct {
@@ -58,10 +57,10 @@ func (p *remotePeer) run(ctx context.Context) {
 		p.local.removeActiveConns(p.remoteID)
 	}()
 
-	g, ctx := errgroup.WithContext(ctx)
+	g := reliable.NewGroup(ctx)
 
-	g.Go(func() error { return p.runRemote(ctx) })
-	g.Go(func() error {
+	g.Go(p.runRemote)
+	g.Go(func(ctx context.Context) error {
 		<-p.closer
 		return errPeeringStop
 	})

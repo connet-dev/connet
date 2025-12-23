@@ -26,7 +26,6 @@ import (
 	"github.com/connet-dev/connet/statusc"
 	"github.com/klev-dev/klevdb"
 	"github.com/quic-go/quic-go"
-	"golang.org/x/sync/errgroup"
 )
 
 type controlClient struct {
@@ -338,15 +337,10 @@ func (s *controlClient) runClientsStream(ctx context.Context, conn *quic.Conn) e
 		}
 	}()
 
-	g, ctx := errgroup.WithContext(ctx)
+	g := reliable.NewGroup(ctx)
+	g.Go(quicc.CancelStream(stream))
 
-	g.Go(func() error {
-		<-ctx.Done()
-		stream.CancelRead(0)
-		return nil
-	})
-
-	g.Go(func() error {
+	g.Go(func(ctx context.Context) error {
 		for {
 			req := &pbrelay.ClientsReq{
 				Offset: s.getClientsStreamOffset(),
@@ -457,15 +451,10 @@ func (s *controlClient) runServersStream(ctx context.Context, conn *quic.Conn) e
 		}
 	}()
 
-	g, ctx := errgroup.WithContext(ctx)
+	g := reliable.NewGroup(ctx)
+	g.Go(quicc.CancelStream(stream))
 
-	g.Go(func() error {
-		<-ctx.Done()
-		stream.CancelRead(0)
-		return nil
-	})
-
-	g.Go(func() error {
+	g.Go(func(ctx context.Context) error {
 		for {
 			req := &pbrelay.ServersReq{}
 			if err := proto.Read(stream, req); err != nil {

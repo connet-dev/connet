@@ -24,7 +24,6 @@ import (
 	"github.com/connet-dev/connet/reliable"
 	"github.com/connet-dev/connet/slogc"
 	"github.com/quic-go/quic-go"
-	"golang.org/x/sync/errgroup"
 )
 
 type ClientAuthenticateRequest struct {
@@ -623,9 +622,9 @@ func (s *clientStream) announce(ctx context.Context, req *pbclient.Request_Annou
 		}
 	}()
 
-	g, ctx := errgroup.WithContext(ctx)
+	g := reliable.NewGroup(ctx)
 
-	g.Go(func() error {
+	g.Go(func(ctx context.Context) error {
 		for {
 			req, err := pbclient.ReadRequest(s.stream)
 			if err != nil {
@@ -652,7 +651,7 @@ func (s *clientStream) announce(ctx context.Context, req *pbclient.Request_Annou
 		}
 	})
 
-	g.Go(func() error {
+	g.Go(func(ctx context.Context) error {
 		defer s.conn.logger.Debug("completed sources notify")
 		return s.conn.server.listen(ctx, endpoint, role.Invert(), func(peers []*pbclient.RemotePeer) error {
 			s.conn.logger.Debug("updated sources list", "peers", len(peers))
@@ -697,15 +696,15 @@ func (s *clientStream) relay(ctx context.Context, req *pbclient.Request_Relay) e
 		return err
 	}
 
-	g, ctx := errgroup.WithContext(ctx)
+	g := reliable.NewGroup(ctx)
 
-	g.Go(func() error {
+	g.Go(func(ctx context.Context) error {
 		connCtx := s.conn.conn.Context()
 		<-connCtx.Done()
 		return context.Cause(connCtx)
 	})
 
-	g.Go(func() error {
+	g.Go(func(ctx context.Context) error {
 		defer s.conn.logger.Debug("completed relay notify")
 		return s.conn.server.relays.Client(ctx, endpoint, role, clientCert, s.conn.auth, func(relays map[RelayID]relayCacheValue) error {
 			s.conn.logger.Debug("updated relay list", "relays", len(relays))

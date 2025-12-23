@@ -11,6 +11,7 @@ import (
 
 func Join(l io.ReadWriteCloser, r io.ReadWriteCloser) error {
 	var g errgroup.Group
+
 	g.Go(func() error {
 		defer func() {
 			if err := l.Close(); err != nil {
@@ -20,6 +21,7 @@ func Join(l io.ReadWriteCloser, r io.ReadWriteCloser) error {
 		_, err := io.Copy(l, r)
 		return err
 	})
+
 	g.Go(func() error {
 		defer func() {
 			if err := r.Close(); err != nil {
@@ -29,6 +31,7 @@ func Join(l io.ReadWriteCloser, r io.ReadWriteCloser) error {
 		_, err := io.Copy(r, l)
 		return err
 	})
+
 	return g.Wait()
 }
 

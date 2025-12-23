@@ -11,8 +11,8 @@ import (
 	"github.com/connet-dev/connet/control"
 	"github.com/connet-dev/connet/netc"
 	"github.com/connet-dev/connet/relay"
+	"github.com/connet-dev/connet/reliable"
 	"github.com/connet-dev/connet/selfhosted"
-	"golang.org/x/sync/errgroup"
 )
 
 type Server struct {
@@ -99,9 +99,9 @@ func New(opts ...Option) (*Server, error) {
 }
 
 func (s *Server) Run(ctx context.Context) error {
-	g, ctx := errgroup.WithContext(ctx)
-	g.Go(func() error { return s.control.Run(ctx) })
-	g.Go(func() error { return s.relay.Run(ctx) })
+	g := reliable.NewGroup(ctx)
+	g.Go(s.control.Run)
+	g.Go(s.relay.Run)
 	return g.Wait()
 }
 
