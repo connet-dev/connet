@@ -38,21 +38,16 @@ type relay struct {
 	logger *slog.Logger
 }
 
-func runRelay(
-	ctx context.Context,
-	local *peer,
-	id relayID,
-	hps []model.HostPort,
-	serverConf *serverTLSConfig,
-	logger *slog.Logger,
-) *relay {
+func runRelay(ctx context.Context, local *peer, id relayID, hps []model.HostPort, serverConf *serverTLSConfig, logger *slog.Logger) *relay {
 	ctx, cancel := context.WithCancel(ctx)
 	r := &relay{
-		local:           local,
+		local: local,
+
 		serverID:        id,
 		serverHostports: hps,
-		cancel:          cancel,
-		logger:          logger.With("relay", id, "addrs", hps),
+
+		cancel: cancel,
+		logger: logger.With("relay", id, "addrs", hps),
 	}
 	r.serverConf.Store(serverConf)
 	go r.run(ctx)

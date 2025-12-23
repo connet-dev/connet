@@ -643,7 +643,7 @@ by adding account management and it is one of the easiest way to start.
  - [x] fix issue with not closing relay connection when relay dissapears
 
 ### v0.11.0
- - [ ] rewrite relay protocol to not depend on control connection
+ - [ ] rewrite relay to not depend on control connection
 
 ### vNext
  - [ ] peer identity and support for options in p2p
