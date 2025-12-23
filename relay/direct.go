@@ -289,7 +289,7 @@ func (c *directReserveConn) reserve(ctx context.Context) error {
 	}
 
 	g := reliable.NewGroup(ctx)
-	g.Go(quicc.WaitStream(stream))
+	g.Go(quicc.CancelStream(stream))
 
 	g.Go(func(ctx context.Context) error {
 		for {

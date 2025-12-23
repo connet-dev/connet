@@ -180,7 +180,7 @@ func (ep *endpoint) runAnnounce(ctx context.Context, conn *quic.Conn) error {
 	}()
 
 	g := reliable.NewGroup(ctx)
-	g.Go(quicc.WaitStream(stream))
+	g.Go(quicc.CancelStream(stream))
 
 	g.Go(func(ctx context.Context) error {
 		defer ep.logger.Debug("completed announce notify")
@@ -238,7 +238,7 @@ func (ep *endpoint) runRelay(ctx context.Context, conn *quic.Conn) error {
 	}
 
 	g := reliable.NewGroup(ctx)
-	g.Go(quicc.WaitStream(stream))
+	g.Go(quicc.CancelStream(stream))
 
 	g.Go(func(ctx context.Context) error {
 		for {
@@ -276,7 +276,7 @@ func (ep *endpoint) runDirectRelays(ctx context.Context, conn *quic.Conn) error 
 	}
 
 	g := reliable.NewGroup(ctx)
-	g.Go(quicc.WaitStream(stream))
+	g.Go(quicc.CancelStream(stream))
 
 	g.Go(func(ctx context.Context) error {
 		for {

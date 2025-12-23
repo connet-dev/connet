@@ -6,7 +6,7 @@ import (
 	"github.com/quic-go/quic-go"
 )
 
-func WaitStream(stream *quic.Stream) func(context.Context) error {
+func CancelStream(stream *quic.Stream) func(ctx context.Context) error {
 	return func(ctx context.Context) error {
 		<-ctx.Done()
 		stream.CancelRead(0)

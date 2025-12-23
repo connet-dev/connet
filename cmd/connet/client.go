@@ -16,10 +16,10 @@ import (
 	"github.com/connet-dev/connet/model"
 	"github.com/connet-dev/connet/nat"
 	"github.com/connet-dev/connet/netc"
+	"github.com/connet-dev/connet/reliable"
 	"github.com/connet-dev/connet/statusc"
 	"github.com/quic-go/quic-go"
 	"github.com/spf13/cobra"
-	"golang.org/x/sync/errgroup"
 )
 
 type ClientConfig struct {
@@ -240,10 +240,10 @@ func clientRun(ctx context.Context, cfg ClientConfig, logger *slog.Logger) error
 		return fmt.Errorf("create client: %w", err)
 	}
 
-	g, ctx := errgroup.WithContext(ctx)
+	g := reliable.NewGroup(ctx)
 
 	if statusAddr != nil {
-		g.Go(func() error {
+		g.Go(func(ctx context.Context) error {
 			logger.Debug("running status server", "addr", statusAddr)
 			return statusc.Run(ctx, statusAddr, cl.Status)
 		})
@@ -254,12 +254,12 @@ func clientRun(ctx context.Context, cfg ClientConfig, logger *slog.Logger) error
 		if err != nil {
 			return err
 		}
-		g.Go(func() error {
+		g.Go(func(ctx context.Context) error {
 			<-dst.Context().Done()
 			return fmt.Errorf("[destination %s] unexpected error: %w", name, context.Cause(dst.Context()))
 		})
 		if dstrun := destinationHandlers[name]; dstrun != nil {
-			g.Go(func() error { return dstrun(dst).Run(ctx) })
+			g.Go(dstrun(dst).Run)
 		}
 	}
 
@@ -268,12 +268,12 @@ func clientRun(ctx context.Context, cfg ClientConfig, logger *slog.Logger) error
 		if err != nil {
 			return err
 		}
-		g.Go(func() error {
+		g.Go(func(ctx context.Context) error {
 			<-src.Context().Done()
 			return fmt.Errorf("[source %s] unexpected error: %w", name, context.Cause(src.Context()))
 		})
 		if srcrun := sourceHandlers[name]; srcrun != nil {
-			g.Go(func() error { return srcrun(src).Run(ctx) })
+			g.Go(srcrun(src).Run)
 		}
 	}
 
