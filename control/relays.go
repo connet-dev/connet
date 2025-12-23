@@ -77,12 +77,7 @@ func newRelayServer(
 			srv = map[RelayID]relayCacheValue{}
 			endpointsCache[msg.Key.Endpoint] = srv
 		}
-		rcv := relayCacheValue{Hostports: msg.Value.Hostports, Cert: msg.Value.Cert}
-		if len(rcv.Hostports) == 0 {
-			// compat: old values contain single hostport, use it
-			rcv.Hostports = append(rcv.Hostports, msg.Value.Hostport)
-		}
-		srv[msg.Key.RelayID] = rcv
+		srv[msg.Key.RelayID] = relayCacheValue{Hostports: msg.Value.Hostports, Cert: msg.Value.Cert}
 	}
 
 	serverIDConfig, err := config.GetOrInit(configServerID, func(_ ConfigKey) (ConfigValue, error) {
@@ -318,12 +313,7 @@ func (s *relayServer) runEndpointsCache(ctx context.Context) error {
 				srv = map[RelayID]relayCacheValue{}
 				s.endpointsCache[msg.Key.Endpoint] = srv
 			}
-			rcv := relayCacheValue{Hostports: msg.Value.Hostports, Cert: msg.Value.Cert}
-			if len(rcv.Hostports) == 0 {
-				// compat: old values are missing hostports, use single to cache
-				rcv.Hostports = append(rcv.Hostports, msg.Value.Hostport)
-			}
-			srv[msg.Key.RelayID] = rcv
+			srv[msg.Key.RelayID] = relayCacheValue{Hostports: msg.Value.Hostports, Cert: msg.Value.Cert}
 		}
 
 		s.endpointsOffset = msg.Offset + 1
@@ -419,7 +409,7 @@ func (c *relayConn) runErr(ctx context.Context) error {
 	c.endpoints = endpoints
 
 	key := RelayConnKey{ID: c.id}
-	value := RelayConnValue{Authentication: c.auth, Hostport: c.hostports[0], Hostports: c.hostports}
+	value := RelayConnValue{Authentication: c.auth, Hostports: c.hostports}
 	if err := c.server.conns.Put(key, value); err != nil {
 		return err
 	}
@@ -629,7 +619,7 @@ func (c *relayConn) runRelayEndpoints(ctx context.Context) error {
 
 	for _, msg := range initialMsgs {
 		key := RelayServerKey{Endpoint: msg.Key.Endpoint, RelayID: c.id}
-		value := RelayServerValue{Hostport: c.hostports[0], Hostports: c.hostports, Cert: msg.Value.Cert}
+		value := RelayServerValue{Hostports: c.hostports, Cert: msg.Value.Cert}
 		if err := c.server.servers.Put(key, value); err != nil {
 			return err
 		}
@@ -663,7 +653,7 @@ func (c *relayConn) runRelayEndpoints(ctx context.Context) error {
 					return err
 				}
 			} else {
-				value := RelayServerValue{Hostport: c.hostports[0], Hostports: c.hostports, Cert: msg.Value.Cert}
+				value := RelayServerValue{Hostports: c.hostports, Cert: msg.Value.Cert}
 				if err := c.server.servers.Put(key, value); err != nil {
 					return err
 				}

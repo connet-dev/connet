@@ -322,7 +322,7 @@ func (c *Client) connect(ctx context.Context, transport *quic.Transport, retoken
 		}
 	}()
 
-	if err := proto.Write(authStream, &pbclient.Authenticate{
+	if err := proto.Write(authStream, &pbclient.AuthenticateReq{
 		Token:          c.token,
 		ReconnectToken: retoken,
 		BuildVersion:   model.BuildVersion(),

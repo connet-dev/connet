@@ -6,7 +6,7 @@ import "model.proto";
 
 option go_package = "github.com/connet-dev/connet/proto/pbclient";
 
-message Authenticate {
+message AuthenticateReq {
   string token = 1;
   bytes reconnect_token = 2;
   string build_version = 3;

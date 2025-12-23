@@ -492,7 +492,7 @@ func (c *clientConn) authenticate(ctx context.Context) (*clientConnAuth, error) 
 		}
 	}()
 
-	req := &pbclient.Authenticate{}
+	req := &pbclient.AuthenticateReq{}
 	if err := proto.Read(authStream, req); err != nil {
 		return nil, fmt.Errorf("client auth read: %w", err)
 	}

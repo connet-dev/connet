@@ -23,7 +23,7 @@ const (
 	_ = protoimpl.EnforceVersion(protoimpl.MaxVersion - 20)
 )
 
-type Authenticate struct {
+type AuthenticateReq struct {
 	state          protoimpl.MessageState `protogen:"open.v1"`
 	Token          string                 `protobuf:"bytes,1,opt,name=token,proto3" json:"token,omitempty"`
 	ReconnectToken []byte                 `protobuf:"bytes,2,opt,name=reconnect_token,json=reconnectToken,proto3" json:"reconnect_token,omitempty"`
@@ -32,20 +32,20 @@ type Authenticate struct {
 	sizeCache      protoimpl.SizeCache
 }
 
-func (x *Authenticate) Reset() {
-	*x = Authenticate{}
+func (x *AuthenticateReq) Reset() {
+	*x = AuthenticateReq{}
 	mi := &file_client_proto_msgTypes[0]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
 
-func (x *Authenticate) String() string {
+func (x *AuthenticateReq) String() string {
 	return protoimpl.X.MessageStringOf(x)
 }
 
-func (*Authenticate) ProtoMessage() {}
+func (*AuthenticateReq) ProtoMessage() {}
 
-func (x *Authenticate) ProtoReflect() protoreflect.Message {
+func (x *AuthenticateReq) ProtoReflect() protoreflect.Message {
 	mi := &file_client_proto_msgTypes[0]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
@@ -57,26 +57,26 @@ func (x *Authenticate) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use Authenticate.ProtoReflect.Descriptor instead.
-func (*Authenticate) Descriptor() ([]byte, []int) {
+// Deprecated: Use AuthenticateReq.ProtoReflect.Descriptor instead.
+func (*AuthenticateReq) Descriptor() ([]byte, []int) {
 	return file_client_proto_rawDescGZIP(), []int{0}
 }
 
-func (x *Authenticate) GetToken() string {
+func (x *AuthenticateReq) GetToken() string {
 	if x != nil {
 		return x.Token
 	}
 	return ""
 }
 
-func (x *Authenticate) GetReconnectToken() []byte {
+func (x *AuthenticateReq) GetReconnectToken() []byte {
 	if x != nil {
 		return x.ReconnectToken
 	}
 	return nil
 }
 
-func (x *Authenticate) GetBuildVersion() string {
+func (x *AuthenticateReq) GetBuildVersion() string {
 	if x != nil {
 		return x.BuildVersion
 	}
@@ -649,8 +649,8 @@ var File_client_proto protoreflect.FileDescriptor
 
 const file_client_proto_rawDesc = "" +
 	"\n" +
-	"\fclient.proto\x12\x06client\x1a\verror.proto\x1a\vmodel.proto\"r\n" +
-	"\fAuthenticate\x12\x14\n" +
+	"\fclient.proto\x12\x06client\x1a\verror.proto\x1a\vmodel.proto\"u\n" +
+	"\x0fAuthenticateReq\x12\x14\n" +
 	"\x05token\x18\x01 \x01(\tR\x05token\x12'\n" +
 	"\x0freconnect_token\x18\x02 \x01(\fR\x0ereconnectToken\x12#\n" +
 	"\rbuild_version\x18\x03 \x01(\tR\fbuildVersion\"\x88\x01\n" +
@@ -705,7 +705,7 @@ func file_client_proto_rawDescGZIP() []byte {
 
 var file_client_proto_msgTypes = make([]protoimpl.MessageInfo, 11)
 var file_client_proto_goTypes = []any{
-	(*Authenticate)(nil),      // 0: client.Authenticate
+	(*AuthenticateReq)(nil),   // 0: client.AuthenticateReq
 	(*AuthenticateResp)(nil),  // 1: client.AuthenticateResp
 	(*Request)(nil),           // 2: client.Request
 	(*Response)(nil),          // 3: client.Response
