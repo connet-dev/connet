@@ -29,38 +29,33 @@ type relay struct {
 	serverHostports []model.HostPort
 	serverConf      atomic.Pointer[serverTLSConfig]
 
-	closer chan struct{}
-
+	cancel context.CancelFunc
 	logger *slog.Logger
 }
 
-func newRelay(local *peer, id relayID, hps []model.HostPort, serverConf *serverTLSConfig, logger *slog.Logger) *relay {
+func runRelay(ctx context.Context, local *peer, id relayID, hps []model.HostPort, serverConf *serverTLSConfig, logger *slog.Logger) *relay {
+	ctx, cancel := context.WithCancel(ctx)
 	r := &relay{
-		local:           local,
+		local: local,
+
 		serverID:        id,
 		serverHostports: hps,
-		closer:          make(chan struct{}),
-		logger:          logger.With("relay", id, "addrs", hps),
+
+		cancel: cancel,
+		logger: logger.With("relay", id, "addrs", hps),
 	}
 	r.serverConf.Store(serverConf)
+	go r.run(ctx)
 	return r
 }
 
 func (r *relay) run(ctx context.Context) {
-	g := reliable.NewGroup(ctx)
-
-	g.Go(r.runConn)
-	g.Go(func(ctx context.Context) error {
-		<-r.closer
-		return errPeeringStop
-	})
-
-	if err := g.Wait(); err != nil {
+	if err := r.runErr(ctx); err != nil {
 		r.logger.Debug("error while running relaying", "err", err)
 	}
 }
 
-func (r *relay) runConn(ctx context.Context) error {
+func (r *relay) runErr(ctx context.Context) error {
 	boff := reliable.MinBackoff
 	for {
 		conn, err := r.connectAny(ctx)
@@ -164,8 +159,4 @@ func (r *relay) keepalive(ctx context.Context, conn *quic.Conn) error {
 			quicc.LogRTTStats(conn, r.logger)
 		}
 	}
-}
-
-func (r *relay) stop() {
-	close(r.closer)
 }
