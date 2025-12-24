@@ -26,8 +26,10 @@ import (
 	"github.com/quic-go/quic-go"
 )
 
-var ErrNoDialedDestinations = errors.New("no dialed destinations")
-var ErrNoActiveDestinations = errors.New("no active destinations")
+var ErrSourceClosed = fmt.Errorf("source closed: %w", errEndpointClosed)
+var ErrSourceConnect = errors.New("cannot connect destination")
+var ErrSourceConnectDestinations = fmt.Errorf("%w: all peer connections were unreachable", ErrSourceConnect)
+var ErrSourceNoActiveDestinations = fmt.Errorf("%w: no active peer connections", ErrSourceConnect)
 
 // Source represents an endpoint that can connect to remote destinations.
 // It is compatible with [net.Dialer] on top of connet infrastructure
@@ -86,14 +88,14 @@ func (s *Source) DialContext(ctx context.Context, network, address string) (net.
 	if s.cfg.DestinationPolicy == model.NoPolicy {
 		conns, err := s.findActive()
 		if err != nil {
-			return nil, fmt.Errorf("get active conns: %w", err)
+			return nil, fmt.Errorf("find active conns: %w", err)
 		}
 		return s.dialInOrder(ctx, conns)
 	}
 
 	peerConns, err := s.findActiveByPeer()
 	if err != nil {
-		return nil, fmt.Errorf("get active conns: %w", err)
+		return nil, fmt.Errorf("find active conns by peer: %w", err)
 	}
 	conns := make([]sourceConn, len(peerConns))
 	for i, pconn := range peerConns {
@@ -142,7 +144,7 @@ func (s *Source) Status() (SourceStatus, error) {
 
 // Close closes this source. Any active connections are also closed.
 func (s *Source) Close() error {
-	return s.ep.close()
+	return s.ep.close(ErrSourceClosed)
 }
 
 func (s *Source) runActive(ctx context.Context) {
@@ -191,7 +193,7 @@ func (s *Source) getDestinationTLS(name string) (*tls.Config, error) {
 func (s *Source) findActive() ([]sourceConn, error) {
 	conns := s.conns.Load()
 	if conns == nil || len(*conns) == 0 {
-		return nil, ErrNoActiveDestinations
+		return nil, ErrSourceNoActiveDestinations
 	}
 
 	return slices.SortedFunc(slices.Values(*conns), rttCompare), nil
@@ -219,7 +221,7 @@ type peerSourceConn struct {
 func (s *Source) findActiveByPeer() ([]peerSourceConn, error) {
 	conns := s.conns.Load()
 	if conns == nil || len(*conns) == 0 {
-		return nil, ErrNoActiveDestinations
+		return nil, ErrSourceNoActiveDestinations
 	}
 
 	bypeer := map[peerID][]sourceConn{}
@@ -311,7 +313,7 @@ func (s *Source) dialInOrder(ctx context.Context, conns []sourceConn) (net.Conn,
 		}
 	}
 
-	return nil, fmt.Errorf("%w: %w", ErrNoDialedDestinations, errors.Join(errs...))
+	return nil, fmt.Errorf("%w: %w", ErrSourceConnectDestinations, errors.Join(errs...))
 }
 
 func (s *Source) dial(ctx context.Context, dest sourceConn) (net.Conn, error) {

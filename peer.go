@@ -218,7 +218,7 @@ func (p *peer) runRelays(ctx context.Context) error {
 		for id, relay := range runningRelays {
 			if _, ok := activeRelays[id]; !ok {
 				p.logger.Debug("stopping relay", "id", id)
-				relay.cancel()
+				relay.cancel(errRelayRemoved)
 				delete(runningRelays, id)
 			}
 		}
@@ -329,7 +329,7 @@ func (p *peer) runPeers(ctx context.Context) error {
 		for id, prg := range runningPeers {
 			if _, ok := activePeers[id]; !ok {
 				p.logger.Debug("stopping remote peer", "id", id)
-				prg.cancel()
+				prg.cancel(errRemotePeerRemoved)
 				delete(runningPeers, id)
 			}
 		}

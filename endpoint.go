@@ -5,7 +5,6 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
-	"net"
 	"sync"
 	"sync/atomic"
 
@@ -18,6 +17,8 @@ import (
 	"github.com/connet-dev/connet/statusc"
 	"github.com/quic-go/quic-go"
 )
+
+var errEndpointClosed = fmt.Errorf("endpoint closed")
 
 type endpointStatus struct {
 	Status statusc.Status
@@ -35,9 +36,9 @@ type endpoint struct {
 	cfg    endpointConfig
 	peer   *peer
 
-	ctx       context.Context
-	ctxCancel context.CancelCauseFunc
-	closer    chan struct{}
+	ctx    context.Context
+	cancel context.CancelCauseFunc
+	closer chan struct{}
 
 	onlineReport func(err error)
 	connStatus   atomic.Value
@@ -57,15 +58,15 @@ func newEndpoint(ctx context.Context, cl *Client, cfg endpointConfig, logger *sl
 		return nil, err
 	}
 
-	ctx, ctxCancel := context.WithCancelCause(ctx)
+	ctx, cancel := context.WithCancelCause(ctx)
 	ep := &endpoint{
 		client: cl,
 		cfg:    cfg,
 		peer:   p,
 
-		ctx:       ctx,
-		ctxCancel: ctxCancel,
-		closer:    make(chan struct{}),
+		ctx:    ctx,
+		cancel: cancel,
+		closer: make(chan struct{}),
 
 		logger: logger,
 	}
@@ -91,11 +92,11 @@ func newEndpoint(ctx context.Context, cl *Client, cfg endpointConfig, logger *sl
 
 	select {
 	case <-ctx.Done():
-		ep.ctxCancel(ctx.Err())
+		ep.cancel(ctx.Err())
 		return nil, ctx.Err()
 	case err := <-errCh:
 		if err != nil {
-			ep.ctxCancel(err)
+			ep.cancel(err)
 			return nil, err
 		}
 	}
@@ -114,8 +115,8 @@ func (ep *endpoint) status() (endpointStatus, error) {
 	}, nil
 }
 
-func (ep *endpoint) close() error {
-	ep.ctxCancel(net.ErrClosed)
+func (ep *endpoint) close(err error) error {
+	ep.cancel(err)
 	<-ep.closer
 	return nil
 }
@@ -123,7 +124,7 @@ func (ep *endpoint) close() error {
 func (ep *endpoint) runPeer(ctx context.Context) {
 	if err := ep.peer.run(ctx); err != nil {
 		ep.logger.Debug("peer stopped", "err", err)
-		ep.ctxCancel(err)
+		ep.cancel(err)
 	}
 }
 
@@ -135,7 +136,7 @@ func (ep *endpoint) runSession(ctx context.Context) {
 		return nil
 	})
 	if err != nil {
-		ep.ctxCancel(err)
+		ep.cancel(err)
 	}
 }
 

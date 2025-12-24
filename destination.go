@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/tls"
 	"crypto/x509"
+	"errors"
 	"fmt"
 	"log/slog"
 	"net"
@@ -14,10 +15,13 @@ import (
 	"github.com/connet-dev/connet/proto/pbconnect"
 	"github.com/connet-dev/connet/proto/pberror"
 	"github.com/connet-dev/connet/quicc"
-	"github.com/connet-dev/connet/reliable"
 	"github.com/connet-dev/connet/statusc"
 	"github.com/quic-go/quic-go"
 )
+
+var ErrDestinationClosed = fmt.Errorf("destination closed: %w", errEndpointClosed)
+var errDestinationConnUpdated = errors.New("destination connection updated")
+var errDestinationConnRemoved = errors.New("destination connection removed")
 
 // Destination represents an endpoint that accepts connections from remote endpoints
 // It implements [net.Listener] on top of connet infrastructure
@@ -104,7 +108,7 @@ func (d *Destination) Addr() net.Addr {
 // Close closes this destination. Any active connections are also closed.
 // Any blocked accept operations will be unblocked and return errors.
 func (d *Destination) Close() error {
-	return d.ep.close()
+	return d.ep.close(ErrDestinationClosed)
 }
 
 func (d *Destination) runActive(ctx context.Context) {
@@ -119,7 +123,7 @@ func (d *Destination) runActiveErr(ctx context.Context) error {
 	var conns = map[peerConnKey]*destinationConn{}
 	defer func() {
 		for peer, conn := range conns {
-			conn.close()
+			conn.cancel(ErrDestinationClosed)
 			delete(conns, peer)
 		}
 	}()
@@ -131,18 +135,16 @@ func (d *Destination) runActiveErr(ctx context.Context) error {
 				if dc.conn == conn {
 					continue
 				}
-				dc.close()
+				dc.cancel(errDestinationConnUpdated)
 				delete(conns, peer)
 			}
 
-			dc := newDestinationConn(d, peer, conn, d.logger)
-			conns[peer] = dc
-			go dc.run(ctx)
+			conns[peer] = runDestinationConn(ctx, d, peer, conn, d.logger)
 		}
 
 		for peer, conn := range conns {
 			if _, ok := active[peer]; !ok {
-				conn.close()
+				conn.cancel(errDestinationConnRemoved)
 				delete(conns, peer)
 			}
 		}
@@ -184,38 +186,31 @@ type destinationConn struct {
 	peer   peerConnKey
 	conn   *quic.Conn
 	logger *slog.Logger
-
-	closer chan struct{}
+	cancel context.CancelCauseFunc
 }
 
-func newDestinationConn(dst *Destination, peer peerConnKey, conn *quic.Conn, logger *slog.Logger) *destinationConn {
-	return &destinationConn{
-		dst, peer, conn,
-		logger.With("peer", peer.id, "style", peer.style),
-		make(chan struct{})}
+func runDestinationConn(ctx context.Context, dst *Destination, peer peerConnKey, conn *quic.Conn, logger *slog.Logger) *destinationConn {
+	ctx, cancel := context.WithCancelCause(ctx)
+	c := &destinationConn{dst, peer, conn, logger.With("peer", peer.id, "style", peer.style), cancel}
+	go c.run(ctx)
+	return c
 }
 
 func (d *destinationConn) run(ctx context.Context) {
-	g := reliable.NewGroup(ctx)
-
-	g.Go(func(ctx context.Context) error {
-		for {
-			stream, err := d.conn.AcceptStream(ctx)
-			if err != nil {
-				d.logger.Debug("accept failed", "err", err)
-				return err
-			}
-			d.logger.Debug("accepted stream new stream")
-			go d.runDestination(ctx, stream)
-		}
-	})
-	g.Go(func(ctx context.Context) error {
-		<-d.closer
-		return errPeeringStop
-	})
-
-	if err := g.Wait(); err != nil {
+	if err := d.runErr(ctx); err != nil {
 		d.logger.Debug("error while running destination", "err", err)
+	}
+}
+
+func (d *destinationConn) runErr(ctx context.Context) error {
+	for {
+		stream, err := d.conn.AcceptStream(ctx)
+		if err != nil {
+			d.logger.Debug("accept failed", "err", err)
+			return err
+		}
+		d.logger.Debug("accepted stream new stream")
+		go d.runDestination(ctx, stream)
 	}
 }
 
@@ -328,14 +323,12 @@ func (d *destinationConn) runConnect(ctx context.Context, stream *quic.Stream, r
 	d.logger.Debug("accepted conn", "style", d.peer.style)
 	select {
 	case <-ctx.Done():
-		return ctx.Err()
-	case <-d.closer:
-		return errPeeringStop
+		return context.Cause(ctx)
+	case <-stream.Context().Done():
+		return context.Cause(stream.Context())
+	case <-d.conn.Context().Done():
+		return context.Cause(d.conn.Context())
 	case d.dst.acceptCh <- encStream:
 		return nil
 	}
-}
-
-func (d *destinationConn) close() {
-	close(d.closer)
 }
