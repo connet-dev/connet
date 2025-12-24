@@ -31,7 +31,6 @@ type Destination struct {
 
 	acceptCh chan net.Conn
 
-	cancel context.CancelCauseFunc
 	logger *slog.Logger
 }
 
@@ -109,7 +108,7 @@ func (d *Destination) Addr() net.Addr {
 // Close closes this destination. Any active connections are also closed.
 // Any blocked accept operations will be unblocked and return errors.
 func (d *Destination) Close() error {
-	return d.ep.close()
+	return d.ep.close(errDestinationClosed)
 }
 
 func (d *Destination) runActive(ctx context.Context) {

@@ -256,14 +256,14 @@ func (c *Client) closeEndpoints() {
 	for _, dstName := range c.Destinations() {
 		if dst, err := c.GetDestination(dstName); err == nil {
 			if err := dst.Close(); err != nil {
-				slogc.Fine(c.logger, "error closing destination", "dst", dstName, "err", err)
+				slogc.Fine(c.logger, "error closing destination", "endpoint", dstName, "err", err)
 			}
 		}
 	}
 	for _, srcName := range c.Sources() {
 		if src, err := c.GetSource(srcName); err == nil {
 			if err := src.Close(); err != nil {
-				slogc.Fine(c.logger, "error closing source", "src", srcName, "err", err)
+				slogc.Fine(c.logger, "error closing source", "endpoint", srcName, "err", err)
 			}
 		}
 	}

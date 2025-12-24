@@ -26,6 +26,7 @@ import (
 	"github.com/quic-go/quic-go"
 )
 
+var errSourceClosed = errors.New("source closed")
 var ErrNoDialedDestinations = errors.New("no dialed destinations")
 var ErrNoActiveDestinations = errors.New("no active destinations")
 
@@ -142,7 +143,7 @@ func (s *Source) Status() (SourceStatus, error) {
 
 // Close closes this source. Any active connections are also closed.
 func (s *Source) Close() error {
-	return s.ep.close()
+	return s.ep.close(errSourceClosed)
 }
 
 func (s *Source) runActive(ctx context.Context) {

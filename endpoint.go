@@ -18,8 +18,6 @@ import (
 	"github.com/quic-go/quic-go"
 )
 
-var errEndpointRemoved = errors.New("endpoint removed")
-
 type endpointStatus struct {
 	Status statusc.Status
 	StatusPeer
@@ -115,8 +113,8 @@ func (ep *endpoint) status() (endpointStatus, error) {
 	}, nil
 }
 
-func (ep *endpoint) close() error {
-	ep.cancel(errEndpointRemoved)
+func (ep *endpoint) close(err error) error {
+	ep.cancel(err)
 	<-ep.closer
 	return nil
 }
