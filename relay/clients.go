@@ -12,7 +12,6 @@ import (
 	"net"
 	"slices"
 	"sync"
-	"time"
 
 	"github.com/connet-dev/connet/model"
 	"github.com/connet-dev/connet/netc"
@@ -314,17 +313,7 @@ func (c *clientConn) runDestination(ctx context.Context) error {
 	fcs := c.server.addDestination(c)
 	defer c.server.removeDestination(fcs, c)
 
-	quicc.LogRTTStats(c.conn, c.logger)
-	for {
-		select {
-		case <-ctx.Done():
-			return context.Cause(ctx)
-		case <-c.conn.Context().Done():
-			return context.Cause(c.conn.Context())
-		case <-time.After(30 * time.Second):
-			quicc.LogRTTStats(c.conn, c.logger)
-		}
-	}
+	return quicc.WaitLogRTTStats(ctx, c.conn, c.logger)
 }
 
 func (c *clientConn) runSource(ctx context.Context) error {
@@ -334,17 +323,7 @@ func (c *clientConn) runSource(ctx context.Context) error {
 	g := reliable.NewGroup(ctx)
 
 	g.Go(func(ctx context.Context) error {
-		quicc.LogRTTStats(c.conn, c.logger)
-		for {
-			select {
-			case <-ctx.Done():
-				return context.Cause(ctx)
-			case <-c.conn.Context().Done():
-				return context.Cause(c.conn.Context())
-			case <-time.After(30 * time.Second):
-				quicc.LogRTTStats(c.conn, c.logger)
-			}
-		}
+		return quicc.WaitLogRTTStats(ctx, c.conn, c.logger)
 	})
 
 	g.Go(func(ctx context.Context) error {

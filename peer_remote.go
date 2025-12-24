@@ -23,16 +23,16 @@ import (
 	"github.com/quic-go/quic-go"
 )
 
-var errPeeringStop = errors.New("peering stopped")
-var errClosed = errors.New("closed")
+var errRemotePeerRemoved = errors.New("remote peer removed")
+var errRemotePeerPathRemoved = errors.New("remote peer path removed")
 
 func isPeerTerminalError(err error) bool {
 	switch {
 	case errors.Is(err, context.Canceled):
 		return true
-	case errors.Is(err, errClosed):
+	case errors.Is(err, errRemotePeerRemoved):
 		return true
-	case errors.Is(err, errPeeringStop):
+	case errors.Is(err, errRemotePeerPathRemoved):
 		return true
 	}
 	return false
@@ -47,12 +47,12 @@ type remotePeer struct {
 	outgoing *remotePeerOutgoing
 	relays   *remotePeerRelays
 
-	cancel context.CancelFunc
+	cancel context.CancelCauseFunc
 	logger *slog.Logger
 }
 
 func runRemotePeer(ctx context.Context, local *peer, remote *pbclient.RemotePeer, logger *slog.Logger) *remotePeer {
-	ctx, cancel := context.WithCancel(ctx)
+	ctx, cancel := context.WithCancelCause(ctx)
 	r := &remotePeer{
 		local: local,
 
@@ -67,27 +67,19 @@ func runRemotePeer(ctx context.Context, local *peer, remote *pbclient.RemotePeer
 }
 
 func (p *remotePeer) run(ctx context.Context) {
+	defer p.cancel(nil) // just a context cancel
+
 	defer func() {
 		p.local.removeActiveConns(p.remoteID)
 	}()
 
 	if err := p.runErr(ctx); err != nil {
-		p.logger.Debug("error while running peering", "err", err)
+		p.logger.Debug("error running remote peer", "err", err)
+		// p.cancel()
 	}
 }
 
 func (p *remotePeer) runErr(ctx context.Context) error {
-	defer func() {
-		if p.incoming != nil {
-			p.incoming.cancel()
-		}
-		if p.outgoing != nil {
-			p.outgoing.cancel()
-		}
-		if p.relays != nil {
-			p.relays.cancel()
-		}
-	}()
 	return p.remote.Listen(ctx, func(remote *pbclient.RemotePeer) error {
 		if p.local.allowDirect && len(remote.Peer.Directs) > 0 {
 			if p.incoming == nil {
@@ -112,11 +104,11 @@ func (p *remotePeer) runErr(ctx context.Context) error {
 			}
 		} else {
 			if p.incoming != nil {
-				p.incoming.cancel()
+				p.incoming.cancel(errRemotePeerPathRemoved)
 				p.incoming = nil
 			}
 			if p.outgoing != nil {
-				p.outgoing.cancel()
+				p.outgoing.cancel(errRemotePeerPathRemoved)
 				p.outgoing = nil
 			}
 		}
@@ -132,7 +124,7 @@ func (p *remotePeer) runErr(ctx context.Context) error {
 		case len(remotes) > 0 && p.relays != nil:
 			p.relays.remotes.Set(remotes)
 		case len(remotes) == 0 && p.relays != nil:
-			p.relays.cancel()
+			p.relays.cancel(errRemotePeerPathRemoved)
 			p.relays = nil
 		case len(remotes) == 0 && p.relays == nil:
 			// do nothing, since remote is not running
@@ -145,12 +137,12 @@ func (p *remotePeer) runErr(ctx context.Context) error {
 type remotePeerIncoming struct {
 	parent     *remotePeer
 	clientCert *x509.Certificate
-	cancel     context.CancelFunc
+	cancel     context.CancelCauseFunc
 	logger     *slog.Logger
 }
 
 func runRemotePeerIncoming(ctx context.Context, parent *remotePeer, clientCert *x509.Certificate) *remotePeerIncoming {
-	ctx, cancel := context.WithCancel(ctx)
+	ctx, cancel := context.WithCancelCause(ctx)
 	p := &remotePeerIncoming{
 		parent:     parent,
 		clientCert: clientCert,
@@ -197,24 +189,33 @@ func (p *remotePeerIncoming) connect(ctx context.Context) (*quic.Conn, error) {
 		cancel()
 		return nil, ctx.Err()
 	case conn := <-ch: // TODO panic on closing channel?
-		stream, err := conn.AcceptStream(ctx)
-		if err != nil {
-			return nil, err
-		}
-		defer func() {
-			if err := stream.Close(); err != nil {
-				slogc.Fine(p.logger, "error closing check stream", "err", err)
-			}
-		}()
-
-		if _, err := pbconnect.ReadRequest(stream); err != nil {
-			return nil, err
-		} else if err := proto.Write(stream, &pbconnect.Response{}); err != nil {
-			return nil, err
+		if err := p.check(ctx, conn); err != nil {
+			cerr := conn.CloseWithError(quic.ApplicationErrorCode(pberror.Code_ConnectionCheckFailed), "connection check failed")
+			return nil, fmt.Errorf("connection check failed: %w", errors.Join(err, cerr))
 		}
 
 		return conn, nil
 	}
+}
+
+func (p *remotePeerIncoming) check(ctx context.Context, conn *quic.Conn) error {
+	stream, err := conn.AcceptStream(ctx)
+	if err != nil {
+		return err
+	}
+	defer func() {
+		if err := stream.Close(); err != nil {
+			slogc.Fine(p.logger, "error closing check stream", "err", err)
+		}
+	}()
+
+	if _, err := pbconnect.ReadRequest(stream); err != nil {
+		return err
+	} else if err := proto.Write(stream, &pbconnect.Response{}); err != nil {
+		return err
+	}
+
+	return nil
 }
 
 func (p *remotePeerIncoming) keepalive(ctx context.Context, conn *quic.Conn) error {
@@ -227,29 +228,19 @@ func (p *remotePeerIncoming) keepalive(ctx context.Context, conn *quic.Conn) err
 	p.parent.local.addActiveConn(p.parent.remoteID, peerIncoming, "", conn)
 	defer p.parent.local.removeActiveConn(p.parent.remoteID, peerIncoming, "")
 
-	quicc.LogRTTStats(conn, p.logger)
-	for {
-		select {
-		case <-ctx.Done():
-			return context.Cause(ctx)
-		case <-conn.Context().Done():
-			return context.Cause(conn.Context())
-		case <-time.After(30 * time.Second):
-			quicc.LogRTTStats(conn, p.logger)
-		}
-	}
+	return quicc.WaitLogRTTStats(ctx, conn, p.logger)
 }
 
 type remotePeerOutgoing struct {
 	parent     *remotePeer
 	serverConf *serverTLSConfig
 	addrs      map[netip.AddrPort]struct{}
-	cancel     context.CancelFunc
+	cancel     context.CancelCauseFunc
 	logger     *slog.Logger
 }
 
 func runRemotePeerOutgoing(ctx context.Context, parent *remotePeer, serverConfg *serverTLSConfig, addrs map[netip.AddrPort]struct{}) *remotePeerOutgoing {
-	ctx, cancel := context.WithCancel(ctx)
+	ctx, cancel := context.WithCancelCause(ctx)
 	p := &remotePeerOutgoing{
 		parent:     parent,
 		serverConf: serverConfg,
@@ -356,28 +347,18 @@ func (p *remotePeerOutgoing) keepalive(ctx context.Context, conn *quic.Conn) err
 	p.parent.local.addActiveConn(p.parent.remoteID, peerOutgoing, "", conn)
 	defer p.parent.local.removeActiveConn(p.parent.remoteID, peerOutgoing, "")
 
-	quicc.LogRTTStats(conn, p.logger)
-	for {
-		select {
-		case <-ctx.Done():
-			return context.Cause(ctx)
-		case <-conn.Context().Done():
-			return context.Cause(conn.Context())
-		case <-time.After(30 * time.Second):
-			quicc.LogRTTStats(conn, p.logger)
-		}
-	}
+	return quicc.WaitLogRTTStats(ctx, conn, p.logger)
 }
 
 type remotePeerRelays struct {
 	parent  *remotePeer
 	remotes *notify.V[map[relayID]struct{}]
-	cancel  context.CancelFunc
+	cancel  context.CancelCauseFunc
 	logger  *slog.Logger
 }
 
 func runRemotePeerRelays(ctx context.Context, parent *remotePeer, remotes map[relayID]struct{}) *remotePeerRelays {
-	ctx, cancel := context.WithCancel(ctx)
+	ctx, cancel := context.WithCancelCause(ctx)
 	p := &remotePeerRelays{
 		parent:  parent,
 		remotes: notify.New(remotes),

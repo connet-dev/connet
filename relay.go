@@ -20,6 +20,8 @@ import (
 	"github.com/quic-go/quic-go"
 )
 
+var errRelayRemoved = errors.New("relay removed")
+
 type relayID string
 
 type relay struct {
@@ -29,12 +31,12 @@ type relay struct {
 	serverHostports []model.HostPort
 	serverConf      atomic.Pointer[serverTLSConfig]
 
-	cancel context.CancelFunc
+	cancel context.CancelCauseFunc
 	logger *slog.Logger
 }
 
 func runRelay(ctx context.Context, local *peer, id relayID, hps []model.HostPort, serverConf *serverTLSConfig, logger *slog.Logger) *relay {
-	ctx, cancel := context.WithCancel(ctx)
+	ctx, cancel := context.WithCancelCause(ctx)
 	r := &relay{
 		local: local,
 
@@ -51,7 +53,7 @@ func runRelay(ctx context.Context, local *peer, id relayID, hps []model.HostPort
 
 func (r *relay) run(ctx context.Context) {
 	if err := r.runErr(ctx); err != nil {
-		r.logger.Debug("error while running relaying", "err", err)
+		r.logger.Debug("error running relay", "err", err)
 	}
 }
 
@@ -148,15 +150,5 @@ func (r *relay) keepalive(ctx context.Context, conn *quic.Conn) error {
 	r.local.addRelayConn(r.serverID, conn)
 	defer r.local.removeRelayConn(r.serverID)
 
-	quicc.LogRTTStats(conn, r.logger)
-	for {
-		select {
-		case <-ctx.Done():
-			return context.Cause(ctx)
-		case <-conn.Context().Done():
-			return context.Cause(conn.Context())
-		case <-time.After(30 * time.Second):
-			quicc.LogRTTStats(conn, r.logger)
-		}
-	}
+	return quicc.WaitLogRTTStats(ctx, conn, r.logger)
 }
