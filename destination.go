@@ -19,7 +19,7 @@ import (
 	"github.com/quic-go/quic-go"
 )
 
-var errDestinationClosed = errors.New("destination closed")
+var ErrDestinationClosed = fmt.Errorf("destination closed: %w", errEndpointClosed)
 var errDestinationConnUpdated = errors.New("destination connection updated")
 var errDestinationConnRemoved = errors.New("destination connection removed")
 
@@ -108,7 +108,7 @@ func (d *Destination) Addr() net.Addr {
 // Close closes this destination. Any active connections are also closed.
 // Any blocked accept operations will be unblocked and return errors.
 func (d *Destination) Close() error {
-	return d.ep.close(errDestinationClosed)
+	return d.ep.close(ErrDestinationClosed)
 }
 
 func (d *Destination) runActive(ctx context.Context) {
@@ -123,7 +123,7 @@ func (d *Destination) runActiveErr(ctx context.Context) error {
 	var conns = map[peerConnKey]*destinationConn{}
 	defer func() {
 		for peer, conn := range conns {
-			conn.cancel(errDestinationClosed)
+			conn.cancel(ErrDestinationClosed)
 			delete(conns, peer)
 		}
 	}()
@@ -323,7 +323,7 @@ func (d *destinationConn) runConnect(ctx context.Context, stream *quic.Stream, r
 	d.logger.Debug("accepted conn", "style", d.peer.style)
 	select {
 	case <-ctx.Done():
-		return ctx.Err()
+		return context.Cause(ctx)
 	case <-stream.Context().Done():
 		return context.Cause(stream.Context())
 	case <-d.conn.Context().Done():

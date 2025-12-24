@@ -299,7 +299,7 @@ func TestE2E(t *testing.T) {
 		<-dialCh
 
 		require.ErrorIs(t, acceptErr, net.ErrClosed)
-		require.ErrorIs(t, dialErr, ErrNoActiveDestinations)
+		require.ErrorIs(t, dialErr, ErrSourceNoActiveDestinations)
 		require.Nil(t, acceptConn)
 		require.Nil(t, dialConn)
 	})
@@ -351,7 +351,7 @@ func TestE2E(t *testing.T) {
 		<-dialCh
 
 		require.ErrorIs(t, acceptErr, net.ErrClosed)
-		require.ErrorIs(t, dialErr, ErrNoActiveDestinations)
+		require.ErrorIs(t, dialErr, ErrSourceNoActiveDestinations)
 		require.Nil(t, acceptConn)
 		require.Nil(t, dialConn)
 	})

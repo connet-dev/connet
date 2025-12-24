@@ -18,6 +18,8 @@ import (
 	"github.com/quic-go/quic-go"
 )
 
+var errEndpointClosed = fmt.Errorf("endpoint closed")
+
 type endpointStatus struct {
 	Status statusc.Status
 	StatusPeer

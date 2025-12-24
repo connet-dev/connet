@@ -179,11 +179,11 @@ func (s *HTTPSource) Run(ctx context.Context) error {
 			ErrorHandler: func(w http.ResponseWriter, r *http.Request, err error) {
 				w.WriteHeader(http.StatusBadGateway)
 				switch {
-				case errors.Is(err, ErrNoActiveDestinations):
+				case errors.Is(err, ErrSourceNoActiveDestinations):
 					if _, err := fmt.Fprintf(w, "[source %s] no active destinations found", endpoint); err != nil {
 						slogc.FineDefault("error writing proxy server error", "err", err)
 					}
-				case errors.Is(err, ErrNoDialedDestinations):
+				case errors.Is(err, ErrSourceConnectDestinations):
 					if _, err := fmt.Fprintf(w, "[source %s] cannot dial active destinations", endpoint); err != nil {
 						slogc.FineDefault("error writing proxy server error", "err", err)
 					}

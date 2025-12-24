@@ -26,7 +26,7 @@ import (
 	"github.com/quic-go/quic-go"
 )
 
-var errClientClosed = errors.New("client closed")
+var ErrClientClosed = errors.New("client closed")
 
 type Client struct {
 	config
@@ -247,7 +247,7 @@ func (c *Client) removeSource(endpoint model.Endpoint) {
 
 // Close closes this client. It disconnects the client and all endpoints (destinations and sources) associated with it.
 func (c *Client) Close() error {
-	c.ctxCancel(errClientClosed)
+	c.ctxCancel(ErrClientClosed)
 	<-c.closer
 	return nil
 }
