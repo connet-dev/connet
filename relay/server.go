@@ -160,8 +160,8 @@ func (s *Server) getControlID() (string, error) {
 }
 
 func (s *Server) getEndpoints() []model.Endpoint {
-	s.clients.endpointsMu.RLock()
-	defer s.clients.endpointsMu.RUnlock()
+	s.clients.controlServer.endpointsMu.RLock()
+	defer s.clients.controlServer.endpointsMu.RUnlock()
 
-	return slices.Collect(maps.Keys(s.clients.endpoints))
+	return slices.Collect(maps.Keys(s.clients.controlServer.endpoints))
 }

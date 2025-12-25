@@ -17,8 +17,7 @@ type ServerConfig struct {
 	Tokens            []string           `toml:"tokens"`
 	TokenRestrictions []TokenRestriction `toml:"token-restriction"`
 
-	RelayIngresses       []RelayIngress `toml:"relay-ingress"`
-	DirectRelayIngresses []RelayIngress `toml:"direct-relay-ingress"`
+	RelayIngresses []RelayIngress `toml:"relay-ingress"`
 
 	StatusAddr string `toml:"status-addr"`
 	StoreDir   string `toml:"store-dir"`

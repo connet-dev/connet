@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"sync"
 	"sync/atomic"
 
 	"github.com/connet-dev/connet/certc"
@@ -22,7 +23,16 @@ import (
 	"github.com/quic-go/quic-go"
 )
 
-func (s *clientsServer) runDirectConn(ctx context.Context, conn *quic.Conn) {
+type clientsDirectServer struct {
+	rootCert *certc.Cert
+
+	peerServers   map[string]*directPeerServer
+	peerServersMu sync.RWMutex
+
+	logger *slog.Logger
+}
+
+func (s *clientsDirectServer) runDirectConn(ctx context.Context, conn *quic.Conn) {
 	s.logger.Info("new client connected", "SNI", conn.ConnectionState().TLS.ServerName, "remote", conn.RemoteAddr())
 
 	s.peerServersMu.RLock()
@@ -40,7 +50,7 @@ func (s *clientsServer) runDirectConn(ctx context.Context, conn *quic.Conn) {
 }
 
 type directReserveConn struct {
-	server *clientsServer
+	server *clientsDirectServer
 	conn   *quic.Conn
 	logger *slog.Logger
 
@@ -218,7 +228,7 @@ func newDirectPeerServer(conn *directReserveConn, peers []*pbclientrelay.Peer) (
 			ServerName:   serverName,
 			Certificates: []tls.Certificate{serverTLSCert},
 			ClientAuth:   tls.RequireAndVerifyClientCert,
-			NextProtos:   model.ConnectRelayNextProtos,
+			NextProtos:   model.ConnectRelayDirectNextProtos,
 		},
 
 		logger: conn.logger.With("peer-server", serverName),
