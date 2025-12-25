@@ -27,8 +27,7 @@ type Config struct {
 	ControlToken string
 	ControlCAs   *x509.CertPool
 
-	Ingress       []Ingress
-	DirectIngress []DirectIngress
+	Ingress []Ingress
 
 	Stores Stores
 
@@ -75,32 +74,26 @@ func NewServer(cfg Config) (*Server, error) {
 		return nil, fmt.Errorf("relay control client: %w", err)
 	}
 
-	clients := newClientsServer(cfg, control.tlsAuthenticate, control.authenticate)
-
-	direct, err := newDirectServer(rootCert, directCert, cfg.Logger)
+	clients, err := newClientsServer(cfg, control.tlsAuthenticate, control.authenticate, rootCert, directCert)
 	if err != nil {
-		return nil, fmt.Errorf("relay direct server: %w", err)
+		return nil, fmt.Errorf("relay clients server: %w", err)
 	}
 
 	return &Server{
 		ingress:           cfg.Ingress,
-		directs:           cfg.DirectIngress,
 		statelessResetKey: &statelessResetKey,
 
 		control: control,
 		clients: clients,
-		direct:  direct,
 	}, nil
 }
 
 type Server struct {
 	ingress           []Ingress
-	directs           []DirectIngress
 	statelessResetKey *quic.StatelessResetKey
 
 	control *controlClient
 	clients *clientsServer
-	direct  *directServer
 }
 
 func (s *Server) Run(ctx context.Context) error {
@@ -124,20 +117,6 @@ func (s *Server) Run(ctx context.Context) error {
 			},
 		}
 		g.Go(reliable.Bind(cfg, s.clients.run))
-	}
-
-	for _, ingress := range s.directs {
-		cfg := directServerIngress{
-			ingress:           ingress,
-			statelessResetKey: s.statelessResetKey,
-			addedTransport: func(t *quic.Transport) {
-				notify.SliceAppend(transports, t)
-			},
-			removeTransport: func(t *quic.Transport) {
-				notify.SliceRemove(transports, t)
-			},
-		}
-		g.Go(reliable.Bind(cfg, s.direct.run))
 	}
 
 	g.Go(reliable.Bind(waitForTransport, s.control.run))

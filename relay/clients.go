@@ -13,6 +13,7 @@ import (
 	"slices"
 	"sync"
 
+	"github.com/connet-dev/connet/certc"
 	"github.com/connet-dev/connet/model"
 	"github.com/connet-dev/connet/netc"
 	"github.com/connet-dev/connet/proto"
@@ -33,33 +34,62 @@ type clientAuth struct {
 type tlsAuthenticator func(chi *tls.ClientHelloInfo, base *tls.Config) (*tls.Config, error)
 type clientAuthenticator func(serverName string, certs []*x509.Certificate) *clientAuth
 
-func newClientsServer(cfg Config, tlsAuth tlsAuthenticator, clAuth clientAuthenticator) *clientsServer {
-	tlsConf := &tls.Config{
-		ClientAuth: tls.RequireAndVerifyClientCert,
-		NextProtos: model.ConnectRelayNextProtos,
-	}
-	tlsConf.GetConfigForClient = func(chi *tls.ClientHelloInfo) (*tls.Config, error) {
-		return tlsAuth(chi, tlsConf)
+func newClientsServer(cfg Config, tlsAuth tlsAuthenticator, clAuth clientAuthenticator, rootCert *certc.Cert, directCert *certc.Cert) (*clientsServer, error) {
+	directTLS, err := directCert.TLSCert()
+	if err != nil {
+		return nil, fmt.Errorf("direct TLS cert: %w", err)
 	}
 
-	return &clientsServer{
-		tlsConf: tlsConf,
-		auth:    clAuth,
+	s := &clientsServer{
+		rootCert: rootCert,
+		tlsConf: &tls.Config{
+			Certificates: []tls.Certificate{directTLS},
+			NextProtos:   model.ConnectRelayNextProtos,
+		},
+		controlAuth: tlsAuth,
+		auth:        clAuth,
 
 		endpoints: map[model.Endpoint]*endpointClients{},
 
+		peerServers: map[string]*directPeerServer{},
+
 		logger: cfg.Logger.With("server", "relay-clients"),
 	}
+
+	s.tlsConf.GetConfigForClient = s.tlsAuth
+
+	return s, nil
 }
 
 type clientsServer struct {
-	tlsConf *tls.Config
-	auth    clientAuthenticator
+	rootCert    *certc.Cert
+	tlsConf     *tls.Config
+	controlAuth tlsAuthenticator
+	auth        clientAuthenticator
 
 	endpoints   map[model.Endpoint]*endpointClients
 	endpointsMu sync.RWMutex
 
+	peerServers   map[string]*directPeerServer
+	peerServersMu sync.RWMutex
+
 	logger *slog.Logger
+}
+
+func (s *clientsServer) tlsAuth(chi *tls.ClientHelloInfo) (*tls.Config, error) {
+	if netc.IsSubdomain(chi.ServerName, "connet.control.relay") && slices.Contains(chi.SupportedProtos, model.CRv01.String()) {
+		return s.controlAuth(chi, s.tlsConf)
+	}
+	if netc.IsSubdomain(chi.ServerName, "connet.relay") && slices.Contains(chi.SupportedProtos, model.CRv02.String()) {
+		s.peerServersMu.RLock()
+		srv := s.peerServers[chi.ServerName]
+		s.peerServersMu.RUnlock()
+
+		if srv != nil {
+			return srv.tlsConf.Load(), nil
+		}
+	}
+	return s.tlsConf, nil
 }
 
 type endpointClients struct {
@@ -233,12 +263,27 @@ func (s *clientsServer) run(ctx context.Context, cfg clientsServerCfg) error {
 			return fmt.Errorf("client server quic accept: %w", err)
 		}
 
-		rc := &clientConn{
-			server: s,
-			conn:   conn,
-			logger: s.logger,
+		serverName := conn.ConnectionState().TLS.ServerName
+		switch {
+		case netc.IsSubdomain(serverName, "connet.control.relay"):
+			rc := &clientConn{
+				server: s,
+				conn:   conn,
+				logger: s.logger,
+			}
+			go rc.run(ctx)
+		case netc.IsSubdomain(serverName, "connet.relay"):
+			go s.runDirectConn(ctx, conn)
+		case netc.IsSubdomain(serverName, "reserve.relay"):
+			rc := &directReserveConn{
+				server: s,
+				conn:   conn,
+				logger: s.logger,
+			}
+			go rc.run(ctx)
+		default:
+			conn.CloseWithError(quic.ApplicationErrorCode(pberror.Code_AuthenticationFailed), "cannot auth") // TODO
 		}
-		go rc.run(ctx)
 	}
 }
 

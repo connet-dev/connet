@@ -97,7 +97,7 @@ func newPeer(direct *directServer, addrs *notify.V[advertiseAddrs], allowDirect 
 	}
 
 	serverCert, err := root.NewServer(certc.CertOpts{
-		Domains: []string{netc.GenDomainName("connet-direct")},
+		Domains: []string{netc.GenDomainName("connet.peer")},
 	})
 	if err != nil {
 		return nil, err

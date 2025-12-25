@@ -53,7 +53,7 @@ func New(opts ...Option) (*Server, error) {
 	}
 
 	relayAuth := selfhosted.RelayAuthentication{
-		Token: netc.GenDomainName("relay"),
+		Token: netc.GenName(),
 	}
 
 	control, err := control.NewServer(control.Config{
@@ -81,8 +81,7 @@ func New(opts ...Option) (*Server, error) {
 		ControlToken: relayAuth.Token,
 		ControlCAs:   relaysCAs,
 
-		Ingress:       cfg.relayIngresses,
-		DirectIngress: cfg.directRelayIngresses,
+		Ingress: cfg.relayIngresses,
 
 		Stores: relay.NewFileStores(filepath.Join(cfg.dir, "relay")),
 		Logger: cfg.logger,

@@ -29,11 +29,9 @@ import (
 )
 
 type controlClient struct {
-	root      *certc.Cert
 	hostports []model.HostPort
-
+	root      *certc.Cert
 	direct    *certc.Cert
-	directHps []model.HostPort
 
 	controlAddr    *net.UDPAddr
 	controlToken   string
@@ -92,16 +90,11 @@ func newControlClient(cfg Config, root *certc.Cert, directCert *certc.Cert, conf
 	hostports := iterc.FlattenSlice(iterc.MapSlice(cfg.Ingress, func(in Ingress) []model.HostPort {
 		return in.Hostports
 	}))
-	directHps := iterc.FlattenSlice(iterc.MapSlice(cfg.DirectIngress, func(in DirectIngress) []model.HostPort {
-		return in.Hostports
-	}))
 
 	c := &controlClient{
-		root:      root,
 		hostports: hostports,
-
+		root:      root,
 		direct:    directCert,
-		directHps: directHps,
 
 		controlAddr:  cfg.ControlAddr,
 		controlToken: cfg.ControlToken,
@@ -161,6 +154,7 @@ func (s *controlClient) getServer(name string) *relayServer {
 func (s *controlClient) tlsAuthenticate(chi *tls.ClientHelloInfo, base *tls.Config) (*tls.Config, error) {
 	if srv := s.getServer(chi.ServerName); srv != nil {
 		cfg := base.Clone()
+		cfg.ClientAuth = tls.RequireAndVerifyClientCert
 		cfg.Certificates = srv.tls
 		cfg.ClientCAs = srv.cas.Load()
 		return cfg, nil
@@ -258,7 +252,6 @@ func (s *controlClient) connectSingle(ctx context.Context, transport *quic.Trans
 		Addresses:         iterc.MapSlice(s.hostports, model.HostPort.PB),
 		ReconnectToken:    reconnConfig.Bytes,
 		BuildVersion:      model.BuildVersion(),
-		DirectAddresses:   iterc.MapSlice(s.directHps, model.HostPort.PB),
 		ServerCertificate: s.direct.Raw(),
 	}); err != nil {
 		return nil, fmt.Errorf("auth write error: %w", err)
@@ -408,7 +401,7 @@ func (s *controlClient) runClientsLog(ctx context.Context) error {
 
 			switch {
 			case errors.Is(err, klevdb.ErrNotFound):
-				serverName := netc.GenDomainName("connet-relay")
+				serverName := netc.GenDomainName("connet.control.relay")
 				serverRoot, err := s.root.NewServer(certc.CertOpts{
 					Domains: []string{serverName},
 				})

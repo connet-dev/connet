@@ -11,9 +11,7 @@ message AuthenticateReq {
   repeated model.HostPort addresses = 5;
   bytes reconnect_token = 3;
   string build_version = 4;
-
-  repeated model.HostPort direct_addresses = 6;
-  bytes server_certificate = 7;
+  bytes server_certificate = 6;
 }
 
 message AuthenticateResp {

@@ -5,9 +5,14 @@ import (
 	"encoding/base32"
 	"fmt"
 	"io"
+	"strings"
 )
 
 var DNSSECEncoding = base32.NewEncoding("0123456789abcdefghijklmnopqrstuv").WithPadding(base32.NoPadding)
+
+func IsSubdomain(domain string, suffix string) bool {
+	return strings.HasSuffix(domain, fmt.Sprintf(".%s.invalid", suffix))
+}
 
 func GenDomainName(suffix string) string {
 	return fmt.Sprintf("%s.%s.invalid", GenName(), suffix)

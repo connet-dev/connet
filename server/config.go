@@ -16,8 +16,7 @@ type serverConfig struct {
 	clientsIngresses []control.Ingress
 	clientsAuth      control.ClientAuthenticator
 
-	relayIngresses       []relay.Ingress
-	directRelayIngresses []relay.DirectIngress
+	relayIngresses []relay.Ingress
 
 	dir    string
 	logger *slog.Logger
@@ -56,17 +55,6 @@ func newServerConfig(opts []Option) (*serverConfig, error) {
 		}
 		hps := []model.HostPort{{Host: "localhost", Port: 19191}}
 		if err := RelayIngress(relay.Ingress{Addr: addr, Hostports: hps})(cfg); err != nil {
-			return nil, fmt.Errorf("default clients relay address: %w", err)
-		}
-	}
-
-	if len(cfg.directRelayIngresses) == 0 {
-		addr, err := net.ResolveUDPAddr("udp", ":19181")
-		if err != nil {
-			return nil, fmt.Errorf("resolve clients relay address: %w", err)
-		}
-		hps := []model.HostPort{{Host: "localhost", Port: 19181}}
-		if err := DirectRelayIngress(relay.DirectIngress{Addr: addr, Hostports: hps})(cfg); err != nil {
 			return nil, fmt.Errorf("default clients relay address: %w", err)
 		}
 	}
@@ -115,14 +103,6 @@ func ClientsAuthenticator(clientsAuth control.ClientAuthenticator) Option {
 func RelayIngress(icfg relay.Ingress) Option {
 	return func(cfg *serverConfig) error {
 		cfg.relayIngresses = append(cfg.relayIngresses, icfg)
-
-		return nil
-	}
-}
-
-func DirectRelayIngress(icfg relay.DirectIngress) Option {
-	return func(cfg *serverConfig) error {
-		cfg.directRelayIngresses = append(cfg.directRelayIngresses, icfg)
 
 		return nil
 	}

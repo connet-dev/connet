@@ -81,7 +81,7 @@ func newRelayServer(
 	}
 
 	serverIDConfig, err := config.GetOrInit(configServerID, func(_ ConfigKey) (ConfigValue, error) {
-		return ConfigValue{String: netc.GenDomainName("connet-control")}, nil
+		return ConfigValue{String: netc.GenDomainName("relay.control")}, nil
 	})
 	if err != nil {
 		return nil, fmt.Errorf("relay server id: %w", err)
@@ -231,7 +231,7 @@ func (s *relayServer) Active(ctx context.Context, auth ClientAuthentication, not
 
 	var activeRelays = map[RelayID]activeRelay{}
 	for _, conn := range conns {
-		activeRelays[conn.Key.ID] = activeRelay{conn.Value.DirectHostports, conn.Value.ServerCertificate}
+		activeRelays[conn.Key.ID] = activeRelay{conn.Value.Hostports, conn.Value.ServerCertificate}
 	}
 	if err := notifyFn(activeRelays); err != nil {
 		return err
@@ -247,7 +247,7 @@ func (s *relayServer) Active(ctx context.Context, auth ClientAuthentication, not
 			if msg.Delete {
 				delete(activeRelays, msg.Key.ID)
 			} else {
-				activeRelays[msg.Key.ID] = activeRelay{msg.Value.DirectHostports, msg.Value.ServerCertificate}
+				activeRelays[msg.Key.ID] = activeRelay{msg.Value.Hostports, msg.Value.ServerCertificate}
 			}
 		}
 
@@ -408,12 +408,10 @@ type relayConn struct {
 }
 
 type relayConnAuth struct {
-	id        RelayID
-	auth      RelayAuthentication
-	hostports []model.HostPort
-
-	directHostports []model.HostPort
-	directCert      *x509.Certificate
+	id          RelayID
+	auth        RelayAuthentication
+	hostports   []model.HostPort
+	certificate *x509.Certificate
 }
 
 func (c *relayConn) run(ctx context.Context) {
@@ -455,7 +453,7 @@ func (c *relayConn) runErr(ctx context.Context) error {
 	c.endpoints = endpoints
 
 	key := RelayConnKey{ID: c.id}
-	value := RelayConnValue{c.auth, c.hostports, c.directHostports, c.directCert}
+	value := RelayConnValue{c.auth, c.hostports, c.certificate}
 	if err := c.server.conns.Put(key, value); err != nil {
 		return err
 	}
@@ -542,8 +540,7 @@ func (c *relayConn) authenticate(ctx context.Context) (*relayConnAuth, error) {
 
 	c.logger.Debug("authentication completed", "local", c.conn.LocalAddr(), "remote", c.conn.RemoteAddr(), "proto", protocol, "build", req.BuildVersion)
 	hostports := model.HostPortFromPBs(req.Addresses)
-	directHostports := model.HostPortFromPBs(req.DirectAddresses)
-	return &relayConnAuth{id, auth, hostports, directHostports, cert}, nil
+	return &relayConnAuth{id, auth, hostports, cert}, nil
 }
 
 func (c *relayConn) runRelayClients(ctx context.Context) error {

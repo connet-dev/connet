@@ -578,7 +578,7 @@ func (c *remotePeerDirectRelayConn) connect(ctx context.Context, spec remotePeer
 			Certificates: []tls.Certificate{c.parent.parent.local.clientCert},
 			RootCAs:      spec.serverConf.cas,
 			ServerName:   spec.serverConf.name,
-			NextProtos:   model.ConnectRelayNextProtos,
+			NextProtos:   model.ConnectRelayDirectNextProtos,
 		}, quicc.StdConfig)
 		if err != nil {
 			errs = append(errs, err)

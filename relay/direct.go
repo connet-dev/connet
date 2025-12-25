@@ -7,9 +7,6 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
-	"net"
-	"strings"
-	"sync"
 	"sync/atomic"
 
 	"github.com/connet-dev/connet/certc"
@@ -25,134 +22,7 @@ import (
 	"github.com/quic-go/quic-go"
 )
 
-type directServer struct {
-	rootCert *certc.Cert
-	tlsConf  *tls.Config
-
-	peerServers   map[string]*directPeerServer
-	peerServersMu sync.RWMutex
-
-	logger *slog.Logger
-}
-
-func newDirectServer(
-	rootCert *certc.Cert,
-	directCert *certc.Cert,
-	logger *slog.Logger,
-) (*directServer, error) {
-	directTLS, err := directCert.TLSCert()
-	if err != nil {
-		return nil, fmt.Errorf("direct TLS cert: %w", err)
-	}
-
-	s := &directServer{
-		rootCert: rootCert,
-		tlsConf: &tls.Config{
-			Certificates: []tls.Certificate{directTLS},
-			NextProtos:   model.ConnectRelayNextProtos,
-		},
-
-		peerServers: map[string]*directPeerServer{},
-
-		logger: logger.With("server", "relay-direct-clients"),
-	}
-
-	s.tlsConf.GetConfigForClient = s.tlsAuth
-
-	return s, nil
-}
-
-func (s *directServer) tlsAuth(chi *tls.ClientHelloInfo) (*tls.Config, error) {
-	if !strings.HasSuffix(chi.ServerName, ".connect.relay.invalid") {
-		return s.tlsConf, nil
-	}
-
-	s.peerServersMu.RLock()
-	srv := s.peerServers[chi.ServerName]
-	s.peerServersMu.RUnlock()
-
-	if srv == nil {
-		return s.tlsConf, nil
-	}
-	return srv.tlsConf.Load(), nil
-}
-
-type directServerIngress struct {
-	ingress           DirectIngress
-	statelessResetKey *quic.StatelessResetKey
-	addedTransport    func(*quic.Transport)
-	removeTransport   func(*quic.Transport)
-}
-
-func (s *directServer) run(ctx context.Context, cfg directServerIngress) error {
-	s.logger.Debug("start udp listener", "addr", cfg.ingress.Addr)
-	udpConn, err := net.ListenUDP("udp", cfg.ingress.Addr)
-	if err != nil {
-		return fmt.Errorf("relay server listen: %w", err)
-	}
-	defer func() {
-		if err := udpConn.Close(); err != nil {
-			slogc.Fine(s.logger, "error closing udp listener", "err", err)
-		}
-	}()
-
-	s.logger.Debug("start quic listener", "addr", cfg.ingress.Addr)
-	transport := quicc.ServerTransport(udpConn, cfg.statelessResetKey)
-	defer func() {
-		if err := transport.Close(); err != nil {
-			slogc.Fine(s.logger, "error closing transport", "err", err)
-		}
-	}()
-
-	cfg.addedTransport(transport)
-	defer cfg.removeTransport(transport)
-
-	tlsConf := s.tlsConf.Clone()
-	tlsConf.ServerName = cfg.ingress.Hostports[0].Host
-
-	quicConf := quicc.StdConfig
-	if cfg.ingress.Restr.IsNotEmpty() {
-		quicConf = quicConf.Clone()
-		quicConf.GetConfigForClient = func(info *quic.ClientInfo) (*quic.Config, error) {
-			if cfg.ingress.Restr.IsAllowedAddr(info.RemoteAddr) {
-				return quicConf, nil
-			}
-			return nil, fmt.Errorf("client not allowed from %s", info.RemoteAddr.String())
-		}
-	}
-
-	l, err := transport.Listen(tlsConf, quicConf)
-	if err != nil {
-		return fmt.Errorf("client server udp listen: %w", err)
-	}
-	defer func() {
-		if err := l.Close(); err != nil {
-			slogc.Fine(s.logger, "error closing clients listener", "err", err)
-		}
-	}()
-
-	s.logger.Info("accepting client connections", "addr", transport.Conn.LocalAddr())
-	for {
-		conn, err := l.Accept(ctx)
-		if err != nil {
-			slogc.Fine(s.logger, "accept error", "err", err)
-			return fmt.Errorf("client server quic accept: %w", err)
-		}
-
-		if strings.HasSuffix(conn.ConnectionState().TLS.ServerName, ".connect.relay.invalid") {
-			go s.runDirectConn(ctx, conn)
-		} else {
-			rc := &directReserveConn{
-				server: s,
-				conn:   conn,
-				logger: s.logger,
-			}
-			go rc.run(ctx)
-		}
-	}
-}
-
-func (s *directServer) runDirectConn(ctx context.Context, conn *quic.Conn) {
+func (s *clientsServer) runDirectConn(ctx context.Context, conn *quic.Conn) {
 	s.logger.Info("new client connected", "SNI", conn.ConnectionState().TLS.ServerName, "remote", conn.RemoteAddr())
 
 	s.peerServersMu.RLock()
@@ -170,7 +40,7 @@ func (s *directServer) runDirectConn(ctx context.Context, conn *quic.Conn) {
 }
 
 type directReserveConn struct {
-	server *directServer
+	server *clientsServer
 	conn   *quic.Conn
 	logger *slog.Logger
 
@@ -327,7 +197,7 @@ type directPeerServer struct {
 }
 
 func newDirectPeerServer(conn *directReserveConn, peers []*pbclientrelay.Peer) (*directPeerServer, error) {
-	serverName := netc.GenDomainName("connect.relay")
+	serverName := netc.GenDomainName("connet.relay")
 	serverCert, err := conn.server.rootCert.NewServer(certc.CertOpts{
 		Domains: []string{serverName},
 	})
