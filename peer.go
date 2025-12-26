@@ -80,13 +80,17 @@ func (s peerStyle) String() string {
 	}
 }
 
-func (s peerStyle) isRelay() bool {
+func (s peerStyle) isDirect() bool {
 	switch s {
 	case peerIncoming, peerOutgoing:
-		return false
-	default:
 		return true
+	default:
+		return false
 	}
+}
+
+func (s peerStyle) isRelay() bool {
+	return !s.isDirect()
 }
 
 func newPeer(direct *directServer, addrs *notify.V[advertiseAddrs], logger *slog.Logger) (*peer, error) {

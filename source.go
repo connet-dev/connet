@@ -201,9 +201,9 @@ func (s *Source) findActive() ([]sourceConn, error) {
 
 func rttCompare(l, r sourceConn) int {
 	switch {
-	case l.peer.style.isRelay() && !r.peer.style.isRelay():
+	case l.peer.style.isRelay() && r.peer.style.isDirect():
 		return +1
-	case !l.peer.style.isRelay() && r.peer.style.isRelay():
+	case l.peer.style.isDirect() && r.peer.style.isRelay():
 		return -1
 	}
 
