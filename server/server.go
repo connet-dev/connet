@@ -53,7 +53,7 @@ func New(opts ...Option) (*Server, error) {
 	}
 
 	relayAuth := selfhosted.RelayAuthentication{
-		Token: netc.GenName(),
+		Token: netc.GenDomainName("relay.control"),
 	}
 
 	control, err := control.NewServer(control.Config{

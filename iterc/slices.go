@@ -20,6 +20,7 @@ func FilterSlice[S ~[]P, P any](s S, f func(P) bool) S {
 	return slices.Collect(Filter(slices.Values(s), f))
 }
 
+// FlattenSlice returns a slice containing elements from each of the subslices
 func FlattenSlice[SP ~[]S, S ~[]P, P any](sp SP) S {
 	return slices.Collect(Flatten(slices.Values(sp)))
 }

@@ -10,12 +10,12 @@ import (
 
 var DNSSECEncoding = base32.NewEncoding("0123456789abcdefghijklmnopqrstuv").WithPadding(base32.NoPadding)
 
-func IsSubdomain(domain string, suffix string) bool {
-	return strings.HasSuffix(domain, fmt.Sprintf(".%s.invalid", suffix))
+func IsSubdomain(domain string, realm string) bool {
+	return strings.HasSuffix(domain, fmt.Sprintf(".%s.invalid", realm))
 }
 
-func GenDomainName(suffix string) string {
-	return fmt.Sprintf("%s.%s.invalid", GenName(), suffix)
+func GenDomainName(realm string) string {
+	return fmt.Sprintf("%s.%s.invalid", GenName(), realm)
 }
 
 func GenName() string {
