@@ -32,9 +32,8 @@ type peer struct {
 	peers      *notify.V[[]*pbclient.RemotePeer]
 	peerConns  *notify.V[map[peerConnKey]*quic.Conn]
 
-	direct      *directServer
-	addrs       *notify.V[advertiseAddrs]
-	allowDirect bool
+	direct *directServer
+	addrs  *notify.V[advertiseAddrs]
 
 	serverCert tls.Certificate
 	clientCert tls.Certificate
@@ -70,14 +69,27 @@ func (s peerStyle) String() string {
 	}
 }
 
-func newPeer(direct *directServer, addrs *notify.V[advertiseAddrs], allowDirect bool, logger *slog.Logger) (*peer, error) {
+func (s peerStyle) isDirect() bool {
+	switch s {
+	case peerIncoming, peerOutgoing:
+		return true
+	default:
+		return false
+	}
+}
+
+func (s peerStyle) isRelay() bool {
+	return !s.isDirect()
+}
+
+func newPeer(direct *directServer, addrs *notify.V[advertiseAddrs], logger *slog.Logger) (*peer, error) {
 	root, err := certc.NewRoot()
 	if err != nil {
 		return nil, err
 	}
 
 	serverCert, err := root.NewServer(certc.CertOpts{
-		Domains: []string{netc.GenDomainName("connet-direct")},
+		Domains: []string{netc.GenDomainName("connet.peer")},
 	})
 	if err != nil {
 		return nil, err
@@ -95,9 +107,7 @@ func newPeer(direct *directServer, addrs *notify.V[advertiseAddrs], allowDirect 
 		return nil, err
 	}
 
-	if allowDirect {
-		direct.addServerCert(serverTLSCert)
-	}
+	direct.addServerCert(serverTLSCert)
 
 	return &peer{
 		self: notify.New(&pbclient.Peer{
@@ -109,9 +119,8 @@ func newPeer(direct *directServer, addrs *notify.V[advertiseAddrs], allowDirect 
 		peers:      notify.NewEmpty[[]*pbclient.RemotePeer](),
 		peerConns:  notify.New(map[peerConnKey]*quic.Conn{}),
 
-		direct:      direct,
-		addrs:       addrs,
-		allowDirect: allowDirect,
+		direct: direct,
+		addrs:  addrs,
 
 		serverCert: serverTLSCert,
 		clientCert: clientTLSCert,
@@ -141,10 +150,6 @@ func (p *peer) run(ctx context.Context) error {
 }
 
 func (p *peer) runDirectAddrs(ctx context.Context) error {
-	if !p.allowDirect {
-		return nil
-	}
-
 	return p.addrs.Listen(ctx, func(t advertiseAddrs) error {
 		p.self.Update(func(cp *pbclient.Peer) *pbclient.Peer {
 			return &pbclient.Peer{

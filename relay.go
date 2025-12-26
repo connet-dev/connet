@@ -86,7 +86,7 @@ func (r *relay) runErr(ctx context.Context) error {
 func (r *relay) connectAny(ctx context.Context) (*quic.Conn, error) {
 	for _, hp := range r.serverHostports {
 		if conn, err := r.connect(ctx, hp); err != nil {
-			r.logger.Debug("cannot connet relay", "hostport", hp, "err", err)
+			r.logger.Debug("cannot connect relay", "hostport", hp, "err", err)
 		} else {
 			return conn, nil
 		}

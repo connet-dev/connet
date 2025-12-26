@@ -199,9 +199,9 @@ func (s *Source) findActive() ([]sourceConn, error) {
 
 func rttCompare(l, r sourceConn) int {
 	switch {
-	case l.peer.style == peerRelay && r.peer.style != peerRelay:
+	case l.peer.style.isRelay() && r.peer.style.isDirect():
 		return +1
-	case l.peer.style != peerRelay && r.peer.style == peerRelay:
+	case l.peer.style.isDirect() && r.peer.style.isRelay():
 		return -1
 	}
 
@@ -364,7 +364,7 @@ func (s *Source) dialStream(ctx context.Context, dest sourceConn, stream *quic.S
 	var srcSecret *ecdh.PrivateKey
 
 	connect := &pbconnect.Request_Connect{}
-	if dest.peer.style == peerRelay {
+	if dest.peer.style.isRelay() {
 		connect.SourceEncryption = model.PBFromEncryptions(s.cfg.RelayEncryptions)
 
 		if slices.Contains(s.cfg.RelayEncryptions, model.TLSEncryption) {
@@ -396,7 +396,7 @@ func (s *Source) dialStream(ctx context.Context, dest sourceConn, stream *quic.S
 	}
 
 	var encStream = quicc.StreamConn(stream, dest.conn)
-	if dest.peer.style == peerRelay {
+	if dest.peer.style.isRelay() {
 		destinationEncryption := model.EncryptionFromPB(resp.Connect.DestinationEncryption)
 		if !slices.Contains(s.cfg.RelayEncryptions, destinationEncryption) {
 			return nil, fmt.Errorf("source failed to negotiate encryption scheme: %s", destinationEncryption)

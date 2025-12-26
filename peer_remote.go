@@ -67,21 +67,18 @@ func runRemotePeer(ctx context.Context, local *peer, remote *pbclient.RemotePeer
 }
 
 func (p *remotePeer) run(ctx context.Context) {
-	defer p.cancel(nil) // just a context cancel
-
 	defer func() {
 		p.local.removeActiveConns(p.remoteID)
 	}()
 
 	if err := p.runErr(ctx); err != nil {
 		p.logger.Debug("error running remote peer", "err", err)
-		// p.cancel()
 	}
 }
 
 func (p *remotePeer) runErr(ctx context.Context) error {
 	return p.remote.Listen(ctx, func(remote *pbclient.RemotePeer) error {
-		if p.local.allowDirect && len(remote.Peer.Directs) > 0 {
+		if len(remote.Peer.Directs) > 0 {
 			if p.incoming == nil {
 				remoteClientCert, err := x509.ParseCertificate(remote.Peer.ClientCertificate)
 				if err != nil {

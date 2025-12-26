@@ -8,6 +8,7 @@ import (
 	"sync"
 	"sync/atomic"
 
+	"github.com/connet-dev/connet/iterc"
 	"github.com/connet-dev/connet/model"
 	"github.com/connet-dev/connet/proto"
 	"github.com/connet-dev/connet/proto/pbclient"
@@ -53,7 +54,7 @@ type endpoint struct {
 //   - an error happens in runPeer
 //   - a terminal error happens in runAnnounce
 func newEndpoint(ctx context.Context, cl *Client, cfg endpointConfig, logger *slog.Logger) (*endpoint, error) {
-	p, err := newPeer(cl.directServer, cl.addrs, cfg.route.AllowDirect(), logger)
+	p, err := newPeer(cl.directServer, cl.addrs, logger)
 	if err != nil {
 		return nil, err
 	}
@@ -123,6 +124,7 @@ func (ep *endpoint) close(err error) error {
 
 func (ep *endpoint) runPeer(ctx context.Context) {
 	if err := ep.peer.run(ctx); err != nil {
+		ep.logger.Debug("peer stopped", "err", err)
 		ep.cancel(err)
 	}
 }
@@ -183,7 +185,18 @@ func (ep *endpoint) runAnnounce(ctx context.Context, conn *quic.Conn) error {
 
 	g.Go(func(ctx context.Context) error {
 		defer ep.logger.Debug("completed announce notify")
-		return ep.peer.selfListen(ctx, func(peer *pbclient.Peer) error {
+		return ep.peer.selfListen(ctx, func(rawPeer *pbclient.Peer) error {
+			peer := &pbclient.Peer{
+				ServerCertificate: rawPeer.ServerCertificate,
+				ClientCertificate: rawPeer.ClientCertificate,
+			}
+			if ep.cfg.route.AllowDirect() {
+				peer.Directs = rawPeer.Directs
+			}
+			if ep.cfg.route.AllowRelay() {
+				peer.RelayIds = rawPeer.RelayIds
+			}
+
 			ep.logger.Debug("updated announce", "direct", len(peer.Directs), "relays", len(peer.RelayIds))
 			return proto.Write(stream, &pbclient.Request{
 				Announce: &pbclient.Request_Announce{
@@ -208,7 +221,24 @@ func (ep *endpoint) runAnnounce(ctx context.Context, conn *quic.Conn) error {
 
 			// TODO on server restart peers is reset and client loses active peers
 			// only for them to come back at the next tick, with different ID
-			ep.peer.setPeers(resp.Announce.Peers)
+			ep.peer.setPeers(iterc.MapSlice(resp.Announce.Peers, func(rawPeer *pbclient.RemotePeer) *pbclient.RemotePeer {
+				peer := &pbclient.RemotePeer{
+					Id: rawPeer.Id,
+					Peer: &pbclient.Peer{
+						ServerCertificate: rawPeer.Peer.ServerCertificate,
+						ClientCertificate: rawPeer.Peer.ClientCertificate,
+					},
+				}
+
+				if ep.cfg.route.AllowDirect() {
+					peer.Peer.Directs = rawPeer.Peer.Directs
+				}
+				if ep.cfg.route.AllowRelay() {
+					peer.Peer.RelayIds = rawPeer.Peer.RelayIds
+				}
+
+				return peer
+			}))
 		}
 	})
 
