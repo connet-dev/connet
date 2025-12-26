@@ -33,7 +33,7 @@ type clientsDirectServer struct {
 }
 
 func (s *clientsDirectServer) runDirectConn(ctx context.Context, conn *quic.Conn) {
-	s.logger.Info("new client connected", "SNI", conn.ConnectionState().TLS.ServerName, "remote", conn.RemoteAddr())
+	s.logger.Info("new client connected", "server", conn.ConnectionState().TLS.ServerName, "remote", conn.RemoteAddr())
 
 	s.peerServersMu.RLock()
 	srv := s.peerServers[conn.ConnectionState().TLS.ServerName]
