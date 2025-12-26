@@ -32,14 +32,13 @@ type peer struct {
 	relayConns *notify.V[map[relayID]*quic.Conn]
 
 	directRelays     *notify.V[[]*pbclient.DirectRelay]
-	directRelayCerts *notify.V[map[relayID]*x509.Certificate]
+	directPeerRelays *notify.V[[]*pbclient.PeerDirectRelay]
 
 	peers     *notify.V[[]*pbclient.RemotePeer]
 	peerConns *notify.V[map[peerConnKey]*quic.Conn]
 
-	direct      *directServer
-	addrs       *notify.V[advertiseAddrs]
-	allowDirect bool
+	direct *directServer
+	addrs  *notify.V[advertiseAddrs]
 
 	serverCert tls.Certificate
 	clientCert tls.Certificate
@@ -90,7 +89,7 @@ func (s peerStyle) isRelay() bool {
 	}
 }
 
-func newPeer(direct *directServer, addrs *notify.V[advertiseAddrs], allowDirect bool, logger *slog.Logger) (*peer, error) {
+func newPeer(direct *directServer, addrs *notify.V[advertiseAddrs], logger *slog.Logger) (*peer, error) {
 	root, err := certc.NewRoot()
 	if err != nil {
 		return nil, err
@@ -115,9 +114,7 @@ func newPeer(direct *directServer, addrs *notify.V[advertiseAddrs], allowDirect 
 		return nil, err
 	}
 
-	if allowDirect {
-		direct.addServerCert(serverTLSCert)
-	}
+	direct.addServerCert(serverTLSCert)
 
 	return &peer{
 		self: notify.New(&pbclient.Peer{
@@ -129,14 +126,13 @@ func newPeer(direct *directServer, addrs *notify.V[advertiseAddrs], allowDirect 
 		relayConns: notify.New(map[relayID]*quic.Conn{}),
 
 		directRelays:     notify.NewEmpty[[]*pbclient.DirectRelay](),
-		directRelayCerts: notify.New(map[relayID]*x509.Certificate{}),
+		directPeerRelays: notify.NewEmpty[[]*pbclient.PeerDirectRelay](),
 
 		peers:     notify.NewEmpty[[]*pbclient.RemotePeer](),
 		peerConns: notify.New(map[peerConnKey]*quic.Conn{}),
 
-		direct:      direct,
-		addrs:       addrs,
-		allowDirect: allowDirect,
+		direct: direct,
+		addrs:  addrs,
 
 		serverCert: serverTLSCert,
 		clientCert: clientTLSCert,
@@ -172,10 +168,6 @@ func (p *peer) run(ctx context.Context) error {
 }
 
 func (p *peer) runDirectAddrs(ctx context.Context) error {
-	if !p.allowDirect {
-		return nil
-	}
-
 	return p.addrs.Listen(ctx, func(t advertiseAddrs) error {
 		p.self.Update(func(cp *pbclient.Peer) *pbclient.Peer {
 			return &pbclient.Peer{
@@ -183,7 +175,7 @@ func (p *peer) runDirectAddrs(ctx context.Context) error {
 				RelayIds:          cp.RelayIds,
 				ServerCertificate: cp.ServerCertificate,
 				ClientCertificate: cp.ClientCertificate,
-				DirectRelays:      cp.DirectRelays,
+				Relays:            cp.Relays,
 			}
 		})
 		return nil
@@ -238,7 +230,7 @@ func (p *peer) runDirectRelays(ctx context.Context) error {
 
 			activeRelays[id] = struct{}{}
 
-			cfg, err := newServerTLSConfig(relay.ServerCertificate)
+			cfg, err := newServerTLSConfig(relay.ReserveCertificate)
 			if err != nil {
 				return fmt.Errorf("parse direct relay cert %s: %w", id, err)
 			}
@@ -276,7 +268,7 @@ func (p *peer) runShareRelays(ctx context.Context) error {
 				RelayIds:          ids,
 				ServerCertificate: cp.ServerCertificate,
 				ClientCertificate: cp.ClientCertificate,
-				DirectRelays:      cp.DirectRelays,
+				Relays:            cp.Relays,
 			}
 		})
 		return nil
@@ -284,16 +276,8 @@ func (p *peer) runShareRelays(ctx context.Context) error {
 }
 
 func (p *peer) runShareDirectRelays(ctx context.Context) error {
-	return p.directRelayCerts.Listen(ctx, func(certs map[relayID]*x509.Certificate) error {
-		p.logger.Debug("direct relays conns updated", "len", len(certs))
-
-		var relays []*pbclient.PeerDirectRelay
-		for k, cert := range certs {
-			relays = append(relays, &pbclient.PeerDirectRelay{
-				Id:                string(k),
-				ServerCertificate: cert.Raw,
-			})
-		}
+	return p.directPeerRelays.Listen(ctx, func(relays []*pbclient.PeerDirectRelay) error {
+		p.logger.Debug("direct peer relays updated", "len", len(relays))
 
 		p.self.Update(func(cp *pbclient.Peer) *pbclient.Peer {
 			return &pbclient.Peer{
@@ -301,7 +285,7 @@ func (p *peer) runShareDirectRelays(ctx context.Context) error {
 				RelayIds:          cp.RelayIds,
 				ServerCertificate: cp.ServerCertificate,
 				ClientCertificate: cp.ClientCertificate,
-				DirectRelays:      relays,
+				Relays:            relays,
 			}
 		})
 
@@ -351,12 +335,14 @@ func (p *peer) removeRelayConn(id relayID) {
 	notify.MapDelete(p.relayConns, id)
 }
 
-func (p *peer) addDirectRelayCert(id relayID, cert *x509.Certificate) {
-	notify.MapPut(p.directRelayCerts, id, cert)
+func (p *peer) addDirectPeerRelay(relay *pbclient.PeerDirectRelay) { // TODO upsert?
+	notify.SliceAppend(p.directPeerRelays, relay)
 }
 
-func (p *peer) removeDirectRelayCert(id relayID) { // TODO should we remove convenince methods?
-	notify.MapDelete(p.directRelayCerts, id)
+func (p *peer) removeDirectPeerRelay(id relayID) { // TODO should we remove convenince methods?
+	notify.SliceFilter(p.directPeerRelays, func(relay *pbclient.PeerDirectRelay) bool {
+		return relay.Id != string(id)
+	})
 }
 
 func (p *peer) addActiveConn(id peerID, style peerStyle, key string, conn *quic.Conn) {

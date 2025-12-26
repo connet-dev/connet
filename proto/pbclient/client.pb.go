@@ -263,7 +263,7 @@ type Peer struct {
 	RelayIds          []string               `protobuf:"bytes,6,rep,name=relay_ids,json=relayIds,proto3" json:"relay_ids,omitempty"`
 	ServerCertificate []byte                 `protobuf:"bytes,4,opt,name=server_certificate,json=serverCertificate,proto3" json:"server_certificate,omitempty"` // certificate to use when connecting to this client
 	ClientCertificate []byte                 `protobuf:"bytes,5,opt,name=client_certificate,json=clientCertificate,proto3" json:"client_certificate,omitempty"` // certificate that this client uses when connecting
-	DirectRelays      []*PeerDirectRelay     `protobuf:"bytes,7,rep,name=direct_relays,json=directRelays,proto3" json:"direct_relays,omitempty"`
+	Relays            []*PeerDirectRelay     `protobuf:"bytes,7,rep,name=relays,proto3" json:"relays,omitempty"`
 	unknownFields     protoimpl.UnknownFields
 	sizeCache         protoimpl.SizeCache
 }
@@ -326,9 +326,9 @@ func (x *Peer) GetClientCertificate() []byte {
 	return nil
 }
 
-func (x *Peer) GetDirectRelays() []*PeerDirectRelay {
+func (x *Peer) GetRelays() []*PeerDirectRelay {
 	if x != nil {
-		return x.DirectRelays
+		return x.Relays
 	}
 	return nil
 }
@@ -385,58 +385,6 @@ func (x *RemotePeer) GetPeer() *Peer {
 	return nil
 }
 
-type PeerDirectRelay struct {
-	state             protoimpl.MessageState `protogen:"open.v1"`
-	Id                string                 `protobuf:"bytes,1,opt,name=id,proto3" json:"id,omitempty"`
-	ServerCertificate []byte                 `protobuf:"bytes,2,opt,name=server_certificate,json=serverCertificate,proto3" json:"server_certificate,omitempty"`
-	unknownFields     protoimpl.UnknownFields
-	sizeCache         protoimpl.SizeCache
-}
-
-func (x *PeerDirectRelay) Reset() {
-	*x = PeerDirectRelay{}
-	mi := &file_client_proto_msgTypes[6]
-	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-	ms.StoreMessageInfo(mi)
-}
-
-func (x *PeerDirectRelay) String() string {
-	return protoimpl.X.MessageStringOf(x)
-}
-
-func (*PeerDirectRelay) ProtoMessage() {}
-
-func (x *PeerDirectRelay) ProtoReflect() protoreflect.Message {
-	mi := &file_client_proto_msgTypes[6]
-	if x != nil {
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		if ms.LoadMessageInfo() == nil {
-			ms.StoreMessageInfo(mi)
-		}
-		return ms
-	}
-	return mi.MessageOf(x)
-}
-
-// Deprecated: Use PeerDirectRelay.ProtoReflect.Descriptor instead.
-func (*PeerDirectRelay) Descriptor() ([]byte, []int) {
-	return file_client_proto_rawDescGZIP(), []int{6}
-}
-
-func (x *PeerDirectRelay) GetId() string {
-	if x != nil {
-		return x.Id
-	}
-	return ""
-}
-
-func (x *PeerDirectRelay) GetServerCertificate() []byte {
-	if x != nil {
-		return x.ServerCertificate
-	}
-	return nil
-}
-
 type Relay struct {
 	state             protoimpl.MessageState `protogen:"open.v1"`
 	Id                string                 `protobuf:"bytes,3,opt,name=id,proto3" json:"id,omitempty"`
@@ -448,7 +396,7 @@ type Relay struct {
 
 func (x *Relay) Reset() {
 	*x = Relay{}
-	mi := &file_client_proto_msgTypes[7]
+	mi := &file_client_proto_msgTypes[6]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -460,7 +408,7 @@ func (x *Relay) String() string {
 func (*Relay) ProtoMessage() {}
 
 func (x *Relay) ProtoReflect() protoreflect.Message {
-	mi := &file_client_proto_msgTypes[7]
+	mi := &file_client_proto_msgTypes[6]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -473,7 +421,7 @@ func (x *Relay) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use Relay.ProtoReflect.Descriptor instead.
 func (*Relay) Descriptor() ([]byte, []int) {
-	return file_client_proto_rawDescGZIP(), []int{7}
+	return file_client_proto_rawDescGZIP(), []int{6}
 }
 
 func (x *Relay) GetId() string {
@@ -498,17 +446,17 @@ func (x *Relay) GetServerCertificate() []byte {
 }
 
 type DirectRelay struct {
-	state             protoimpl.MessageState `protogen:"open.v1"`
-	Id                string                 `protobuf:"bytes,1,opt,name=id,proto3" json:"id,omitempty"`
-	ServerCertificate []byte                 `protobuf:"bytes,2,opt,name=server_certificate,json=serverCertificate,proto3" json:"server_certificate,omitempty"`
-	Addresses         []*pbmodel.HostPort    `protobuf:"bytes,3,rep,name=addresses,proto3" json:"addresses,omitempty"`
-	unknownFields     protoimpl.UnknownFields
-	sizeCache         protoimpl.SizeCache
+	state              protoimpl.MessageState `protogen:"open.v1"`
+	Id                 string                 `protobuf:"bytes,1,opt,name=id,proto3" json:"id,omitempty"`
+	Addresses          []*pbmodel.HostPort    `protobuf:"bytes,2,rep,name=addresses,proto3" json:"addresses,omitempty"`
+	ReserveCertificate []byte                 `protobuf:"bytes,3,opt,name=reserve_certificate,json=reserveCertificate,proto3" json:"reserve_certificate,omitempty"`
+	unknownFields      protoimpl.UnknownFields
+	sizeCache          protoimpl.SizeCache
 }
 
 func (x *DirectRelay) Reset() {
 	*x = DirectRelay{}
-	mi := &file_client_proto_msgTypes[8]
+	mi := &file_client_proto_msgTypes[7]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -520,7 +468,7 @@ func (x *DirectRelay) String() string {
 func (*DirectRelay) ProtoMessage() {}
 
 func (x *DirectRelay) ProtoReflect() protoreflect.Message {
-	mi := &file_client_proto_msgTypes[8]
+	mi := &file_client_proto_msgTypes[7]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -533,7 +481,7 @@ func (x *DirectRelay) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use DirectRelay.ProtoReflect.Descriptor instead.
 func (*DirectRelay) Descriptor() ([]byte, []int) {
-	return file_client_proto_rawDescGZIP(), []int{8}
+	return file_client_proto_rawDescGZIP(), []int{7}
 }
 
 func (x *DirectRelay) GetId() string {
@@ -543,16 +491,76 @@ func (x *DirectRelay) GetId() string {
 	return ""
 }
 
-func (x *DirectRelay) GetServerCertificate() []byte {
+func (x *DirectRelay) GetAddresses() []*pbmodel.HostPort {
 	if x != nil {
-		return x.ServerCertificate
+		return x.Addresses
 	}
 	return nil
 }
 
-func (x *DirectRelay) GetAddresses() []*pbmodel.HostPort {
+func (x *DirectRelay) GetReserveCertificate() []byte {
+	if x != nil {
+		return x.ReserveCertificate
+	}
+	return nil
+}
+
+type PeerDirectRelay struct {
+	state              protoimpl.MessageState `protogen:"open.v1"`
+	Id                 string                 `protobuf:"bytes,1,opt,name=id,proto3" json:"id,omitempty"`
+	Addresses          []*pbmodel.HostPort    `protobuf:"bytes,2,rep,name=addresses,proto3" json:"addresses,omitempty"`
+	ConnectCertificate []byte                 `protobuf:"bytes,3,opt,name=connect_certificate,json=connectCertificate,proto3" json:"connect_certificate,omitempty"`
+	unknownFields      protoimpl.UnknownFields
+	sizeCache          protoimpl.SizeCache
+}
+
+func (x *PeerDirectRelay) Reset() {
+	*x = PeerDirectRelay{}
+	mi := &file_client_proto_msgTypes[8]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *PeerDirectRelay) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*PeerDirectRelay) ProtoMessage() {}
+
+func (x *PeerDirectRelay) ProtoReflect() protoreflect.Message {
+	mi := &file_client_proto_msgTypes[8]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use PeerDirectRelay.ProtoReflect.Descriptor instead.
+func (*PeerDirectRelay) Descriptor() ([]byte, []int) {
+	return file_client_proto_rawDescGZIP(), []int{8}
+}
+
+func (x *PeerDirectRelay) GetId() string {
+	if x != nil {
+		return x.Id
+	}
+	return ""
+}
+
+func (x *PeerDirectRelay) GetAddresses() []*pbmodel.HostPort {
 	if x != nil {
 		return x.Addresses
+	}
+	return nil
+}
+
+func (x *PeerDirectRelay) GetConnectCertificate() []byte {
+	if x != nil {
+		return x.ConnectCertificate
 	}
 	return nil
 }
@@ -805,28 +813,29 @@ const file_client_proto_rawDesc = "" +
 	"\x05peers\x18\x01 \x03(\v2\x12.client.RemotePeerR\x05peers\x12+\n" +
 	"\x06relays\x18\x02 \x03(\v2\x13.client.DirectRelayR\x06relays\x1a/\n" +
 	"\x06Relays\x12%\n" +
-	"\x06relays\x18\x01 \x03(\v2\r.client.RelayR\x06relays\"\xea\x01\n" +
+	"\x06relays\x18\x01 \x03(\v2\r.client.RelayR\x06relays\"\xdd\x01\n" +
 	"\x04Peer\x12)\n" +
 	"\adirects\x18\x03 \x03(\v2\x0f.model.AddrPortR\adirects\x12\x1b\n" +
 	"\trelay_ids\x18\x06 \x03(\tR\brelayIds\x12-\n" +
 	"\x12server_certificate\x18\x04 \x01(\fR\x11serverCertificate\x12-\n" +
-	"\x12client_certificate\x18\x05 \x01(\fR\x11clientCertificate\x12<\n" +
-	"\rdirect_relays\x18\a \x03(\v2\x17.client.PeerDirectRelayR\fdirectRelays\">\n" +
+	"\x12client_certificate\x18\x05 \x01(\fR\x11clientCertificate\x12/\n" +
+	"\x06relays\x18\a \x03(\v2\x17.client.PeerDirectRelayR\x06relays\">\n" +
 	"\n" +
 	"RemotePeer\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12 \n" +
-	"\x04peer\x18\b \x01(\v2\f.client.PeerR\x04peer\"P\n" +
-	"\x0fPeerDirectRelay\x12\x0e\n" +
-	"\x02id\x18\x01 \x01(\tR\x02id\x12-\n" +
-	"\x12server_certificate\x18\x02 \x01(\fR\x11serverCertificate\"u\n" +
+	"\x04peer\x18\b \x01(\v2\f.client.PeerR\x04peer\"u\n" +
 	"\x05Relay\x12\x0e\n" +
 	"\x02id\x18\x03 \x01(\tR\x02id\x12-\n" +
 	"\taddresses\x18\x04 \x03(\v2\x0f.model.HostPortR\taddresses\x12-\n" +
-	"\x12server_certificate\x18\x02 \x01(\fR\x11serverCertificate\"{\n" +
+	"\x12server_certificate\x18\x02 \x01(\fR\x11serverCertificate\"}\n" +
 	"\vDirectRelay\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12-\n" +
-	"\x12server_certificate\x18\x02 \x01(\fR\x11serverCertificate\x12-\n" +
-	"\taddresses\x18\x03 \x03(\v2\x0f.model.HostPortR\taddressesB-Z+github.com/connet-dev/connet/proto/pbclientb\x06proto3"
+	"\taddresses\x18\x02 \x03(\v2\x0f.model.HostPortR\taddresses\x12/\n" +
+	"\x13reserve_certificate\x18\x03 \x01(\fR\x12reserveCertificate\"\x81\x01\n" +
+	"\x0fPeerDirectRelay\x12\x0e\n" +
+	"\x02id\x18\x01 \x01(\tR\x02id\x12-\n" +
+	"\taddresses\x18\x02 \x03(\v2\x0f.model.HostPortR\taddresses\x12/\n" +
+	"\x13connect_certificate\x18\x03 \x01(\fR\x12connectCertificateB-Z+github.com/connet-dev/connet/proto/pbclientb\x06proto3"
 
 var (
 	file_client_proto_rawDescOnce sync.Once
@@ -848,9 +857,9 @@ var file_client_proto_goTypes = []any{
 	(*Response)(nil),          // 3: client.Response
 	(*Peer)(nil),              // 4: client.Peer
 	(*RemotePeer)(nil),        // 5: client.RemotePeer
-	(*PeerDirectRelay)(nil),   // 6: client.PeerDirectRelay
-	(*Relay)(nil),             // 7: client.Relay
-	(*DirectRelay)(nil),       // 8: client.DirectRelay
+	(*Relay)(nil),             // 6: client.Relay
+	(*DirectRelay)(nil),       // 7: client.DirectRelay
+	(*PeerDirectRelay)(nil),   // 8: client.PeerDirectRelay
 	(*Request_Announce)(nil),  // 9: client.Request.Announce
 	(*Request_Relay)(nil),     // 10: client.Request.Relay
 	(*Response_Announce)(nil), // 11: client.Response.Announce
@@ -870,23 +879,24 @@ var file_client_proto_depIdxs = []int32{
 	11, // 5: client.Response.announce:type_name -> client.Response.Announce
 	12, // 6: client.Response.relay:type_name -> client.Response.Relays
 	14, // 7: client.Peer.directs:type_name -> model.AddrPort
-	6,  // 8: client.Peer.direct_relays:type_name -> client.PeerDirectRelay
+	8,  // 8: client.Peer.relays:type_name -> client.PeerDirectRelay
 	4,  // 9: client.RemotePeer.peer:type_name -> client.Peer
 	15, // 10: client.Relay.addresses:type_name -> model.HostPort
 	15, // 11: client.DirectRelay.addresses:type_name -> model.HostPort
-	16, // 12: client.Request.Announce.endpoint:type_name -> model.Endpoint
-	17, // 13: client.Request.Announce.role:type_name -> model.Role
-	4,  // 14: client.Request.Announce.peer:type_name -> client.Peer
-	16, // 15: client.Request.Relay.endpoint:type_name -> model.Endpoint
-	17, // 16: client.Request.Relay.role:type_name -> model.Role
-	5,  // 17: client.Response.Announce.peers:type_name -> client.RemotePeer
-	8,  // 18: client.Response.Announce.relays:type_name -> client.DirectRelay
-	7,  // 19: client.Response.Relays.relays:type_name -> client.Relay
-	20, // [20:20] is the sub-list for method output_type
-	20, // [20:20] is the sub-list for method input_type
-	20, // [20:20] is the sub-list for extension type_name
-	20, // [20:20] is the sub-list for extension extendee
-	0,  // [0:20] is the sub-list for field type_name
+	15, // 12: client.PeerDirectRelay.addresses:type_name -> model.HostPort
+	16, // 13: client.Request.Announce.endpoint:type_name -> model.Endpoint
+	17, // 14: client.Request.Announce.role:type_name -> model.Role
+	4,  // 15: client.Request.Announce.peer:type_name -> client.Peer
+	16, // 16: client.Request.Relay.endpoint:type_name -> model.Endpoint
+	17, // 17: client.Request.Relay.role:type_name -> model.Role
+	5,  // 18: client.Response.Announce.peers:type_name -> client.RemotePeer
+	7,  // 19: client.Response.Announce.relays:type_name -> client.DirectRelay
+	6,  // 20: client.Response.Relays.relays:type_name -> client.Relay
+	21, // [21:21] is the sub-list for method output_type
+	21, // [21:21] is the sub-list for method input_type
+	21, // [21:21] is the sub-list for extension type_name
+	21, // [21:21] is the sub-list for extension extendee
+	0,  // [0:21] is the sub-list for field type_name
 }
 
 func init() { file_client_proto_init() }

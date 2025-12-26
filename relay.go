@@ -335,7 +335,7 @@ func (r *directRelay) reserve(ctx context.Context, conn *quic.Conn) error {
 	})
 
 	g.Go(func(ctx context.Context) error {
-		defer r.local.removeDirectRelayCert(r.serverID)
+		defer r.local.removeDirectPeerRelay(r.serverID)
 		for {
 			resp := &pbclientrelay.ReserveResp{}
 			if err := proto.Read(stream, resp); err != nil {
@@ -348,7 +348,11 @@ func (r *directRelay) reserve(ctx context.Context, conn *quic.Conn) error {
 			if err != nil {
 				return fmt.Errorf("direct relay cert: %w", err)
 			}
-			r.local.addDirectRelayCert(r.serverID, cert)
+			r.local.addDirectPeerRelay(&pbclient.PeerDirectRelay{
+				Id:                 string(r.serverID),
+				Addresses:          iterc.MapSlice(r.serverHostports, model.HostPort.PB),
+				ConnectCertificate: cert.Raw,
+			})
 		}
 	})
 

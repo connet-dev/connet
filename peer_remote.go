@@ -25,7 +25,6 @@ import (
 
 var errRemotePeerRemoved = errors.New("remote peer removed")
 var errRemotePeerPathRemoved = errors.New("remote peer path removed")
-var errRemotePeerDirectRelayNoAddrs = errors.New("remote peer direct relay: no active addresses")
 var errRemotePeerDirectRelayRemoved = errors.New("remote peer direct relay not available")
 
 func isPeerTerminalError(err error) bool {
@@ -81,7 +80,7 @@ func (p *remotePeer) run(ctx context.Context) {
 
 func (p *remotePeer) runErr(ctx context.Context) error {
 	return p.remote.Listen(ctx, func(remote *pbclient.RemotePeer) error {
-		if p.local.allowDirect && len(remote.Peer.Directs) > 0 {
+		if len(remote.Peer.Directs) > 0 {
 			if p.incoming == nil {
 				remoteClientCert, err := x509.ParseCertificate(remote.Peer.ClientCertificate)
 				if err != nil {
@@ -130,13 +129,15 @@ func (p *remotePeer) runErr(ctx context.Context) error {
 			// do nothing, since remote is not running
 		}
 
-		directRemotes := map[relayID]*serverTLSConfig{}
-		for _, direct := range remote.Peer.DirectRelays {
-			tlsConfig, err := newServerTLSConfig(direct.ServerCertificate)
+		// TODO should only connect when relay is enabled
+		directRemotes := map[relayID]remotePeerDirectRelayConnSpec{}
+		for _, direct := range remote.Peer.Relays {
+			addrs := model.HostPortFromPBs(direct.Addresses)
+			tlsConfig, err := newServerTLSConfig(direct.ConnectCertificate)
 			if err != nil {
 				return fmt.Errorf("parse direct relay server certificate: %w", err)
 			}
-			directRemotes[relayID(direct.Id)] = tlsConfig
+			directRemotes[relayID(direct.Id)] = remotePeerDirectRelayConnSpec{addrs, tlsConfig}
 		}
 
 		switch {
@@ -427,12 +428,12 @@ func (p *remotePeerRelays) run(ctx context.Context) {
 
 type remotePeerDirectRelays struct {
 	parent  *remotePeer
-	remotes *notify.V[map[relayID]*serverTLSConfig]
+	remotes *notify.V[map[relayID]remotePeerDirectRelayConnSpec]
 	cancel  context.CancelCauseFunc
 	logger  *slog.Logger
 }
 
-func runRemotePeerDirectRelays(ctx context.Context, parent *remotePeer, remotes map[relayID]*serverTLSConfig) *remotePeerDirectRelays {
+func runRemotePeerDirectRelays(ctx context.Context, parent *remotePeer, remotes map[relayID]remotePeerDirectRelayConnSpec) *remotePeerDirectRelays {
 	ctx, cancel := context.WithCancelCause(ctx)
 	p := &remotePeerDirectRelays{
 		parent:  parent,
@@ -447,46 +448,30 @@ func runRemotePeerDirectRelays(ctx context.Context, parent *remotePeer, remotes 
 func (p *remotePeerDirectRelays) run(ctx context.Context) {
 	running := map[relayID]*remotePeerDirectRelayConn{}
 
-	var findRelayAddrs = func(id relayID, relays []*pbclient.DirectRelay) []model.HostPort {
-		for _, relay := range relays {
-			if id == relayID(relay.Id) {
-				return model.HostPortFromPBs(relay.Addresses)
+	err := p.remotes.Listen(ctx, func(peers map[relayID]remotePeerDirectRelayConnSpec) error {
+		active := map[relayID]struct{}{}
+
+		for rid, spec := range peers {
+			active[rid] = struct{}{}
+
+			if conn := running[rid]; conn != nil {
+				conn.spec.Set(spec)
+			} else {
+				running[rid] = runRemotePeerDirectRelayConn(ctx, p, rid, spec)
 			}
 		}
+
+		for rid, conn := range running {
+			if _, ok := active[rid]; !ok {
+				p.parent.logger.Debug("stopping direct peer relay", "id", rid)
+				conn.cancel(errRemotePeerDirectRelayRemoved)
+				delete(running, rid)
+			}
+		}
+
 		return nil
-	}
+	})
 
-	err := notify.ListenMulti(ctx, p.parent.local.directRelays, p.remotes,
-		func(ctx context.Context, relaysAddrs []*pbclient.DirectRelay, peerCerts map[relayID]*serverTLSConfig) error {
-			active := map[relayID]struct{}{}
-
-			for rid, cert := range peerCerts {
-				active[rid] = struct{}{}
-
-				switch addrs, conn := findRelayAddrs(rid, relaysAddrs), running[rid]; {
-				case len(addrs) > 0 && conn == nil:
-					conn = runRemotePeerDirectRelayConn(ctx, p, rid, addrs, cert)
-					running[rid] = conn
-				case len(addrs) > 0 && conn != nil:
-					conn.spec.Set(remotePeerDirectRelayConnSpec{addrs, cert})
-				case len(addrs) == 0 && conn != nil:
-					conn.cancel(errRemotePeerDirectRelayNoAddrs)
-					delete(running, rid)
-				case len(addrs) == 0 && conn == nil:
-					// do nothing, conn is not running
-				}
-			}
-
-			for rid, conn := range running {
-				if _, ok := active[rid]; !ok {
-					p.parent.logger.Debug("stopping direct peer relay", "id", rid)
-					conn.cancel(errRemotePeerDirectRelayRemoved)
-					delete(running, rid)
-				}
-			}
-
-			return nil
-		})
 	if err != nil {
 		p.logger.Debug("error running direct peer relays", "err", err)
 	}
@@ -509,17 +494,10 @@ func runRemotePeerDirectRelayConn(
 	ctx context.Context,
 	parent *remotePeerDirectRelays,
 	remote relayID,
-	addrs []model.HostPort,
-	cert *serverTLSConfig,
+	spec remotePeerDirectRelayConnSpec,
 ) *remotePeerDirectRelayConn {
 	ctx, cancel := context.WithCancelCause(ctx)
-	c := &remotePeerDirectRelayConn{
-		parent,
-		remote,
-		notify.New(remotePeerDirectRelayConnSpec{addrs, cert}),
-		cancel,
-		parent.logger.With("direct-peer", remote),
-	}
+	c := &remotePeerDirectRelayConn{parent, remote, notify.New(spec), cancel, parent.logger.With("direct-peer", remote)}
 	go c.run(ctx)
 	return c
 }

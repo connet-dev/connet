@@ -57,17 +57,12 @@ message Peer {
   repeated string relay_ids = 6;
   bytes server_certificate = 4; // certificate to use when connecting to this client
   bytes client_certificate = 5; // certificate that this client uses when connecting
-  repeated PeerDirectRelay direct_relays = 7;
+  repeated PeerDirectRelay relays = 7;
 }
 
 message RemotePeer {
   string id = 1;
   Peer peer = 8;
-}
-
-message PeerDirectRelay { // TODO peer should use DirectRelay instead of matching by id
-  string id = 1;
-  bytes server_certificate = 2;
 }
 
 message Relay {
@@ -78,6 +73,12 @@ message Relay {
 
 message DirectRelay {
   string id = 1;
-  bytes server_certificate = 2;
-  repeated model.HostPort addresses = 3;
+  repeated model.HostPort addresses = 2;
+  bytes reserve_certificate = 3;
+}
+
+message PeerDirectRelay {
+  string id = 1;
+  repeated model.HostPort addresses = 2;
+  bytes connect_certificate = 3;
 }

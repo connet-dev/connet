@@ -433,9 +433,9 @@ func (c *relayConn) runErr(ctx context.Context) error {
 	}()
 
 	notify.SliceAppend(c.server.directRelays, &pbclient.DirectRelay{
-		Id:                c.id.string,
-		ServerCertificate: c.certificate.Raw,
-		Addresses:         iterc.MapSlice(c.hostports, model.HostPort.PB),
+		Id:                 c.id.string,
+		Addresses:          iterc.MapSlice(c.hostports, model.HostPort.PB),
+		ReserveCertificate: c.certificate.Raw,
 	})
 	defer notify.SliceFilter(c.server.directRelays, func(relay *pbclient.DirectRelay) bool {
 		return relay.Id != c.id.string
