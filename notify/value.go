@@ -208,6 +208,12 @@ func SliceRemove[S []T, T comparable](v *V[S], val T) {
 	})
 }
 
+func SliceFilter[S []T, T any](v *V[S], fn func(t T) bool) {
+	v.Update(func(t S) S {
+		return iterc.FilterSlice(t, fn)
+	})
+}
+
 func MapPut[M ~map[K]T, K comparable, T any](m *V[M], k K, v T) {
 	m.Update(func(t M) M {
 		t = maps.Clone(t)

@@ -26,11 +26,13 @@ import (
 )
 
 type peer struct {
-	self       *notify.V[*pbclient.Peer]
+	self *notify.V[*pbclient.Peer]
+
 	relays     *notify.V[[]*pbclient.Relay]
 	relayConns *notify.V[map[relayID]*quic.Conn]
-	peers      *notify.V[[]*pbclient.RemotePeer]
-	peerConns  *notify.V[map[peerConnKey]*quic.Conn]
+
+	peers     *notify.V[[]*pbclient.RemotePeer]
+	peerConns *notify.V[map[peerConnKey]*quic.Conn]
 
 	direct *directServer
 	addrs  *notify.V[advertiseAddrs]
@@ -114,10 +116,12 @@ func newPeer(direct *directServer, addrs *notify.V[advertiseAddrs], logger *slog
 			ServerCertificate: serverTLSCert.Leaf.Raw,
 			ClientCertificate: clientTLSCert.Leaf.Raw,
 		}),
+
 		relays:     notify.NewEmpty[[]*pbclient.Relay](),
 		relayConns: notify.New(map[relayID]*quic.Conn{}),
-		peers:      notify.NewEmpty[[]*pbclient.RemotePeer](),
-		peerConns:  notify.New(map[peerConnKey]*quic.Conn{}),
+
+		peers:     notify.NewEmpty[[]*pbclient.RemotePeer](),
+		peerConns: notify.New(map[peerConnKey]*quic.Conn{}),
 
 		direct: direct,
 		addrs:  addrs,

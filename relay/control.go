@@ -402,7 +402,7 @@ func (s *controlClient) runClientsLog(ctx context.Context) error {
 
 			switch {
 			case errors.Is(err, klevdb.ErrNotFound):
-				serverName := netc.GenDomainName("connet-relay")
+				serverName := netc.GenDomainName("connet.control.relay")
 				serverRoot, err := s.root.NewServer(certc.CertOpts{
 					Domains: []string{serverName},
 				})

@@ -81,7 +81,7 @@ func newRelayServer(
 	}
 
 	serverIDConfig, err := config.GetOrInit(configServerID, func(_ ConfigKey) (ConfigValue, error) {
-		return ConfigValue{String: netc.GenDomainName("connet-control")}, nil
+		return ConfigValue{String: netc.GenDomainName("relay.control")}, nil
 	})
 	if err != nil {
 		return nil, fmt.Errorf("relay server id: %w", err)
