@@ -208,9 +208,9 @@ func SliceRemove[S []T, T comparable](v *V[S], val T) {
 	})
 }
 
-func SliceRemoveFn[S []T, T any](v *V[S], val T, cmp func(a, b T) bool) {
+func SliceFilter[S []T, T any](v *V[S], fn func(t T) bool) {
 	v.Update(func(t S) S {
-		return iterc.FilterSlice(t, func(el T) bool { return cmp(el, val) })
+		return iterc.FilterSlice(t, fn)
 	})
 }
 

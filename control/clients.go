@@ -297,8 +297,8 @@ func (s *clientServer) runPeerCache(ctx context.Context) error {
 		peers := s.peersCache[key]
 		if msg.Delete {
 			if peers != nil {
-				peers.Update(func(peers []*pbclient.RemotePeer) []*pbclient.RemotePeer {
-					return iterc.FilterSlice(peers, func(peer *pbclient.RemotePeer) bool { return peer.Id != msg.Key.ID.string })
+				notify.SliceFilter(peers, func(peer *pbclient.RemotePeer) bool {
+					return peer.Id != msg.Key.ID.string
 				})
 				// TODO check and remove
 			}

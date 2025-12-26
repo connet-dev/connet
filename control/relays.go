@@ -10,7 +10,6 @@ import (
 	"log/slog"
 	"maps"
 	"net"
-	"slices"
 	"sync"
 
 	"github.com/connet-dev/connet/iterc"
@@ -433,15 +432,13 @@ func (c *relayConn) runErr(ctx context.Context) error {
 		}
 	}()
 
-	c.server.directRelays.Update(func(relays []*pbclient.DirectRelay) []*pbclient.DirectRelay {
-		return append(slices.Clone(relays), &pbclient.DirectRelay{
-			Id:                c.id.string,
-			ServerCertificate: c.certificate.Raw,
-			Addresses:         iterc.MapSlice(c.hostports, model.HostPort.PB),
-		})
+	notify.SliceAppend(c.server.directRelays, &pbclient.DirectRelay{
+		Id:                c.id.string,
+		ServerCertificate: c.certificate.Raw,
+		Addresses:         iterc.MapSlice(c.hostports, model.HostPort.PB),
 	})
-	defer c.server.directRelays.Update(func(relays []*pbclient.DirectRelay) []*pbclient.DirectRelay {
-		return iterc.FilterSlice(relays, func(relay *pbclient.DirectRelay) bool { return relay.Id != c.id.string })
+	defer notify.SliceFilter(c.server.directRelays, func(relay *pbclient.DirectRelay) bool {
+		return relay.Id != c.id.string
 	})
 
 	return reliable.RunGroup(ctx,
