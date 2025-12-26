@@ -10,12 +10,16 @@ import (
 	"log/slog"
 	"maps"
 	"net"
+	"slices"
 	"sync"
 
+	"github.com/connet-dev/connet/iterc"
 	"github.com/connet-dev/connet/logc"
 	"github.com/connet-dev/connet/model"
 	"github.com/connet-dev/connet/netc"
+	"github.com/connet-dev/connet/notify"
 	"github.com/connet-dev/connet/proto"
+	"github.com/connet-dev/connet/proto/pbclient"
 	"github.com/connet-dev/connet/proto/pberror"
 	"github.com/connet-dev/connet/proto/pbrelay"
 	"github.com/connet-dev/connet/quicc"
@@ -129,6 +133,8 @@ func newRelayServer(
 
 		endpointsCache:  endpointsCache,
 		endpointsOffset: endpointsOffset,
+
+		directRelays: notify.NewEmpty[[]*pbclient.DirectRelay](),
 	}, nil
 }
 
@@ -151,6 +157,8 @@ type relayServer struct {
 	endpointsCache  map[model.Endpoint]map[RelayID]relayCacheValue
 	endpointsOffset int64
 	endpointsMu     sync.RWMutex
+
+	directRelays *notify.V[[]*pbclient.DirectRelay]
 }
 
 func (s *relayServer) getEndpoint(endpoint model.Endpoint) (map[RelayID]relayCacheValue, int64) {
@@ -218,47 +226,9 @@ func (s *relayServer) listen(ctx context.Context, endpoint model.Endpoint,
 	}
 }
 
-type activeRelay struct {
-	hostports   []model.HostPort
-	certificate *x509.Certificate
-}
-
-func (s *relayServer) Active(ctx context.Context, auth ClientAuthentication, notifyFn func(map[RelayID]activeRelay) error) error {
-	conns, offset, err := s.conns.Snapshot()
-	if err != nil {
-		return err
-	}
-
-	var activeRelays = map[RelayID]activeRelay{}
-	for _, conn := range conns {
-		activeRelays[conn.Key.ID] = activeRelay{conn.Value.Hostports, conn.Value.ServerCertificate}
-	}
-	if err := notifyFn(activeRelays); err != nil {
-		return err
-	}
-
-	for {
-		changes, nextOffset, err := s.conns.Consume(ctx, offset)
-		if err != nil {
-			return err
-		}
-
-		for _, msg := range changes {
-			if msg.Delete {
-				delete(activeRelays, msg.Key.ID)
-			} else {
-				activeRelays[msg.Key.ID] = activeRelay{msg.Value.Hostports, msg.Value.ServerCertificate}
-			}
-		}
-
-		if len(changes) > 0 {
-			if err := notifyFn(activeRelays); err != nil {
-				return err
-			}
-		}
-
-		offset = nextOffset
-	}
+func (s *relayServer) Active(ctx context.Context, auth ClientAuthentication) *notify.V[[]*pbclient.DirectRelay] {
+	// TODO filter out based on client auth
+	return s.directRelays
 }
 
 func (s *relayServer) run(ctx context.Context) error {
@@ -462,6 +432,17 @@ func (c *relayConn) runErr(ctx context.Context) error {
 			c.logger.Warn("failed to delete conn", "key", key, "err", err)
 		}
 	}()
+
+	c.server.directRelays.Update(func(relays []*pbclient.DirectRelay) []*pbclient.DirectRelay {
+		return append(slices.Clone(relays), &pbclient.DirectRelay{
+			Id:                c.id.string,
+			ServerCertificate: c.certificate.Raw,
+			Addresses:         iterc.MapSlice(c.hostports, model.HostPort.PB),
+		})
+	})
+	defer c.server.directRelays.Update(func(relays []*pbclient.DirectRelay) []*pbclient.DirectRelay {
+		return iterc.FilterSlice(relays, func(relay *pbclient.DirectRelay) bool { return relay.Id != c.id.string })
+	})
 
 	return reliable.RunGroup(ctx,
 		c.runRelayClients,
