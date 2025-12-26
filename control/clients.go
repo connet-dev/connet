@@ -561,8 +561,6 @@ func (s *clientStream) runErr(ctx context.Context) error {
 		return s.announce(ctx, req.Announce)
 	case req.Relay != nil:
 		return s.relay(ctx, req.Relay)
-	case req.DirectRelay != nil:
-		return s.directRelay(ctx)
 	default:
 		return s.unknown(ctx, req)
 	}
@@ -640,14 +638,16 @@ func (s *clientStream) announce(ctx context.Context, req *pbclient.Request_Annou
 	})
 
 	g.Go(func(ctx context.Context) error {
-		defer s.conn.logger.Debug("completed sources notify")
+		defer s.conn.logger.Debug("completed announce notify")
 		peersNotify := s.conn.server.announcements(endpoint, role.Invert())
-		return peersNotify.Listen(ctx, func(peers []*pbclient.RemotePeer) error {
-			s.conn.logger.Debug("updated sources list", "peers", len(peers))
+		relaysNotify := s.conn.server.relays.Active(ctx, s.conn.auth)
+		return notify.ListenMulti(ctx, peersNotify, relaysNotify, func(ctx context.Context, peers []*pbclient.RemotePeer, relays []*pbclient.DirectRelay) error {
+			s.conn.logger.Debug("updated announce list", "peers", len(peers), "relays", len(relays))
 
 			if err := proto.Write(s.stream, &pbclient.Response{
 				Announce: &pbclient.Response_Announce{
-					Peers: peers,
+					Peers:  peers,
+					Relays: relays,
 				},
 			}); err != nil {
 				return fmt.Errorf("client announce write: %w", err)
@@ -713,35 +713,6 @@ func (s *clientStream) relay(ctx context.Context, req *pbclient.Request_Relay) e
 				},
 			}); err != nil {
 				return fmt.Errorf("client relay response: %w", err)
-			}
-			return nil
-		})
-	})
-
-	return g.Wait()
-}
-
-func (s *clientStream) directRelay(ctx context.Context) error {
-	g := reliable.NewGroup(ctx)
-
-	g.Go(func(ctx context.Context) error {
-		connCtx := s.conn.conn.Context()
-		<-connCtx.Done()
-		return context.Cause(connCtx)
-	})
-
-	g.Go(func(ctx context.Context) error {
-		defer s.conn.logger.Debug("completed direct relay notify")
-		relaysNotify := s.conn.server.relays.Active(ctx, s.conn.auth)
-		return relaysNotify.Listen(ctx, func(relays []*pbclient.DirectRelay) error {
-			s.conn.logger.Debug("updated direct relay list", "relays", len(relays))
-
-			if err := proto.Write(s.stream, &pbclient.Response{
-				DirectRelays: &pbclient.Response_DirectRelays{
-					Relays: relays,
-				},
-			}); err != nil {
-				return fmt.Errorf("direct relay response: %w", err)
 			}
 			return nil
 		})

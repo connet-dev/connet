@@ -23,7 +23,6 @@ message Request {
   // Soft one-of
   Announce announce = 1;
   Relay relay = 2;
-  DirectRelay direct_relay = 3;
 
   message Announce {
     model.Endpoint endpoint = 1;
@@ -35,7 +34,6 @@ message Request {
     model.Role role = 2;
     bytes client_certificate = 3; // certificate to use when connecting to a relay
   }
-  message DirectRelay {}
 }
 
 message Response {
@@ -44,16 +42,13 @@ message Response {
   // Soft one-of if error is nil
   Announce announce = 2;
   Relays relay = 3;
-  DirectRelays direct_relays = 4;
 
   message Announce {
     repeated RemotePeer peers = 1;
+    repeated DirectRelay relays = 2;
   }
   message Relays {
     repeated Relay relays = 1;
-  }
-  message DirectRelays {
-    repeated DirectRelay relays = 1;
   }
 }
 
@@ -70,7 +65,7 @@ message RemotePeer {
   Peer peer = 8;
 }
 
-message PeerDirectRelay {
+message PeerDirectRelay { // TODO peer should use DirectRelay instead of matching by id
   string id = 1;
   bytes server_certificate = 2;
 }

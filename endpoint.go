@@ -162,7 +162,6 @@ func (ep *endpoint) runSessionAnnounceErr(ctx context.Context, sess *session) er
 		g := reliable.NewGroup(ctx)
 		g.Go(reliable.Bind(sess.conn, ep.runAnnounce))
 		g.Go(reliable.Bind(sess.conn, ep.runRelay))
-		g.Go(reliable.Bind(sess.conn, ep.runDirectRelays))
 		return g.Wait()
 	}
 
@@ -211,6 +210,9 @@ func (ep *endpoint) runAnnounce(ctx context.Context, conn *quic.Conn) error {
 			// TODO on server restart peers is reset and client loses active peers
 			// only for them to come back at the next tick, with different ID
 			ep.peer.setPeers(resp.Announce.Peers)
+			if ep.cfg.route.AllowRelay() {
+				ep.peer.setDirectRelays(resp.Announce.Relays)
+			}
 		}
 	})
 
@@ -253,44 +255,6 @@ func (ep *endpoint) runRelay(ctx context.Context, conn *quic.Conn) error {
 			}
 
 			ep.peer.setRelays(resp.Relay.Relays)
-		}
-	})
-
-	return g.Wait()
-}
-
-func (ep *endpoint) runDirectRelays(ctx context.Context, conn *quic.Conn) error {
-	stream, err := conn.OpenStreamSync(ctx)
-	if err != nil {
-		return fmt.Errorf("relay open stream: %w", err)
-	}
-	defer func() {
-		if err := stream.Close(); err != nil {
-			slogc.Fine(ep.logger, "error closing relay stream", "err", err)
-		}
-	}()
-
-	if err := proto.Write(stream, &pbclient.Request{
-		DirectRelay: &pbclient.Request_DirectRelay{},
-	}); err != nil {
-		return err
-	}
-
-	g := reliable.NewGroup(ctx)
-	g.Go(quicc.CancelStream(stream))
-
-	g.Go(func(ctx context.Context) error {
-		for {
-			resp, err := pbclient.ReadResponse(stream)
-			if err != nil {
-				ep.onlineReport(err)
-				return fmt.Errorf("direct relay error: %w", err)
-			}
-			if resp.DirectRelays == nil {
-				return fmt.Errorf("direct relay unexpected response")
-			}
-
-			ep.peer.setDirectRelays(resp.DirectRelays.Relays)
 		}
 	})
 
