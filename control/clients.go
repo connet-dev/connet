@@ -456,7 +456,9 @@ func (c *clientConn) runErr(ctx context.Context) error {
 		c.clientConnAuth = *auth
 		c.logger = c.logger.With("client-id", c.id)
 	}
-	c.logger.Info("new client connected", "addr", c.conn.RemoteAddr(), "metadata", c.metadata)
+
+	c.logger.Info("client connected", "addr", c.conn.RemoteAddr(), "metadata", c.metadata)
+	defer c.logger.Info("client disconnected", "addr", c.conn.RemoteAddr(), "metadata", c.metadata)
 
 	if err := c.server.connected(c.id, c.auth, c.conn.RemoteAddr(), c.metadata); err != nil {
 		return err

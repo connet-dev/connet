@@ -398,7 +398,9 @@ func (c *relayConn) runErr(ctx context.Context) error {
 		c.relayConnAuth = *rauth
 		c.logger = c.logger.With("relay", c.hostports)
 	}
-	c.logger.Info("new relay connected", "addr", c.conn.RemoteAddr(), "metadata", c.metadata)
+
+	c.logger.Info("relay connected", "addr", c.conn.RemoteAddr(), "metadata", c.metadata)
+	defer c.logger.Info("relay disconnected", "addr", c.conn.RemoteAddr(), "metadata", c.metadata)
 
 	endpoints, err := c.server.stores.RelayEndpoints(c.id)
 	if err != nil {
