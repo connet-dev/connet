@@ -159,7 +159,9 @@ func (s *Source) runActiveErr(ctx context.Context) error {
 
 		var conns = make([]sourceConn, 0, len(active))
 		for peer, conn := range active {
-			conns = append(conns, sourceConn{peer, conn})
+			if peer.style != peerRelayIncoming {
+				conns = append(conns, sourceConn{peer, conn})
+			}
 		}
 		s.conns.Store(&conns)
 		return nil

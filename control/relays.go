@@ -12,10 +12,13 @@ import (
 	"net"
 	"sync"
 
+	"github.com/connet-dev/connet/iterc"
 	"github.com/connet-dev/connet/logc"
 	"github.com/connet-dev/connet/model"
 	"github.com/connet-dev/connet/netc"
+	"github.com/connet-dev/connet/notify"
 	"github.com/connet-dev/connet/proto"
+	"github.com/connet-dev/connet/proto/pbclient"
 	"github.com/connet-dev/connet/proto/pberror"
 	"github.com/connet-dev/connet/proto/pbrelay"
 	"github.com/connet-dev/connet/quicc"
@@ -129,6 +132,8 @@ func newRelayServer(
 
 		endpointsCache:  endpointsCache,
 		endpointsOffset: endpointsOffset,
+
+		directRelays: notify.NewEmpty[[]*pbclient.DirectRelay](),
 	}, nil
 }
 
@@ -151,6 +156,8 @@ type relayServer struct {
 	endpointsCache  map[model.Endpoint]map[RelayID]relayCacheValue
 	endpointsOffset int64
 	endpointsMu     sync.RWMutex
+
+	directRelays *notify.V[[]*pbclient.DirectRelay]
 }
 
 func (s *relayServer) getEndpoint(endpoint model.Endpoint) (map[RelayID]relayCacheValue, int64) {
@@ -216,6 +223,11 @@ func (s *relayServer) listen(ctx context.Context, endpoint model.Endpoint,
 			}
 		}
 	}
+}
+
+func (s *relayServer) Active(ctx context.Context, auth ClientAuthentication) *notify.V[[]*pbclient.DirectRelay] {
+	// TODO filter out based on client auth
+	return s.directRelays
 }
 
 func (s *relayServer) run(ctx context.Context) error {
@@ -365,9 +377,10 @@ type relayConn struct {
 }
 
 type relayConnAuth struct {
-	id        RelayID
-	auth      RelayAuthentication
-	hostports []model.HostPort
+	id          RelayID
+	auth        RelayAuthentication
+	hostports   []model.HostPort
+	certificate *x509.Certificate
 }
 
 func (c *relayConn) run(ctx context.Context) {
@@ -409,7 +422,7 @@ func (c *relayConn) runErr(ctx context.Context) error {
 	c.endpoints = endpoints
 
 	key := RelayConnKey{ID: c.id}
-	value := RelayConnValue{Authentication: c.auth, Hostports: c.hostports}
+	value := RelayConnValue{c.auth, c.hostports, c.certificate}
 	if err := c.server.conns.Put(key, value); err != nil {
 		return err
 	}
@@ -418,6 +431,15 @@ func (c *relayConn) runErr(ctx context.Context) error {
 			c.logger.Warn("failed to delete conn", "key", key, "err", err)
 		}
 	}()
+
+	notify.SliceAppend(c.server.directRelays, &pbclient.DirectRelay{
+		Id:                 c.id.string,
+		Addresses:          iterc.MapSlice(c.hostports, model.HostPort.PB),
+		ReserveCertificate: c.certificate.Raw,
+	})
+	defer notify.SliceFilter(c.server.directRelays, func(relay *pbclient.DirectRelay) bool {
+		return relay.Id != c.id.string
+	})
 
 	return reliable.RunGroup(ctx,
 		c.runRelayClients,
@@ -442,6 +464,18 @@ func (c *relayConn) authenticate(ctx context.Context) (*relayConnAuth, error) {
 	req := &pbrelay.AuthenticateReq{}
 	if err := proto.Read(authStream, req); err != nil {
 		return nil, fmt.Errorf("auth read request: %w", err)
+	}
+
+	cert, err := x509.ParseCertificate(req.ServerCertificate)
+	if err != nil {
+		perr := pberror.GetError(err)
+		if perr == nil {
+			perr = pberror.NewError(pberror.Code_AuthenticationFailed, "authentication failed: %v", err)
+		}
+		if err := proto.Write(authStream, &pbrelay.AuthenticateResp{Error: perr}); err != nil {
+			return nil, fmt.Errorf("relay auth err write: %w", err)
+		}
+		return nil, fmt.Errorf("auth failed: %w", perr)
 	}
 
 	protocol := model.GetRelayNextProto(c.conn)
@@ -484,7 +518,7 @@ func (c *relayConn) authenticate(ctx context.Context) (*relayConnAuth, error) {
 
 	c.logger.Debug("authentication completed", "local", c.conn.LocalAddr(), "remote", c.conn.RemoteAddr(), "proto", protocol, "build", req.BuildVersion)
 	hostports := model.HostPortFromPBs(req.Addresses)
-	return &relayConnAuth{id, auth, hostports}, nil
+	return &relayConnAuth{id, auth, hostports, cert}, nil
 }
 
 func (c *relayConn) runRelayClients(ctx context.Context) error {
