@@ -118,13 +118,15 @@ func ServerAddress(address string) Option {
 		if err != nil {
 			return fmt.Errorf("resolve control address: %w", err)
 		}
-		host, _, err := net.SplitHostPort(address)
-		if err != nil {
-			return fmt.Errorf("split control address: %w", err)
-		}
-
 		cfg.controlAddr = addr
-		cfg.controlHost = host
+
+		if cfg.controlHost == "" {
+			host, _, err := net.SplitHostPort(address)
+			if err != nil {
+				return fmt.Errorf("split control address: %w", err)
+			}
+			cfg.controlHost = host
+		}
 
 		return nil
 	}

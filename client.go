@@ -302,7 +302,7 @@ type session struct {
 }
 
 func (c *Client) connect(ctx context.Context, transport *quic.Transport, retoken []byte) (*session, error) {
-	c.logger.Debug("dialing target", "addr", c.controlAddr)
+	c.logger.Debug("dialing target", "addr", c.controlAddr, "name", c.controlHost)
 	conn, err := transport.Dial(ctx, c.controlAddr, &tls.Config{
 		ServerName: c.controlHost,
 		RootCAs:    c.controlCAs,
