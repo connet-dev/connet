@@ -133,7 +133,7 @@ Here is the full client `client.toml` configuration specification:
 token-file = "path/to/relay/token" # file that contains the auth token for the control server
 token = "client-token-1" # auth token for the control server (fallback when 'token-file' is not specified)
 # if both 'token-file' and 'token' are empty, will read 'CONNET_TOKEN' environment variable
-metadata = "home" # metadata associated with this client, to help distinguish different clients
+metadata = "home" # metadata sent when authenticating to help identify this client
 
 server-addr = "localhost:19190" # control server address (UDP/QUIC, host:port) (defaults to '127.0.0.1:19190')
 server-cas-file = "path/to/cert.pem" # control server TLS certificate authorities file, when not using public CAs
@@ -288,7 +288,7 @@ Here is the full relay server `relay.toml` configuration specification:
 token-file = "path/to/relay/token" # file that contains the auth token for the control server
 token = "relay-token-1" # auth token for the control server (fallback when 'token-file' is not specified)
 # one of token-file or token is required
-metadata = "home" # metadata associated with this relay, to help distinguish different relays
+metadata = "home" # metadata sent when authenticating to help identify this relay
 
 control-addr = "localhost:19189" # the control server address to connect to, defaults to localhost:19189
 control-cas-file = "path/to/ca/file.pem" # the public certificate root of the control server, no default, required when using self-signed certs
