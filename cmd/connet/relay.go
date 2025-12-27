@@ -21,6 +21,9 @@ type RelayConfig struct {
 
 	ControlAddr    string `toml:"control-addr"`
 	ControlCAsFile string `toml:"control-cas-file"`
+	ControlName    string `toml:"control-name"`
+
+	HandshakeIdleTimeout durationValue `toml:"handshake-idle-timeout"`
 
 	StatusAddr string `toml:"status-addr"`
 	StoreDir   string `toml:"store-dir"`
@@ -56,6 +59,9 @@ func relayCmd() *cobra.Command {
 
 	cmd.Flags().StringVar(&flagsConfig.Relay.ControlAddr, "control-addr", "", "control server address (UDP/QUIC, host:port) (defaults to '127.0.0.1:19189')")
 	cmd.Flags().StringVar(&flagsConfig.Relay.ControlCAsFile, "control-cas-file", "", "control server TLS certificate authorities file, when not using public CAs")
+	cmd.Flags().StringVar(&flagsConfig.Relay.ControlName, "control-name", "", "control server name (UDP/QUIC, host), when connecting via IP and certificate includes only domains (defaults to the host in 'server-addr')")
+
+	cmd.Flags().Var(&flagsConfig.Relay.HandshakeIdleTimeout, "handshake-idle-timeout", "default handshake idle timeout, use when there is a high latency to connect to the server (defaults to 5s)")
 
 	addStatusAddrFlag(cmd, &flagsConfig.Relay.StatusAddr)
 	addStoreDirFlag(cmd, &flagsConfig.Relay.StoreDir)
@@ -137,11 +143,19 @@ func relayRun(ctx context.Context, cfg RelayConfig, logger *slog.Logger) error {
 		relayCfg.ControlCAs = cas
 	}
 
-	controlHost, _, err := net.SplitHostPort(cfg.ControlAddr)
-	if err != nil {
-		return fmt.Errorf("split control address: %w", err)
+	if cfg.ControlName != "" {
+		relayCfg.ControlHost = cfg.ControlName
+	} else {
+		controlHost, _, err := net.SplitHostPort(cfg.ControlAddr)
+		if err != nil {
+			return fmt.Errorf("split control address: %w", err)
+		}
+		relayCfg.ControlHost = controlHost
 	}
-	relayCfg.ControlHost = controlHost
+
+	if cfg.HandshakeIdleTimeout > 0 {
+		relayCfg.HandshakeIdleTimeout = cfg.HandshakeIdleTimeout.get()
+	}
 
 	var statusAddr *net.TCPAddr
 	if cfg.StatusAddr != "" {
@@ -193,6 +207,9 @@ func (c *RelayConfig) merge(o RelayConfig) {
 
 	c.ControlAddr = override(c.ControlAddr, o.ControlAddr)
 	c.ControlCAsFile = override(c.ControlCAsFile, o.ControlCAsFile)
+	c.ControlName = override(c.ControlName, o.ControlName)
+
+	c.HandshakeIdleTimeout = override(c.HandshakeIdleTimeout, o.HandshakeIdleTimeout)
 
 	c.StatusAddr = override(c.StatusAddr, o.StatusAddr)
 	c.StoreDir = override(c.StoreDir, o.StoreDir)

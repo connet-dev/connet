@@ -112,7 +112,7 @@ func (r *relay) connect(ctx context.Context, hp model.HostPort) (*quic.Conn, err
 		RootCAs:      cfg.cas,
 		ServerName:   cfg.name,
 		NextProtos:   model.ConnectRelayControlNextProtos,
-	}, quicc.StdConfig)
+	}, quicc.ClientConfig(r.local.direct.handshakeIdleTimeout))
 	if err != nil {
 		return nil, err
 	}
@@ -239,7 +239,7 @@ func (r *directRelay) connect(ctx context.Context, hp model.HostPort) (*quic.Con
 		RootCAs:      cfg.cas,
 		ServerName:   cfg.name,
 		NextProtos:   model.ConnectRelayDirectNextProtos,
-	}, quicc.StdConfig)
+	}, quicc.ClientConfig(r.local.direct.handshakeIdleTimeout))
 	if err != nil {
 		return nil, err
 	}

@@ -8,6 +8,7 @@ import (
 	"log/slog"
 	"sync"
 	"sync/atomic"
+	"time"
 
 	"github.com/connet-dev/connet/model"
 	"github.com/connet-dev/connet/proto/pberror"
@@ -22,14 +23,18 @@ type directServer struct {
 
 	servers   map[string]*vServer
 	serversMu sync.RWMutex
+
+	handshakeIdleTimeout time.Duration
 }
 
-func newDirectServer(transport *quic.Transport, logger *slog.Logger) (*directServer, error) {
+func newDirectServer(transport *quic.Transport, handshakeIdleTimeout time.Duration, logger *slog.Logger) (*directServer, error) {
 	return &directServer{
 		transport: transport,
 		logger:    logger.With("component", "direct-server"),
 
 		servers: map[string]*vServer{},
+
+		handshakeIdleTimeout: handshakeIdleTimeout,
 	}, nil
 }
 
@@ -131,7 +136,7 @@ func (s *directServer) Run(ctx context.Context) error {
 		return conf, nil
 	}
 
-	l, err := s.transport.Listen(tlsConf, quicc.StdConfig)
+	l, err := s.transport.Listen(tlsConf, quicc.ServerConfig())
 	if err != nil {
 		return err
 	}

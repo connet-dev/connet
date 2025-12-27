@@ -314,7 +314,7 @@ func (p *remotePeerOutgoing) connect(ctx context.Context) (*quic.Conn, error) {
 			RootCAs:      p.serverConf.cas,
 			ServerName:   p.serverConf.name,
 			NextProtos:   model.ConnectDirectNextProtos,
-		}, quicc.StdConfig)
+		}, quicc.ClientConfig(p.parent.local.direct.handshakeIdleTimeout))
 		switch {
 		case isPeerTerminalError(err):
 			return nil, err
@@ -557,7 +557,7 @@ func (c *remotePeerDirectRelayConn) connect(ctx context.Context, spec remotePeer
 			RootCAs:      spec.serverConf.cas,
 			ServerName:   spec.serverConf.name,
 			NextProtos:   model.ConnectRelayDirectNextProtos,
-		}, quicc.StdConfig)
+		}, quicc.ClientConfig(c.parent.parent.local.direct.handshakeIdleTimeout))
 		if err != nil {
 			errs = append(errs, err)
 			continue

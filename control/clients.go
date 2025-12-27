@@ -250,7 +250,7 @@ func (s *clientServer) runListener(ctx context.Context, ingress Ingress) error {
 		tlsConf.NextProtos = model.ClientNextProtos
 	}
 
-	quicConf := quicc.StdConfig
+	quicConf := quicc.ServerConfig()
 	if ingress.Restr.IsNotEmpty() {
 		quicConf = quicConf.Clone()
 		quicConf.GetConfigForClient = func(info *quic.ClientInfo) (*quic.Config, error) {

@@ -11,6 +11,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"time"
 
 	"github.com/connet-dev/connet/nat"
 	"github.com/quic-go/quic-go"
@@ -26,7 +27,8 @@ type config struct {
 	directAddr     *net.UDPAddr
 	directResetKey *quic.StatelessResetKey
 
-	natPMP nat.PMPConfig
+	natPMP               nat.PMPConfig
+	handshakeIdleTimeout time.Duration
 
 	logger *slog.Logger
 }
@@ -52,7 +54,7 @@ func newConfig(opts []Option) (*config, error) {
 	}
 
 	if cfg.controlAddr == nil {
-		if err := ControlAddress("127.0.0.1:19190")(cfg); err != nil {
+		if err := ServerAddress("127.0.0.1:19190")(cfg); err != nil {
 			return nil, fmt.Errorf("default control address: %w", err)
 		}
 	}
@@ -96,8 +98,8 @@ func TokenFromEnv() Option {
 	}
 }
 
-// ControlAddress configures the control server address
-func ControlAddress(address string) Option {
+// ServerAddress configures the control server address
+func ServerAddress(address string) Option {
 	return func(cfg *config) error {
 		if i := strings.LastIndex(address, ":"); i < 0 {
 			// missing :port, lets give it the default
@@ -107,20 +109,22 @@ func ControlAddress(address string) Option {
 		if err != nil {
 			return fmt.Errorf("resolve control address: %w", err)
 		}
-		host, _, err := net.SplitHostPort(address)
-		if err != nil {
-			return fmt.Errorf("split control address: %w", err)
-		}
-
 		cfg.controlAddr = addr
-		cfg.controlHost = host
+
+		if cfg.controlHost == "" {
+			host, _, err := net.SplitHostPort(address)
+			if err != nil {
+				return fmt.Errorf("split control address: %w", err)
+			}
+			cfg.controlHost = host
+		}
 
 		return nil
 	}
 }
 
-// ControlCAsFile reads from a file and configures the control server CAs. Used in cases where control server is not using PKIX.
-func ControlCAsFile(certFile string) Option {
+// ServerCAsFile reads from a file and configures the control server CAs. Used in cases where control server is not using PKIX.
+func ServerCAsFile(certFile string) Option {
 	return func(cfg *config) error {
 		casData, err := os.ReadFile(certFile)
 		if err != nil {
@@ -138,10 +142,19 @@ func ControlCAsFile(certFile string) Option {
 	}
 }
 
-// ControlCAsFile configures the control server CAs. Used in cases where control server is not using PKIX.
-func ControlCAs(cas *x509.CertPool) Option {
+// ServerCAs configures the control server CAs. Used in cases where control server is not using PKIX.
+func ServerCAs(cas *x509.CertPool) Option {
 	return func(cfg *config) error {
 		cfg.controlCAs = cas
+
+		return nil
+	}
+}
+
+// ServerName configures the server name to use in TLS when connecting to the control server
+func ServerName(name string) Option {
+	return func(cfg *config) error {
+		cfg.controlHost = name
 
 		return nil
 	}
@@ -252,6 +265,15 @@ func DirectStatelessResetKeyFromEnv() Option {
 func NatPMPConfig(pmp nat.PMPConfig) Option {
 	return func(cfg *config) error {
 		cfg.natPMP = pmp
+		return nil
+	}
+}
+
+// HandshakeIdleTimeout configures the handshake idle timeout to use by default when connecting to control/relay/peers
+func HandshakeIdleTimeout(d time.Duration) Option {
+	return func(cfg *config) error {
+		cfg.handshakeIdleTimeout = d
+
 		return nil
 	}
 }

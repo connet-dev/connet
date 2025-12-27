@@ -124,7 +124,7 @@ func (c *Client) runClient(ctx context.Context, errCh chan error) {
 		}
 	}()
 
-	ds, err := newDirectServer(transport, c.logger)
+	ds, err := newDirectServer(transport, c.handshakeIdleTimeout, c.logger)
 	if err != nil {
 		errCh <- fmt.Errorf("create direct server: %w", err)
 		return
@@ -302,12 +302,12 @@ type session struct {
 }
 
 func (c *Client) connect(ctx context.Context, transport *quic.Transport, retoken []byte) (*session, error) {
-	c.logger.Debug("dialing target", "addr", c.controlAddr)
+	c.logger.Debug("dialing target", "addr", c.controlAddr, "name", c.controlHost)
 	conn, err := transport.Dial(ctx, c.controlAddr, &tls.Config{
 		ServerName: c.controlHost,
 		RootCAs:    c.controlCAs,
 		NextProtos: model.ClientNextProtos,
-	}, quicc.StdConfig)
+	}, quicc.ClientConfig(c.handshakeIdleTimeout))
 	if err != nil {
 		return nil, fmt.Errorf("dial server %s: %w", c.controlAddr, err)
 	}

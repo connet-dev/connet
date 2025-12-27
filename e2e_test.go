@@ -222,8 +222,8 @@ func TestE2E(t *testing.T) {
 	t.Run("deny-ip", func(t *testing.T) {
 		clIPDeny, err := Connect(ctx,
 			Token("test-token-deny-ip"),
-			ControlAddress("localhost:20000"),
-			ControlCAs(cas),
+			ServerAddress("localhost:20000"),
+			ServerCAs(cas),
 			DirectAddress(":20002"),
 			Logger(logger.With("test", "cl-ip-deny")),
 		)
@@ -233,8 +233,8 @@ func TestE2E(t *testing.T) {
 	t.Run("deny-name", func(t *testing.T) {
 		clNameDeny, err := Connect(ctx,
 			Token("test-token-deny-name"),
-			ControlAddress("localhost:20000"),
-			ControlCAs(cas),
+			ServerAddress("localhost:20000"),
+			ServerCAs(cas),
 			DirectAddress(":20002"),
 			Logger(logger.With("test", "cl-name-deny")),
 		)
@@ -248,8 +248,8 @@ func TestE2E(t *testing.T) {
 	t.Run("deny-role", func(t *testing.T) {
 		clRoleDeny, err := Connect(ctx,
 			Token("test-token-deny-role"),
-			ControlAddress("localhost:20000"),
-			ControlCAs(cas),
+			ServerAddress("localhost:20000"),
+			ServerCAs(cas),
 			DirectAddress(":20003"),
 			Logger(logger.With("test", "cl-role-deny")),
 		)
@@ -263,8 +263,8 @@ func TestE2E(t *testing.T) {
 	t.Run("close-client", func(t *testing.T) {
 		cl, err := Connect(ctx,
 			Token("test-token-dst"),
-			ControlAddress("localhost:20000"),
-			ControlCAs(cas),
+			ServerAddress("localhost:20000"),
+			ServerCAs(cas),
 			DirectAddress(":20002"),
 			Logger(logger.With("test", "cl-dst")),
 		)
@@ -307,8 +307,8 @@ func TestE2E(t *testing.T) {
 		clCtx, clCancel := context.WithCancel(ctx)
 		cl, err := Connect(clCtx,
 			Token("test-token-dst"),
-			ControlAddress("localhost:20000"),
-			ControlCAs(cas),
+			ServerAddress("localhost:20000"),
+			ServerCAs(cas),
 			DirectAddress(":20002"),
 			Logger(logger.With("test", "cl-dst")),
 		)
@@ -358,8 +358,8 @@ func TestE2E(t *testing.T) {
 	t.Run("close-dst", func(t *testing.T) {
 		cl, err := Connect(ctx,
 			Token("test-token-dst"),
-			ControlAddress("localhost:20000"),
-			ControlCAs(cas),
+			ServerAddress("localhost:20000"),
+			ServerCAs(cas),
 			DirectAddress(":20002"),
 			Logger(logger.With("test", "cl-dst")),
 		)
@@ -375,8 +375,8 @@ func TestE2E(t *testing.T) {
 	t.Run("cancel-dst", func(t *testing.T) {
 		cl, err := Connect(ctx,
 			Token("test-token-dst"),
-			ControlAddress("localhost:20000"),
-			ControlCAs(cas),
+			ServerAddress("localhost:20000"),
+			ServerCAs(cas),
 			DirectAddress(":20002"),
 			Logger(logger.With("test", "cl-dst")),
 		)
@@ -401,8 +401,8 @@ func TestE2E(t *testing.T) {
 
 	clDst, err := Connect(ctx,
 		Token("test-token-dst"),
-		ControlAddress("localhost:20000"),
-		ControlCAs(cas),
+		ServerAddress("localhost:20000"),
+		ServerCAs(cas),
 		DirectAddress(":20002"),
 		Logger(logger.With("test", "cl-dst")),
 	)
@@ -410,8 +410,8 @@ func TestE2E(t *testing.T) {
 
 	clSrc, err := Connect(ctx,
 		Token("test-token-src"),
-		ControlAddress("localhost:20000"),
-		ControlCAs(cas),
+		ServerAddress("localhost:20000"),
+		ServerCAs(cas),
 		DirectAddress(":20003"),
 		Logger(logger.With("test", "cl-src")),
 	)

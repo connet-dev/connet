@@ -10,6 +10,7 @@ import (
 	"maps"
 	"net"
 	"slices"
+	"time"
 
 	"github.com/connet-dev/connet/certc"
 	"github.com/connet-dev/connet/iterc"
@@ -26,6 +27,8 @@ type Config struct {
 	ControlHost  string
 	ControlToken string
 	ControlCAs   *x509.CertPool
+
+	HandshakeIdleTimeout time.Duration
 
 	Ingress []Ingress
 
