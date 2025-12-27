@@ -95,8 +95,9 @@ func (s *Server) getClients() ([]StatusClient, error) {
 	var clients []StatusClient
 	for _, msg := range clientMsgs {
 		clients = append(clients, StatusClient{
-			ID:   msg.Key.ID,
-			Addr: msg.Value.Addr,
+			ID:       msg.Key.ID,
+			Addr:     msg.Value.Addr,
+			Metadata: msg.Value.Metadata,
 		})
 	}
 
@@ -132,6 +133,7 @@ func (s *Server) getRelays() ([]StatusRelay, error) {
 		relays = append(relays, StatusRelay{
 			ID:        msg.Key.ID,
 			Hostports: iterc.MapSlice(msg.Value.Hostports, model.HostPort.String),
+			Metadata:  msg.Value.Metadata,
 		})
 	}
 
@@ -146,8 +148,9 @@ type Status struct {
 }
 
 type StatusClient struct {
-	ID   ClientID `json:"id"`
-	Addr string   `json:"addr"`
+	ID       ClientID `json:"id"`
+	Addr     string   `json:"addr"`
+	Metadata string   `json:"metadata"`
 }
 
 type StatusPeer struct {
@@ -159,4 +162,5 @@ type StatusPeer struct {
 type StatusRelay struct {
 	ID        RelayID  `json:"id"`
 	Hostports []string `json:"hostport"`
+	Metadata  string   `json:"metadata"`
 }
