@@ -10,7 +10,6 @@ import (
 	"net/url"
 	"os"
 	"slices"
-	"time"
 
 	"github.com/connet-dev/connet"
 	"github.com/connet-dev/connet/model"
@@ -56,9 +55,9 @@ type DestinationConfig struct {
 }
 
 type SourceConfig struct {
-	Route            string   `toml:"route"`
-	RelayEncryptions []string `toml:"relay-encryptions"`
-	DialTimeout      int      `toml:"dial-timeout"`
+	Route            string        `toml:"route"`
+	RelayEncryptions []string      `toml:"relay-encryptions"`
+	DialTimeout      durationValue `toml:"dial-timeout"`
 
 	URL      string `toml:"url"`
 	CertFile string `toml:"cert-file"` // tls/https server cert
@@ -320,7 +319,7 @@ func (fc DestinationConfig) parse(name string, defaultRelayEncryptions []model.E
 		WithRoute(route).
 		WithProxy(proxy).
 		WithRelayEncryptions(relayEncryptions...).
-		WithDialTimeout(time.Duration(fc.DialTimeout) * time.Millisecond)
+		WithDialTimeout(fc.DialTimeout.get())
 
 	targetURL, err := url.Parse(fc.URL)
 	if err != nil {
@@ -430,7 +429,7 @@ func (fc SourceConfig) parse(name string, defaultRelayEncryptions []model.Encryp
 	cfg := connet.NewSourceConfig(name).
 		WithRoute(route).
 		WithRelayEncryptions(relayEncryptions...).
-		WithDialTimeout(time.Duration(fc.DialTimeout)*time.Millisecond).
+		WithDialTimeout(fc.DialTimeout.get()).
 		WithLoadBalance(lbPolicy, lbRetry, fc.LBRetryMax)
 
 	targetURL, err := url.Parse(fc.URL)

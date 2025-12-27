@@ -152,7 +152,7 @@ relay-encryptions = ["none"] # require encryption when using relay for all desti
 route = "any" # what kind of routes to use, `any` will use both `direct` and `relay`
 relay-encryptions = ["tls", "dhxcp"] # require `tls` or `dhxcp` encryption when using relay for this destination
 proxy-proto-version = "" # proxy proto version to push origin information to the server, supports `v1` and `v2`
-dial-timeout = 0 # if URL is network connection, how long to wait for connection to establish (in ms, defaults to 0, wait forever)
+dial-timeout = "2s" # if URL is network connection, how long to wait for connection to establish (defaults to 0, wait forever)
 url = "tcp://localhost:3000" # URL to which destination connects to, over tcp
 # other options for the url field:
 url = "tls://localhost:3000" # a TLS destination to connect to
