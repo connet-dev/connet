@@ -16,6 +16,7 @@ import (
 type RelayConfig struct {
 	TokenFile string `toml:"token-file"`
 	Token     string `toml:"token"`
+	Metadata  string `toml:"metadata"`
 
 	Ingresses []RelayIngress `toml:"ingress"`
 
@@ -49,6 +50,7 @@ func relayCmd() *cobra.Command {
 
 	cmd.Flags().StringVar(&flagsConfig.Relay.TokenFile, "token-file", "", "file that contains the auth token for the control server")
 	cmd.Flags().StringVar(&flagsConfig.Relay.Token, "token", "", "auth token for the control server (fallback when 'token-file' is not specified)")
+	cmd.Flags().StringVar(&flagsConfig.Relay.Metadata, "metadata", "", "metadata sent when authenticating to help identify this relay")
 
 	var ingress RelayIngress
 	cmd.Flags().StringVar(&ingress.Addr, "addr", "", "clients server address to listen for connections (UDP/QUIC, [host]:port) (defaults to ':19191')")
@@ -102,6 +104,7 @@ func relayRun(ctx context.Context, cfg RelayConfig, logger *slog.Logger) error {
 	} else {
 		relayCfg.ControlToken = cfg.Token
 	}
+	relayCfg.Metadata = cfg.Metadata
 
 	if len(cfg.Ingresses) == 0 {
 		cfg.Ingresses = append(cfg.Ingresses, RelayIngress{})
@@ -202,6 +205,7 @@ func (c *RelayConfig) merge(o RelayConfig) {
 		c.Token = o.Token
 		c.TokenFile = o.TokenFile
 	}
+	c.Metadata = override(c.Metadata, o.Metadata)
 
 	c.Ingresses = mergeSlices(c.Ingresses, o.Ingresses)
 

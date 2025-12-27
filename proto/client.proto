@@ -10,6 +10,7 @@ message AuthenticateReq {
   string token = 1;
   bytes reconnect_token = 2;
   string build_version = 3;
+  string metadata = 4;
 }
 
 message AuthenticateResp {

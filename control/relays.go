@@ -368,9 +368,11 @@ type relayConnAuth struct {
 	id        RelayID
 	auth      RelayAuthentication
 	hostports []model.HostPort
+	metadata  string
 }
 
 func (c *relayConn) run(ctx context.Context) {
+	c.logger.Debug("new relay connection", "proto", c.conn.ConnectionState().TLS.NegotiatedProtocol, "remote", c.conn.RemoteAddr())
 	defer func() {
 		if err := c.conn.CloseWithError(quic.ApplicationErrorCode(pberror.Code_Unknown), "connection closed"); err != nil {
 			slogc.Fine(c.logger, "error closing connection", "err", err)
@@ -396,6 +398,7 @@ func (c *relayConn) runErr(ctx context.Context) error {
 		c.relayConnAuth = *rauth
 		c.logger = c.logger.With("relay", c.hostports)
 	}
+	c.logger.Info("new relay connected", "addr", c.conn.RemoteAddr(), "metadata", c.metadata)
 
 	endpoints, err := c.server.stores.RelayEndpoints(c.id)
 	if err != nil {
@@ -409,7 +412,7 @@ func (c *relayConn) runErr(ctx context.Context) error {
 	c.endpoints = endpoints
 
 	key := RelayConnKey{ID: c.id}
-	value := RelayConnValue{Authentication: c.auth, Hostports: c.hostports}
+	value := RelayConnValue{c.auth, c.hostports, c.metadata}
 	if err := c.server.conns.Put(key, value); err != nil {
 		return err
 	}
@@ -484,7 +487,7 @@ func (c *relayConn) authenticate(ctx context.Context) (*relayConnAuth, error) {
 
 	c.logger.Debug("authentication completed", "local", c.conn.LocalAddr(), "remote", c.conn.RemoteAddr(), "proto", protocol, "build", req.BuildVersion)
 	hostports := model.HostPortFromPBs(req.Addresses)
-	return &relayConnAuth{id, auth, hostports}, nil
+	return &relayConnAuth{id, auth, hostports, req.Metadata}, nil
 }
 
 func (c *relayConn) runRelayClients(ctx context.Context) error {

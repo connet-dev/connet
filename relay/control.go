@@ -31,6 +31,7 @@ import (
 type controlClient struct {
 	hostports []model.HostPort
 	root      *certc.Cert
+	metadata  string
 
 	controlAddr          *net.UDPAddr
 	controlToken         string
@@ -99,6 +100,7 @@ func newControlClient(cfg Config, configStore logc.KV[ConfigKey, ConfigValue]) (
 	c := &controlClient{
 		hostports: hostports,
 		root:      root,
+		metadata:  cfg.Metadata,
 
 		controlAddr:  cfg.ControlAddr,
 		controlToken: cfg.ControlToken,
@@ -256,6 +258,7 @@ func (s *controlClient) connectSingle(ctx context.Context, transport *quic.Trans
 		Addresses:      iterc.MapSlice(s.hostports, model.HostPort.PB),
 		ReconnectToken: reconnConfig.Bytes,
 		BuildVersion:   model.BuildVersion(),
+		Metadata:       s.metadata,
 	}); err != nil {
 		return nil, fmt.Errorf("auth write error: %w", err)
 	}

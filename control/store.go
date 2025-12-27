@@ -87,6 +87,7 @@ type ClientConnKey struct {
 type ClientConnValue struct {
 	Authentication ClientAuthentication `json:"authentication"`
 	Addr           string               `json:"addr"`
+	Metadata       string               `json:"metadata"`
 }
 
 type ClientPeerKey struct {
@@ -111,6 +112,7 @@ type RelayConnKey struct {
 type RelayConnValue struct {
 	Authentication RelayAuthentication `json:"authentication"`
 	Hostports      []model.HostPort    `json:"hostports"`
+	Metadata       string              `json:"metadata"`
 }
 
 type RelayClientKey struct {
