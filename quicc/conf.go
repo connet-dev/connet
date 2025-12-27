@@ -26,9 +26,21 @@ func ServerTransport(conn net.PacketConn, statelessResetKey *quic.StatelessReset
 	}
 }
 
-var StdConfig = &quic.Config{
-	MaxIdleTimeout:  20 * time.Second,
-	KeepAlivePeriod: 10 * time.Second,
-	Versions:        []quic.Version{quic.Version1},
-	// TODO review other options
+func ClientConfig(handshakeIdleTimeout time.Duration) *quic.Config {
+	return &quic.Config{
+		HandshakeIdleTimeout: handshakeIdleTimeout,
+		MaxIdleTimeout:       20 * time.Second,
+		KeepAlivePeriod:      10 * time.Second,
+		Versions:             []quic.Version{quic.Version1},
+		// TODO review other options
+	}
+}
+
+func ServerConfig() *quic.Config {
+	return &quic.Config{
+		MaxIdleTimeout:  20 * time.Second,
+		KeepAlivePeriod: 10 * time.Second,
+		Versions:        []quic.Version{quic.Version1},
+		// TODO review other options
+	}
 }

@@ -32,9 +32,10 @@ type controlClient struct {
 	hostports []model.HostPort
 	root      *certc.Cert
 
-	controlAddr    *net.UDPAddr
-	controlToken   string
-	controlTLSConf *tls.Config
+	controlAddr             *net.UDPAddr
+	controlToken            string
+	controlTLSConf          *tls.Config
+	controlHandshakeTimeout time.Duration
 
 	config  logc.KV[ConfigKey, ConfigValue]
 	clients logc.KV[ClientKey, ClientValue]
@@ -106,6 +107,7 @@ func newControlClient(cfg Config, configStore logc.KV[ConfigKey, ConfigValue]) (
 			RootCAs:    cfg.ControlCAs,
 			NextProtos: model.RelayNextProtos,
 		},
+		controlHandshakeTimeout: cfg.DefaultHandshakeIdleTimeout,
 
 		config:  configStore,
 		clients: clients,
@@ -234,7 +236,7 @@ func (s *controlClient) connect(ctx context.Context, tfn TransportsFn) (*quic.Co
 }
 
 func (s *controlClient) connectSingle(ctx context.Context, transport *quic.Transport, reconnConfig ConfigValue) (*quic.Conn, error) {
-	conn, err := transport.Dial(ctx, s.controlAddr, s.controlTLSConf, quicc.StdConfig)
+	conn, err := transport.Dial(ctx, s.controlAddr, s.controlTLSConf, quicc.ClientConfig(s.controlHandshakeTimeout))
 	if err != nil {
 		return nil, fmt.Errorf("cannot dial: %w", err)
 	}

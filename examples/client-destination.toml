@@ -1,6 +1,7 @@
 log-level = "debug"
 
 [client]
+default-handshake-timeout = "20s"
 token-file = "examples/client-token.secret"
 server-cas-file = ".direnv/minica.pem"
 

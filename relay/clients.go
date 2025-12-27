@@ -204,7 +204,7 @@ func (s *clientsServer) run(ctx context.Context, cfg clientsServerCfg) error {
 	cfg.addedTransport(transport)
 	defer cfg.removeTransport(transport)
 
-	quicConf := quicc.StdConfig
+	quicConf := quicc.ServerConfig()
 	if cfg.ingress.Restr.IsNotEmpty() {
 		quicConf = quicConf.Clone()
 		quicConf.GetConfigForClient = func(info *quic.ClientInfo) (*quic.Config, error) {

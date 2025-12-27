@@ -289,7 +289,7 @@ func (p *remotePeerOutgoing) connect(ctx context.Context) (*quic.Conn, error) {
 			RootCAs:      p.serverConf.cas,
 			ServerName:   p.serverConf.name,
 			NextProtos:   model.ConnectDirectNextProtos,
-		}, quicc.StdConfig)
+		}, quicc.ClientConfig(p.parent.local.direct.handshakeIdleTimeout))
 		switch {
 		case isPeerTerminalError(err):
 			return nil, err

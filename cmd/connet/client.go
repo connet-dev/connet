@@ -28,12 +28,15 @@ type ClientConfig struct {
 
 	ServerAddr    string `toml:"server-addr"`
 	ServerCAsFile string `toml:"server-cas-file"`
+	ServerName    string `toml:"server-name"`
 
 	DirectAddr         string `toml:"direct-addr"`
 	DirectResetKey     string `toml:"direct-stateless-reset-key"`
 	DirectResetKeyFile string `toml:"direct-stateless-reset-key-file"`
-	StatusAddr         string `toml:"status-addr"`
-	NatPMP             string `toml:"nat-pmp"`
+
+	StatusAddr              string        `toml:"status-addr"`
+	NatPMP                  string        `toml:"nat-pmp"`
+	DefaultHandshakeTimeout durationValue `toml:"default-handshake-timeout"`
 
 	RelayEncryptions []string                     `toml:"relay-encryptions"`
 	Destinations     map[string]DestinationConfig `toml:"destinations"`
@@ -41,10 +44,10 @@ type ClientConfig struct {
 }
 
 type DestinationConfig struct {
-	Route             string   `toml:"route"`
-	RelayEncryptions  []string `toml:"relay-encryptions"`
-	ProxyProtoVersion string   `toml:"proxy-proto-version"`
-	DialTimeout       int      `toml:"dial-timeout"`
+	Route             string        `toml:"route"`
+	RelayEncryptions  []string      `toml:"relay-encryptions"`
+	ProxyProtoVersion string        `toml:"proxy-proto-version"`
+	DialTimeout       durationValue `toml:"dial-timeout"`
 
 	URL      string `toml:"url"`
 	CAsFile  string `toml:"cas-file"`  // tls/https server certificate authority, literal "insecure-skip-verify" to skip
@@ -86,10 +89,14 @@ func clientCmd() *cobra.Command {
 	cmd.Flags().StringVar(&flagsConfig.Client.Token, "token", "", `auth token for the control server (fallback when 'token-file' is not specified)
   if both 'token-file' and 'token' are empty, will read CONNET_TOKEN environment variable`)
 
+	cmd.Flags().Var(&flagsConfig.Client.DefaultHandshakeTimeout, "default-handshake-timeout", "default handshake idle timeout, when there is a high latency to connect (defaults to 5s)")
+
 	cmd.Flags().StringVar(&flagsConfig.Client.ServerAddr, "server-addr", "", "control server address (UDP/QUIC, host:port) (defaults to '127.0.0.1:19190')")
 	cmd.Flags().StringVar(&flagsConfig.Client.ServerCAsFile, "server-cas-file", "", "control server TLS certificate authorities file, when not using public CAs")
+	cmd.Flags().StringVar(&flagsConfig.Client.ServerName, "server-name", "", "control server name (UDP/QUIC, host), when connecting via IP and certificate includes only domains (defaults to the host in 'server-addr')")
 
 	cmd.Flags().StringVar(&flagsConfig.Client.DirectAddr, "direct-addr", "", "direct server address to listen for peer connections (UDP/QUIC, [host]:port) (defaults to ':19192')")
+
 	addStatusAddrFlag(cmd, &flagsConfig.Client.StatusAddr)
 	cmd.Flags().StringVar(&flagsConfig.Client.NatPMP, "nat-pmp", "", "nat-pmp behavior, one of [system, dial, disabled] (defaults to 'system')")
 
@@ -156,10 +163,13 @@ func clientRun(ctx context.Context, cfg ClientConfig, logger *slog.Logger) error
 	}
 
 	if cfg.ServerAddr != "" {
-		opts = append(opts, connet.ControlAddress(cfg.ServerAddr))
+		opts = append(opts, connet.ServerAddress(cfg.ServerAddr))
 	}
 	if cfg.ServerCAsFile != "" {
-		opts = append(opts, connet.ControlCAsFile(cfg.ServerCAsFile))
+		opts = append(opts, connet.ServerCAsFile(cfg.ServerCAsFile))
+	}
+	if cfg.ServerName != "" {
+		opts = append(opts, connet.ServerName(cfg.ServerName))
 	}
 
 	if cfg.DirectAddr != "" {
@@ -203,6 +213,10 @@ func clientRun(ctx context.Context, cfg ClientConfig, logger *slog.Logger) error
 		return fmt.Errorf("invalid Nat-PMP config option: %s", cfg.NatPMP)
 	}
 	opts = append(opts, connet.NatPMPConfig(pmpCfg))
+
+	if cfg.DefaultHandshakeTimeout > 0 {
+		opts = append(opts, connet.DefaultHandshakeIdleTimeout(cfg.DefaultHandshakeTimeout.get()))
+	}
 
 	var defaultRelayEncryptions = []model.EncryptionScheme{model.NoEncryption}
 	if len(cfg.RelayEncryptions) > 0 {
@@ -537,14 +551,17 @@ func (c *ClientConfig) merge(o ClientConfig) {
 
 	c.ServerAddr = override(c.ServerAddr, o.ServerAddr)
 	c.ServerCAsFile = override(c.ServerCAsFile, o.ServerCAsFile)
+	c.ServerName = override(c.ServerName, o.ServerName)
 
 	c.DirectAddr = override(c.DirectAddr, o.DirectAddr)
 	if o.DirectResetKey != "" || o.DirectResetKeyFile != "" {
 		c.DirectResetKey = o.DirectResetKey
 		c.DirectResetKeyFile = o.DirectResetKeyFile
 	}
+
 	c.StatusAddr = override(c.StatusAddr, o.StatusAddr)
 	c.NatPMP = override(c.NatPMP, o.NatPMP)
+	c.DefaultHandshakeTimeout = override(c.DefaultHandshakeTimeout, o.DefaultHandshakeTimeout)
 
 	c.RelayEncryptions = overrides(c.RelayEncryptions, o.RelayEncryptions)
 

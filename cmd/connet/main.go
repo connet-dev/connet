@@ -14,6 +14,7 @@ import (
 	"os/signal"
 	"strings"
 	"syscall"
+	"time"
 
 	"github.com/connet-dev/connet/model"
 	"github.com/connet-dev/connet/netc"
@@ -276,4 +277,31 @@ func runWithStatus[T any](ctx context.Context, srv withStatus[T], statusAddr *ne
 		return statusc.Run(ctx, statusAddr, srv.Status)
 	})
 	return g.Wait()
+}
+
+type durationValue time.Duration
+
+func (d *durationValue) UnmarshalText(b []byte) error {
+	x, err := time.ParseDuration(string(b))
+	if err != nil {
+		return err
+	}
+	*d = durationValue(x)
+	return nil
+}
+
+func (d *durationValue) Set(s string) error {
+	v, err := time.ParseDuration(s)
+	*d = durationValue(v)
+	return err
+}
+
+func (d *durationValue) Type() string {
+	return "duration"
+}
+
+func (d *durationValue) String() string { return (*time.Duration)(d).String() }
+
+func (d *durationValue) get() time.Duration {
+	return time.Duration(*d)
 }

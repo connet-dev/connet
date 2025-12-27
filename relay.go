@@ -107,7 +107,7 @@ func (r *relay) connect(ctx context.Context, hp model.HostPort) (*quic.Conn, err
 		RootCAs:      cfg.cas,
 		ServerName:   cfg.name,
 		NextProtos:   model.ConnectRelayNextProtos,
-	}, quicc.StdConfig)
+	}, quicc.ClientConfig(r.local.direct.handshakeIdleTimeout))
 	if err != nil {
 		return nil, err
 	}

@@ -136,12 +136,15 @@ token = "client-token-1" # auth token for the control server (fallback when 'tok
 
 server-addr = "localhost:19190" # control server address (UDP/QUIC, host:port) (defaults to '127.0.0.1:19190')
 server-cas-file = "path/to/cert.pem" # control server TLS certificate authorities file, when not using public CAs
+server-name = "localhost" # control server name (UDP/QUIC, host), when connecting via IP and certificate includes only domains (defaults to the host in 'server-addr')
 
 direct-addr = ":19192" # direct server address to listen for peer connections (UDP/QUIC, [host]:port) (defaults to ':19192')
 direct-stateless-reset-key = "" # the QUIC stateless reset key as a literal 32 byte value in base32hex format
 direct-stateless-reset-key-file = "/path/to/reset/key" # the QUIC stateless reset key read from a file
+
 status-addr = "127.0.0.1:19182" # status server address to listen for connections (TCP/HTTP, [host]:port) (disabled by default)
 nat-pmp = "system" # support for NAT-PMP, defaults to `system`
+default-handshake-timeout = "50s" # quic handshake idle timeout, when there is a high latency to connect (defaults to 5s)
 
 relay-encryptions = ["none"] # require encryption when using relay for all destination/sources, defaults to "none"
 
@@ -149,7 +152,7 @@ relay-encryptions = ["none"] # require encryption when using relay for all desti
 route = "any" # what kind of routes to use, `any` will use both `direct` and `relay`
 relay-encryptions = ["tls", "dhxcp"] # require `tls` or `dhxcp` encryption when using relay for this destination
 proxy-proto-version = "" # proxy proto version to push origin information to the server, supports `v1` and `v2`
-dial-timeout = 0 # if URL is network connection, how long to wait for connection to establish, defaults to 0 (wait forever)
+dial-timeout = 0 # if URL is network connection, how long to wait for connection to establish (in ms, defaults to 0, wait forever)
 url = "tcp://localhost:3000" # URL to which destination connects to, over tcp
 # other options for the url field:
 url = "tls://localhost:3000" # a TLS destination to connect to
@@ -287,6 +290,8 @@ token = "relay-token-1" # auth token for the control server (fallback when 'toke
 
 control-addr = "localhost:19189" # the control server address to connect to, defaults to localhost:19189
 control-cas-file = "path/to/ca/file.pem" # the public certificate root of the control server, no default, required when using self-signed certs
+
+default-handshake-timeout = "50s" # quic handshake idle timeout, when there is a high latency to connect (defaults to 5s)
 
 status-addr = "127.0.0.1:19181" # address to listen for incoming status connections (TCP/HTTP, [host]:port) (disabled by default)
 store-dir = "path/to/relay-store" # directory for this relay server to persist runtime information, see Storage section for more info
