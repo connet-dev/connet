@@ -87,6 +87,7 @@ type ClientConnKey struct {
 type ClientConnValue struct {
 	Authentication ClientAuthentication `json:"authentication"`
 	Addr           string               `json:"addr"`
+	Metadata       string               `json:"metadata"`
 }
 
 type ClientPeerKey struct {
@@ -111,12 +112,14 @@ type RelayConnKey struct {
 type RelayConnValue struct {
 	Authentication    RelayAuthentication `json:"authentication"`
 	Hostports         []model.HostPort    `json:"hostports"`
+	Metadata          string              `json:"metadata"`
 	ServerCertificate *x509.Certificate   `json:"server_certificate"`
 }
 
 type jsonRelayConnValue struct {
 	Authentication    RelayAuthentication `json:"authentication"`
 	Hostports         []model.HostPort    `json:"hostports"`
+	Metadata          string              `json:"metadata"`
 	ServerCertificate []byte              `json:"server_certificate"`
 }
 
@@ -124,6 +127,7 @@ func (v RelayConnValue) MarshalJSON() ([]byte, error) {
 	return json.Marshal(jsonRelayConnValue{
 		Authentication:    v.Authentication,
 		Hostports:         v.Hostports,
+		Metadata:          v.Metadata,
 		ServerCertificate: v.ServerCertificate.Raw,
 	})
 }
@@ -139,7 +143,7 @@ func (v *RelayConnValue) UnmarshalJSON(b []byte) error {
 		return err
 	}
 
-	*v = RelayConnValue{s.Authentication, s.Hostports, cert}
+	*v = RelayConnValue{s.Authentication, s.Hostports, s.Metadata, cert}
 	return nil
 }
 

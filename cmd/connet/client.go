@@ -24,6 +24,7 @@ import (
 type ClientConfig struct {
 	TokenFile string `toml:"token-file"`
 	Token     string `toml:"token"`
+	Metadata  string `toml:"metadata"`
 
 	ServerAddr    string `toml:"server-addr"`
 	ServerCAsFile string `toml:"server-cas-file"`
@@ -87,6 +88,7 @@ func clientCmd() *cobra.Command {
 	cmd.Flags().StringVar(&flagsConfig.Client.TokenFile, "token-file", "", "file that contains the auth token for the control server")
 	cmd.Flags().StringVar(&flagsConfig.Client.Token, "token", "", `auth token for the control server (fallback when 'token-file' is not specified)
   if both 'token-file' and 'token' are empty, will read CONNET_TOKEN environment variable`)
+	cmd.Flags().StringVar(&flagsConfig.Client.Metadata, "metadata", "", "metadata sent when authenticating to help identify this client")
 
 	cmd.Flags().Var(&flagsConfig.Client.HandshakeIdleTimeout, "handshake-idle-timeout", "default handshake idle timeout, when there is a high latency to connect (defaults to 5s)")
 
@@ -159,6 +161,9 @@ func clientRun(ctx context.Context, cfg ClientConfig, logger *slog.Logger) error
 		opts = append(opts, connet.Token(tokens[0]))
 	} else {
 		opts = append(opts, connet.Token(cfg.Token))
+	}
+	if cfg.Metadata != "" {
+		opts = append(opts, connet.Metadata(cfg.Metadata))
 	}
 
 	if cfg.ServerAddr != "" {
@@ -547,6 +552,7 @@ func (c *ClientConfig) merge(o ClientConfig) {
 		c.Token = o.Token
 		c.TokenFile = o.TokenFile
 	}
+	c.Metadata = override(c.Metadata, o.Metadata)
 
 	c.ServerAddr = override(c.ServerAddr, o.ServerAddr)
 	c.ServerCAsFile = override(c.ServerCAsFile, o.ServerCAsFile)

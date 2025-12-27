@@ -328,6 +328,7 @@ func (c *Client) connect(ctx context.Context, transport *quic.Transport, retoken
 		Token:          c.token,
 		ReconnectToken: retoken,
 		BuildVersion:   model.BuildVersion(),
+		Metadata:       c.metadata,
 	}); err != nil {
 		return nil, fmt.Errorf("write authentication: %w", err)
 	}

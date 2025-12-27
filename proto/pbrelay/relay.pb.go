@@ -78,7 +78,8 @@ type AuthenticateReq struct {
 	Addresses         []*pbmodel.HostPort    `protobuf:"bytes,5,rep,name=addresses,proto3" json:"addresses,omitempty"`
 	ReconnectToken    []byte                 `protobuf:"bytes,3,opt,name=reconnect_token,json=reconnectToken,proto3" json:"reconnect_token,omitempty"`
 	BuildVersion      string                 `protobuf:"bytes,4,opt,name=build_version,json=buildVersion,proto3" json:"build_version,omitempty"`
-	ServerCertificate []byte                 `protobuf:"bytes,6,opt,name=server_certificate,json=serverCertificate,proto3" json:"server_certificate,omitempty"`
+	Metadata          string                 `protobuf:"bytes,6,opt,name=metadata,proto3" json:"metadata,omitempty"`
+	ServerCertificate []byte                 `protobuf:"bytes,7,opt,name=server_certificate,json=serverCertificate,proto3" json:"server_certificate,omitempty"`
 	unknownFields     protoimpl.UnknownFields
 	sizeCache         protoimpl.SizeCache
 }
@@ -137,6 +138,13 @@ func (x *AuthenticateReq) GetReconnectToken() []byte {
 func (x *AuthenticateReq) GetBuildVersion() string {
 	if x != nil {
 		return x.BuildVersion
+	}
+	return ""
+}
+
+func (x *AuthenticateReq) GetMetadata() string {
+	if x != nil {
+		return x.Metadata
 	}
 	return ""
 }
@@ -556,13 +564,14 @@ var File_relay_proto protoreflect.FileDescriptor
 
 const file_relay_proto_rawDesc = "" +
 	"\n" +
-	"\vrelay.proto\x12\x05relay\x1a\verror.proto\x1a\vmodel.proto\"\xd3\x01\n" +
+	"\vrelay.proto\x12\x05relay\x1a\verror.proto\x1a\vmodel.proto\"\xef\x01\n" +
 	"\x0fAuthenticateReq\x12\x14\n" +
 	"\x05token\x18\x01 \x01(\tR\x05token\x12-\n" +
 	"\taddresses\x18\x05 \x03(\v2\x0f.model.HostPortR\taddresses\x12'\n" +
 	"\x0freconnect_token\x18\x03 \x01(\fR\x0ereconnectToken\x12#\n" +
-	"\rbuild_version\x18\x04 \x01(\tR\fbuildVersion\x12-\n" +
-	"\x12server_certificate\x18\x06 \x01(\fR\x11serverCertificate\"~\n" +
+	"\rbuild_version\x18\x04 \x01(\tR\fbuildVersion\x12\x1a\n" +
+	"\bmetadata\x18\x06 \x01(\tR\bmetadata\x12-\n" +
+	"\x12server_certificate\x18\a \x01(\fR\x11serverCertificate\"~\n" +
 	"\x10AuthenticateResp\x12\"\n" +
 	"\x05error\x18\x01 \x01(\v2\f.error.ErrorR\x05error\x12\x1d\n" +
 	"\n" +

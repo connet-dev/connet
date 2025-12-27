@@ -76,6 +76,8 @@ func New(opts ...Option) (*Server, error) {
 	}
 
 	relay, err := relay.NewServer(relay.Config{
+		Metadata: "embedded relay",
+
 		ControlAddr:  relaysAddr,
 		ControlHost:  relaysTLSCert.Leaf.IPAddresses[0].String(),
 		ControlToken: relayAuth.Token,

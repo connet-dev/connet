@@ -23,6 +23,8 @@ import (
 )
 
 type Config struct {
+	Metadata string
+
 	ControlAddr  *net.UDPAddr
 	ControlHost  string
 	ControlToken string

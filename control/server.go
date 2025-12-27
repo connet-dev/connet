@@ -4,6 +4,8 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
+	"maps"
+	"slices"
 
 	"github.com/connet-dev/connet/iterc"
 	"github.com/connet-dev/connet/logc"
@@ -68,7 +70,7 @@ func (s *Server) Status(ctx context.Context) (Status, error) {
 		return Status{}, err
 	}
 
-	peers, err := s.getPeers()
+	endpoints, err := s.getEndpoints()
 	if err != nil {
 		return Status{}, err
 	}
@@ -79,10 +81,10 @@ func (s *Server) Status(ctx context.Context) (Status, error) {
 	}
 
 	return Status{
-		ServerID: s.relays.id,
-		Clients:  clients,
-		Peers:    peers,
-		Relays:   relays,
+		Clients:       clients,
+		Endpoints:     endpoints,
+		RelayServerID: s.relays.id,
+		Relays:        relays,
 	}, nil
 }
 
@@ -95,30 +97,39 @@ func (s *Server) getClients() ([]StatusClient, error) {
 	var clients []StatusClient
 	for _, msg := range clientMsgs {
 		clients = append(clients, StatusClient{
-			ID:   msg.Key.ID,
-			Addr: msg.Value.Addr,
+			ID:       msg.Key.ID,
+			Addr:     msg.Value.Addr,
+			Metadata: msg.Value.Metadata,
 		})
 	}
 
 	return clients, nil
 }
 
-func (s *Server) getPeers() ([]StatusPeer, error) {
+func (s *Server) getEndpoints() ([]StatusEndpoint, error) {
 	peerMsgs, _, err := s.clients.peers.Snapshot()
 	if err != nil {
 		return nil, err
 	}
 
-	var peers []StatusPeer
+	endpoints := map[model.Endpoint]StatusEndpoint{}
 	for _, msg := range peerMsgs {
-		peers = append(peers, StatusPeer{
-			ID:       msg.Key.ID,
-			Role:     msg.Key.Role,
-			Endpoint: msg.Key.Endpoint,
-		})
+		ep := endpoints[msg.Key.Endpoint]
+		ep.Endpoint = msg.Key.Endpoint
+
+		switch msg.Key.Role {
+		case model.Destination:
+			ep.Destinations = append(ep.Destinations, msg.Key.ID)
+		case model.Source:
+			ep.Sources = append(ep.Sources, msg.Key.ID)
+		default:
+			return nil, fmt.Errorf("unknown role: %s", msg.Key.Role)
+		}
+
+		endpoints[msg.Key.Endpoint] = ep
 	}
 
-	return peers, nil
+	return slices.Collect(maps.Values(endpoints)), nil
 }
 
 func (s *Server) getRelays() ([]StatusRelay, error) {
@@ -132,6 +143,7 @@ func (s *Server) getRelays() ([]StatusRelay, error) {
 		relays = append(relays, StatusRelay{
 			ID:        msg.Key.ID,
 			Hostports: iterc.MapSlice(msg.Value.Hostports, model.HostPort.String),
+			Metadata:  msg.Value.Metadata,
 		})
 	}
 
@@ -139,24 +151,26 @@ func (s *Server) getRelays() ([]StatusRelay, error) {
 }
 
 type Status struct {
-	ServerID string         `json:"server_id"`
-	Clients  []StatusClient `json:"clients"`
-	Peers    []StatusPeer   `json:"peers"`
-	Relays   []StatusRelay  `json:"relays"`
+	Clients       []StatusClient   `json:"clients"`
+	Endpoints     []StatusEndpoint `json:"endpoints"`
+	RelayServerID string           `json:"relay_server_id"`
+	Relays        []StatusRelay    `json:"relays"`
 }
 
 type StatusClient struct {
-	ID   ClientID `json:"id"`
-	Addr string   `json:"addr"`
+	ID       ClientID `json:"id"`
+	Addr     string   `json:"addr"`
+	Metadata string   `json:"metadata"`
 }
 
-type StatusPeer struct {
-	ID       ClientID       `json:"id"`
-	Role     model.Role     `json:"role"`
-	Endpoint model.Endpoint `json:"endpoint"`
+type StatusEndpoint struct {
+	Endpoint     model.Endpoint `json:"endpoint"`
+	Destinations []ClientID     `json:"destinations"`
+	Sources      []ClientID     `json:"sources"`
 }
 
 type StatusRelay struct {
 	ID        RelayID  `json:"id"`
 	Hostports []string `json:"hostport"`
+	Metadata  string   `json:"metadata"`
 }

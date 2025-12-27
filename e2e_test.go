@@ -405,6 +405,7 @@ func TestE2E(t *testing.T) {
 		ServerCAs(cas),
 		DirectAddress(":20002"),
 		Logger(logger.With("test", "cl-dst")),
+		Metadata("destinations"),
 	)
 	require.NoError(t, err)
 
@@ -414,6 +415,7 @@ func TestE2E(t *testing.T) {
 		ServerCAs(cas),
 		DirectAddress(":20003"),
 		Logger(logger.With("test", "cl-src")),
+		Metadata("sources"),
 	)
 	require.NoError(t, err)
 

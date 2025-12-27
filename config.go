@@ -18,7 +18,8 @@ import (
 )
 
 type config struct {
-	token string
+	token    string
+	metadata string
 
 	controlAddr *net.UDPAddr
 	controlHost string
@@ -94,6 +95,14 @@ func TokenFromEnv() Option {
 		if connetToken := os.Getenv("CONNET_TOKEN"); connetToken != "" {
 			cfg.token = connetToken
 		}
+		return nil
+	}
+}
+
+func Metadata(metadata string) Option {
+	return func(cfg *config) error {
+		cfg.metadata = metadata
+
 		return nil
 	}
 }

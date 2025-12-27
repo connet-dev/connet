@@ -32,6 +32,7 @@ type controlClient struct {
 	hostports []model.HostPort
 	root      *certc.Cert
 	direct    *certc.Cert
+	metadata  string
 
 	controlAddr          *net.UDPAddr
 	controlToken         string
@@ -96,6 +97,7 @@ func newControlClient(cfg Config, root *certc.Cert, directCert *certc.Cert, conf
 		hostports: hostports,
 		root:      root,
 		direct:    directCert,
+		metadata:  cfg.Metadata,
 
 		controlAddr:  cfg.ControlAddr,
 		controlToken: cfg.ControlToken,
@@ -254,6 +256,7 @@ func (s *controlClient) connectSingle(ctx context.Context, transport *quic.Trans
 		Addresses:         iterc.MapSlice(s.hostports, model.HostPort.PB),
 		ReconnectToken:    reconnConfig.Bytes,
 		BuildVersion:      model.BuildVersion(),
+		Metadata:          s.metadata,
 		ServerCertificate: s.direct.Raw(),
 	}); err != nil {
 		return nil, fmt.Errorf("auth write error: %w", err)

@@ -166,12 +166,12 @@ type clientServer struct {
 	reactivateMu sync.RWMutex
 }
 
-func (s *clientServer) connected(id ClientID, auth ClientAuthentication, remote net.Addr) error {
+func (s *clientServer) connected(id ClientID, auth ClientAuthentication, remote net.Addr, metadata string) error {
 	s.reactivateMu.Lock()
 	delete(s.reactivate, ClientConnKey{id})
 	s.reactivateMu.Unlock()
 
-	return s.conns.Put(ClientConnKey{id}, ClientConnValue{Authentication: auth, Addr: remote.String()})
+	return s.conns.Put(ClientConnKey{id}, ClientConnValue{auth, remote.String(), metadata})
 }
 
 func (s *clientServer) disconnected(id ClientID) error {
@@ -410,12 +410,13 @@ type clientConn struct {
 }
 
 type clientConnAuth struct {
-	id   ClientID
-	auth ClientAuthentication
+	id       ClientID
+	auth     ClientAuthentication
+	metadata string
 }
 
 func (c *clientConn) run(ctx context.Context) {
-	c.logger.Info("new client connected", "proto", c.conn.ConnectionState().TLS.NegotiatedProtocol, "remote", c.conn.RemoteAddr())
+	c.logger.Debug("new client connection", "proto", c.conn.ConnectionState().TLS.NegotiatedProtocol, "remote", c.conn.RemoteAddr())
 	defer func() {
 		if err := c.conn.CloseWithError(quic.ApplicationErrorCode(pberror.Code_Unknown), "connection closed"); err != nil {
 			slogc.Fine(c.logger, "error closing connection", "err", err)
@@ -442,7 +443,10 @@ func (c *clientConn) runErr(ctx context.Context) error {
 		c.logger = c.logger.With("client-id", c.id)
 	}
 
-	if err := c.server.connected(c.id, c.auth, c.conn.RemoteAddr()); err != nil {
+	c.logger.Info("client connected", "addr", c.conn.RemoteAddr(), "metadata", c.metadata)
+	defer c.logger.Info("client disconnected", "addr", c.conn.RemoteAddr(), "metadata", c.metadata)
+
+	if err := c.server.connected(c.id, c.auth, c.conn.RemoteAddr(), c.metadata); err != nil {
 		return err
 	}
 	defer func() {
@@ -530,7 +534,7 @@ func (c *clientConn) authenticate(ctx context.Context) (*clientConnAuth, error) 
 	}
 
 	c.logger.Debug("authentication completed", "local", c.conn.LocalAddr(), "remote", c.conn.RemoteAddr(), "proto", protocol, "build", req.BuildVersion)
-	return &clientConnAuth{id, auth}, nil
+	return &clientConnAuth{id, auth, req.Metadata}, nil
 }
 
 type clientStream struct {

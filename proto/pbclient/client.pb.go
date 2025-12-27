@@ -28,6 +28,7 @@ type AuthenticateReq struct {
 	Token          string                 `protobuf:"bytes,1,opt,name=token,proto3" json:"token,omitempty"`
 	ReconnectToken []byte                 `protobuf:"bytes,2,opt,name=reconnect_token,json=reconnectToken,proto3" json:"reconnect_token,omitempty"`
 	BuildVersion   string                 `protobuf:"bytes,3,opt,name=build_version,json=buildVersion,proto3" json:"build_version,omitempty"`
+	Metadata       string                 `protobuf:"bytes,4,opt,name=metadata,proto3" json:"metadata,omitempty"`
 	unknownFields  protoimpl.UnknownFields
 	sizeCache      protoimpl.SizeCache
 }
@@ -79,6 +80,13 @@ func (x *AuthenticateReq) GetReconnectToken() []byte {
 func (x *AuthenticateReq) GetBuildVersion() string {
 	if x != nil {
 		return x.BuildVersion
+	}
+	return ""
+}
+
+func (x *AuthenticateReq) GetMetadata() string {
+	if x != nil {
+		return x.Metadata
 	}
 	return ""
 }
@@ -785,11 +793,12 @@ var File_client_proto protoreflect.FileDescriptor
 
 const file_client_proto_rawDesc = "" +
 	"\n" +
-	"\fclient.proto\x12\x06client\x1a\verror.proto\x1a\vmodel.proto\"u\n" +
+	"\fclient.proto\x12\x06client\x1a\verror.proto\x1a\vmodel.proto\"\x91\x01\n" +
 	"\x0fAuthenticateReq\x12\x14\n" +
 	"\x05token\x18\x01 \x01(\tR\x05token\x12'\n" +
 	"\x0freconnect_token\x18\x02 \x01(\fR\x0ereconnectToken\x12#\n" +
-	"\rbuild_version\x18\x03 \x01(\tR\fbuildVersion\"\x88\x01\n" +
+	"\rbuild_version\x18\x03 \x01(\tR\fbuildVersion\x12\x1a\n" +
+	"\bmetadata\x18\x04 \x01(\tR\bmetadata\"\x88\x01\n" +
 	"\x10AuthenticateResp\x12\"\n" +
 	"\x05error\x18\x01 \x01(\v2\f.error.ErrorR\x05error\x12'\n" +
 	"\x06public\x18\x02 \x01(\v2\x0f.model.AddrPortR\x06public\x12'\n" +
