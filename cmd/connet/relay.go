@@ -23,7 +23,7 @@ type RelayConfig struct {
 	ControlCAsFile string `toml:"control-cas-file"`
 	ControlName    string `toml:"control-name"`
 
-	DefaultHandshakeTimeout durationValue `toml:"default-handshake-timeout"`
+	HandshakeIdleTimeout durationValue `toml:"handshake-idle-timeout"`
 
 	StatusAddr string `toml:"status-addr"`
 	StoreDir   string `toml:"store-dir"`
@@ -61,7 +61,7 @@ func relayCmd() *cobra.Command {
 	cmd.Flags().StringVar(&flagsConfig.Relay.ControlCAsFile, "control-cas-file", "", "control server TLS certificate authorities file, when not using public CAs")
 	cmd.Flags().StringVar(&flagsConfig.Relay.ControlName, "control-name", "", "control server name (UDP/QUIC, host), when connecting via IP and certificate includes only domains (defaults to the host in 'server-addr')")
 
-	cmd.Flags().Var(&flagsConfig.Relay.DefaultHandshakeTimeout, "default-handshake-timeout", "default handshake idle timeout, use when there is a high latency to connect to the server (defaults to 5s)")
+	cmd.Flags().Var(&flagsConfig.Relay.HandshakeIdleTimeout, "handshake-idle-timeout", "default handshake idle timeout, use when there is a high latency to connect to the server (defaults to 5s)")
 
 	addStatusAddrFlag(cmd, &flagsConfig.Relay.StatusAddr)
 	addStoreDirFlag(cmd, &flagsConfig.Relay.StoreDir)
@@ -153,8 +153,8 @@ func relayRun(ctx context.Context, cfg RelayConfig, logger *slog.Logger) error {
 		relayCfg.ControlHost = controlHost
 	}
 
-	if cfg.DefaultHandshakeTimeout > 0 {
-		relayCfg.DefaultHandshakeIdleTimeout = cfg.DefaultHandshakeTimeout.get()
+	if cfg.HandshakeIdleTimeout > 0 {
+		relayCfg.HandshakeIdleTimeout = cfg.HandshakeIdleTimeout.get()
 	}
 
 	var statusAddr *net.TCPAddr
@@ -209,7 +209,7 @@ func (c *RelayConfig) merge(o RelayConfig) {
 	c.ControlCAsFile = override(c.ControlCAsFile, o.ControlCAsFile)
 	c.ControlName = override(c.ControlName, o.ControlName)
 
-	c.DefaultHandshakeTimeout = override(c.DefaultHandshakeTimeout, o.DefaultHandshakeTimeout)
+	c.HandshakeIdleTimeout = override(c.HandshakeIdleTimeout, o.HandshakeIdleTimeout)
 
 	c.StatusAddr = override(c.StatusAddr, o.StatusAddr)
 	c.StoreDir = override(c.StoreDir, o.StoreDir)

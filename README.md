@@ -144,7 +144,7 @@ direct-stateless-reset-key-file = "/path/to/reset/key" # the QUIC stateless rese
 
 status-addr = "127.0.0.1:19182" # status server address to listen for connections (TCP/HTTP, [host]:port) (disabled by default)
 nat-pmp = "system" # support for NAT-PMP, defaults to `system`
-default-handshake-timeout = "50s" # quic handshake idle timeout, when there is a high latency to connect (defaults to 5s)
+handshake-idle-timeout = "1m" # handshake idle timeout (QUIC, duration), when there is a high latency to connect (defaults to 5s)
 
 relay-encryptions = ["none"] # require encryption when using relay for all destination/sources, defaults to "none"
 
@@ -292,7 +292,7 @@ control-addr = "localhost:19189" # the control server address to connect to, def
 control-cas-file = "path/to/ca/file.pem" # the public certificate root of the control server, no default, required when using self-signed certs
 control-name = "localhost" # control server name (UDP/QUIC, host), when connecting via IP and certificate includes only domains (defaults to the host in 'server-addr')
 
-default-handshake-timeout = "50s" # quic handshake idle timeout, when there is a high latency to connect (defaults to 5s)
+handshake-timeout = "1m" # handshake idle timeout (QUIC, duration), when there is a high latency to connect (defaults to 5s)
 
 status-addr = "127.0.0.1:19181" # address to listen for incoming status connections (TCP/HTTP, [host]:port) (disabled by default)
 store-dir = "path/to/relay-store" # directory for this relay server to persist runtime information, see Storage section for more info

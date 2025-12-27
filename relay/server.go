@@ -26,7 +26,7 @@ type Config struct {
 	ControlToken string
 	ControlCAs   *x509.CertPool
 
-	DefaultHandshakeIdleTimeout time.Duration
+	HandshakeIdleTimeout time.Duration
 
 	Ingress []Ingress
 

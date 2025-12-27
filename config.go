@@ -27,8 +27,8 @@ type config struct {
 	directAddr     *net.UDPAddr
 	directResetKey *quic.StatelessResetKey
 
-	natPMP                      nat.PMPConfig
-	defaultHandshakeIdleTimeout time.Duration
+	natPMP               nat.PMPConfig
+	handshakeIdleTimeout time.Duration
 
 	logger *slog.Logger
 }
@@ -94,15 +94,6 @@ func TokenFromEnv() Option {
 		if connetToken := os.Getenv("CONNET_TOKEN"); connetToken != "" {
 			cfg.token = connetToken
 		}
-		return nil
-	}
-}
-
-// DefaultHandshakeIdleTimeout configures the handshake idle timeout to use by default when connecting to control/relay/peers
-func DefaultHandshakeIdleTimeout(d time.Duration) Option {
-	return func(cfg *config) error {
-		cfg.defaultHandshakeIdleTimeout = d
-
 		return nil
 	}
 }
@@ -274,6 +265,15 @@ func DirectStatelessResetKeyFromEnv() Option {
 func NatPMPConfig(pmp nat.PMPConfig) Option {
 	return func(cfg *config) error {
 		cfg.natPMP = pmp
+		return nil
+	}
+}
+
+// HandshakeIdleTimeout configures the handshake idle timeout to use by default when connecting to control/relay/peers
+func HandshakeIdleTimeout(d time.Duration) Option {
+	return func(cfg *config) error {
+		cfg.handshakeIdleTimeout = d
+
 		return nil
 	}
 }

@@ -124,7 +124,7 @@ func (c *Client) runClient(ctx context.Context, errCh chan error) {
 		}
 	}()
 
-	ds, err := newDirectServer(transport, c.defaultHandshakeIdleTimeout, c.logger)
+	ds, err := newDirectServer(transport, c.handshakeIdleTimeout, c.logger)
 	if err != nil {
 		errCh <- fmt.Errorf("create direct server: %w", err)
 		return
@@ -307,7 +307,7 @@ func (c *Client) connect(ctx context.Context, transport *quic.Transport, retoken
 		ServerName: c.controlHost,
 		RootCAs:    c.controlCAs,
 		NextProtos: model.ClientNextProtos,
-	}, quicc.ClientConfig(c.defaultHandshakeIdleTimeout))
+	}, quicc.ClientConfig(c.handshakeIdleTimeout))
 	if err != nil {
 		return nil, fmt.Errorf("dial server %s: %w", c.controlAddr, err)
 	}

@@ -34,9 +34,9 @@ type ClientConfig struct {
 	DirectResetKey     string `toml:"direct-stateless-reset-key"`
 	DirectResetKeyFile string `toml:"direct-stateless-reset-key-file"`
 
-	StatusAddr              string        `toml:"status-addr"`
-	NatPMP                  string        `toml:"nat-pmp"`
-	DefaultHandshakeTimeout durationValue `toml:"default-handshake-timeout"`
+	StatusAddr           string        `toml:"status-addr"`
+	NatPMP               string        `toml:"nat-pmp"`
+	HandshakeIdleTimeout durationValue `toml:"handshake-idle-timeout"`
 
 	RelayEncryptions []string                     `toml:"relay-encryptions"`
 	Destinations     map[string]DestinationConfig `toml:"destinations"`
@@ -89,7 +89,7 @@ func clientCmd() *cobra.Command {
 	cmd.Flags().StringVar(&flagsConfig.Client.Token, "token", "", `auth token for the control server (fallback when 'token-file' is not specified)
   if both 'token-file' and 'token' are empty, will read CONNET_TOKEN environment variable`)
 
-	cmd.Flags().Var(&flagsConfig.Client.DefaultHandshakeTimeout, "default-handshake-timeout", "default handshake idle timeout, when there is a high latency to connect (defaults to 5s)")
+	cmd.Flags().Var(&flagsConfig.Client.HandshakeIdleTimeout, "handshake-idle-timeout", "default handshake idle timeout, when there is a high latency to connect (defaults to 5s)")
 
 	cmd.Flags().StringVar(&flagsConfig.Client.ServerAddr, "server-addr", "", "control server address (UDP/QUIC, host:port) (defaults to '127.0.0.1:19190')")
 	cmd.Flags().StringVar(&flagsConfig.Client.ServerCAsFile, "server-cas-file", "", "control server TLS certificate authorities file, when not using public CAs")
@@ -214,8 +214,8 @@ func clientRun(ctx context.Context, cfg ClientConfig, logger *slog.Logger) error
 	}
 	opts = append(opts, connet.NatPMPConfig(pmpCfg))
 
-	if cfg.DefaultHandshakeTimeout > 0 {
-		opts = append(opts, connet.DefaultHandshakeIdleTimeout(cfg.DefaultHandshakeTimeout.get()))
+	if cfg.HandshakeIdleTimeout > 0 {
+		opts = append(opts, connet.HandshakeIdleTimeout(cfg.HandshakeIdleTimeout.get()))
 	}
 
 	var defaultRelayEncryptions = []model.EncryptionScheme{model.NoEncryption}
@@ -561,7 +561,7 @@ func (c *ClientConfig) merge(o ClientConfig) {
 
 	c.StatusAddr = override(c.StatusAddr, o.StatusAddr)
 	c.NatPMP = override(c.NatPMP, o.NatPMP)
-	c.DefaultHandshakeTimeout = override(c.DefaultHandshakeTimeout, o.DefaultHandshakeTimeout)
+	c.HandshakeIdleTimeout = override(c.HandshakeIdleTimeout, o.HandshakeIdleTimeout)
 
 	c.RelayEncryptions = overrides(c.RelayEncryptions, o.RelayEncryptions)
 
