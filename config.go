@@ -225,6 +225,15 @@ func DirectStatelessResetKeyFromEnv() Option {
 			path = filepath.Join(cacheDir, name)
 		} else if userCacheDir, err := os.UserCacheDir(); err == nil {
 			// Look for XDG_CACHE_HOME, fallback to $HOME/.cache
+			switch _, err := os.Stat(userCacheDir); {
+			case err == nil:
+				// the base user cache directory exists, continue
+			case errors.Is(err, os.ErrNotExist):
+				return nil
+			default:
+				return fmt.Errorf("stat cache dir: %w", err)
+			}
+
 			dir := filepath.Join(userCacheDir, "connet")
 			switch _, err := os.Stat(dir); {
 			case err == nil:
