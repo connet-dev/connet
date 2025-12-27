@@ -182,7 +182,7 @@ url = "wss://127.0.0.1:8083" # same as above, but exposes it on HTTPS
 cert-file = "/path/to/cert/file" # the TLS/HTTPS server certificate to use
 key-file = "/path/to/key/file" # the TLS/HTTPS server certificate private key to use
 cas-file = "/path/to/cas/file" # the TLS/HTTPS client certificates to trust (mutual TLS)
-dial-timeout = 0 # how long to wait for single destination connection, defaults to 0 (wait forever)
+dial-timeout = "5s" # how long to wait for single destination connection, defaults to 0 (wait forever)
 lb-policy = "" # the load balancer policy, defaults to '' (none)
 lb-retry = "" # the load balancer retry policy, defaults to '' (never)
 lb-retry-max = 0 # when using count/timed retry, for how long to retry
@@ -290,6 +290,7 @@ token = "relay-token-1" # auth token for the control server (fallback when 'toke
 
 control-addr = "localhost:19189" # the control server address to connect to, defaults to localhost:19189
 control-cas-file = "path/to/ca/file.pem" # the public certificate root of the control server, no default, required when using self-signed certs
+control-name = "localhost" # control server name (UDP/QUIC, host), when connecting via IP and certificate includes only domains (defaults to the host in 'server-addr')
 
 default-handshake-timeout = "50s" # quic handshake idle timeout, when there is a high latency to connect (defaults to 5s)
 
