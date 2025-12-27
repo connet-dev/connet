@@ -33,7 +33,7 @@ type clientsDirectServer struct {
 }
 
 func (s *clientsDirectServer) runDirectConn(ctx context.Context, conn *quic.Conn) {
-	s.logger.Info("new client connected", "server", conn.ConnectionState().TLS.ServerName, "remote", conn.RemoteAddr())
+	s.logger.Debug("new client connection", "server", conn.ConnectionState().TLS.ServerName, "remote", conn.RemoteAddr())
 
 	s.peerServersMu.RLock()
 	srv := s.peerServers[conn.ConnectionState().TLS.ServerName]
@@ -58,11 +58,12 @@ type directReserveConn struct {
 }
 
 type directAuth struct {
-	id string
+	id       string
+	metadata string
 }
 
 func (c *directReserveConn) run(ctx context.Context) {
-	c.logger.Info("new client connected", "proto", c.conn.ConnectionState().TLS.NegotiatedProtocol, "remote", c.conn.RemoteAddr())
+	c.logger.Debug("new client connection", "proto", c.conn.ConnectionState().TLS.NegotiatedProtocol, "remote", c.conn.RemoteAddr())
 	defer func() {
 		if err := c.conn.CloseWithError(quic.ApplicationErrorCode(pberror.Code_Unknown), "connection closed"); err != nil {
 			slogc.Fine(c.logger, "error closing connection", "err", err)
@@ -89,6 +90,8 @@ func (c *directReserveConn) runErr(ctx context.Context) error {
 		c.logger = c.logger.With("client-id", c.id)
 	}
 
+	c.logger.Info("client connected", "addr", c.conn.RemoteAddr(), "metadata", c.metadata)
+	defer c.logger.Info("client disconnected", "addr", c.conn.RemoteAddr(), "metadata", c.metadata)
 	// TODO client connection tracking
 	// connected + defer disconnected
 
@@ -128,7 +131,7 @@ func (c *directReserveConn) authenticate(ctx context.Context) (*directAuth, erro
 	}
 
 	c.logger.Debug("authentication completed", "local", c.conn.LocalAddr(), "remote", c.conn.RemoteAddr(), "build", req.BuildVersion)
-	return &directAuth{id: req.ClientId}, nil
+	return &directAuth{req.ClientId, req.Metadata}, nil
 }
 
 func (c *directReserveConn) reserve(ctx context.Context) error {

@@ -8,6 +8,7 @@ option go_package = "github.com/connet-dev/connet/proto/pbclientrelay";
 message AuthenticateReq {
   string client_id = 1;
   string build_version = 3;
+  string metadata = 4;
 }
 
 message AuthenticateResp {
