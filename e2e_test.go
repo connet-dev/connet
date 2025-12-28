@@ -16,7 +16,6 @@ import (
 	"net/url"
 	"os"
 	"slices"
-	"strings"
 	"testing"
 	"time"
 
@@ -587,10 +586,10 @@ func TestE2E(t *testing.T) {
 					respData, err := io.ReadAll(resp.Body)
 					require.NoError(t, err)
 
-					if strings.Contains(name, "tls") {
-						require.Equal(t, fmt.Sprintf("[source %s] cannot dial active destinations", name), string(respData))
-					} else {
+					if name == "dst-relay-direct-src" {
 						require.Equal(t, fmt.Sprintf("[source %s] no active destinations found", name), string(respData))
+					} else {
+						require.Equal(t, fmt.Sprintf("[source %s] cannot dial active destinations", name), string(respData))
 					}
 				})
 			}

@@ -129,7 +129,6 @@ func (p *remotePeer) runErr(ctx context.Context) error {
 			// do nothing, since remote is not running
 		}
 
-		// TODO should only connect when relay is enabled
 		directRemotes := map[relayID]remotePeerDirectRelayConnSpec{}
 		for _, direct := range remote.Peer.Relays {
 			addrs := model.HostPortFromPBs(direct.Addresses)

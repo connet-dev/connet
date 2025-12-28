@@ -1,12 +1,15 @@
 package relay
 
 import (
+	"cmp"
 	"context"
 	"crypto/tls"
 	"crypto/x509"
 	"errors"
 	"fmt"
 	"log/slog"
+	"maps"
+	"slices"
 	"sync"
 	"sync/atomic"
 
@@ -194,6 +197,10 @@ func (c *directReserveConn) reserve(ctx context.Context) error {
 		}
 	})
 
+	g.Go(func(ctx context.Context) error {
+		return srv.runSource(ctx)
+	})
+
 	return g.Wait()
 }
 
@@ -205,6 +212,9 @@ type directPeerServer struct {
 	serverTLS  *tls.Config
 
 	tlsConf atomic.Pointer[tls.Config]
+
+	remoteConns   map[model.Key]*quic.Conn
+	remoteConnsMu sync.RWMutex
 
 	logger *slog.Logger
 }
@@ -234,6 +244,8 @@ func newDirectPeerServer(conn *directReserveConn, peers []*pbclientrelay.Peer) (
 			NextProtos:   model.ConnectRelayDirectNextProtos,
 		},
 
+		remoteConns: map[model.Key]*quic.Conn{},
+
 		logger: conn.logger.With("peer-server", serverName),
 	}
 
@@ -261,6 +273,103 @@ func (s *directPeerServer) update(peers []*pbclientrelay.Peer) error {
 	return nil
 }
 
+func (s *directPeerServer) runSource(ctx context.Context) error {
+	for {
+		stream, err := s.conn.conn.AcceptStream(ctx)
+		if err != nil {
+			return fmt.Errorf("could not accept source stream: %w", err)
+		}
+		go s.runSourceStream(ctx, stream)
+	}
+}
+
+func (s *directPeerServer) runSourceStream(ctx context.Context, stream *quic.Stream) {
+	defer func() {
+		if err := stream.Close(); err != nil {
+			slogc.Fine(s.logger, "error closing source stream", "err", err)
+		}
+	}()
+
+	if err := s.runSourceStreamErr(ctx, stream); err != nil {
+		s.logger.Debug("error while running source", "err", err)
+	}
+}
+
+func (d *directPeerServer) getRemoteConns() []*quic.Conn {
+	d.remoteConnsMu.RLock()
+	defer d.remoteConnsMu.RUnlock()
+
+	return slices.SortedFunc(maps.Values(d.remoteConns), func(l, r *quic.Conn) int {
+		ld := l.ConnectionStats().SmoothedRTT
+		rd := r.ConnectionStats().SmoothedRTT
+
+		return cmp.Compare(ld, rd)
+	})
+}
+
+func (s *directPeerServer) runSourceStreamErr(ctx context.Context, stream *quic.Stream) error {
+	req, err := pbconnect.ReadRequest(stream)
+	if err != nil {
+		return fmt.Errorf("source stream read: %w", err)
+	}
+
+	switch {
+	case req.Connect != nil:
+		return s.connectSources(ctx, stream, req)
+	default:
+		return s.unknown(ctx, stream, req)
+	}
+}
+
+func (s *directPeerServer) connectSources(ctx context.Context, stream *quic.Stream, req *pbconnect.Request) error {
+	dests := s.getRemoteConns()
+	if len(dests) == 0 {
+		err := pberror.NewError(pberror.Code_DestinationNotFound, "could not find destination")
+		return proto.Write(stream, &pbconnect.Response{Error: err})
+	}
+
+	var pberrs []string
+	for _, dest := range dests {
+		if err := s.connectSource(ctx, stream, dest, req); err != nil {
+			if pberr := pberror.GetError(err); pberr != nil {
+				pberrs = append(pberrs, pberr.Error())
+			}
+			s.logger.Debug("could not dial destination", "err", err)
+		} else {
+			// connect was success
+			return nil
+		}
+	}
+
+	err := pberror.NewError(pberror.Code_DestinationDialFailed, "could not dial destinations: %v", pberrs)
+	return proto.Write(stream, &pbconnect.Response{Error: err})
+}
+
+func (s *directPeerServer) connectSource(ctx context.Context, srcStream *quic.Stream, dst *quic.Conn, req *pbconnect.Request) error {
+	dstStream, err := dst.OpenStreamSync(ctx)
+	if err != nil {
+		return fmt.Errorf("destination open stream: %w", err)
+	}
+
+	if err := proto.Write(dstStream, req); err != nil {
+		return fmt.Errorf("destination write request: %w", err)
+	}
+
+	resp, err := pbconnect.ReadResponse(dstStream)
+	if err != nil {
+		return fmt.Errorf("destination read response: %w", err)
+	}
+
+	if err := proto.Write(srcStream, resp); err != nil {
+		return fmt.Errorf("source write response: %w", err)
+	}
+
+	s.logger.Debug("joining conns")
+	err = netc.Join(srcStream, dstStream)
+	s.logger.Debug("disconnected conns", "err", err)
+	return nil
+}
+
 func (s *directPeerServer) run(ctx context.Context, conn *quic.Conn) {
 	defer func() {
 		if err := conn.CloseWithError(quic.ApplicationErrorCode(pberror.Code_Unknown), "connection closed"); err != nil {
@@ -278,12 +387,22 @@ func (s *directPeerServer) runErr(ctx context.Context, conn *quic.Conn) error {
 		return err
 	}
 
+	key := model.NewKey(conn.ConnectionState().TLS.PeerCertificates[0])
+	s.remoteConnsMu.Lock()
+	s.remoteConns[key] = conn
+	s.remoteConnsMu.Unlock()
+	defer func() {
+		s.remoteConnsMu.Lock()
+		delete(s.remoteConns, key)
+		s.remoteConnsMu.Unlock()
+	}()
+
 	for {
 		stream, err := conn.AcceptStream(ctx)
 		if err != nil {
 			return err
 		}
-		go s.runStream(ctx, stream)
+		go s.runDestinationStream(ctx, stream)
 	}
 }
 
@@ -307,19 +426,19 @@ func (s *directPeerServer) check(ctx context.Context, conn *quic.Conn) error {
 	return nil
 }
 
-func (s *directPeerServer) runStream(ctx context.Context, stream *quic.Stream) {
+func (s *directPeerServer) runDestinationStream(ctx context.Context, stream *quic.Stream) {
 	defer func() {
 		if err := stream.Close(); err != nil {
 			slogc.Fine(s.logger, "error closing source stream", "err", err)
 		}
 	}()
 
-	if err := s.runStreamErr(ctx, stream); err != nil {
+	if err := s.runDestinationStreamErr(ctx, stream); err != nil {
 		s.logger.Debug("error while running source", "err", err)
 	}
 }
 
-func (s *directPeerServer) runStreamErr(ctx context.Context, stream *quic.Stream) error {
+func (s *directPeerServer) runDestinationStreamErr(ctx context.Context, stream *quic.Stream) error {
 	req, err := pbconnect.ReadRequest(stream)
 	if err != nil {
 		return fmt.Errorf("source stream read: %w", err)
@@ -327,13 +446,13 @@ func (s *directPeerServer) runStreamErr(ctx context.Context, stream *quic.Stream
 
 	switch {
 	case req.Connect != nil:
-		return s.connect(ctx, stream, req)
+		return s.connectDestination(ctx, stream, req)
 	default:
 		return s.unknown(ctx, stream, req)
 	}
 }
 
-func (s *directPeerServer) connect(ctx context.Context, stream *quic.Stream, req *pbconnect.Request) error {
+func (s *directPeerServer) connectDestination(ctx context.Context, stream *quic.Stream, req *pbconnect.Request) error {
 	dstStream, err := s.conn.conn.OpenStreamSync(ctx)
 	if err != nil {
 		return fmt.Errorf("destination open stream: %w", err)

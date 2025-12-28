@@ -244,14 +244,14 @@ func (r *directRelay) connect(ctx context.Context, hp model.HostPort) (*quic.Con
 		return nil, err
 	}
 
-	if err := r.check(ctx, conn); err != nil {
+	if err := r.authenticate(ctx, conn); err != nil {
 		cerr := conn.CloseWithError(quic.ApplicationErrorCode(pberror.Code_ConnectionCheckFailed), "connection check failed")
 		return nil, errors.Join(err, cerr)
 	}
 	return conn, nil
 }
 
-func (r *directRelay) check(ctx context.Context, conn *quic.Conn) error {
+func (r *directRelay) authenticate(ctx context.Context, conn *quic.Conn) error {
 	stream, err := conn.OpenStreamSync(ctx)
 	if err != nil {
 		return err
