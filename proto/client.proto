@@ -61,6 +61,7 @@ message Peer {
 
 message RemotePeer {
   string id = 1;
+  string metadata = 9;
   Peer peer = 8;
 }
 

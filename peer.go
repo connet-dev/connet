@@ -380,9 +380,9 @@ func (p *peer) getECDHPublicKey(cfg *pbconnect.ECDHConfiguration) (*ecdh.PublicK
 
 type StatusPeer struct {
 	// Status of each relay this peer is connected to
-	Relays []StatusRelayConnection `json:"relays"`
+	Relays map[string]StatusRelayConnection `json:"relays"`
 	// Status of each peer this peer is connected to
-	Peers []StatusPeerConnection `json:"peers"`
+	Peers map[string]StatusRemotePeer `json:"peers"`
 }
 
 type StatusRelayConnection struct {
@@ -390,46 +390,61 @@ type StatusRelayConnection struct {
 	Addr string `json:"addr"`
 }
 
-type StatusPeerConnection struct {
-	ID    string `json:"id"`
+type StatusRemotePeer struct {
+	ID          string                       `json:"id"`
+	Metadata    string                       `json:"metadata"`
+	Connections []StatusRemotePeerConnection `json:"connections"`
+}
+
+type StatusRemotePeerConnection struct {
 	Style string `json:"style"`
 	Addr  string `json:"addr"`
 }
 
 func (p *peer) status() (StatusPeer, error) {
-	stat := StatusPeer{}
+	stat := StatusPeer{
+		Relays: map[string]StatusRelayConnection{},
+		Peers:  map[string]StatusRemotePeer{},
+	}
 
 	relays, err := p.relayConns.Peek()
 	if err != nil {
 		return StatusPeer{}, err
 	}
 	for id, conn := range relays {
-		stat.Relays = append(stat.Relays, StatusRelayConnection{
+		stat.Relays[string(id)] = StatusRelayConnection{
 			ID:   string(id),
 			Addr: conn.RemoteAddr().String(),
-		})
+		}
 	}
-	slices.SortFunc(stat.Relays, func(l, r StatusRelayConnection) int {
-		return strings.Compare(l.ID, r.ID)
-	})
+
+	peers, err := p.peers.Peek()
+	if err != nil {
+		return StatusPeer{}, err
+	}
+	for _, peer := range peers {
+		stat.Peers[peer.Id] = StatusRemotePeer{ID: peer.Id, Metadata: peer.Metadata}
+	}
 
 	conns, err := p.peerConns.Peek()
 	if err != nil {
 		return StatusPeer{}, err
 	}
 	for key, conn := range conns {
-		stat.Peers = append(stat.Peers, StatusPeerConnection{
-			ID:    string(key.id),
-			Style: key.style.String(),
-			Addr:  conn.RemoteAddr().String(),
+		if peer, ok := stat.Peers[string(key.id)]; ok {
+			peer.Connections = append(peer.Connections, StatusRemotePeerConnection{
+				Style: key.style.String(),
+				Addr:  conn.RemoteAddr().String(),
+			})
+			stat.Peers[string(key.id)] = peer
+		}
+	}
+
+	for _, v := range stat.Peers {
+		slices.SortFunc(v.Connections, func(a, b StatusRemotePeerConnection) int {
+			return strings.Compare(a.Style, b.Style)
 		})
 	}
-	slices.SortFunc(stat.Peers, func(l, r StatusPeerConnection) int {
-		if diff := strings.Compare(l.ID, r.ID); diff != 0 {
-			return diff
-		}
-		return strings.Compare(l.Style, r.Style)
-	})
 
 	return stat, nil
 }
