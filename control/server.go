@@ -4,8 +4,6 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
-	"maps"
-	"slices"
 
 	"github.com/connet-dev/connet/iterc"
 	"github.com/connet-dev/connet/logc"
@@ -88,33 +86,33 @@ func (s *Server) Status(ctx context.Context) (Status, error) {
 	}, nil
 }
 
-func (s *Server) getClients() ([]StatusClient, error) {
+func (s *Server) getClients() (map[string]StatusClient, error) {
 	clientMsgs, _, err := s.clients.conns.Snapshot()
 	if err != nil {
 		return nil, err
 	}
 
-	var clients []StatusClient
+	clients := map[string]StatusClient{}
 	for _, msg := range clientMsgs {
-		clients = append(clients, StatusClient{
+		clients[msg.Key.ID.string] = StatusClient{
 			ID:       msg.Key.ID,
 			Addr:     msg.Value.Addr,
 			Metadata: msg.Value.Metadata,
-		})
+		}
 	}
 
 	return clients, nil
 }
 
-func (s *Server) getEndpoints() ([]StatusEndpoint, error) {
+func (s *Server) getEndpoints() (map[string]StatusEndpoint, error) {
 	peerMsgs, _, err := s.clients.peers.Snapshot()
 	if err != nil {
 		return nil, err
 	}
 
-	endpoints := map[model.Endpoint]StatusEndpoint{}
+	endpoints := map[string]StatusEndpoint{}
 	for _, msg := range peerMsgs {
-		ep := endpoints[msg.Key.Endpoint]
+		ep := endpoints[msg.Key.Endpoint.String()]
 		ep.Endpoint = msg.Key.Endpoint
 
 		switch msg.Key.Role {
@@ -126,35 +124,35 @@ func (s *Server) getEndpoints() ([]StatusEndpoint, error) {
 			return nil, fmt.Errorf("unknown role: %s", msg.Key.Role)
 		}
 
-		endpoints[msg.Key.Endpoint] = ep
+		endpoints[msg.Key.Endpoint.String()] = ep
 	}
 
-	return slices.Collect(maps.Values(endpoints)), nil
+	return endpoints, nil
 }
 
-func (s *Server) getRelays() ([]StatusRelay, error) {
+func (s *Server) getRelays() (map[string]StatusRelay, error) {
 	msgs, _, err := s.relays.conns.Snapshot()
 	if err != nil {
 		return nil, err
 	}
 
-	var relays []StatusRelay
+	relays := map[string]StatusRelay{}
 	for _, msg := range msgs {
-		relays = append(relays, StatusRelay{
+		relays[msg.Key.ID.string] = StatusRelay{
 			ID:        msg.Key.ID,
 			Hostports: iterc.MapSlice(msg.Value.Hostports, model.HostPort.String),
 			Metadata:  msg.Value.Metadata,
-		})
+		}
 	}
 
 	return relays, nil
 }
 
 type Status struct {
-	Clients       []StatusClient   `json:"clients"`
-	Endpoints     []StatusEndpoint `json:"endpoints"`
-	RelayServerID string           `json:"relay_server_id"`
-	Relays        []StatusRelay    `json:"relays"`
+	Clients       map[string]StatusClient   `json:"clients"`
+	Endpoints     map[string]StatusEndpoint `json:"endpoints"`
+	RelayServerID string                    `json:"relay-server-id"`
+	Relays        map[string]StatusRelay    `json:"relays"`
 }
 
 type StatusClient struct {
