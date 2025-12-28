@@ -577,17 +577,83 @@ If you want to use `connet`, but you don't want to run the server yourself, we h
 at [connet.dev](https://connet.dev). It is free when clients connect directly, builds upon the open source components 
 by adding account management and it is one of the easiest way to start. 
 
+## Planlog
+
+### Next
+ - [ ] rewrite relay to not depend on control connection
+ - [ ] peer identity and support for options in p2p
+ - [ ] raw endpoint protocols
+ - [ ] UPnP/IDG and PCP for hole-punching
+ - [ ] preshared clients - controless p2p
+ - [ ] api to control client/control/relay
+
+### Future
+ - [ ] UDP support
+ - [ ] notarize mac app
+ - [ ] systemd dynamic user in nixos
+ - [ ] docs section for building the project
+ - [ ] mininet testing
+ - [ ] gen config
+ - [ ] swift/ios/mac and java/android client libraries
+ - [ ] relay-to-relay forwarding
+
 ## Changelog
 
-### v0.5.0
- - [x] Stateless reset key for the server
- - [x] Name access restrictions for clients
- - [x] File HTTP server
- - [x] Use quic-go tracer, instead of ping (and duration estimation)
- - [x] Optimize global IP restrictions - check earlier
- - [x] Role restrictions for clients
- - [x] proxy proto support
- - [x] update nix modules with new config options
+### v0.11.0
+ - [x] disable quic version negotiation, use quic v1
+ - [x] expose errors for use by clients
+ - [x] added options to change the handshake idle timeout and server name
+ - [x] client and peer metadata to identify peers
+ - [x] if XDG cache dir doesn't exist, use ephemeral quic stateless reset key 
+
+### v0.10.0
+ - [x] package refactor/rename - move all clients in main connet package
+ - [x] fix issue with disconnecting from relay when peer dissapears
+ - [x] fix issue with not closing relay connection when relay dissapears
+
+### v0.9.12
+ - [x] auto-tag release
+ - [x] nix embed version on release
+
+### v0.9.4
+ - [x] destination load balance
+
+### v0.9.3
+ - [x] zip distribution for macos
+ - [x] embed version when building
+ - [x] cleanup and improve cli interface/docs
+
+### v0.9.2
+ - [x] fix docker stateless reset file error
+ - [x] improve env usage, pass token from env
+
+### v0.9.1
+ - [x] compact multiple segments in stores
+
+### v0.9.0
+ - [x] remove expired protocol fields
+ - [x] remove expired protocols
+ - [x] refactor protocol errors
+ - [x] from forward to endpoint
+ - [x] compact control/relay stores
+ - [x] Support for NAT-PMP (rfc 6886)
+
+### v0.8.0
+ - [x] info log on adding/removing endpoint
+ - [x] websocket join as a func
+ - [x] info log on client connecting
+ - [x] multiple ingress addrs
+ - [x] protos in single folder, subpackages
+
+### v0.7.0
+ - [x] dynamic source/destination in the client
+ - [x] TLS source/destination
+ - [x] docs section for embedding into golang programs
+ - [x] sni rewrite
+ - [x] HTTP source
+ - [x] HTTP host rewrite
+ - [x] websocket tcp converter
+ - [x] client versioning support
 
 ### v0.6.0
  - [x] NixOS testing
@@ -601,71 +667,12 @@ by adding account management and it is one of the easiest way to start.
  - [x] dial/accept support for src/dst
  - [x] zip and name windows executable .exe
 
-### v0.7.0
- - [x] dynamic source/destination in the client
- - [x] TLS source/destination
- - [x] docs section for embedding into golang programs
- - [x] sni rewrite
- - [x] HTTP source
- - [x] HTTP host rewrite
- - [x] websocket tcp converter
- - [x] client versioning support
-
-### v0.8.0
- - [x] info log on adding/removing endpoint
- - [x] websocket join as a func
- - [x] info log on client connecting
- - [x] multiple ingress addrs
- - [x] protos in single folder, subpackages
-
-### v0.9.0
- - [x] remove expired protocol fields
- - [x] remove expired protocols
- - [x] refactor protocol errors
- - [x] from forward to endpoint
- - [x] compact control/relay stores
- - [x] Support for NAT-PMP (rfc 6886)
-
-### v0.9.1
- - [x] compact multiple segments in stores
-
-### v0.9.2
- - [x] fix docker stateless reset file error
- - [x] improve env usage, pass token from env
-
-### v0.9.3
- - [x] zip distribution for macos
- - [x] embed version when building
- - [x] cleanup and improve cli interface/docs
-
-### v0.9.4
- - [x] destination load balance
-
-### v0.9.12
- - [x] auto-tag release
- - [x] nix embed version on release
-
-### v0.10.0
- - [x] package refactor/rename - move all clients in main connet package
- - [x] fix issue with disconnecting from relay when peer dissapears
- - [x] fix issue with not closing relay connection when relay dissapears
-
-### v0.11.0
- - [ ] rewrite relay to not depend on control connection
-
-### vNext
- - [ ] peer identity and support for options in p2p
- - [ ] raw endpoint protocols
- - [ ] UPnP/IDG and PCP for hole-punching
- - [ ] preshared clients - controless p2p
- - [ ] api to control client/control/relay
-
-## vFuture
- - [ ] UDP support
- - [ ] notarize mac app
- - [ ] systemd dynamic user in nixos
- - [ ] docs section for building the project
- - [ ] mininet testing
- - [ ] gen config
- - [ ] swift/ios/mac and java/android client libraries
- - [ ] relay-to-relay forwarding
+### v0.5.0
+ - [x] Stateless reset key for the server
+ - [x] Name access restrictions for clients
+ - [x] File HTTP server
+ - [x] Use quic-go tracer, instead of ping (and duration estimation)
+ - [x] Optimize global IP restrictions - check earlier
+ - [x] Role restrictions for clients
+ - [x] proxy proto support
+ - [x] update nix modules with new config options
