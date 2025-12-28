@@ -130,11 +130,17 @@ func (s *Server) Run(ctx context.Context) error {
 }
 
 type Status struct {
-	Status            statusc.Status   `json:"status"`
-	Hostports         []string         `json:"hostports"`
-	ControlServerAddr string           `json:"control_server_addr"`
-	ControlServerID   string           `json:"control_server_id"`
-	Endpoints         []model.Endpoint `json:"endpoints"`
+	Status     statusc.Status            `json:"status"`
+	Hostports  []string                  `json:"hostports"`
+	ServerAddr string                    `json:"server-addrress"`
+	ServerID   string                    `json:"server-id"`
+	Endpoints  map[string]EndpointStatus `json:"endpoints"`
+}
+
+type EndpointStatus struct {
+	Endpoint     model.Endpoint `json:"endpoint"`
+	Destinations []string       `json:"destinations"`
+	Sources      []string       `json:"sources"`
 }
 
 func (s *Server) Status(ctx context.Context) (Status, error) {
@@ -148,11 +154,11 @@ func (s *Server) Status(ctx context.Context) (Status, error) {
 	eps := s.getEndpoints()
 
 	return Status{
-		Status:            stat,
-		Hostports:         iterc.MapSliceStrings(s.control.hostports),
-		ControlServerAddr: s.control.controlAddr.String(),
-		ControlServerID:   controlID,
-		Endpoints:         eps,
+		Status:     stat,
+		Hostports:  iterc.MapSliceStrings(s.control.hostports),
+		ServerAddr: s.control.controlAddr.String(),
+		ServerID:   controlID,
+		Endpoints:  eps,
 	}, nil
 }
 
@@ -164,9 +170,22 @@ func (s *Server) getControlID() (string, error) {
 	return controlIDConfig.String, nil
 }
 
-func (s *Server) getEndpoints() []model.Endpoint {
+func (s *Server) getEndpoints() map[string]EndpointStatus {
 	s.clients.controlServer.endpointsMu.RLock()
 	defer s.clients.controlServer.endpointsMu.RUnlock()
 
-	return slices.Collect(maps.Keys(s.clients.controlServer.endpoints))
+	endpoints := map[string]EndpointStatus{}
+	for ep, v := range s.clients.controlServer.endpoints {
+		v.mu.RLock()
+		destinations := slices.Collect(maps.Keys(v.destinations))
+		sources := slices.Collect(maps.Keys(v.sources))
+		v.mu.RUnlock()
+
+		endpoints[ep.String()] = EndpointStatus{
+			Endpoint:     ep,
+			Destinations: iterc.MapSliceStrings(destinations),
+			Sources:      iterc.MapSliceStrings(sources),
+		}
+	}
+	return endpoints
 }

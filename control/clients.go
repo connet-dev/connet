@@ -85,8 +85,9 @@ func newClientServer(
 		if reactivePeers, ok := reactivate[ClientConnKey{msg.Key.ID}]; ok {
 			key := cacheKey{msg.Key.Endpoint, msg.Key.Role}
 			peersCacheRestore[key] = append(peersCacheRestore[key], &pbclient.RemotePeer{
-				Id:   msg.Key.ID.string,
-				Peer: msg.Value.Peer,
+				Id:       msg.Key.ID.string,
+				Metadata: msg.Value.Metadata,
+				Peer:     msg.Value.Peer,
 			})
 			reactivate[ClientConnKey{msg.Key.ID}] = append(reactivePeers, msg.Key)
 		} else {
@@ -178,8 +179,8 @@ func (s *clientServer) disconnected(id ClientID) error {
 	return s.conns.Del(ClientConnKey{id})
 }
 
-func (s *clientServer) announce(endpoint model.Endpoint, role model.Role, id ClientID, peer *pbclient.Peer) error {
-	return s.peers.Put(ClientPeerKey{endpoint, role, id}, ClientPeerValue{peer})
+func (s *clientServer) announce(endpoint model.Endpoint, role model.Role, id ClientID, metadata string, peer *pbclient.Peer) error {
+	return s.peers.Put(ClientPeerKey{endpoint, role, id}, ClientPeerValue{peer, metadata})
 }
 
 func (s *clientServer) revoke(endpoint model.Endpoint, role model.Role, id ClientID) error {
@@ -309,8 +310,9 @@ func (s *clientServer) runPeerCache(ctx context.Context) error {
 			// }
 		} else {
 			npeer := &pbclient.RemotePeer{
-				Id:   msg.Key.ID.string,
-				Peer: msg.Value.Peer,
+				Id:       msg.Key.ID.string,
+				Metadata: msg.Value.Metadata,
+				Peer:     msg.Value.Peer,
 			}
 			if peers != nil {
 				peers.Update(func(_peers []*pbclient.RemotePeer) []*pbclient.RemotePeer {
@@ -603,7 +605,7 @@ func (s *clientStream) announce(ctx context.Context, req *pbclient.Request_Annou
 		return err
 	}
 
-	if err := s.conn.server.announce(endpoint, role, s.conn.id, req.Peer); err != nil {
+	if err := s.conn.server.announce(endpoint, role, s.conn.id, s.conn.metadata, req.Peer); err != nil {
 		return err
 	}
 	defer func() {
@@ -635,7 +637,7 @@ func (s *clientStream) announce(ctx context.Context, req *pbclient.Request_Annou
 				return err
 			}
 
-			if err := s.conn.server.announce(endpoint, role, s.conn.id, req.Announce.Peer); err != nil {
+			if err := s.conn.server.announce(endpoint, role, s.conn.id, s.conn.metadata, req.Announce.Peer); err != nil {
 				return err
 			}
 		}

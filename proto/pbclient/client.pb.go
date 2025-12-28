@@ -344,6 +344,7 @@ func (x *Peer) GetRelays() []*PeerDirectRelay {
 type RemotePeer struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Id            string                 `protobuf:"bytes,1,opt,name=id,proto3" json:"id,omitempty"`
+	Metadata      string                 `protobuf:"bytes,9,opt,name=metadata,proto3" json:"metadata,omitempty"`
 	Peer          *Peer                  `protobuf:"bytes,8,opt,name=peer,proto3" json:"peer,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
@@ -382,6 +383,13 @@ func (*RemotePeer) Descriptor() ([]byte, []int) {
 func (x *RemotePeer) GetId() string {
 	if x != nil {
 		return x.Id
+	}
+	return ""
+}
+
+func (x *RemotePeer) GetMetadata() string {
+	if x != nil {
+		return x.Metadata
 	}
 	return ""
 }
@@ -828,10 +836,11 @@ const file_client_proto_rawDesc = "" +
 	"\trelay_ids\x18\x06 \x03(\tR\brelayIds\x12-\n" +
 	"\x12server_certificate\x18\x04 \x01(\fR\x11serverCertificate\x12-\n" +
 	"\x12client_certificate\x18\x05 \x01(\fR\x11clientCertificate\x12/\n" +
-	"\x06relays\x18\a \x03(\v2\x17.client.PeerDirectRelayR\x06relays\">\n" +
+	"\x06relays\x18\a \x03(\v2\x17.client.PeerDirectRelayR\x06relays\"Z\n" +
 	"\n" +
 	"RemotePeer\x12\x0e\n" +
-	"\x02id\x18\x01 \x01(\tR\x02id\x12 \n" +
+	"\x02id\x18\x01 \x01(\tR\x02id\x12\x1a\n" +
+	"\bmetadata\x18\t \x01(\tR\bmetadata\x12 \n" +
 	"\x04peer\x18\b \x01(\v2\f.client.PeerR\x04peer\"u\n" +
 	"\x05Relay\x12\x0e\n" +
 	"\x02id\x18\x03 \x01(\tR\x02id\x12-\n" +

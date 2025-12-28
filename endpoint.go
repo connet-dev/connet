@@ -224,7 +224,8 @@ func (ep *endpoint) runAnnounce(ctx context.Context, conn *quic.Conn) error {
 			// only for them to come back at the next tick, with different ID
 			ep.peer.setPeers(iterc.MapSlice(resp.Announce.Peers, func(rawPeer *pbclient.RemotePeer) *pbclient.RemotePeer {
 				peer := &pbclient.RemotePeer{
-					Id: rawPeer.Id,
+					Id:       rawPeer.Id,
+					Metadata: rawPeer.Metadata,
 					Peer: &pbclient.Peer{
 						ServerCertificate: rawPeer.Peer.ServerCertificate,
 						ClientCertificate: rawPeer.Peer.ClientCertificate,

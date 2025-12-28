@@ -97,7 +97,8 @@ type ClientPeerKey struct {
 }
 
 type ClientPeerValue struct {
-	Peer *pbclient.Peer `json:"peer"`
+	Peer     *pbclient.Peer `json:"peer"`
+	Metadata string         `json:"metadata"`
 }
 
 type cacheKey struct {

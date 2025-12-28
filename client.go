@@ -423,6 +423,12 @@ func (c *Client) listenNatpmp(ctx context.Context) error {
 type ClientStatus struct {
 	// Overall status of this client
 	Status statusc.Status `json:"status"`
+	// Metadata is the metadata field send to the control server and other peers
+	Metadata string `json:"metadata"`
+	// ServerAddr reports which server this client is connected
+	ServerAddr string `json:"server-address"`
+	// DirectAddr reports local direct connectsions server
+	DirectAddr string `json:"direct-address"`
 	// Status of each active destination for this client
 	Destinations map[model.Endpoint]DestinationStatus `json:"destinations"`
 	// Status of each active source for this client
@@ -445,6 +451,9 @@ func (c *Client) Status(ctx context.Context) (ClientStatus, error) {
 
 	return ClientStatus{
 		Status:       stat,
+		Metadata:     c.metadata,
+		ServerAddr:   c.controlAddr.String(),
+		DirectAddr:   c.directAddr.String(),
 		Destinations: dsts,
 		Sources:      srcs,
 	}, nil
