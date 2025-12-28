@@ -9,6 +9,7 @@ import (
 	"github.com/connet-dev/connet/logc"
 	"github.com/connet-dev/connet/model"
 	"github.com/connet-dev/connet/reliable"
+	"github.com/connet-dev/connet/restr"
 )
 
 type Config struct {
@@ -79,10 +80,13 @@ func (s *Server) Status(ctx context.Context) (Status, error) {
 	}
 
 	return Status{
-		Clients:       clients,
-		Endpoints:     endpoints,
-		RelayServerID: s.relays.id,
-		Relays:        relays,
+		ClientIngresses: iterc.MapSlice(s.clients.ingresses, StatusIngressFn),
+		Clients:         clients,
+		Endpoints:       endpoints,
+
+		RelayServerID:  s.relays.id,
+		RelayIngresses: iterc.MapSlice(s.relays.ingresses, StatusIngressFn),
+		Relays:         relays,
 	}, nil
 }
 
@@ -149,10 +153,18 @@ func (s *Server) getRelays() (map[string]StatusRelay, error) {
 }
 
 type Status struct {
-	Clients       map[string]StatusClient   `json:"clients"`
-	Endpoints     map[string]StatusEndpoint `json:"endpoints"`
-	RelayServerID string                    `json:"relay-server-id"`
-	Relays        map[string]StatusRelay    `json:"relays"`
+	ClientIngresses []StatusIngress           `json:"client-ingresses"`
+	Clients         map[string]StatusClient   `json:"clients"`
+	Endpoints       map[string]StatusEndpoint `json:"endpoints"`
+
+	RelayServerID  string                 `json:"relay-server-id"`
+	RelayIngresses []StatusIngress        `json:"relay-ingresses"`
+	Relays         map[string]StatusRelay `json:"relays"`
+}
+
+type StatusIngress struct {
+	Address      string   `json:"address"`
+	Restrictions restr.IP `json:"restrictions"`
 }
 
 type StatusClient struct {
@@ -171,4 +183,11 @@ type StatusRelay struct {
 	ID        RelayID  `json:"id"`
 	Hostports []string `json:"hostport"`
 	Metadata  string   `json:"metadata"`
+}
+
+func StatusIngressFn(ing Ingress) StatusIngress {
+	return StatusIngress{
+		Address:      ing.Addr.String(),
+		Restrictions: ing.Restr,
+	}
 }
