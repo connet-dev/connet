@@ -49,7 +49,7 @@ func (s *clientsDirectServer) runDirectConn(ctx context.Context, conn *quic.Conn
 		return
 	}
 
-	srv.run(ctx, conn)
+	srv.runRemote(ctx, conn)
 }
 
 type directReserveConn struct {
@@ -205,7 +205,7 @@ func (c *directReserveConn) reserve(ctx context.Context) error {
 }
 
 type directPeerServer struct {
-	conn *directReserveConn
+	localConn *directReserveConn
 
 	serverName string
 	serverCert *certc.Cert
@@ -233,7 +233,7 @@ func newDirectPeerServer(conn *directReserveConn, peers []*pbclientrelay.Peer) (
 	}
 
 	s := &directPeerServer{
-		conn: conn,
+		localConn: conn,
 
 		serverName: serverName,
 		serverCert: serverCert,
@@ -275,7 +275,7 @@ func (s *directPeerServer) update(peers []*pbclientrelay.Peer) error {
 
 func (s *directPeerServer) runSource(ctx context.Context) error {
 	for {
-		stream, err := s.conn.conn.AcceptStream(ctx)
+		stream, err := s.localConn.conn.AcceptStream(ctx)
 		if err != nil {
 			return fmt.Errorf("could not accept source stream: %w", err)
 		}
@@ -370,19 +370,19 @@ func (s *directPeerServer) connectSource(ctx context.Context, srcStream *quic.St
 	return nil
 }
 
-func (s *directPeerServer) run(ctx context.Context, conn *quic.Conn) {
+func (s *directPeerServer) runRemote(ctx context.Context, conn *quic.Conn) {
 	defer func() {
 		if err := conn.CloseWithError(quic.ApplicationErrorCode(pberror.Code_Unknown), "connection closed"); err != nil {
 			slogc.Fine(s.logger, "error closing connection", "err", err)
 		}
 	}()
 
-	if err := s.runErr(ctx, conn); err != nil {
+	if err := s.runRemoteErr(ctx, conn); err != nil {
 		s.logger.Debug("error while running client conn", "err", err)
 	}
 }
 
-func (s *directPeerServer) runErr(ctx context.Context, conn *quic.Conn) error {
+func (s *directPeerServer) runRemoteErr(ctx context.Context, conn *quic.Conn) error {
 	if err := s.check(ctx, conn); err != nil {
 		return err
 	}
@@ -453,7 +453,7 @@ func (s *directPeerServer) runDestinationStreamErr(ctx context.Context, stream *
 }
 
 func (s *directPeerServer) connectDestination(ctx context.Context, stream *quic.Stream, req *pbconnect.Request) error {
-	dstStream, err := s.conn.conn.OpenStreamSync(ctx)
+	dstStream, err := s.localConn.conn.OpenStreamSync(ctx)
 	if err != nil {
 		return fmt.Errorf("destination open stream: %w", err)
 	}
