@@ -135,12 +135,24 @@ type Status struct {
 	ServerAddr string                    `json:"server-addrress"`
 	ServerID   string                    `json:"server-id"`
 	Endpoints  map[string]EndpointStatus `json:"endpoints"`
+	Directs    map[string]DirectStatus   `json:"directs"`
 }
 
 type EndpointStatus struct {
 	Endpoint     model.Endpoint `json:"endpoint"`
 	Destinations []string       `json:"destinations"`
 	Sources      []string       `json:"sources"`
+}
+
+type DirectStatus struct {
+	ServerName string               `json:"server-name"`
+	ClientID   string               `json:"client-id"`
+	Remotes    []DirectRemoteStatus `json:"remotes"`
+}
+
+type DirectRemoteStatus struct {
+	ClientID string `json:"client-id"`
+	Addr     string `json:"address"`
 }
 
 func (s *Server) Status(ctx context.Context) (Status, error) {
@@ -152,6 +164,7 @@ func (s *Server) Status(ctx context.Context) (Status, error) {
 	}
 
 	eps := s.getEndpoints()
+	drs := s.getDirects()
 
 	return Status{
 		Status:     stat,
@@ -159,6 +172,7 @@ func (s *Server) Status(ctx context.Context) (Status, error) {
 		ServerAddr: s.control.controlAddr.String(),
 		ServerID:   controlID,
 		Endpoints:  eps,
+		Directs:    drs,
 	}, nil
 }
 
@@ -188,4 +202,39 @@ func (s *Server) getEndpoints() map[string]EndpointStatus {
 		}
 	}
 	return endpoints
+}
+
+func (s *Server) getDirects() map[string]DirectStatus {
+	s.clients.directServer.peerServersMu.RLock()
+	defer s.clients.directServer.peerServersMu.RUnlock()
+
+	directs := map[string]DirectStatus{}
+	for srv, v := range s.clients.directServer.peerServers {
+		v.expectClientsMu.RLock()
+		expectClients := maps.Clone(v.expectClients)
+		v.expectClientsMu.RUnlock()
+
+		v.remoteConnsMu.RLock()
+		conns := maps.Clone(v.remoteConns)
+		v.remoteConnsMu.RUnlock()
+
+		var clients []DirectRemoteStatus
+		for k, v := range expectClients {
+			var addr string
+			if conn, ok := conns[v]; ok {
+				addr = conn.RemoteAddr().String()
+			}
+			clients = append(clients, DirectRemoteStatus{
+				ClientID: k,
+				Addr:     addr,
+			})
+		}
+
+		directs[srv] = DirectStatus{
+			ServerName: v.serverName,
+			ClientID:   v.localConn.id,
+			Remotes:    clients,
+		}
+	}
+	return directs
 }

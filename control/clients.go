@@ -662,13 +662,13 @@ func (s *clientStream) announce(ctx context.Context, req *pbclient.Request_Annou
 		}
 	})
 
-	peerAnnounce := notify.New(&pbclient.Response_Announce{})
+	peerAnnounce := notify.NewEmpty[*pbclient.Response_Announce]()
 	g.Go(func(ctx context.Context) error {
 		return s.conn.server.listen(ctx, endpoint, role.Invert(), func(peers []*pbclient.RemotePeer) error {
 			peerAnnounce.Update(func(t *pbclient.Response_Announce) *pbclient.Response_Announce {
 				return &pbclient.Response_Announce{
 					Peers:  peers,
-					Relays: t.Relays,
+					Relays: t.GetRelays(),
 				}
 			})
 			return nil
@@ -678,7 +678,7 @@ func (s *clientStream) announce(ctx context.Context, req *pbclient.Request_Annou
 		return s.conn.server.relays.Active(ctx, endpoint, s.conn.auth, func(relays map[RelayID]*pbclient.DirectRelay) error {
 			peerAnnounce.Update(func(t *pbclient.Response_Announce) *pbclient.Response_Announce {
 				return &pbclient.Response_Announce{
-					Peers:  t.Peers,
+					Peers:  t.GetPeers(),
 					Relays: slices.Collect(maps.Values(relays)),
 				}
 			})

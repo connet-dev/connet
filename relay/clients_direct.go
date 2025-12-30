@@ -155,7 +155,10 @@ func (c *directReserveConn) reserve(ctx context.Context) error {
 
 	srv, err := newDirectPeerServer(c, req.Peers)
 	if err != nil {
-		// TODO notify client
+		err := pberror.NewError(pberror.Code_RelayReserveFailed, "create server: %v", err)
+		if err := proto.Write(stream, &pbclientrelay.ReserveResp{Error: err}); err != nil {
+			return fmt.Errorf("client create server err write: %w", err)
+		}
 		return fmt.Errorf("client create server: %w", err)
 	}
 
@@ -174,34 +177,7 @@ func (c *directReserveConn) reserve(ctx context.Context) error {
 		return fmt.Errorf("client resp write: %w", err)
 	}
 
-	g := reliable.NewGroup(ctx)
-	g.Go(quicc.CancelStream(stream))
-
-	g.Go(func(ctx context.Context) error {
-		for {
-			req := &pbclientrelay.ReserveReq{}
-			if err := proto.Read(stream, req); err != nil {
-				return fmt.Errorf("client req read: %w", err)
-			}
-
-			if err := srv.update(req.Peers); err != nil {
-				// TODO notify client
-				return fmt.Errorf("client update server: %w", err)
-			}
-
-			if err := proto.Write(stream, &pbclientrelay.ReserveResp{
-				ServerCertificate: srv.serverCert.Raw(),
-			}); err != nil {
-				return fmt.Errorf("client resp write: %w", err)
-			}
-		}
-	})
-
-	g.Go(func(ctx context.Context) error {
-		return srv.runSource(ctx)
-	})
-
-	return g.Wait()
+	return srv.runReserveErr(ctx, stream)
 }
 
 type directPeerServer struct {
@@ -211,7 +187,9 @@ type directPeerServer struct {
 	serverCert *certc.Cert
 	serverTLS  *tls.Config
 
-	tlsConf atomic.Pointer[tls.Config]
+	expectClients   map[string]model.Key
+	expectClientsMu sync.RWMutex
+	tlsConf         atomic.Pointer[tls.Config]
 
 	remoteConns   map[model.Key]*quic.Conn
 	remoteConnsMu sync.RWMutex
@@ -256,15 +234,56 @@ func newDirectPeerServer(conn *directReserveConn, peers []*pbclientrelay.Peer) (
 	return s, nil
 }
 
+func (s *directPeerServer) runReserveErr(ctx context.Context, stream *quic.Stream) error {
+	g := reliable.NewGroup(ctx)
+	g.Go(quicc.CancelStream(stream))
+
+	g.Go(func(ctx context.Context) error {
+		for {
+			req := &pbclientrelay.ReserveReq{}
+			if err := proto.Read(stream, req); err != nil {
+				return fmt.Errorf("client req read: %w", err)
+			}
+
+			if err := s.update(req.Peers); err != nil {
+				err := pberror.NewError(pberror.Code_RelayReserveFailed, "update server: %v", err)
+				if err := proto.Write(stream, &pbclientrelay.ReserveResp{Error: err}); err != nil {
+					return fmt.Errorf("client update server err write: %w", err)
+				}
+				return fmt.Errorf("client update server: %w", err)
+			}
+
+			if err := proto.Write(stream, &pbclientrelay.ReserveResp{
+				ServerCertificate: s.serverCert.Raw(),
+			}); err != nil {
+				return fmt.Errorf("client resp write: %w", err)
+			}
+		}
+	})
+
+	g.Go(func(ctx context.Context) error {
+		return s.runSource(ctx)
+	})
+
+	return g.Wait()
+}
+
 func (s *directPeerServer) update(peers []*pbclientrelay.Peer) error {
+	clients := map[string]model.Key{}
 	clientCAs := x509.NewCertPool()
 	for _, peer := range peers {
 		cert, err := x509.ParseCertificate(peer.ClientCertificate)
 		if err != nil {
 			return fmt.Errorf("cannot parse certificate for %s: %w", peer.Id, err)
 		}
+
+		clients[peer.Id] = model.NewKey(cert)
 		clientCAs.AddCert(cert)
 	}
+
+	s.expectClientsMu.Lock()
+	s.expectClients = clients
+	s.expectClientsMu.Unlock()
 
 	// TODO optimize
 	s.serverTLS.ClientCAs = clientCAs

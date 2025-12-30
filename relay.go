@@ -351,7 +351,7 @@ func (r *directRelay) reserve(ctx context.Context, conn *quic.Conn) error {
 			}
 			r.local.addDirectPeerRelay(&pbclient.PeerDirectRelay{
 				Id:                 string(r.serverID),
-				Addresses:          iterc.MapSlice(r.serverHostports, model.HostPort.PB),
+				Addresses:          model.PBsFromHostPorts(r.serverHostports),
 				ConnectCertificate: cert.Raw,
 			})
 		}
