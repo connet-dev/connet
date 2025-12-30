@@ -12,11 +12,9 @@ import (
 	"net"
 	"sync"
 
-	"github.com/connet-dev/connet/iterc"
 	"github.com/connet-dev/connet/logc"
 	"github.com/connet-dev/connet/model"
 	"github.com/connet-dev/connet/netc"
-	"github.com/connet-dev/connet/notify"
 	"github.com/connet-dev/connet/proto"
 	"github.com/connet-dev/connet/proto/pbclient"
 	"github.com/connet-dev/connet/proto/pberror"
@@ -66,6 +64,22 @@ func newRelayServer(
 	serverOffsets, err := stores.RelayServerOffsets()
 	if err != nil {
 		return nil, fmt.Errorf("relay server offsets store open: %w", err)
+	}
+
+	directsMsgs, directsOffset, err := conns.Snapshot()
+	if err != nil {
+		return nil, fmt.Errorf("relay conns snapshot: %w", err)
+	}
+	directsCache := map[RelayID]directRelay{}
+	for _, msg := range directsMsgs {
+		directsCache[msg.Key.ID] = directRelay{
+			auth: msg.Value.Authentication,
+			proto: &pbclient.DirectRelay{
+				Id:                 msg.Key.ID.string,
+				Addresses:          model.PBsFromHostPorts(msg.Value.Hostports),
+				ReserveCertificate: msg.Value.ServerCertificate.Raw,
+			},
+		}
 	}
 
 	endpointsMsgs, endpointsOffset, err := servers.Snapshot()
@@ -133,7 +147,8 @@ func newRelayServer(
 		endpointsCache:  endpointsCache,
 		endpointsOffset: endpointsOffset,
 
-		directRelays: notify.NewEmpty[[]*pbclient.DirectRelay](),
+		directsCache:  directsCache,
+		directsOffset: directsOffset,
 	}, nil
 }
 
@@ -157,7 +172,14 @@ type relayServer struct {
 	endpointsOffset int64
 	endpointsMu     sync.RWMutex
 
-	directRelays *notify.V[[]*pbclient.DirectRelay]
+	directsCache  map[RelayID]directRelay
+	directsOffset int64
+	directsMu     sync.RWMutex
+}
+
+type directRelay struct {
+	auth  RelayAuthentication
+	proto *pbclient.DirectRelay
 }
 
 func (s *relayServer) getEndpoint(endpoint model.Endpoint) (map[RelayID]relayCacheValue, int64) {
@@ -225,9 +247,58 @@ func (s *relayServer) listen(ctx context.Context, endpoint model.Endpoint,
 	}
 }
 
-func (s *relayServer) Active(ctx context.Context, auth ClientAuthentication) *notify.V[[]*pbclient.DirectRelay] {
-	// TODO filter out based on client auth
-	return s.directRelays
+func (s *relayServer) cachedDirects() (map[RelayID]directRelay, int64) {
+	s.directsMu.RLock()
+	defer s.directsMu.RUnlock()
+
+	return maps.Clone(s.directsCache), s.directsOffset
+}
+
+func (s *relayServer) Active(ctx context.Context, ep model.Endpoint, auth ClientAuthentication, notify func(map[RelayID]*pbclient.DirectRelay) error) error {
+	directRelays, offset := s.cachedDirects()
+	localDirectRelays := map[RelayID]*pbclient.DirectRelay{}
+	for id, relay := range directRelays {
+		if ok, err := s.auth.Allow(relay.auth, auth, ep); err != nil {
+			return fmt.Errorf("auth allow error: %w", err)
+		} else if ok {
+			localDirectRelays[id] = relay.proto
+		}
+	}
+	if err := notify(localDirectRelays); err != nil {
+		return err
+	}
+
+	for {
+		msgs, nextOffset, err := s.conns.Consume(ctx, offset)
+		if err != nil {
+			return err
+		}
+
+		var changed bool
+		for _, msg := range msgs {
+			if msg.Delete {
+				delete(localDirectRelays, msg.Key.ID)
+				changed = true
+			} else if ok, err := s.auth.Allow(msg.Value.Authentication, auth, ep); err != nil {
+				return fmt.Errorf("auth allow error: %w", err)
+			} else if ok {
+				localDirectRelays[msg.Key.ID] = &pbclient.DirectRelay{
+					Id:                 msg.Key.ID.string,
+					Addresses:          model.PBsFromHostPorts(msg.Value.Hostports),
+					ReserveCertificate: msg.Value.ServerCertificate.Raw,
+				}
+				changed = true
+			}
+		}
+
+		offset = nextOffset
+
+		if changed {
+			if err := notify(localDirectRelays); err != nil {
+				return err
+			}
+		}
+	}
 }
 
 func (s *relayServer) run(ctx context.Context) error {
@@ -237,6 +308,7 @@ func (s *relayServer) run(ctx context.Context) error {
 		g.Go(reliable.Bind(ingress, s.runListener))
 	}
 	g.Go(s.runEndpointsCache)
+	g.Go(s.runDirectsCache)
 
 	g.Go(logc.ScheduleCompact(s.conns))
 	g.Go(logc.ScheduleCompact(s.clients))
@@ -351,6 +423,47 @@ func (s *relayServer) runEndpointsCache(ctx context.Context) error {
 	}
 }
 
+func (s *relayServer) runDirectsCache(ctx context.Context) error {
+	update := func(msg logc.Message[RelayConnKey, RelayConnValue]) {
+		s.directsMu.Lock()
+		defer s.directsMu.Unlock()
+
+		if msg.Delete {
+			delete(s.directsCache, msg.Key.ID)
+		} else {
+			s.directsCache[msg.Key.ID] = directRelay{
+				auth: msg.Value.Authentication,
+				proto: &pbclient.DirectRelay{
+					Id:                 msg.Key.ID.string,
+					Addresses:          model.PBsFromHostPorts(msg.Value.Hostports),
+					ReserveCertificate: msg.Value.ServerCertificate.Raw,
+				},
+			}
+		}
+
+		s.directsOffset = msg.Offset + 1
+	}
+
+	for {
+		s.directsMu.RLock()
+		offset := s.directsOffset
+		s.directsMu.RUnlock()
+
+		msgs, nextOffset, err := s.conns.Consume(ctx, offset)
+		if err != nil {
+			return fmt.Errorf("relay conns consume: %w", err)
+		}
+
+		for _, msg := range msgs {
+			update(msg)
+		}
+
+		s.directsMu.Lock()
+		s.directsOffset = nextOffset
+		s.directsMu.Unlock()
+	}
+}
+
 func (s *relayServer) getRelayServerOffset(id RelayID) (int64, error) {
 	offset, err := s.serverOffsets.Get(RelayConnKey{id})
 	switch {
@@ -436,15 +549,6 @@ func (c *relayConn) runErr(ctx context.Context) error {
 			c.logger.Warn("failed to delete conn", "key", key, "err", err)
 		}
 	}()
-
-	notify.SliceAppend(c.server.directRelays, &pbclient.DirectRelay{
-		Id:                 c.id.string,
-		Addresses:          iterc.MapSlice(c.hostports, model.HostPort.PB),
-		ReserveCertificate: c.certificate.Raw,
-	})
-	defer notify.SliceFilter(c.server.directRelays, func(relay *pbclient.DirectRelay) bool {
-		return relay.Id != c.id.string
-	})
 
 	return reliable.RunGroup(ctx,
 		c.runRelayClients,
