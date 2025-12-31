@@ -360,7 +360,7 @@ func (r *directRelay) reserve(ctx context.Context, conn *quic.Conn) error {
 			}
 			for peerId := range activePeerIds {
 				if _, ok := newActivePeerIds[peerId]; !ok {
-					r.local.addActiveConn(peerId, peerRelayIncoming, string(r.serverID), conn)
+					r.local.removeActiveConn(peerId, peerRelayIncoming, string(r.serverID))
 				}
 			}
 		}

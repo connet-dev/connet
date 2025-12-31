@@ -21,7 +21,6 @@ import (
 	"github.com/connet-dev/connet/model"
 	"github.com/connet-dev/connet/proto"
 	"github.com/connet-dev/connet/proto/pbconnect"
-	"github.com/connet-dev/connet/proto/pberror"
 	"github.com/connet-dev/connet/quicc"
 	"github.com/connet-dev/connet/statusc"
 	"github.com/quic-go/quic-go"
@@ -309,12 +308,6 @@ func (s *Source) dialInOrder(ctx context.Context, conns []sourceConn) (net.Conn,
 		} else {
 			// connect was success
 			return conn, nil
-		}
-	}
-
-	if len(errs) == 1 {
-		if err := pberror.GetAppError(errs[0]); err != nil && err.ErrorCode == quic.ApplicationErrorCode(pberror.Code_DestinationNotFound) {
-			return nil, ErrSourceNoActiveDestinations
 		}
 	}
 
