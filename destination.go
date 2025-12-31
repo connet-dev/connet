@@ -153,9 +153,9 @@ func (d *Destination) runActiveErr(ctx context.Context) error {
 }
 
 func (d *Destination) getSourceTLS(name string) (*tls.Config, error) {
-	remotes, err := d.ep.peer.peers.Peek()
-	if err != nil {
-		return nil, fmt.Errorf("source peers list: %w", err)
+	remotes, ok := d.ep.peer.peers.Peek()
+	if !ok {
+		return nil, fmt.Errorf("source peer %s not found: no remotes", name)
 	}
 
 	for _, remote := range remotes {

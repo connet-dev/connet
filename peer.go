@@ -118,10 +118,10 @@ func newPeer(direct *directServer, addrs *notify.V[advertiseAddrs], logger *slog
 		}),
 
 		relays:     notify.NewEmpty[[]*pbclient.Relay](),
-		relayConns: notify.New(map[relayID]*quic.Conn{}),
+		relayConns: notify.NewEmpty[map[relayID]*quic.Conn](),
 
 		peers:     notify.NewEmpty[[]*pbclient.RemotePeer](),
-		peerConns: notify.New(map[peerConnKey]*quic.Conn{}),
+		peerConns: notify.NewEmpty[map[peerConnKey]*quic.Conn](),
 
 		direct: direct,
 		addrs:  addrs,
@@ -336,9 +336,9 @@ func (p *peer) newECDHConfig() (*ecdh.PrivateKey, *pbconnect.ECDHConfiguration, 
 }
 
 func (p *peer) getECDHPublicKey(cfg *pbconnect.ECDHConfiguration) (*ecdh.PublicKey, error) {
-	remotes, err := p.peers.Peek()
-	if err != nil {
-		return nil, fmt.Errorf("peers peer: %w", err)
+	remotes, ok := p.peers.Peek()
+	if !ok {
+		return nil, fmt.Errorf("no peers found")
 	}
 	var candidates []*x509.Certificate
 	for _, remote := range remotes {
@@ -407,36 +407,30 @@ func (p *peer) status() (StatusPeer, error) {
 		Peers:  map[string]StatusRemotePeer{},
 	}
 
-	relays, err := p.relayConns.Peek()
-	if err != nil {
-		return StatusPeer{}, err
-	}
-	for id, conn := range relays {
-		stat.Relays[string(id)] = StatusRelayConnection{
-			ID:   string(id),
-			Addr: conn.RemoteAddr().String(),
+	if relays, ok := p.relayConns.Peek(); ok {
+		for id, conn := range relays {
+			stat.Relays[string(id)] = StatusRelayConnection{
+				ID:   string(id),
+				Addr: conn.RemoteAddr().String(),
+			}
 		}
 	}
 
-	peers, err := p.peers.Peek()
-	if err != nil {
-		return StatusPeer{}, err
-	}
-	for _, peer := range peers {
-		stat.Peers[peer.Id] = StatusRemotePeer{ID: peer.Id, Metadata: peer.Metadata}
+	if peers, ok := p.peers.Peek(); ok {
+		for _, peer := range peers {
+			stat.Peers[peer.Id] = StatusRemotePeer{ID: peer.Id, Metadata: peer.Metadata}
+		}
 	}
 
-	conns, err := p.peerConns.Peek()
-	if err != nil {
-		return StatusPeer{}, err
-	}
-	for key, conn := range conns {
-		if peer, ok := stat.Peers[string(key.id)]; ok {
-			peer.Connections = append(peer.Connections, StatusRemotePeerConnection{
-				Style: key.style.String(),
-				Addr:  conn.RemoteAddr().String(),
-			})
-			stat.Peers[string(key.id)] = peer
+	if conns, ok := p.peerConns.Peek(); ok {
+		for key, conn := range conns {
+			if peer, ok := stat.Peers[string(key.id)]; ok {
+				peer.Connections = append(peer.Connections, StatusRemotePeerConnection{
+					Style: key.style.String(),
+					Addr:  conn.RemoteAddr().String(),
+				})
+				stat.Peers[string(key.id)] = peer
+			}
 		}
 	}
 
