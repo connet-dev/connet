@@ -253,7 +253,7 @@ func (s *controlClient) connectSingle(ctx context.Context, transport *quic.Trans
 
 	if err := proto.Write(authStream, &pbrelay.AuthenticateReq{
 		Token:             s.controlToken,
-		Addresses:         iterc.MapSlice(s.hostports, model.HostPort.PB),
+		Addresses:         model.PBsFromHostPorts(s.hostports),
 		ReconnectToken:    reconnConfig.Bytes,
 		BuildVersion:      model.BuildVersion(),
 		Metadata:          s.metadata,

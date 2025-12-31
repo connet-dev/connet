@@ -14,7 +14,6 @@ import (
 	"sync"
 	"time"
 
-	"github.com/connet-dev/connet/iterc"
 	"github.com/connet-dev/connet/logc"
 	"github.com/connet-dev/connet/model"
 	"github.com/connet-dev/connet/notify"
@@ -747,7 +746,7 @@ func (s *clientStream) relay(ctx context.Context, req *pbclient.Request_Relay) e
 			for id, value := range relays {
 				addrs = append(addrs, &pbclient.Relay{
 					Id:                id.string,
-					Addresses:         iterc.MapSlice(value.Hostports, model.HostPort.PB),
+					Addresses:         model.PBsFromHostPorts(value.Hostports),
 					ServerCertificate: value.Cert.Raw,
 				})
 			}
