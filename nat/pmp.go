@@ -68,8 +68,8 @@ func (s *PMP) Get() []netip.AddrPort {
 		return nil
 	}
 
-	addr, err := s.externalAddrPort.Peek()
-	if err != nil || addr == nil {
+	addr, ok := s.externalAddrPort.Peek()
+	if !ok || addr == nil {
 		return nil
 	}
 	return []netip.AddrPort{*addr, s.localAddrPort}

@@ -8,7 +8,6 @@ import (
 	"fmt"
 	"log/slog"
 	"net"
-	"slices"
 	"sync/atomic"
 	"time"
 
@@ -288,9 +287,6 @@ func (r *directRelay) runRelay(ctx context.Context, conn *quic.Conn) error {
 		}
 	}()
 
-	r.local.addActiveConn("*", peerRelayIncoming, string(r.serverID), conn)
-	defer r.local.removeActiveConn("*", peerRelayIncoming, string(r.serverID))
-
 	return r.reserve(ctx, conn)
 }
 
@@ -310,20 +306,11 @@ func (r *directRelay) reserve(ctx context.Context, conn *quic.Conn) error {
 
 	g.Go(func(ctx context.Context) error {
 		defer r.logger.Debug("completed relay announce")
-
-		var activePeers []*pbclient.RemotePeer
 		return r.local.peers.Listen(ctx, func(remotes []*pbclient.RemotePeer) error {
-			if slices.EqualFunc(activePeers, remotes, func(l, r *pbclient.RemotePeer) bool {
-				return l.Id == r.Id
-			}) {
-				return nil
-			}
-			activePeers = remotes
-
 			r.logger.Debug("updated announce", "peers", len(remotes))
 			if err := proto.Write(stream, &pbclientrelay.ReserveReq{
-				Peers: iterc.MapSlice(remotes, func(remote *pbclient.RemotePeer) *pbclientrelay.Peer {
-					return &pbclientrelay.Peer{
+				Peers: iterc.MapSlice(remotes, func(remote *pbclient.RemotePeer) *pbclientrelay.ReservePeer {
+					return &pbclientrelay.ReservePeer{
 						Id:                remote.Id,
 						ClientCertificate: remote.Peer.ClientCertificate,
 					}
@@ -337,6 +324,14 @@ func (r *directRelay) reserve(ctx context.Context, conn *quic.Conn) error {
 
 	g.Go(func(ctx context.Context) error {
 		defer r.local.removeDirectPeerRelay(r.serverID)
+
+		activePeerIds := map[peerID]struct{}{}
+		defer func() {
+			for peerId := range activePeerIds {
+				r.local.removeActiveConn(peerId, peerRelayIncoming, string(r.serverID))
+			}
+		}()
+
 		for {
 			resp := &pbclientrelay.ReserveResp{}
 			if err := proto.Read(stream, resp); err != nil {
@@ -354,6 +349,20 @@ func (r *directRelay) reserve(ctx context.Context, conn *quic.Conn) error {
 				Addresses:          model.PBsFromHostPorts(r.serverHostports),
 				ConnectCertificate: cert.Raw,
 			})
+
+			newActivePeerIds := map[peerID]struct{}{}
+			for _, peer := range resp.Peers {
+				peerId := peerID(peer.Id)
+				newActivePeerIds[peerId] = struct{}{}
+
+				r.local.addActiveConn(peerId, peerRelayIncoming, string(r.serverID), conn)
+				activePeerIds[peerId] = struct{}{}
+			}
+			for peerId := range activePeerIds {
+				if _, ok := newActivePeerIds[peerId]; !ok {
+					r.local.addActiveConn(peerId, peerRelayIncoming, string(r.serverID), conn)
+				}
+			}
 		}
 	})
 

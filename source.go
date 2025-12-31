@@ -168,9 +168,9 @@ func (s *Source) runActiveErr(ctx context.Context) error {
 }
 
 func (s *Source) getDestinationTLS(name string) (*tls.Config, error) {
-	remotes, err := s.ep.peer.peers.Peek()
-	if err != nil {
-		return nil, fmt.Errorf("destination peers list: %w", err)
+	remotes, ok := s.ep.peer.peers.Peek()
+	if !ok {
+		return nil, fmt.Errorf("destination peer %s not found: no remotes", name)
 	}
 
 	for _, remote := range remotes {

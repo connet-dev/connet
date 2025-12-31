@@ -210,22 +210,17 @@ func (s *Server) getDirects() map[string]DirectStatus {
 
 	directs := map[string]DirectStatus{}
 	for srv, v := range s.clients.directServer.peerServers {
-		v.expectClientsMu.RLock()
-		expectClients := maps.Clone(v.expectClients)
-		v.expectClientsMu.RUnlock()
-
-		v.remoteConnsMu.RLock()
-		conns := maps.Clone(v.remoteConns)
-		v.remoteConnsMu.RUnlock()
+		expectedConns, _ := v.expectConns.Peek()
+		remoteConns, _ := v.remoteConns.Peek()
 
 		var clients []DirectRemoteStatus
-		for k, v := range expectClients {
+		for k, v := range expectedConns {
 			var addr string
-			if conn, ok := conns[v]; ok {
+			if conn, ok := remoteConns[k]; ok {
 				addr = conn.RemoteAddr().String()
 			}
 			clients = append(clients, DirectRemoteStatus{
-				ClientID: k,
+				ClientID: v,
 				Addr:     addr,
 			})
 		}

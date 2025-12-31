@@ -10,6 +10,7 @@ import (
 	"encoding/binary"
 	"fmt"
 	"log/slog"
+	"maps"
 	"slices"
 	"strings"
 	"time"
@@ -32,7 +33,7 @@ type peer struct {
 	relayConns *notify.V[map[relayID]*quic.Conn]
 
 	directRelays     *notify.V[[]*pbclient.DirectRelay]
-	directPeerRelays *notify.V[[]*pbclient.PeerDirectRelay]
+	directPeerRelays *notify.V[map[relayID]*pbclient.PeerDirectRelay]
 
 	peers     *notify.V[[]*pbclient.RemotePeer]
 	peerConns *notify.V[map[peerConnKey]*quic.Conn]
@@ -127,13 +128,13 @@ func newPeer(direct *directServer, addrs *notify.V[advertiseAddrs], logger *slog
 		}),
 
 		relays:     notify.NewEmpty[[]*pbclient.Relay](),
-		relayConns: notify.New(map[relayID]*quic.Conn{}),
+		relayConns: notify.NewEmpty[map[relayID]*quic.Conn](),
 
 		directRelays:     notify.NewEmpty[[]*pbclient.DirectRelay](),
-		directPeerRelays: notify.NewEmpty[[]*pbclient.PeerDirectRelay](),
+		directPeerRelays: notify.NewEmpty[map[relayID]*pbclient.PeerDirectRelay](),
 
 		peers:     notify.NewEmpty[[]*pbclient.RemotePeer](),
-		peerConns: notify.New(map[peerConnKey]*quic.Conn{}),
+		peerConns: notify.NewEmpty[map[peerConnKey]*quic.Conn](),
 
 		direct: direct,
 		addrs:  addrs,
@@ -280,7 +281,7 @@ func (p *peer) runShareRelays(ctx context.Context) error {
 }
 
 func (p *peer) runShareDirectRelays(ctx context.Context) error {
-	return p.directPeerRelays.Listen(ctx, func(relays []*pbclient.PeerDirectRelay) error {
+	return p.directPeerRelays.Listen(ctx, func(relays map[relayID]*pbclient.PeerDirectRelay) error {
 		p.logger.Debug("direct peer relays updated", "len", len(relays))
 
 		p.self.Update(func(cp *pbclient.Peer) *pbclient.Peer {
@@ -289,7 +290,7 @@ func (p *peer) runShareDirectRelays(ctx context.Context) error {
 				RelayIds:          cp.RelayIds,
 				ServerCertificate: cp.ServerCertificate,
 				ClientCertificate: cp.ClientCertificate,
-				Relays:            relays,
+				Relays:            slices.Collect(maps.Values(relays)),
 			}
 		})
 
@@ -339,14 +340,12 @@ func (p *peer) removeRelayConn(id relayID) {
 	notify.MapDelete(p.relayConns, id)
 }
 
-func (p *peer) addDirectPeerRelay(relay *pbclient.PeerDirectRelay) { // TODO upsert?
-	notify.SliceAppend(p.directPeerRelays, relay)
+func (p *peer) addDirectPeerRelay(relay *pbclient.PeerDirectRelay) {
+	notify.MapPut(p.directPeerRelays, relayID(relay.Id), relay)
 }
 
-func (p *peer) removeDirectPeerRelay(id relayID) { // TODO should we remove convenince methods?
-	notify.SliceFilter(p.directPeerRelays, func(relay *pbclient.PeerDirectRelay) bool {
-		return relay.Id != string(id)
-	})
+func (p *peer) removeDirectPeerRelay(id relayID) {
+	notify.MapDelete(p.directPeerRelays, id)
 }
 
 func (p *peer) addActiveConn(id peerID, style peerStyle, key string, conn *quic.Conn) {
@@ -420,9 +419,9 @@ func (p *peer) newECDHConfig() (*ecdh.PrivateKey, *pbconnect.ECDHConfiguration, 
 }
 
 func (p *peer) getECDHPublicKey(cfg *pbconnect.ECDHConfiguration) (*ecdh.PublicKey, error) {
-	remotes, err := p.peers.Peek()
-	if err != nil {
-		return nil, fmt.Errorf("peers peer: %w", err)
+	remotes, ok := p.peers.Peek()
+	if !ok {
+		return nil, fmt.Errorf("no peers found")
 	}
 	var candidates []*x509.Certificate
 	for _, remote := range remotes {
@@ -491,36 +490,33 @@ func (p *peer) status() (StatusPeer, error) {
 		Peers:  map[string]StatusRemotePeer{},
 	}
 
-	relays, err := p.relayConns.Peek()
-	if err != nil {
-		return StatusPeer{}, err
-	}
-	for id, conn := range relays {
-		stat.Relays[string(id)] = StatusRelayConnection{
-			ID:   string(id),
-			Addr: conn.RemoteAddr().String(),
+	relays, ok := p.relayConns.Peek()
+	if ok {
+		for id, conn := range relays {
+			stat.Relays[string(id)] = StatusRelayConnection{
+				ID:   string(id),
+				Addr: conn.RemoteAddr().String(),
+			}
 		}
 	}
 
-	peers, err := p.peers.Peek()
-	if err != nil {
-		return StatusPeer{}, err
-	}
-	for _, peer := range peers {
-		stat.Peers[peer.Id] = StatusRemotePeer{ID: peer.Id, Metadata: peer.Metadata}
+	peers, ok := p.peers.Peek()
+	if ok {
+		for _, peer := range peers {
+			stat.Peers[peer.Id] = StatusRemotePeer{ID: peer.Id, Metadata: peer.Metadata}
+		}
 	}
 
-	conns, err := p.peerConns.Peek()
-	if err != nil {
-		return StatusPeer{}, err
-	}
-	for key, conn := range conns {
-		if peer, ok := stat.Peers[string(key.id)]; ok {
-			peer.Connections = append(peer.Connections, StatusRemotePeerConnection{
-				Style: key.style.String(),
-				Addr:  conn.RemoteAddr().String(),
-			})
-			stat.Peers[string(key.id)] = peer
+	conns, ok := p.peerConns.Peek()
+	if ok {
+		for key, conn := range conns {
+			if peer, ok := stat.Peers[string(key.id)]; ok {
+				peer.Connections = append(peer.Connections, StatusRemotePeerConnection{
+					Style: key.style.String(),
+					Addr:  conn.RemoteAddr().String(),
+				})
+				stat.Peers[string(key.id)] = peer
+			}
 		}
 	}
 

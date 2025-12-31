@@ -16,10 +16,10 @@ message AuthenticateResp {
 }
 
 message ReserveReq {
-  repeated Peer peers = 1;
+  repeated ReservePeer peers = 1;
 }
 
-message Peer {
+message ReservePeer {
   string id = 1;
   bytes client_certificate = 2; // certificate that peer use to connect to the relay
 }
@@ -27,4 +27,9 @@ message Peer {
 message ReserveResp {
   error.Error error = 1;
   bytes server_certificate = 2; // certificate that peers use to connect to the relay
+  repeated ConnectedPeer peers = 3;
+}
+
+message ConnectedPeer {
+  string id = 1;
 }

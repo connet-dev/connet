@@ -128,7 +128,7 @@ func (x *AuthenticateResp) GetError() *pberror.Error {
 
 type ReserveReq struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
-	Peers         []*Peer                `protobuf:"bytes,1,rep,name=peers,proto3" json:"peers,omitempty"`
+	Peers         []*ReservePeer         `protobuf:"bytes,1,rep,name=peers,proto3" json:"peers,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -163,14 +163,14 @@ func (*ReserveReq) Descriptor() ([]byte, []int) {
 	return file_client_relay_proto_rawDescGZIP(), []int{2}
 }
 
-func (x *ReserveReq) GetPeers() []*Peer {
+func (x *ReserveReq) GetPeers() []*ReservePeer {
 	if x != nil {
 		return x.Peers
 	}
 	return nil
 }
 
-type Peer struct {
+type ReservePeer struct {
 	state             protoimpl.MessageState `protogen:"open.v1"`
 	Id                string                 `protobuf:"bytes,1,opt,name=id,proto3" json:"id,omitempty"`
 	ClientCertificate []byte                 `protobuf:"bytes,2,opt,name=client_certificate,json=clientCertificate,proto3" json:"client_certificate,omitempty"` // certificate that peer use to connect to the relay
@@ -178,20 +178,20 @@ type Peer struct {
 	sizeCache         protoimpl.SizeCache
 }
 
-func (x *Peer) Reset() {
-	*x = Peer{}
+func (x *ReservePeer) Reset() {
+	*x = ReservePeer{}
 	mi := &file_client_relay_proto_msgTypes[3]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
 
-func (x *Peer) String() string {
+func (x *ReservePeer) String() string {
 	return protoimpl.X.MessageStringOf(x)
 }
 
-func (*Peer) ProtoMessage() {}
+func (*ReservePeer) ProtoMessage() {}
 
-func (x *Peer) ProtoReflect() protoreflect.Message {
+func (x *ReservePeer) ProtoReflect() protoreflect.Message {
 	mi := &file_client_relay_proto_msgTypes[3]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
@@ -203,19 +203,19 @@ func (x *Peer) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use Peer.ProtoReflect.Descriptor instead.
-func (*Peer) Descriptor() ([]byte, []int) {
+// Deprecated: Use ReservePeer.ProtoReflect.Descriptor instead.
+func (*ReservePeer) Descriptor() ([]byte, []int) {
 	return file_client_relay_proto_rawDescGZIP(), []int{3}
 }
 
-func (x *Peer) GetId() string {
+func (x *ReservePeer) GetId() string {
 	if x != nil {
 		return x.Id
 	}
 	return ""
 }
 
-func (x *Peer) GetClientCertificate() []byte {
+func (x *ReservePeer) GetClientCertificate() []byte {
 	if x != nil {
 		return x.ClientCertificate
 	}
@@ -226,6 +226,7 @@ type ReserveResp struct {
 	state             protoimpl.MessageState `protogen:"open.v1"`
 	Error             *pberror.Error         `protobuf:"bytes,1,opt,name=error,proto3" json:"error,omitempty"`
 	ServerCertificate []byte                 `protobuf:"bytes,2,opt,name=server_certificate,json=serverCertificate,proto3" json:"server_certificate,omitempty"` // certificate that peers use to connect to the relay
+	Peers             []*ConnectedPeer       `protobuf:"bytes,3,rep,name=peers,proto3" json:"peers,omitempty"`
 	unknownFields     protoimpl.UnknownFields
 	sizeCache         protoimpl.SizeCache
 }
@@ -274,6 +275,57 @@ func (x *ReserveResp) GetServerCertificate() []byte {
 	return nil
 }
 
+func (x *ReserveResp) GetPeers() []*ConnectedPeer {
+	if x != nil {
+		return x.Peers
+	}
+	return nil
+}
+
+type ConnectedPeer struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Id            string                 `protobuf:"bytes,1,opt,name=id,proto3" json:"id,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ConnectedPeer) Reset() {
+	*x = ConnectedPeer{}
+	mi := &file_client_relay_proto_msgTypes[5]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ConnectedPeer) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ConnectedPeer) ProtoMessage() {}
+
+func (x *ConnectedPeer) ProtoReflect() protoreflect.Message {
+	mi := &file_client_relay_proto_msgTypes[5]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ConnectedPeer.ProtoReflect.Descriptor instead.
+func (*ConnectedPeer) Descriptor() ([]byte, []int) {
+	return file_client_relay_proto_rawDescGZIP(), []int{5}
+}
+
+func (x *ConnectedPeer) GetId() string {
+	if x != nil {
+		return x.Id
+	}
+	return ""
+}
+
 var File_client_relay_proto protoreflect.FileDescriptor
 
 const file_client_relay_proto_rawDesc = "" +
@@ -284,16 +336,19 @@ const file_client_relay_proto_rawDesc = "" +
 	"\rbuild_version\x18\x03 \x01(\tR\fbuildVersion\x12\x1a\n" +
 	"\bmetadata\x18\x04 \x01(\tR\bmetadata\"6\n" +
 	"\x10AuthenticateResp\x12\"\n" +
-	"\x05error\x18\x01 \x01(\v2\f.error.ErrorR\x05error\"6\n" +
+	"\x05error\x18\x01 \x01(\v2\f.error.ErrorR\x05error\"=\n" +
 	"\n" +
-	"ReserveReq\x12(\n" +
-	"\x05peers\x18\x01 \x03(\v2\x12.client_relay.PeerR\x05peers\"E\n" +
-	"\x04Peer\x12\x0e\n" +
+	"ReserveReq\x12/\n" +
+	"\x05peers\x18\x01 \x03(\v2\x19.client_relay.ReservePeerR\x05peers\"L\n" +
+	"\vReservePeer\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12-\n" +
-	"\x12client_certificate\x18\x02 \x01(\fR\x11clientCertificate\"`\n" +
+	"\x12client_certificate\x18\x02 \x01(\fR\x11clientCertificate\"\x93\x01\n" +
 	"\vReserveResp\x12\"\n" +
 	"\x05error\x18\x01 \x01(\v2\f.error.ErrorR\x05error\x12-\n" +
-	"\x12server_certificate\x18\x02 \x01(\fR\x11serverCertificateB2Z0github.com/connet-dev/connet/proto/pbclientrelayb\x06proto3"
+	"\x12server_certificate\x18\x02 \x01(\fR\x11serverCertificate\x121\n" +
+	"\x05peers\x18\x03 \x03(\v2\x1b.client_relay.ConnectedPeerR\x05peers\"\x1f\n" +
+	"\rConnectedPeer\x12\x0e\n" +
+	"\x02id\x18\x01 \x01(\tR\x02idB2Z0github.com/connet-dev/connet/proto/pbclientrelayb\x06proto3"
 
 var (
 	file_client_relay_proto_rawDescOnce sync.Once
@@ -307,24 +362,26 @@ func file_client_relay_proto_rawDescGZIP() []byte {
 	return file_client_relay_proto_rawDescData
 }
 
-var file_client_relay_proto_msgTypes = make([]protoimpl.MessageInfo, 5)
+var file_client_relay_proto_msgTypes = make([]protoimpl.MessageInfo, 6)
 var file_client_relay_proto_goTypes = []any{
 	(*AuthenticateReq)(nil),  // 0: client_relay.AuthenticateReq
 	(*AuthenticateResp)(nil), // 1: client_relay.AuthenticateResp
 	(*ReserveReq)(nil),       // 2: client_relay.ReserveReq
-	(*Peer)(nil),             // 3: client_relay.Peer
+	(*ReservePeer)(nil),      // 3: client_relay.ReservePeer
 	(*ReserveResp)(nil),      // 4: client_relay.ReserveResp
-	(*pberror.Error)(nil),    // 5: error.Error
+	(*ConnectedPeer)(nil),    // 5: client_relay.ConnectedPeer
+	(*pberror.Error)(nil),    // 6: error.Error
 }
 var file_client_relay_proto_depIdxs = []int32{
-	5, // 0: client_relay.AuthenticateResp.error:type_name -> error.Error
-	3, // 1: client_relay.ReserveReq.peers:type_name -> client_relay.Peer
-	5, // 2: client_relay.ReserveResp.error:type_name -> error.Error
-	3, // [3:3] is the sub-list for method output_type
-	3, // [3:3] is the sub-list for method input_type
-	3, // [3:3] is the sub-list for extension type_name
-	3, // [3:3] is the sub-list for extension extendee
-	0, // [0:3] is the sub-list for field type_name
+	6, // 0: client_relay.AuthenticateResp.error:type_name -> error.Error
+	3, // 1: client_relay.ReserveReq.peers:type_name -> client_relay.ReservePeer
+	6, // 2: client_relay.ReserveResp.error:type_name -> error.Error
+	5, // 3: client_relay.ReserveResp.peers:type_name -> client_relay.ConnectedPeer
+	4, // [4:4] is the sub-list for method output_type
+	4, // [4:4] is the sub-list for method input_type
+	4, // [4:4] is the sub-list for extension type_name
+	4, // [4:4] is the sub-list for extension extendee
+	0, // [0:4] is the sub-list for field type_name
 }
 
 func init() { file_client_relay_proto_init() }
@@ -338,7 +395,7 @@ func file_client_relay_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_client_relay_proto_rawDesc), len(file_client_relay_proto_rawDesc)),
 			NumEnums:      0,
-			NumMessages:   5,
+			NumMessages:   6,
 			NumExtensions: 0,
 			NumServices:   0,
 		},

@@ -16,6 +16,7 @@ import (
 	"github.com/connet-dev/connet/certc"
 	"github.com/connet-dev/connet/model"
 	"github.com/connet-dev/connet/netc"
+	"github.com/connet-dev/connet/notify"
 	"github.com/connet-dev/connet/proto"
 	"github.com/connet-dev/connet/proto/pbclientrelay"
 	"github.com/connet-dev/connet/proto/pbconnect"
@@ -187,17 +188,15 @@ type directPeerServer struct {
 	serverCert *certc.Cert
 	serverTLS  *tls.Config
 
-	expectClients   map[string]model.Key
-	expectClientsMu sync.RWMutex
-	tlsConf         atomic.Pointer[tls.Config]
+	tlsConf atomic.Pointer[tls.Config]
 
-	remoteConns   map[model.Key]*quic.Conn
-	remoteConnsMu sync.RWMutex
+	expectConns *notify.V[map[model.Key]string]
+	remoteConns *notify.V[map[model.Key]*quic.Conn]
 
 	logger *slog.Logger
 }
 
-func newDirectPeerServer(conn *directReserveConn, peers []*pbclientrelay.Peer) (*directPeerServer, error) {
+func newDirectPeerServer(conn *directReserveConn, peers []*pbclientrelay.ReservePeer) (*directPeerServer, error) {
 	serverName := netc.GenDomainName("connet.relay")
 	serverCert, err := conn.server.rootCert.NewServer(certc.CertOpts{
 		Domains: []string{serverName},
@@ -222,7 +221,8 @@ func newDirectPeerServer(conn *directReserveConn, peers []*pbclientrelay.Peer) (
 			NextProtos:   model.ConnectRelayDirectNextProtos,
 		},
 
-		remoteConns: map[model.Key]*quic.Conn{},
+		expectConns: notify.NewEmpty[map[model.Key]string](),
+		remoteConns: notify.NewEmpty[map[model.Key]*quic.Conn](),
 
 		logger: conn.logger.With("peer-server", serverName),
 	}
@@ -253,12 +253,29 @@ func (s *directPeerServer) runReserveErr(ctx context.Context, stream *quic.Strea
 				return fmt.Errorf("client update server: %w", err)
 			}
 
+		}
+	})
+
+	g.Go(func(ctx context.Context) error {
+		return s.remoteConns.Listen(ctx, func(remoteConns map[model.Key]*quic.Conn) error {
+			expectConns, _ := s.expectConns.Peek()
+
+			var peers []*pbclientrelay.ConnectedPeer
+			for k := range remoteConns {
+				if id, ok := expectConns[k]; ok {
+					peers = append(peers, &pbclientrelay.ConnectedPeer{Id: id})
+				}
+			}
+
 			if err := proto.Write(stream, &pbclientrelay.ReserveResp{
 				ServerCertificate: s.serverCert.Raw(),
+				Peers:             peers,
 			}); err != nil {
 				return fmt.Errorf("client resp write: %w", err)
 			}
-		}
+
+			return nil
+		})
 	})
 
 	g.Go(func(ctx context.Context) error {
@@ -268,8 +285,8 @@ func (s *directPeerServer) runReserveErr(ctx context.Context, stream *quic.Strea
 	return g.Wait()
 }
 
-func (s *directPeerServer) update(peers []*pbclientrelay.Peer) error {
-	clients := map[string]model.Key{}
+func (s *directPeerServer) update(peers []*pbclientrelay.ReservePeer) error {
+	expect := map[model.Key]string{}
 	clientCAs := x509.NewCertPool()
 	for _, peer := range peers {
 		cert, err := x509.ParseCertificate(peer.ClientCertificate)
@@ -277,13 +294,11 @@ func (s *directPeerServer) update(peers []*pbclientrelay.Peer) error {
 			return fmt.Errorf("cannot parse certificate for %s: %w", peer.Id, err)
 		}
 
-		clients[peer.Id] = model.NewKey(cert)
+		expect[model.NewKey(cert)] = peer.Id
 		clientCAs.AddCert(cert)
 	}
 
-	s.expectClientsMu.Lock()
-	s.expectClients = clients
-	s.expectClientsMu.Unlock()
+	s.expectConns.Set(expect)
 
 	// TODO optimize
 	s.serverTLS.ClientCAs = clientCAs
@@ -315,10 +330,12 @@ func (s *directPeerServer) runSourceStream(ctx context.Context, stream *quic.Str
 }
 
 func (d *directPeerServer) getRemoteConns() []*quic.Conn {
-	d.remoteConnsMu.RLock()
-	defer d.remoteConnsMu.RUnlock()
+	conns, ok := d.remoteConns.Peek()
+	if !ok {
+		return nil
+	}
 
-	return slices.SortedFunc(maps.Values(d.remoteConns), func(l, r *quic.Conn) int {
+	return slices.SortedFunc(maps.Values(conns), func(l, r *quic.Conn) int {
 		ld := l.ConnectionStats().SmoothedRTT
 		rd := r.ConnectionStats().SmoothedRTT
 
@@ -407,13 +424,9 @@ func (s *directPeerServer) runRemoteErr(ctx context.Context, conn *quic.Conn) er
 	}
 
 	key := model.NewKey(conn.ConnectionState().TLS.PeerCertificates[0])
-	s.remoteConnsMu.Lock()
-	s.remoteConns[key] = conn
-	s.remoteConnsMu.Unlock()
+	notify.MapPut(s.remoteConns, key, conn)
 	defer func() {
-		s.remoteConnsMu.Lock()
-		delete(s.remoteConns, key)
-		s.remoteConnsMu.Unlock()
+		notify.MapDelete(s.remoteConns, key)
 	}()
 
 	for {

@@ -11,7 +11,6 @@ import (
 )
 
 var errNotifyClosed = errors.New("notify already closed")
-var errNotifyEmpty = errors.New("no value")
 
 type V[T any] struct {
 	value   atomic.Pointer[value[T]]
@@ -102,12 +101,11 @@ func (v *V[T]) GetAny(ctx context.Context) (T, uint64, error) {
 	}
 }
 
-func (v *V[T]) Peek() (T, error) {
+func (v *V[T]) Peek() (T, bool) {
 	if current := v.value.Load(); current != nil {
-		return current.value, nil
+		return current.value, true
 	}
-	var t T
-	return t, errNotifyEmpty
+	return *new(T), false
 }
 
 func (v *V[T]) Sync(f func()) {
@@ -216,7 +214,11 @@ func SliceFilter[S []T, T any](v *V[S], fn func(t T) bool) {
 
 func MapPut[M ~map[K]T, K comparable, T any](m *V[M], k K, v T) {
 	m.Update(func(t M) M {
-		t = maps.Clone(t)
+		if t == nil {
+			t = map[K]T{}
+		} else {
+			t = maps.Clone(t)
+		}
 		t[k] = v
 		return t
 	})
