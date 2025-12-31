@@ -490,8 +490,7 @@ func (p *peer) status() (StatusPeer, error) {
 		Peers:  map[string]StatusRemotePeer{},
 	}
 
-	relays, ok := p.relayConns.Peek()
-	if ok {
+	if relays, ok := p.relayConns.Peek(); ok {
 		for id, conn := range relays {
 			stat.Relays[string(id)] = StatusRelayConnection{
 				ID:   string(id),
@@ -500,15 +499,13 @@ func (p *peer) status() (StatusPeer, error) {
 		}
 	}
 
-	peers, ok := p.peers.Peek()
-	if ok {
+	if peers, ok := p.peers.Peek(); ok {
 		for _, peer := range peers {
 			stat.Peers[peer.Id] = StatusRemotePeer{ID: peer.Id, Metadata: peer.Metadata}
 		}
 	}
 
-	conns, ok := p.peerConns.Peek()
-	if ok {
+	if conns, ok := p.peerConns.Peek(); ok {
 		for key, conn := range conns {
 			if peer, ok := stat.Peers[string(key.id)]; ok {
 				peer.Connections = append(peer.Connections, StatusRemotePeerConnection{
