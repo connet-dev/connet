@@ -264,7 +264,7 @@ func (r *directRelay) authenticate(ctx context.Context, conn *quic.Conn) error {
 	if err := proto.Write(stream, &pbclientrelay.AuthenticateReq{
 		ClientId:     "", // TODO peer id
 		BuildVersion: model.BuildVersion(),
-		Metadata:     "", // TODO metadata
+		Metadata:     r.local.metadata,
 	}); err != nil {
 		return fmt.Errorf("cannot write auth request: %w", err)
 	}

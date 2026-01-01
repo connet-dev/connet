@@ -54,7 +54,7 @@ type endpoint struct {
 //   - an error happens in runPeer
 //   - a terminal error happens in runAnnounce
 func newEndpoint(ctx context.Context, cl *Client, cfg endpointConfig, logger *slog.Logger) (*endpoint, error) {
-	p, err := newPeer(cl.directServer, cl.addrs, logger)
+	p, err := newPeer(cl.directServer, cl.addrs, cl.metadata, logger)
 	if err != nil {
 		return nil, err
 	}

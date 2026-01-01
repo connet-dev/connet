@@ -145,9 +145,10 @@ type EndpointStatus struct {
 }
 
 type DirectStatus struct {
-	ServerName string               `json:"server-name"`
-	ClientID   string               `json:"client-id"`
-	Remotes    []DirectRemoteStatus `json:"remotes"`
+	ServerName     string               `json:"server-name"`
+	ClientID       string               `json:"client-id"`
+	ClientMetadata string               `json:"client-metadata"`
+	Remotes        []DirectRemoteStatus `json:"remotes"`
 }
 
 type DirectRemoteStatus struct {
@@ -206,10 +207,11 @@ func (s *Server) getEndpoints() map[string]EndpointStatus {
 
 func (s *Server) getDirects() map[string]DirectStatus {
 	s.clients.directServer.peerServersMu.RLock()
-	defer s.clients.directServer.peerServersMu.RUnlock()
+	peerServers := maps.Clone(s.clients.directServer.peerServers)
+	s.clients.directServer.peerServersMu.RUnlock()
 
 	directs := map[string]DirectStatus{}
-	for srv, v := range s.clients.directServer.peerServers {
+	for srv, v := range peerServers {
 		expectedConns, _ := v.expectConns.Peek()
 		remoteConns, _ := v.remoteConns.Peek()
 
@@ -226,9 +228,10 @@ func (s *Server) getDirects() map[string]DirectStatus {
 		}
 
 		directs[srv] = DirectStatus{
-			ServerName: v.serverName,
-			ClientID:   v.localConn.id,
-			Remotes:    clients,
+			ServerName:     v.serverName,
+			ClientID:       v.localConn.id,
+			ClientMetadata: v.localConn.metadata,
+			Remotes:        clients,
 		}
 	}
 	return directs

@@ -38,8 +38,9 @@ type peer struct {
 	peers     *notify.V[[]*pbclient.RemotePeer]
 	peerConns *notify.V[map[peerConnKey]*quic.Conn]
 
-	direct *directServer
-	addrs  *notify.V[advertiseAddrs]
+	direct   *directServer
+	addrs    *notify.V[advertiseAddrs]
+	metadata string
 
 	serverCert tls.Certificate
 	clientCert tls.Certificate
@@ -94,7 +95,7 @@ func (s peerStyle) isRelay() bool {
 	return !s.isDirect()
 }
 
-func newPeer(direct *directServer, addrs *notify.V[advertiseAddrs], logger *slog.Logger) (*peer, error) {
+func newPeer(direct *directServer, addrs *notify.V[advertiseAddrs], metadata string, logger *slog.Logger) (*peer, error) {
 	root, err := certc.NewRoot()
 	if err != nil {
 		return nil, err
@@ -136,8 +137,9 @@ func newPeer(direct *directServer, addrs *notify.V[advertiseAddrs], logger *slog
 		peers:     notify.NewEmpty[[]*pbclient.RemotePeer](),
 		peerConns: notify.NewEmpty[map[peerConnKey]*quic.Conn](),
 
-		direct: direct,
-		addrs:  addrs,
+		direct:   direct,
+		addrs:    addrs,
+		metadata: metadata,
 
 		serverCert: serverTLSCert,
 		clientCert: clientTLSCert,
