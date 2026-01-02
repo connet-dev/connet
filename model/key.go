@@ -11,14 +11,14 @@ import (
 type Key struct{ string }
 
 func NewKey(cert *x509.Certificate) Key {
-	return newKeyRaw(cert.Raw)
+	return NewKeyRaw(cert.Raw)
 }
 
 func NewKeyConn(conn *quic.Conn) Key {
-	return newKeyRaw(conn.ConnectionState().TLS.PeerCertificates[0].Raw)
+	return NewKeyRaw(conn.ConnectionState().TLS.PeerCertificates[0].Raw)
 }
 
-func newKeyRaw(raw []byte) Key {
+func NewKeyRaw(raw []byte) Key {
 	hash := blake2s.Sum256(raw)
 	return Key{netc.DNSSECEncoding.EncodeToString(hash[:])}
 }

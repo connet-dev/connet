@@ -36,6 +36,32 @@ type clientsDirectServer struct {
 	logger *slog.Logger
 }
 
+func (s *clientsDirectServer) authenticate(ctx context.Context, conn *quic.Conn) (*directAuth, error) {
+	s.logger.Debug("waiting for authentication")
+	authStream, err := conn.AcceptStream(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("client auth stream: %w", err)
+	}
+	defer func() {
+		if err := authStream.Close(); err != nil {
+			slogc.Fine(s.logger, "error closing auth stream", "err", err)
+		}
+	}()
+
+	req := &pbclientrelay.AuthenticateReq{}
+	if err := proto.Read(authStream, req); err != nil {
+		return nil, fmt.Errorf("client auth read: %w", err)
+	}
+
+	if err := proto.Write(authStream, &pbclientrelay.AuthenticateResp{}); err != nil {
+		return nil, fmt.Errorf("client auth write: %w", err)
+	}
+
+	key := model.NewKeyConn(conn)
+	s.logger.Debug("authentication completed", "local", conn.LocalAddr(), "remote", conn.RemoteAddr(), "build", req.BuildVersion)
+	return &directAuth{key, req.Metadata}, nil
+}
+
 func (s *clientsDirectServer) runDirectConn(ctx context.Context, conn *quic.Conn) {
 	s.logger.Debug("new client connection", "server", conn.ConnectionState().TLS.ServerName, "remote", conn.RemoteAddr())
 
@@ -80,7 +106,7 @@ func (c *directReserveConn) run(ctx context.Context) {
 }
 
 func (c *directReserveConn) runErr(ctx context.Context) error {
-	if auth, err := c.authenticate(ctx); err != nil {
+	if auth, err := c.server.authenticate(ctx, c.conn); err != nil {
 		if perr := pberror.GetError(err); perr != nil {
 			cerr := c.conn.CloseWithError(quic.ApplicationErrorCode(perr.Code), perr.Message)
 			err = errors.Join(perr, cerr)
@@ -100,32 +126,6 @@ func (c *directReserveConn) runErr(ctx context.Context) error {
 	// connected + defer disconnected
 
 	return c.reserve(ctx)
-}
-
-func (c *directReserveConn) authenticate(ctx context.Context) (*directAuth, error) {
-	c.logger.Debug("waiting for authentication")
-	authStream, err := c.conn.AcceptStream(ctx)
-	if err != nil {
-		return nil, fmt.Errorf("client auth stream: %w", err)
-	}
-	defer func() {
-		if err := authStream.Close(); err != nil {
-			slogc.Fine(c.logger, "error closing auth stream", "err", err)
-		}
-	}()
-
-	req := &pbclientrelay.AuthenticateReq{}
-	if err := proto.Read(authStream, req); err != nil {
-		return nil, fmt.Errorf("client auth read: %w", err)
-	}
-
-	if err := proto.Write(authStream, &pbclientrelay.AuthenticateResp{}); err != nil {
-		return nil, fmt.Errorf("client auth write: %w", err)
-	}
-
-	key := model.NewKeyConn(c.conn)
-	c.logger.Debug("authentication completed", "local", c.conn.LocalAddr(), "remote", c.conn.RemoteAddr(), "build", req.BuildVersion)
-	return &directAuth{key, req.Metadata}, nil
 }
 
 func (c *directReserveConn) reserve(ctx context.Context) error {
@@ -180,10 +180,15 @@ type directPeerServer struct {
 
 	tlsConf atomic.Pointer[tls.Config]
 
-	expectConns *notify.V[map[model.Key]string]
-	remoteConns *notify.V[map[model.Key]*quic.Conn]
+	expectConns *notify.V[map[model.Key]struct{}]
+	remoteConns *notify.V[map[model.Key]*directConnectConn]
 
 	logger *slog.Logger
+}
+
+type directConnectConn struct {
+	conn *quic.Conn
+	directAuth
 }
 
 func newDirectPeerServer(conn *directReserveConn, peers []*pbclientrelay.ReservePeer) (*directPeerServer, error) {
@@ -211,8 +216,8 @@ func newDirectPeerServer(conn *directReserveConn, peers []*pbclientrelay.Reserve
 			NextProtos:   model.ConnectRelayDirectNextProtos,
 		},
 
-		expectConns: notify.NewEmpty[map[model.Key]string](),
-		remoteConns: notify.NewEmpty[map[model.Key]*quic.Conn](),
+		expectConns: notify.NewEmpty[map[model.Key]struct{}](),
+		remoteConns: notify.NewEmpty[map[model.Key]*directConnectConn](),
 
 		logger: conn.logger.With("peer-server", serverName),
 	}
@@ -247,13 +252,13 @@ func (s *directPeerServer) runReserveErr(ctx context.Context, stream *quic.Strea
 	})
 
 	g.Go(func(ctx context.Context) error {
-		return s.remoteConns.Listen(ctx, func(remoteConns map[model.Key]*quic.Conn) error {
+		return s.remoteConns.Listen(ctx, func(remoteConns map[model.Key]*directConnectConn) error {
 			expectConns, _ := s.expectConns.Peek()
 
 			var peers []*pbclientrelay.ConnectedPeer
 			for k := range remoteConns {
-				if id, ok := expectConns[k]; ok {
-					peers = append(peers, &pbclientrelay.ConnectedPeer{Id: id})
+				if _, ok := expectConns[k]; ok {
+					peers = append(peers, &pbclientrelay.ConnectedPeer{ClientCertificateKey: k.String()})
 				}
 			}
 
@@ -276,15 +281,15 @@ func (s *directPeerServer) runReserveErr(ctx context.Context, stream *quic.Strea
 }
 
 func (s *directPeerServer) update(peers []*pbclientrelay.ReservePeer) error {
-	expect := map[model.Key]string{}
+	expect := map[model.Key]struct{}{}
 	clientCAs := x509.NewCertPool()
 	for _, peer := range peers {
 		cert, err := x509.ParseCertificate(peer.ClientCertificate)
 		if err != nil {
-			return fmt.Errorf("cannot parse certificate for %s: %w", peer.Id, err)
+			return fmt.Errorf("cannot parse certificate: %w", err)
 		}
 
-		expect[model.NewKey(cert)] = peer.Id
+		expect[model.NewKey(cert)] = struct{}{}
 		clientCAs.AddCert(cert)
 	}
 
@@ -319,15 +324,15 @@ func (s *directPeerServer) runSourceStream(ctx context.Context, stream *quic.Str
 	}
 }
 
-func (d *directPeerServer) getRemoteConns() []*quic.Conn {
+func (d *directPeerServer) getRemoteConns() []*directConnectConn {
 	conns, ok := d.remoteConns.Peek()
 	if !ok {
 		return nil
 	}
 
-	return slices.SortedFunc(maps.Values(conns), func(l, r *quic.Conn) int {
-		ld := l.ConnectionStats().SmoothedRTT
-		rd := r.ConnectionStats().SmoothedRTT
+	return slices.SortedFunc(maps.Values(conns), func(l, r *directConnectConn) int {
+		ld := l.conn.ConnectionStats().SmoothedRTT
+		rd := r.conn.ConnectionStats().SmoothedRTT
 
 		return cmp.Compare(ld, rd)
 	})
@@ -356,7 +361,7 @@ func (s *directPeerServer) connectSources(ctx context.Context, stream *quic.Stre
 
 	var pberrs []string
 	for _, dest := range dests {
-		if err := s.connectSource(ctx, stream, dest, req); err != nil {
+		if err := s.connectSource(ctx, stream, dest.conn, req); err != nil {
 			if pberr := pberror.GetError(err); pberr != nil {
 				pberrs = append(pberrs, pberr.Error())
 			}
@@ -409,12 +414,13 @@ func (s *directPeerServer) runRemote(ctx context.Context, conn *quic.Conn) {
 }
 
 func (s *directPeerServer) runRemoteErr(ctx context.Context, conn *quic.Conn) error {
-	if err := s.check(ctx, conn); err != nil {
+	auth, err := s.localConn.server.authenticate(ctx, conn)
+	if err != nil {
 		return err
 	}
 
 	key := model.NewKeyConn(conn)
-	notify.MapPut(s.remoteConns, key, conn)
+	notify.MapPut(s.remoteConns, key, &directConnectConn{conn, *auth})
 	defer func() {
 		notify.MapDelete(s.remoteConns, key)
 	}()

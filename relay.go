@@ -13,6 +13,7 @@ import (
 
 	"github.com/connet-dev/connet/iterc"
 	"github.com/connet-dev/connet/model"
+	"github.com/connet-dev/connet/notify"
 	"github.com/connet-dev/connet/proto"
 	"github.com/connet-dev/connet/proto/pbclient"
 	"github.com/connet-dev/connet/proto/pbclientrelay"
@@ -303,14 +304,21 @@ func (r *directRelay) reserve(ctx context.Context, conn *quic.Conn) error {
 	g := reliable.NewGroup(ctx)
 	g.Go(quicc.CancelStream(stream))
 
+	peerIDByKey := notify.NewEmpty[map[model.Key]peerID]()
 	g.Go(func(ctx context.Context) error {
 		defer r.logger.Debug("completed relay announce")
 		return r.local.peers.Listen(ctx, func(remotes []*pbclient.RemotePeer) error {
 			r.logger.Debug("updated announce", "peers", len(remotes))
+
+			newPeerIDByKey := map[model.Key]peerID{}
+			for _, remote := range remotes {
+				newPeerIDByKey[model.NewKeyRaw(remote.Peer.ClientCertificate)] = peerID(remote.Id)
+			}
+			peerIDByKey.Set(newPeerIDByKey)
+
 			if err := proto.Write(stream, &pbclientrelay.ReserveReq{
 				Peers: iterc.MapSlice(remotes, func(remote *pbclient.RemotePeer) *pbclientrelay.ReservePeer {
 					return &pbclientrelay.ReservePeer{
-						Id:                remote.Id,
 						ClientCertificate: remote.Peer.ClientCertificate,
 					}
 				}),
@@ -347,18 +355,21 @@ func (r *directRelay) reserve(ctx context.Context, conn *quic.Conn) error {
 				Id:                 string(r.serverID),
 				Addresses:          model.PBsFromHostPorts(r.serverHostports),
 				ConnectCertificate: cert.Raw,
-			})
+			}, conn)
 
-			newActivePeerIds := map[peerID]struct{}{}
-			for _, peer := range resp.Peers {
-				peerId := peerID(peer.Id)
-				newActivePeerIds[peerId] = struct{}{}
+			currentPeerIDByKey, _ := peerIDByKey.Peek()
+			newActivePeerIDs := map[peerID]struct{}{}
+			for _, relayPeer := range resp.Peers {
+				peerKey := model.NewKeyString(relayPeer.ClientCertificateKey)
+				if peerID, ok := currentPeerIDByKey[peerKey]; ok {
+					newActivePeerIDs[peerID] = struct{}{}
 
-				r.local.addActiveConn(peerId, peerRelayIncoming, string(r.serverID), conn)
-				activePeerIds[peerId] = struct{}{}
+					r.local.addActiveConn(peerID, peerRelayIncoming, string(r.serverID), conn)
+					activePeerIds[peerID] = struct{}{}
+				}
 			}
 			for peerId := range activePeerIds {
-				if _, ok := newActivePeerIds[peerId]; !ok {
+				if _, ok := newActivePeerIDs[peerId]; !ok {
 					r.local.removeActiveConn(peerId, peerRelayIncoming, string(r.serverID))
 				}
 			}

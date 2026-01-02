@@ -15,6 +15,7 @@ import (
 	"github.com/connet-dev/connet/notify"
 	"github.com/connet-dev/connet/proto"
 	"github.com/connet-dev/connet/proto/pbclient"
+	"github.com/connet-dev/connet/proto/pbclientrelay"
 	"github.com/connet-dev/connet/proto/pbconnect"
 	"github.com/connet-dev/connet/proto/pberror"
 	"github.com/connet-dev/connet/quicc"
@@ -562,7 +563,7 @@ func (c *remotePeerDirectRelayConn) connect(ctx context.Context, spec remotePeer
 			continue
 		}
 
-		if err := c.check(ctx, conn); err != nil {
+		if err := c.authenticate(ctx, conn); err != nil {
 			errs = append(errs, err)
 			continue
 		}
@@ -573,7 +574,7 @@ func (c *remotePeerDirectRelayConn) connect(ctx context.Context, spec remotePeer
 	return nil, fmt.Errorf("could not connect relay: %w", errors.Join(errs...))
 }
 
-func (c *remotePeerDirectRelayConn) check(ctx context.Context, conn *quic.Conn) error {
+func (c *remotePeerDirectRelayConn) authenticate(ctx context.Context, conn *quic.Conn) error {
 	stream, err := conn.OpenStreamSync(ctx)
 	if err != nil {
 		return err
@@ -584,11 +585,19 @@ func (c *remotePeerDirectRelayConn) check(ctx context.Context, conn *quic.Conn) 
 		}
 	}()
 
-	if err := proto.Write(stream, &pbconnect.Request{}); err != nil {
+	if err := proto.Write(stream, &pbclientrelay.AuthenticateReq{
+		Metadata:     c.parent.parent.local.metadata,
+		BuildVersion: model.BuildVersion(),
+	}); err != nil {
 		return err
 	}
-	if _, err := pbconnect.ReadResponse(stream); err != nil {
-		return err
+
+	resp := &pbclientrelay.AuthenticateResp{}
+	if err := proto.Read(stream, resp); err != nil {
+		return fmt.Errorf("cannot read auth response: %w", err)
+	}
+	if resp.Error != nil {
+		return fmt.Errorf("error in auth response: %w", resp.Error)
 	}
 
 	return nil

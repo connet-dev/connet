@@ -19,8 +19,7 @@ message ReserveReq {
 }
 
 message ReservePeer {
-  string id = 1;
-  bytes client_certificate = 2; // certificate that peer use to connect to the relay
+  bytes client_certificate = 1; // certificate that peer use to connect to the relay
 }
 
 message ReserveResp {
@@ -30,5 +29,5 @@ message ReserveResp {
 }
 
 message ConnectedPeer {
-  string id = 1;
+  string client_certificate_key = 1; // certificate key for a connected peer
 }

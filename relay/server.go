@@ -152,8 +152,9 @@ type DirectStatus struct {
 }
 
 type DirectRemoteStatus struct {
-	ClientID string `json:"client-id"`
-	Addr     string `json:"address"`
+	Key      model.Key `json:"key"`
+	Metadata string    `json:"metadata"`
+	Addr     string    `json:"address"`
 }
 
 func (s *Server) Status(ctx context.Context) (Status, error) {
@@ -216,15 +217,13 @@ func (s *Server) getDirects() map[string]DirectStatus {
 		remoteConns, _ := v.remoteConns.Peek()
 
 		var clients []DirectRemoteStatus
-		for k, v := range expectedConns {
-			var addr string
+		for k := range expectedConns {
+			connStat := DirectRemoteStatus{Key: k}
 			if conn, ok := remoteConns[k]; ok {
-				addr = conn.RemoteAddr().String()
+				connStat.Metadata = conn.metadata
+				connStat.Addr = conn.conn.RemoteAddr().String()
 			}
-			clients = append(clients, DirectRemoteStatus{
-				ClientID: v,
-				Addr:     addr,
-			})
+			clients = append(clients, connStat)
 		}
 
 		directs[srv] = DirectStatus{

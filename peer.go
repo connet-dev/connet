@@ -16,6 +16,7 @@ import (
 	"time"
 
 	"github.com/connet-dev/connet/certc"
+	"github.com/connet-dev/connet/iterc"
 	"github.com/connet-dev/connet/model"
 	"github.com/connet-dev/connet/netc"
 	"github.com/connet-dev/connet/notify"
@@ -33,7 +34,7 @@ type peer struct {
 	relayConns *notify.V[map[relayID]*quic.Conn]
 
 	directRelays     *notify.V[[]*pbclient.DirectRelay]
-	directPeerRelays *notify.V[map[relayID]*pbclient.PeerDirectRelay]
+	directPeerRelays *notify.V[map[relayID]peerDirectRelay]
 
 	peers     *notify.V[[]*pbclient.RemotePeer]
 	peerConns *notify.V[map[peerConnKey]*quic.Conn]
@@ -95,6 +96,11 @@ func (s peerStyle) isRelay() bool {
 	return !s.isDirect()
 }
 
+type peerDirectRelay struct {
+	conn  *quic.Conn
+	proto *pbclient.PeerDirectRelay
+}
+
 func newPeer(direct *directServer, addrs *notify.V[advertiseAddrs], metadata string, logger *slog.Logger) (*peer, error) {
 	root, err := certc.NewRoot()
 	if err != nil {
@@ -132,7 +138,7 @@ func newPeer(direct *directServer, addrs *notify.V[advertiseAddrs], metadata str
 		relayConns: notify.NewEmpty[map[relayID]*quic.Conn](),
 
 		directRelays:     notify.NewEmpty[[]*pbclient.DirectRelay](),
-		directPeerRelays: notify.NewEmpty[map[relayID]*pbclient.PeerDirectRelay](),
+		directPeerRelays: notify.NewEmpty[map[relayID]peerDirectRelay](),
 
 		peers:     notify.NewEmpty[[]*pbclient.RemotePeer](),
 		peerConns: notify.NewEmpty[map[peerConnKey]*quic.Conn](),
@@ -283,7 +289,7 @@ func (p *peer) runShareRelays(ctx context.Context) error {
 }
 
 func (p *peer) runShareDirectRelays(ctx context.Context) error {
-	return p.directPeerRelays.Listen(ctx, func(relays map[relayID]*pbclient.PeerDirectRelay) error {
+	return p.directPeerRelays.Listen(ctx, func(relays map[relayID]peerDirectRelay) error {
 		p.logger.Debug("direct peer relays updated", "len", len(relays))
 
 		p.self.Update(func(cp *pbclient.Peer) *pbclient.Peer {
@@ -292,7 +298,9 @@ func (p *peer) runShareDirectRelays(ctx context.Context) error {
 				RelayIds:          cp.RelayIds,
 				ServerCertificate: cp.ServerCertificate,
 				ClientCertificate: cp.ClientCertificate,
-				Relays:            slices.Collect(maps.Values(relays)),
+				Relays: slices.Collect(iterc.Map(maps.Values(relays), func(r peerDirectRelay) *pbclient.PeerDirectRelay {
+					return r.proto
+				})),
 			}
 		})
 
@@ -342,8 +350,8 @@ func (p *peer) removeRelayConn(id relayID) {
 	notify.MapDelete(p.relayConns, id)
 }
 
-func (p *peer) addDirectPeerRelay(relay *pbclient.PeerDirectRelay) {
-	notify.MapPut(p.directPeerRelays, relayID(relay.Id), relay)
+func (p *peer) addDirectPeerRelay(relay *pbclient.PeerDirectRelay, conn *quic.Conn) {
+	notify.MapPut(p.directPeerRelays, relayID(relay.Id), peerDirectRelay{conn, relay})
 }
 
 func (p *peer) removeDirectPeerRelay(id relayID) {
@@ -464,15 +472,17 @@ func (p *peer) getECDHPublicKey(cfg *pbconnect.ECDHConfiguration) (*ecdh.PublicK
 }
 
 type StatusPeer struct {
-	// Status of each relay this peer is connected to
+	// Relays show the status of each relay this peer is connected to
 	Relays map[string]StatusRelayConnection `json:"relays"`
-	// Status of each peer this peer is connected to
+	// Directs shows the status of each direct relay this peer is connected to
+	Directs map[string]StatusRelayConnection `json:"directs"`
+	// Peers shows the status of each peer this peer is connected to
 	Peers map[string]StatusRemotePeer `json:"peers"`
 }
 
 type StatusRelayConnection struct {
-	ID   string `json:"id"`
-	Addr string `json:"addr"`
+	ID      string `json:"id"`
+	Address string `json:"address"`
 }
 
 type StatusRemotePeer struct {
@@ -482,21 +492,32 @@ type StatusRemotePeer struct {
 }
 
 type StatusRemotePeerConnection struct {
-	Style string `json:"style"`
-	Addr  string `json:"addr"`
+	Style   string `json:"style"`
+	Address string `json:"address"`
+	Key     string `json:"key,omitempty"`
 }
 
 func (p *peer) status() (StatusPeer, error) {
 	stat := StatusPeer{
-		Relays: map[string]StatusRelayConnection{},
-		Peers:  map[string]StatusRemotePeer{},
+		Relays:  map[string]StatusRelayConnection{},
+		Directs: map[string]StatusRelayConnection{},
+		Peers:   map[string]StatusRemotePeer{},
 	}
 
 	if relays, ok := p.relayConns.Peek(); ok {
 		for id, conn := range relays {
 			stat.Relays[string(id)] = StatusRelayConnection{
-				ID:   string(id),
-				Addr: conn.RemoteAddr().String(),
+				ID:      string(id),
+				Address: conn.RemoteAddr().String(),
+			}
+		}
+	}
+
+	if relays, ok := p.directPeerRelays.Peek(); ok {
+		for id, relay := range relays {
+			stat.Directs[string(id)] = StatusRelayConnection{
+				ID:      string(id),
+				Address: relay.conn.RemoteAddr().String(),
 			}
 		}
 	}
@@ -511,8 +532,9 @@ func (p *peer) status() (StatusPeer, error) {
 		for key, conn := range conns {
 			if peer, ok := stat.Peers[string(key.id)]; ok {
 				peer.Connections = append(peer.Connections, StatusRemotePeerConnection{
-					Style: key.style.String(),
-					Addr:  conn.RemoteAddr().String(),
+					Style:   key.style.String(),
+					Address: conn.RemoteAddr().String(),
+					Key:     key.key,
 				})
 				stat.Peers[string(key.id)] = peer
 			}

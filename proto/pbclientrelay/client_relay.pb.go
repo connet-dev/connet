@@ -164,8 +164,7 @@ func (x *ReserveReq) GetPeers() []*ReservePeer {
 
 type ReservePeer struct {
 	state             protoimpl.MessageState `protogen:"open.v1"`
-	Id                string                 `protobuf:"bytes,1,opt,name=id,proto3" json:"id,omitempty"`
-	ClientCertificate []byte                 `protobuf:"bytes,2,opt,name=client_certificate,json=clientCertificate,proto3" json:"client_certificate,omitempty"` // certificate that peer use to connect to the relay
+	ClientCertificate []byte                 `protobuf:"bytes,1,opt,name=client_certificate,json=clientCertificate,proto3" json:"client_certificate,omitempty"` // certificate that peer use to connect to the relay
 	unknownFields     protoimpl.UnknownFields
 	sizeCache         protoimpl.SizeCache
 }
@@ -198,13 +197,6 @@ func (x *ReservePeer) ProtoReflect() protoreflect.Message {
 // Deprecated: Use ReservePeer.ProtoReflect.Descriptor instead.
 func (*ReservePeer) Descriptor() ([]byte, []int) {
 	return file_client_relay_proto_rawDescGZIP(), []int{3}
-}
-
-func (x *ReservePeer) GetId() string {
-	if x != nil {
-		return x.Id
-	}
-	return ""
 }
 
 func (x *ReservePeer) GetClientCertificate() []byte {
@@ -275,10 +267,10 @@ func (x *ReserveResp) GetPeers() []*ConnectedPeer {
 }
 
 type ConnectedPeer struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Id            string                 `protobuf:"bytes,1,opt,name=id,proto3" json:"id,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	state                protoimpl.MessageState `protogen:"open.v1"`
+	ClientCertificateKey string                 `protobuf:"bytes,1,opt,name=client_certificate_key,json=clientCertificateKey,proto3" json:"client_certificate_key,omitempty"` // certificate key for a connected peer
+	unknownFields        protoimpl.UnknownFields
+	sizeCache            protoimpl.SizeCache
 }
 
 func (x *ConnectedPeer) Reset() {
@@ -311,9 +303,9 @@ func (*ConnectedPeer) Descriptor() ([]byte, []int) {
 	return file_client_relay_proto_rawDescGZIP(), []int{5}
 }
 
-func (x *ConnectedPeer) GetId() string {
+func (x *ConnectedPeer) GetClientCertificateKey() string {
 	if x != nil {
-		return x.Id
+		return x.ClientCertificateKey
 	}
 	return ""
 }
@@ -330,16 +322,15 @@ const file_client_relay_proto_rawDesc = "" +
 	"\x05error\x18\x01 \x01(\v2\f.error.ErrorR\x05error\"=\n" +
 	"\n" +
 	"ReserveReq\x12/\n" +
-	"\x05peers\x18\x01 \x03(\v2\x19.client_relay.ReservePeerR\x05peers\"L\n" +
-	"\vReservePeer\x12\x0e\n" +
-	"\x02id\x18\x01 \x01(\tR\x02id\x12-\n" +
-	"\x12client_certificate\x18\x02 \x01(\fR\x11clientCertificate\"\x93\x01\n" +
+	"\x05peers\x18\x01 \x03(\v2\x19.client_relay.ReservePeerR\x05peers\"<\n" +
+	"\vReservePeer\x12-\n" +
+	"\x12client_certificate\x18\x01 \x01(\fR\x11clientCertificate\"\x93\x01\n" +
 	"\vReserveResp\x12\"\n" +
 	"\x05error\x18\x01 \x01(\v2\f.error.ErrorR\x05error\x12-\n" +
 	"\x12server_certificate\x18\x02 \x01(\fR\x11serverCertificate\x121\n" +
-	"\x05peers\x18\x03 \x03(\v2\x1b.client_relay.ConnectedPeerR\x05peers\"\x1f\n" +
-	"\rConnectedPeer\x12\x0e\n" +
-	"\x02id\x18\x01 \x01(\tR\x02idB2Z0github.com/connet-dev/connet/proto/pbclientrelayb\x06proto3"
+	"\x05peers\x18\x03 \x03(\v2\x1b.client_relay.ConnectedPeerR\x05peers\"E\n" +
+	"\rConnectedPeer\x124\n" +
+	"\x16client_certificate_key\x18\x01 \x01(\tR\x14clientCertificateKeyB2Z0github.com/connet-dev/connet/proto/pbclientrelayb\x06proto3"
 
 var (
 	file_client_relay_proto_rawDescOnce sync.Once
