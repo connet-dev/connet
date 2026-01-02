@@ -22,14 +22,6 @@ func (f Endpoint) String() string {
 	return f.string
 }
 
-func PBFromEndpoints(eps []Endpoint) []*pbmodel.Endpoint {
-	pbs := make([]*pbmodel.Endpoint, len(eps))
-	for i, ep := range eps {
-		pbs[i] = ep.PB()
-	}
-	return pbs
-}
-
 func (f Endpoint) MarshalText() ([]byte, error) {
 	return []byte(f.string), nil
 }

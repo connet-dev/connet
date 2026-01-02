@@ -33,3 +33,7 @@ func (h HostPort) PB() *pbmodel.HostPort {
 func (h HostPort) String() string {
 	return fmt.Sprintf("%s:%d", h.Host, h.Port)
 }
+
+func PBsFromHostPorts(hps []HostPort) []*pbmodel.HostPort {
+	return iterc.MapSlice(hps, HostPort.PB)
+}

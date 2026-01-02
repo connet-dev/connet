@@ -13,7 +13,6 @@ import (
 	"sync"
 	"time"
 
-	"github.com/connet-dev/connet/iterc"
 	"github.com/connet-dev/connet/logc"
 	"github.com/connet-dev/connet/model"
 	"github.com/connet-dev/connet/proto"
@@ -181,7 +180,7 @@ func (s *clientServer) revoke(endpoint model.Endpoint, role model.Role, id Clien
 	return s.peers.Del(ClientPeerKey{endpoint, role, id})
 }
 
-func (s *clientServer) announcements(endpoint model.Endpoint, role model.Role) ([]*pbclient.RemotePeer, int64) {
+func (s *clientServer) cachedPeers(endpoint model.Endpoint, role model.Role) ([]*pbclient.RemotePeer, int64) {
 	s.peersMu.RLock()
 	defer s.peersMu.RUnlock()
 
@@ -189,7 +188,7 @@ func (s *clientServer) announcements(endpoint model.Endpoint, role model.Role) (
 }
 
 func (s *clientServer) listen(ctx context.Context, endpoint model.Endpoint, role model.Role, notify func(peers []*pbclient.RemotePeer) error) error {
-	peers, offset := s.announcements(endpoint, role)
+	peers, offset := s.cachedPeers(endpoint, role)
 	if err := notify(peers); err != nil {
 		return err
 	}
@@ -720,7 +719,7 @@ func (s *clientStream) relay(ctx context.Context, req *pbclient.Request_Relay) e
 			for id, value := range relays {
 				addrs = append(addrs, &pbclient.Relay{
 					Id:                id.string,
-					Addresses:         iterc.MapSlice(value.Hostports, model.HostPort.PB),
+					Addresses:         model.PBsFromHostPorts(value.Hostports),
 					ServerCertificate: value.Cert.Raw,
 				})
 			}

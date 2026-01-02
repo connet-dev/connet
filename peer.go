@@ -34,8 +34,9 @@ type peer struct {
 	peers     *notify.V[[]*pbclient.RemotePeer]
 	peerConns *notify.V[map[peerConnKey]*quic.Conn]
 
-	direct *directServer
-	addrs  *notify.V[advertiseAddrs]
+	direct   *directServer
+	addrs    *notify.V[advertiseAddrs]
+	metadata string
 
 	serverCert tls.Certificate
 	clientCert tls.Certificate
@@ -45,9 +46,9 @@ type peer struct {
 type peerID string
 
 type peerConnKey struct {
-	id    peerID
-	style peerStyle
-	key   string
+	id       peerID
+	style    peerStyle
+	remoteID string
 }
 
 type peerStyle int
@@ -84,7 +85,7 @@ func (s peerStyle) isRelay() bool {
 	return !s.isDirect()
 }
 
-func newPeer(direct *directServer, addrs *notify.V[advertiseAddrs], logger *slog.Logger) (*peer, error) {
+func newPeer(direct *directServer, addrs *notify.V[advertiseAddrs], metadata string, logger *slog.Logger) (*peer, error) {
 	root, err := certc.NewRoot()
 	if err != nil {
 		return nil, err
@@ -123,8 +124,9 @@ func newPeer(direct *directServer, addrs *notify.V[advertiseAddrs], logger *slog
 		peers:     notify.NewEmpty[[]*pbclient.RemotePeer](),
 		peerConns: notify.NewEmpty[map[peerConnKey]*quic.Conn](),
 
-		direct: direct,
-		addrs:  addrs,
+		direct:   direct,
+		addrs:    addrs,
+		metadata: metadata,
 
 		serverCert: serverTLSCert,
 		clientCert: clientTLSCert,
@@ -265,14 +267,14 @@ func (p *peer) removeRelayConn(id relayID) {
 	notify.MapDelete(p.relayConns, id)
 }
 
-func (p *peer) addActiveConn(id peerID, style peerStyle, key string, conn *quic.Conn) {
-	p.logger.Debug("add active connection", "peer", id, "style", style, "addr", conn.RemoteAddr())
-	notify.MapPut(p.peerConns, peerConnKey{id, style, key}, conn)
+func (p *peer) addActiveConn(id peerID, style peerStyle, remoteID string, conn *quic.Conn) {
+	p.logger.Debug("add active connection", "peer", id, "style", style, "addr", conn.RemoteAddr(), "remote", remoteID)
+	notify.MapPut(p.peerConns, peerConnKey{id, style, remoteID}, conn)
 }
 
-func (p *peer) removeActiveConn(id peerID, style peerStyle, key string) {
-	p.logger.Debug("remove active connection", "peer", id, "style", style)
-	notify.MapDelete(p.peerConns, peerConnKey{id, style, key})
+func (p *peer) removeActiveConn(id peerID, style peerStyle, remoteID string) {
+	p.logger.Debug("remove active connection", "peer", id, "style", style, "remote", remoteID)
+	notify.MapDelete(p.peerConns, peerConnKey{id, style, remoteID})
 }
 
 func (p *peer) removeActiveConns(id peerID) map[peerConnKey]*quic.Conn {
@@ -379,15 +381,15 @@ func (p *peer) getECDHPublicKey(cfg *pbconnect.ECDHConfiguration) (*ecdh.PublicK
 }
 
 type StatusPeer struct {
-	// Status of each relay this peer is connected to
+	// Relays show the status of each relay this peer is connected to
 	Relays map[string]StatusRelayConnection `json:"relays"`
-	// Status of each peer this peer is connected to
+	// Peers shows the status of each peer this peer is connected to
 	Peers map[string]StatusRemotePeer `json:"peers"`
 }
 
 type StatusRelayConnection struct {
-	ID   string `json:"id"`
-	Addr string `json:"addr"`
+	ID      string `json:"id"`
+	Address string `json:"address"`
 }
 
 type StatusRemotePeer struct {
@@ -397,8 +399,9 @@ type StatusRemotePeer struct {
 }
 
 type StatusRemotePeerConnection struct {
-	Style string `json:"style"`
-	Addr  string `json:"addr"`
+	Style    string `json:"style"`
+	Address  string `json:"address"`
+	RemoteID string `json:"remote-id,omitempty"`
 }
 
 func (p *peer) status() (StatusPeer, error) {
@@ -410,8 +413,8 @@ func (p *peer) status() (StatusPeer, error) {
 	if relays, ok := p.relayConns.Peek(); ok {
 		for id, conn := range relays {
 			stat.Relays[string(id)] = StatusRelayConnection{
-				ID:   string(id),
-				Addr: conn.RemoteAddr().String(),
+				ID:      string(id),
+				Address: conn.RemoteAddr().String(),
 			}
 		}
 	}
@@ -426,8 +429,9 @@ func (p *peer) status() (StatusPeer, error) {
 		for key, conn := range conns {
 			if peer, ok := stat.Peers[string(key.id)]; ok {
 				peer.Connections = append(peer.Connections, StatusRemotePeerConnection{
-					Style: key.style.String(),
-					Addr:  conn.RemoteAddr().String(),
+					Style:    key.style.String(),
+					Address:  conn.RemoteAddr().String(),
+					RemoteID: key.remoteID,
 				})
 				stat.Peers[string(key.id)] = peer
 			}
