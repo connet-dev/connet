@@ -28,6 +28,7 @@ func newClientsServer(cfg Config, tlsAuth tlsAuthenticator, clAuth clientAuthent
 		tlsConf: &tls.Config{
 			ServerName:   directTLS.Leaf.DNSNames[0],
 			Certificates: []tls.Certificate{directTLS},
+			ClientAuth:   tls.RequireAnyClientCert,
 			NextProtos:   model.ConnectRelayNextProtos,
 		},
 		controlAuth: tlsAuth,

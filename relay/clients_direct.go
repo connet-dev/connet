@@ -62,7 +62,7 @@ type directReserveConn struct {
 }
 
 type directAuth struct {
-	id       string
+	key      model.Key
 	metadata string
 }
 
@@ -91,7 +91,7 @@ func (c *directReserveConn) runErr(ctx context.Context) error {
 		return err
 	} else {
 		c.directAuth = *auth
-		c.logger = c.logger.With("client-id", c.id)
+		c.logger = c.logger.With("client-key", c.key)
 	}
 
 	c.logger.Info("client connected", "addr", c.conn.RemoteAddr(), "metadata", c.metadata)
@@ -119,23 +119,13 @@ func (c *directReserveConn) authenticate(ctx context.Context) (*directAuth, erro
 		return nil, fmt.Errorf("client auth read: %w", err)
 	}
 
-	// TODO checks
-
-	// origin, err := pbmodel.AddrPortFromNet(c.conn.RemoteAddr())
-	// if err != nil {
-	// 	err := pberror.NewError(pberror.Code_AuthenticationFailed, "cannot resolve origin: %v", err)
-	// 	if err := proto.Write(authStream, &pbclientrelay.AuthenticateResp{Error: err}); err != nil {
-	// 		return nil, fmt.Errorf("client auth err write: %w", err)
-	// 	}
-	// 	return nil, fmt.Errorf("client addr port from net: %w", err)
-	// }
-
 	if err := proto.Write(authStream, &pbclientrelay.AuthenticateResp{}); err != nil {
 		return nil, fmt.Errorf("client auth write: %w", err)
 	}
 
+	key := model.NewKeyConn(c.conn)
 	c.logger.Debug("authentication completed", "local", c.conn.LocalAddr(), "remote", c.conn.RemoteAddr(), "build", req.BuildVersion)
-	return &directAuth{req.ClientId, req.Metadata}, nil
+	return &directAuth{key, req.Metadata}, nil
 }
 
 func (c *directReserveConn) reserve(ctx context.Context) error {
@@ -423,7 +413,7 @@ func (s *directPeerServer) runRemoteErr(ctx context.Context, conn *quic.Conn) er
 		return err
 	}
 
-	key := model.NewKey(conn.ConnectionState().TLS.PeerCertificates[0])
+	key := model.NewKeyConn(conn)
 	notify.MapPut(s.remoteConns, key, conn)
 	defer func() {
 		notify.MapDelete(s.remoteConns, key)

@@ -146,7 +146,7 @@ type EndpointStatus struct {
 
 type DirectStatus struct {
 	ServerName     string               `json:"server-name"`
-	ClientID       string               `json:"client-id"`
+	ClientKey      model.Key            `json:"client-key"`
 	ClientMetadata string               `json:"client-metadata"`
 	Remotes        []DirectRemoteStatus `json:"remotes"`
 }
@@ -229,7 +229,7 @@ func (s *Server) getDirects() map[string]DirectStatus {
 
 		directs[srv] = DirectStatus{
 			ServerName:     v.serverName,
-			ClientID:       v.localConn.id,
+			ClientKey:      v.localConn.key,
 			ClientMetadata: v.localConn.metadata,
 			Remotes:        clients,
 		}
