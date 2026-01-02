@@ -434,26 +434,6 @@ func (s *directPeerServer) runRemoteErr(ctx context.Context, conn *quic.Conn) er
 	}
 }
 
-func (s *directPeerServer) check(ctx context.Context, conn *quic.Conn) error {
-	stream, err := conn.AcceptStream(ctx)
-	if err != nil {
-		return fmt.Errorf("accept client stream: %w", err)
-	}
-	defer func() {
-		if err := stream.Close(); err != nil {
-			slogc.Fine(s.logger, "error closing check client stream", "err", err)
-		}
-	}()
-
-	if _, err := pbconnect.ReadRequest(stream); err != nil {
-		return fmt.Errorf("read client stream: %w", err)
-	} else if err := proto.Write(stream, &pbconnect.Response{}); err != nil {
-		return fmt.Errorf("write client stream: %w", err)
-	}
-
-	return nil
-}
-
 func (s *directPeerServer) runDestinationStream(ctx context.Context, stream *quic.Stream) {
 	defer func() {
 		if err := stream.Close(); err != nil {
