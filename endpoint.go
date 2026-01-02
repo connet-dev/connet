@@ -195,9 +195,10 @@ func (ep *endpoint) runAnnounce(ctx context.Context, conn *quic.Conn) error {
 			}
 			if ep.cfg.route.AllowRelay() {
 				peer.RelayIds = rawPeer.RelayIds
+				peer.Relays = rawPeer.Relays
 			}
 
-			ep.logger.Debug("updated announce", "direct", len(peer.Directs), "relays", len(peer.RelayIds))
+			ep.logger.Debug("updated announce", "direct", len(peer.Directs), "relays", len(peer.RelayIds), "direct-relays", len(peer.Relays))
 			return proto.Write(stream, &pbclient.Request{
 				Announce: &pbclient.Request_Announce{
 					Endpoint: ep.cfg.endpoint.PB(),
@@ -236,10 +237,15 @@ func (ep *endpoint) runAnnounce(ctx context.Context, conn *quic.Conn) error {
 				}
 				if ep.cfg.route.AllowRelay() {
 					peer.Peer.RelayIds = rawPeer.Peer.RelayIds
+					peer.Peer.Relays = rawPeer.Peer.Relays
 				}
 
 				return peer
 			}))
+
+			if ep.cfg.route.AllowRelay() {
+				ep.peer.setDirectRelays(resp.Announce.Relays)
+			}
 		}
 	})
 

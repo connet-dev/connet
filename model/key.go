@@ -4,16 +4,21 @@ import (
 	"crypto/x509"
 
 	"github.com/connet-dev/connet/netc"
+	"github.com/quic-go/quic-go"
 	"golang.org/x/crypto/blake2s"
 )
 
 type Key struct{ string }
 
 func NewKey(cert *x509.Certificate) Key {
-	return newKeyRaw(cert.Raw)
+	return NewKeyRaw(cert.Raw)
 }
 
-func newKeyRaw(raw []byte) Key {
+func NewKeyConn(conn *quic.Conn) Key {
+	return NewKeyRaw(conn.ConnectionState().TLS.PeerCertificates[0].Raw)
+}
+
+func NewKeyRaw(raw []byte) Key {
 	hash := blake2s.Sum256(raw)
 	return Key{netc.DNSSECEncoding.EncodeToString(hash[:])}
 }

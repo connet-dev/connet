@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"io"
 	"log/slog"
+	"maps"
 	"net"
 	"slices"
 	"sync"
@@ -15,6 +16,7 @@ import (
 
 	"github.com/connet-dev/connet/logc"
 	"github.com/connet-dev/connet/model"
+	"github.com/connet-dev/connet/notify"
 	"github.com/connet-dev/connet/proto"
 	"github.com/connet-dev/connet/proto/pbclient"
 	"github.com/connet-dev/connet/proto/pberror"
@@ -42,6 +44,8 @@ type ClientAuthentication []byte
 type ClientRelays interface {
 	Client(ctx context.Context, endpoint model.Endpoint, role model.Role, cert *x509.Certificate, auth ClientAuthentication,
 		notify func(map[RelayID]relayCacheValue) error) error
+	Active(ctx context.Context, ep model.Endpoint, auth ClientAuthentication,
+		notify func(map[RelayID]*pbclient.DirectRelay) error) error
 }
 
 func newClientServer(
@@ -657,15 +661,38 @@ func (s *clientStream) announce(ctx context.Context, req *pbclient.Request_Annou
 		}
 	})
 
+	peerAnnounce := notify.NewEmpty[*pbclient.Response_Announce]()
 	g.Go(func(ctx context.Context) error {
-		defer s.conn.logger.Debug("completed sources notify")
 		return s.conn.server.listen(ctx, endpoint, role.Invert(), func(peers []*pbclient.RemotePeer) error {
-			s.conn.logger.Debug("updated sources list", "peers", len(peers))
+			peerAnnounce.Update(func(t *pbclient.Response_Announce) *pbclient.Response_Announce {
+				return &pbclient.Response_Announce{
+					Peers:  peers,
+					Relays: t.GetRelays(),
+				}
+			})
+			return nil
+		})
+	})
+	g.Go(func(ctx context.Context) error {
+		return s.conn.server.relays.Active(ctx, endpoint, s.conn.auth, func(relays map[RelayID]*pbclient.DirectRelay) error {
+			peerAnnounce.Update(func(t *pbclient.Response_Announce) *pbclient.Response_Announce {
+				return &pbclient.Response_Announce{
+					Peers:  t.GetPeers(),
+					Relays: slices.Collect(maps.Values(relays)),
+				}
+			})
+			return nil
+		})
+	})
+
+	g.Go(func(ctx context.Context) error {
+		defer s.conn.logger.Debug("completed announce notify")
+
+		return peerAnnounce.Listen(ctx, func(announce *pbclient.Response_Announce) error {
+			s.conn.logger.Debug("updated announce list", "peers", len(announce.Peers), "relays", len(announce.Relays))
 
 			if err := proto.Write(s.stream, &pbclient.Response{
-				Announce: &pbclient.Response_Announce{
-					Peers: peers,
-				},
+				Announce: announce,
 			}); err != nil {
 				return fmt.Errorf("client announce write: %w", err)
 			}

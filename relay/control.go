@@ -31,6 +31,7 @@ import (
 type controlClient struct {
 	hostports []model.HostPort
 	root      *certc.Cert
+	direct    *certc.Cert
 	metadata  string
 
 	controlAddr          *net.UDPAddr
@@ -54,12 +55,7 @@ type controlClient struct {
 	logger *slog.Logger
 }
 
-func newControlClient(cfg Config, configStore logc.KV[ConfigKey, ConfigValue]) (*controlClient, error) {
-	root, err := certc.NewRoot()
-	if err != nil {
-		return nil, err
-	}
-
+func newControlClient(cfg Config, root *certc.Cert, directCert *certc.Cert, configStore logc.KV[ConfigKey, ConfigValue]) (*controlClient, error) {
 	clients, err := cfg.Stores.Clients()
 	if err != nil {
 		return nil, err
@@ -100,6 +96,7 @@ func newControlClient(cfg Config, configStore logc.KV[ConfigKey, ConfigValue]) (
 	c := &controlClient{
 		hostports: hostports,
 		root:      root,
+		direct:    directCert,
 		metadata:  cfg.Metadata,
 
 		controlAddr:  cfg.ControlAddr,
@@ -161,6 +158,7 @@ func (s *controlClient) getServer(name string) *relayServer {
 func (s *controlClient) tlsAuthenticate(chi *tls.ClientHelloInfo, base *tls.Config) (*tls.Config, error) {
 	if srv := s.getServer(chi.ServerName); srv != nil {
 		cfg := base.Clone()
+		cfg.ClientAuth = tls.RequireAndVerifyClientCert
 		cfg.Certificates = srv.tls
 		cfg.ClientCAs = srv.cas.Load()
 		return cfg, nil
@@ -254,11 +252,12 @@ func (s *controlClient) connectSingle(ctx context.Context, transport *quic.Trans
 	}()
 
 	if err := proto.Write(authStream, &pbrelay.AuthenticateReq{
-		Token:          s.controlToken,
-		Addresses:      iterc.MapSlice(s.hostports, model.HostPort.PB),
-		ReconnectToken: reconnConfig.Bytes,
-		BuildVersion:   model.BuildVersion(),
-		Metadata:       s.metadata,
+		Token:             s.controlToken,
+		Addresses:         model.PBsFromHostPorts(s.hostports),
+		ReconnectToken:    reconnConfig.Bytes,
+		BuildVersion:      model.BuildVersion(),
+		Metadata:          s.metadata,
+		ServerCertificate: s.direct.Raw(),
 	}); err != nil {
 		return nil, fmt.Errorf("auth write error: %w", err)
 	}

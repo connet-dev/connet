@@ -23,6 +23,7 @@ enum Code {
   RelayValidationFailed = 300;
   RelayInvalidCertificate = 301;
   RelayKeepaliveClosed = 302;
+  RelayReserveFailed = 303;
 
   // Direct
   DirectConnectionClosed = 400;

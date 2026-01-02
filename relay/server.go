@@ -12,8 +12,10 @@ import (
 	"slices"
 	"time"
 
+	"github.com/connet-dev/connet/certc"
 	"github.com/connet-dev/connet/iterc"
 	"github.com/connet-dev/connet/model"
+	"github.com/connet-dev/connet/netc"
 	"github.com/connet-dev/connet/notify"
 	"github.com/connet-dev/connet/reliable"
 	"github.com/connet-dev/connet/statusc"
@@ -60,12 +62,27 @@ func NewServer(cfg Config) (*Server, error) {
 	var statelessResetKey quic.StatelessResetKey
 	copy(statelessResetKey[:], statelessResetVal.Bytes)
 
-	control, err := newControlClient(cfg, configStore)
+	rootCert, err := certc.NewRoot()
+	if err != nil {
+		return nil, fmt.Errorf("generate relay cert: %w", err)
+	}
+
+	directCert, err := rootCert.NewServer(certc.CertOpts{
+		Domains: []string{netc.GenDomainName("reserve.relay")},
+	})
+	if err != nil {
+		return nil, fmt.Errorf("generate direct relay cert: %w", err)
+	}
+
+	control, err := newControlClient(cfg, rootCert, directCert, configStore)
 	if err != nil {
 		return nil, fmt.Errorf("relay control client: %w", err)
 	}
 
-	clients := newClientsServer(cfg, control.tlsAuthenticate, control.authenticate)
+	clients, err := newClientsServer(cfg, control.tlsAuthenticate, control.authenticate, rootCert, directCert)
+	if err != nil {
+		return nil, fmt.Errorf("relay clients server: %w", err)
+	}
 
 	return &Server{
 		ingress:           cfg.Ingress,
@@ -118,12 +135,26 @@ type Status struct {
 	ServerAddr string                    `json:"server-addrress"`
 	ServerID   string                    `json:"server-id"`
 	Endpoints  map[string]EndpointStatus `json:"endpoints"`
+	Directs    map[string]DirectStatus   `json:"directs"`
 }
 
 type EndpointStatus struct {
 	Endpoint     model.Endpoint `json:"endpoint"`
 	Destinations []string       `json:"destinations"`
 	Sources      []string       `json:"sources"`
+}
+
+type DirectStatus struct {
+	ServerName     string               `json:"server-name"`
+	ClientKey      model.Key            `json:"client-key"`
+	ClientMetadata string               `json:"client-metadata"`
+	Remotes        []DirectRemoteStatus `json:"remotes"`
+}
+
+type DirectRemoteStatus struct {
+	Key      model.Key `json:"key"`
+	Metadata string    `json:"metadata"`
+	Addr     string    `json:"address"`
 }
 
 func (s *Server) Status(ctx context.Context) (Status, error) {
@@ -135,6 +166,7 @@ func (s *Server) Status(ctx context.Context) (Status, error) {
 	}
 
 	eps := s.getEndpoints()
+	drs := s.getDirects()
 
 	return Status{
 		Status:     stat,
@@ -142,6 +174,7 @@ func (s *Server) Status(ctx context.Context) (Status, error) {
 		ServerAddr: s.control.controlAddr.String(),
 		ServerID:   controlID,
 		Endpoints:  eps,
+		Directs:    drs,
 	}, nil
 }
 
@@ -154,11 +187,11 @@ func (s *Server) getControlID() (string, error) {
 }
 
 func (s *Server) getEndpoints() map[string]EndpointStatus {
-	s.clients.endpointsMu.RLock()
-	defer s.clients.endpointsMu.RUnlock()
+	s.clients.controlServer.endpointsMu.RLock()
+	defer s.clients.controlServer.endpointsMu.RUnlock()
 
 	endpoints := map[string]EndpointStatus{}
-	for ep, v := range s.clients.endpoints {
+	for ep, v := range s.clients.controlServer.endpoints {
 		v.mu.RLock()
 		destinations := slices.Collect(maps.Keys(v.destinations))
 		sources := slices.Collect(maps.Keys(v.sources))
@@ -171,4 +204,34 @@ func (s *Server) getEndpoints() map[string]EndpointStatus {
 		}
 	}
 	return endpoints
+}
+
+func (s *Server) getDirects() map[string]DirectStatus {
+	s.clients.directServer.peerServersMu.RLock()
+	peerServers := maps.Clone(s.clients.directServer.peerServers)
+	s.clients.directServer.peerServersMu.RUnlock()
+
+	directs := map[string]DirectStatus{}
+	for srv, v := range peerServers {
+		expectedConns, _ := v.expectConns.Peek()
+		remoteConns, _ := v.remoteConns.Peek()
+
+		var clients []DirectRemoteStatus
+		for k := range expectedConns {
+			connStat := DirectRemoteStatus{Key: k}
+			if conn, ok := remoteConns[k]; ok {
+				connStat.Metadata = conn.metadata
+				connStat.Addr = conn.conn.RemoteAddr().String()
+			}
+			clients = append(clients, connStat)
+		}
+
+		directs[srv] = DirectStatus{
+			ServerName:     v.serverName,
+			ClientKey:      v.localConn.key,
+			ClientMetadata: v.localConn.metadata,
+			Remotes:        clients,
+		}
+	}
+	return directs
 }
