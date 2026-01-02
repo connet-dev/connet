@@ -46,9 +46,9 @@ type peer struct {
 type peerID string
 
 type peerConnKey struct {
-	id       peerID
-	style    peerStyle
-	remoteID string
+	id      peerID
+	style   peerStyle
+	relayID string
 }
 
 type peerStyle int
@@ -267,14 +267,14 @@ func (p *peer) removeRelayConn(id relayID) {
 	notify.MapDelete(p.relayConns, id)
 }
 
-func (p *peer) addActiveConn(id peerID, style peerStyle, remoteID string, conn *quic.Conn) {
-	p.logger.Debug("add active connection", "peer", id, "style", style, "addr", conn.RemoteAddr(), "remote", remoteID)
-	notify.MapPut(p.peerConns, peerConnKey{id, style, remoteID}, conn)
+func (p *peer) addActiveConn(id peerID, style peerStyle, relayID string, conn *quic.Conn) {
+	p.logger.Debug("add active connection", "peer", id, "style", style, "addr", conn.RemoteAddr(), "relay", relayID)
+	notify.MapPut(p.peerConns, peerConnKey{id, style, relayID}, conn)
 }
 
-func (p *peer) removeActiveConn(id peerID, style peerStyle, remoteID string) {
-	p.logger.Debug("remove active connection", "peer", id, "style", style, "remote", remoteID)
-	notify.MapDelete(p.peerConns, peerConnKey{id, style, remoteID})
+func (p *peer) removeActiveConn(id peerID, style peerStyle, relayID string) {
+	p.logger.Debug("remove active connection", "peer", id, "style", style, "relay", relayID)
+	notify.MapDelete(p.peerConns, peerConnKey{id, style, relayID})
 }
 
 func (p *peer) removeActiveConns(id peerID) map[peerConnKey]*quic.Conn {
@@ -399,9 +399,9 @@ type StatusRemotePeer struct {
 }
 
 type StatusRemotePeerConnection struct {
-	Style    string `json:"style"`
-	Address  string `json:"address"`
-	RemoteID string `json:"remote-id,omitempty"`
+	Style   string `json:"style"`
+	Address string `json:"address"`
+	RelayID string `json:"relay-id,omitempty"`
 }
 
 func (p *peer) status() (StatusPeer, error) {
@@ -429,9 +429,9 @@ func (p *peer) status() (StatusPeer, error) {
 		for key, conn := range conns {
 			if peer, ok := stat.Peers[string(key.id)]; ok {
 				peer.Connections = append(peer.Connections, StatusRemotePeerConnection{
-					Style:    key.style.String(),
-					Address:  conn.RemoteAddr().String(),
-					RemoteID: key.remoteID,
+					Style:   key.style.String(),
+					Address: conn.RemoteAddr().String(),
+					RelayID: key.relayID,
 				})
 				stat.Peers[string(key.id)] = peer
 			}
