@@ -633,6 +633,7 @@ func (s *clientStream) announce(ctx context.Context, req *pbclient.Request_Annou
 	}()
 
 	g := reliable.NewGroup(ctx)
+	g.Go(quicc.CancelStream(s.stream))
 
 	g.Go(func(ctx context.Context) error {
 		for {
@@ -666,7 +667,7 @@ func (s *clientStream) announce(ctx context.Context, req *pbclient.Request_Annou
 		return s.conn.server.listen(ctx, endpoint, role.Invert(), func(peers []*pbclient.RemotePeer) error {
 			peerAnnounce.Update(func(t *pbclient.Response_Announce) *pbclient.Response_Announce {
 				return &pbclient.Response_Announce{
-					Peers:  peers,
+					Peers:  slices.Clone(peers),
 					Relays: t.GetRelays(),
 				}
 			})

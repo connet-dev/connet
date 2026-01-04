@@ -78,7 +78,9 @@ func newEndpoint(ctx context.Context, cl *Client, cfg endpointConfig, logger *sl
 	var reportOnce sync.Once
 	ep.onlineReport = func(err error) {
 		if err == nil {
-			ep.connStatus.Store(statusc.Connected)
+			if !ep.connStatus.CompareAndSwap(statusc.Reconnecting, statusc.Connected) {
+				ep.connStatus.CompareAndSwap(statusc.NotConnected, statusc.Connected)
+			}
 		}
 		reportOnce.Do(func() {
 			if err != nil {
