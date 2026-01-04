@@ -629,6 +629,7 @@ func (s *clientStream) announce(ctx context.Context, req *pbclient.Request_Annou
 	}()
 
 	g := reliable.NewGroup(ctx)
+	g.Go(quicc.CancelStream(s.stream))
 
 	g.Go(func(ctx context.Context) error {
 		for {
