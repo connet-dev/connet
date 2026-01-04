@@ -51,8 +51,9 @@ type controlClient struct {
 	clientsStreamOffset int64
 	clientsLogOffset    int64
 
-	connStatus        atomic.Value
-	directVerifyKey   ed25519.PublicKey // TODO concurrent access
+	connStatus atomic.Value
+
+	directVerifyKey   ed25519.PublicKey
 	directVerifyKeyMu sync.RWMutex
 
 	logger *slog.Logger
@@ -176,15 +177,16 @@ func (s *controlClient) authenticate(serverName string, certs []*x509.Certificat
 	return nil
 }
 
-func (s *controlClient) directAuthenticate(cert *x509.Certificate, signature []byte) bool {
+func (s *controlClient) directAuthenticate(cert *x509.Certificate, authentication []byte) bool {
 	s.directVerifyKeyMu.RLock()
-	defer s.directVerifyKeyMu.RUnlock()
+	directVerifyKey := s.directVerifyKey
+	s.directVerifyKeyMu.RUnlock()
 
-	if s.directVerifyKey == nil {
+	if directVerifyKey == nil {
 		return false
 	}
 
-	return ed25519.Verify(s.directVerifyKey, cert.Raw, signature)
+	return ed25519.Verify(directVerifyKey, cert.Raw, authentication)
 }
 
 type TransportsFn func(ctx context.Context) ([]*quic.Transport, error)

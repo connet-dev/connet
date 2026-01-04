@@ -27,7 +27,7 @@ import (
 	"github.com/quic-go/quic-go"
 )
 
-type directClientAuthenticator func(cert *x509.Certificate, signature []byte) bool
+type directClientAuthenticator func(cert *x509.Certificate, authentication []byte) bool
 
 type clientsDirectServer struct {
 	rootCert *certc.Cert
@@ -39,7 +39,13 @@ type clientsDirectServer struct {
 	logger *slog.Logger
 }
 
-func (s *clientsDirectServer) authenticate(ctx context.Context, conn *quic.Conn, validateSignature bool) (*directAuth, error) {
+type directAuthenticatedConn struct {
+	conn     *quic.Conn
+	key      model.Key
+	metadata string
+}
+
+func (s *clientsDirectServer) authenticate(ctx context.Context, conn *quic.Conn, validateSignature bool) (*directAuthenticatedConn, error) {
 	s.logger.Debug("waiting for authentication")
 	authStream, err := conn.AcceptStream(ctx)
 	if err != nil {
@@ -69,83 +75,48 @@ func (s *clientsDirectServer) authenticate(ctx context.Context, conn *quic.Conn,
 
 	key := model.NewKey(cert)
 	s.logger.Debug("authentication completed", "local", conn.LocalAddr(), "remote", conn.RemoteAddr(), "build", req.BuildVersion)
-	return &directAuth{key, req.Metadata}, nil
+	return &directAuthenticatedConn{conn, key, req.Metadata}, nil
 }
 
-func (s *clientsDirectServer) runDirectConn(ctx context.Context, conn *quic.Conn) {
-	s.logger.Debug("new client connection", "server", conn.ConnectionState().TLS.ServerName, "remote", conn.RemoteAddr())
-
-	s.peerServersMu.RLock()
-	srv := s.peerServers[conn.ConnectionState().TLS.ServerName]
-	s.peerServersMu.RUnlock()
-
-	if srv == nil {
-		if err := conn.CloseWithError(quic.ApplicationErrorCode(pberror.Code_AuthenticationFailed), "connection closed"); err != nil {
+func (s *clientsDirectServer) runReserveConn(ctx context.Context, conn *quic.Conn) {
+	defer func() {
+		if err := conn.CloseWithError(quic.ApplicationErrorCode(pberror.Code_Unknown), "connection closed"); err != nil {
 			slogc.Fine(s.logger, "error closing connection", "err", err)
 		}
+	}()
+	s.logger.Debug("new client connection", "proto", conn.ConnectionState().TLS.NegotiatedProtocol, "remote", conn.RemoteAddr())
+
+	authConn, err := s.authenticate(ctx, conn, true)
+	if err != nil {
+		if perr := pberror.GetError(err); perr != nil {
+			cerr := conn.CloseWithError(quic.ApplicationErrorCode(perr.Code), perr.Message)
+			err = errors.Join(perr, cerr)
+		} else {
+			cerr := conn.CloseWithError(quic.ApplicationErrorCode(pberror.Code_AuthenticationFailed), "Error while authenticating")
+			err = errors.Join(err, cerr)
+		}
+		s.logger.Debug("error while running client conn", "err", err)
 		return
 	}
 
-	srv.runRemote(ctx, conn)
-}
+	logger := s.logger.With("client-key", authConn.key)
 
-type directReserveConn struct {
-	server *clientsDirectServer
-	conn   *quic.Conn
-	logger *slog.Logger
+	logger.Info("client connected", "addr", conn.RemoteAddr(), "metadata", authConn.metadata)
+	defer logger.Info("client disconnected", "addr", conn.RemoteAddr(), "metadata", authConn.metadata)
 
-	directAuth
-}
-
-type directAuth struct {
-	key      model.Key
-	metadata string
-}
-
-func (c *directReserveConn) run(ctx context.Context) {
-	c.logger.Debug("new client connection", "proto", c.conn.ConnectionState().TLS.NegotiatedProtocol, "remote", c.conn.RemoteAddr())
-	defer func() {
-		if err := c.conn.CloseWithError(quic.ApplicationErrorCode(pberror.Code_Unknown), "connection closed"); err != nil {
-			slogc.Fine(c.logger, "error closing connection", "err", err)
-		}
-	}()
-
-	if err := c.runErr(ctx); err != nil {
-		c.logger.Debug("error while running client conn", "err", err)
+	if err := s.reserve(ctx, authConn, logger); err != nil {
+		logger.Debug("error while running client conn", "err", err)
 	}
 }
 
-func (c *directReserveConn) runErr(ctx context.Context) error {
-	if auth, err := c.server.authenticate(ctx, c.conn, true); err != nil {
-		if perr := pberror.GetError(err); perr != nil {
-			cerr := c.conn.CloseWithError(quic.ApplicationErrorCode(perr.Code), perr.Message)
-			err = errors.Join(perr, cerr)
-		} else {
-			cerr := c.conn.CloseWithError(quic.ApplicationErrorCode(pberror.Code_AuthenticationFailed), "Error while authenticating")
-			err = errors.Join(err, cerr)
-		}
-		return err
-	} else {
-		c.directAuth = *auth
-		c.logger = c.logger.With("client-key", c.key)
-	}
-
-	c.logger.Info("client connected", "addr", c.conn.RemoteAddr(), "metadata", c.metadata)
-	defer c.logger.Info("client disconnected", "addr", c.conn.RemoteAddr(), "metadata", c.metadata)
-	// TODO client connection tracking
-	// connected + defer disconnected
-
-	return c.reserve(ctx)
-}
-
-func (c *directReserveConn) reserve(ctx context.Context) error {
-	stream, err := c.conn.AcceptStream(ctx)
+func (s *clientsDirectServer) reserve(ctx context.Context, conn *directAuthenticatedConn, logger *slog.Logger) error {
+	stream, err := conn.conn.AcceptStream(ctx)
 	if err != nil {
 		return fmt.Errorf("client reserve stream: %w", err)
 	}
 	defer func() {
 		if err := stream.Close(); err != nil {
-			slogc.Fine(c.logger, "error closing reserve stream", "err", err)
+			slogc.Fine(logger, "error closing reserve stream", "err", err)
 		}
 	}()
 
@@ -154,7 +125,7 @@ func (c *directReserveConn) reserve(ctx context.Context) error {
 		return fmt.Errorf("client req read: %w", err)
 	}
 
-	srv, err := newDirectPeerServer(c, req.Peers)
+	srv, err := newDirectPeerServer(s, conn, req.Peers, logger)
 	if err != nil {
 		err := pberror.NewError(pberror.Code_RelayReserveFailed, "create server: %v", err)
 		if err := proto.Write(stream, &pbclientrelay.ReserveResp{Error: err}); err != nil {
@@ -163,13 +134,13 @@ func (c *directReserveConn) reserve(ctx context.Context) error {
 		return fmt.Errorf("client create server: %w", err)
 	}
 
-	c.server.peerServersMu.Lock()
-	c.server.peerServers[srv.serverName] = srv
-	c.server.peerServersMu.Unlock()
+	s.peerServersMu.Lock()
+	s.peerServers[srv.serverName] = srv
+	s.peerServersMu.Unlock()
 	defer func() {
-		c.server.peerServersMu.Lock()
-		delete(c.server.peerServers, srv.serverName)
-		c.server.peerServersMu.Unlock()
+		s.peerServersMu.Lock()
+		delete(s.peerServers, srv.serverName)
+		s.peerServersMu.Unlock()
 	}()
 
 	if err := proto.Write(stream, &pbclientrelay.ReserveResp{
@@ -178,11 +149,44 @@ func (c *directReserveConn) reserve(ctx context.Context) error {
 		return fmt.Errorf("client resp write: %w", err)
 	}
 
-	return srv.runReserveErr(ctx, stream)
+	return srv.runLocalErr(ctx, stream)
+}
+
+func (s *clientsDirectServer) runConnectConn(ctx context.Context, conn *quic.Conn) {
+	defer func() {
+		if err := conn.CloseWithError(quic.ApplicationErrorCode(pberror.Code_Unknown), "connection closed"); err != nil {
+			slogc.Fine(s.logger, "error closing connection", "err", err)
+		}
+	}()
+	s.logger.Debug("new client connection", "server", conn.ConnectionState().TLS.ServerName, "remote", conn.RemoteAddr())
+
+	s.peerServersMu.RLock()
+	srv := s.peerServers[conn.ConnectionState().TLS.ServerName]
+	s.peerServersMu.RUnlock()
+
+	if srv == nil {
+		if err := conn.CloseWithError(quic.ApplicationErrorCode(pberror.Code_AuthenticationFailed), "unknown server"); err != nil {
+			slogc.Fine(s.logger, "error closing connection", "err", err)
+		}
+		return
+	}
+
+	authConn, err := s.authenticate(ctx, conn, false)
+	if err != nil {
+		if err := conn.CloseWithError(quic.ApplicationErrorCode(pberror.Code_AuthenticationFailed), "error authenticating"); err != nil {
+			slogc.Fine(s.logger, "error closing connection", "err", err)
+		}
+		return
+	}
+
+	if err := srv.runRemoteErr(ctx, authConn); err != nil {
+		srv.logger.Debug("error while running client conn", "err", err)
+	}
 }
 
 type directPeerServer struct {
-	localConn *directReserveConn
+	server    *clientsDirectServer
+	localConn *directAuthenticatedConn
 
 	serverName string
 	serverCert *certc.Cert
@@ -191,19 +195,14 @@ type directPeerServer struct {
 	tlsConf atomic.Pointer[tls.Config]
 
 	expectConns *notify.V[map[model.Key]struct{}]
-	remoteConns *notify.V[map[model.Key]*directConnectConn]
+	remoteConns *notify.V[map[model.Key]*directAuthenticatedConn]
 
 	logger *slog.Logger
 }
 
-type directConnectConn struct {
-	conn *quic.Conn
-	directAuth
-}
-
-func newDirectPeerServer(conn *directReserveConn, peers []*pbclientrelay.ReservePeer) (*directPeerServer, error) {
+func newDirectPeerServer(server *clientsDirectServer, localConn *directAuthenticatedConn, peers []*pbclientrelay.ReservePeer, logger *slog.Logger) (*directPeerServer, error) {
 	serverName := netc.GenDomainName("connet.relay")
-	serverCert, err := conn.server.rootCert.NewServer(certc.CertOpts{
+	serverCert, err := server.rootCert.NewServer(certc.CertOpts{
 		Domains: []string{serverName},
 	})
 	if err != nil {
@@ -215,7 +214,8 @@ func newDirectPeerServer(conn *directReserveConn, peers []*pbclientrelay.Reserve
 	}
 
 	s := &directPeerServer{
-		localConn: conn,
+		server:    server,
+		localConn: localConn,
 
 		serverName: serverName,
 		serverCert: serverCert,
@@ -227,9 +227,9 @@ func newDirectPeerServer(conn *directReserveConn, peers []*pbclientrelay.Reserve
 		},
 
 		expectConns: notify.NewEmpty[map[model.Key]struct{}](),
-		remoteConns: notify.NewEmpty[map[model.Key]*directConnectConn](),
+		remoteConns: notify.NewEmpty[map[model.Key]*directAuthenticatedConn](),
 
-		logger: conn.logger.With("peer-server", serverName),
+		logger: logger.With("peer-server", serverName),
 	}
 
 	if err := s.update(peers); err != nil {
@@ -239,7 +239,7 @@ func newDirectPeerServer(conn *directReserveConn, peers []*pbclientrelay.Reserve
 	return s, nil
 }
 
-func (s *directPeerServer) runReserveErr(ctx context.Context, stream *quic.Stream) error {
+func (s *directPeerServer) runLocalErr(ctx context.Context, stream *quic.Stream) error {
 	g := reliable.NewGroup(ctx)
 	g.Go(quicc.CancelStream(stream))
 
@@ -262,7 +262,7 @@ func (s *directPeerServer) runReserveErr(ctx context.Context, stream *quic.Strea
 	})
 
 	g.Go(func(ctx context.Context) error {
-		return s.remoteConns.Listen(ctx, func(remoteConns map[model.Key]*directConnectConn) error {
+		return s.remoteConns.Listen(ctx, func(remoteConns map[model.Key]*directAuthenticatedConn) error {
 			expectConns, _ := s.expectConns.Peek()
 
 			var peers []*pbclientrelay.ConnectedPeer
@@ -334,13 +334,13 @@ func (s *directPeerServer) runSourceStream(ctx context.Context, stream *quic.Str
 	}
 }
 
-func (d *directPeerServer) getRemoteConns() []*directConnectConn {
+func (d *directPeerServer) getRemoteConns() []*directAuthenticatedConn {
 	conns, ok := d.remoteConns.Peek()
 	if !ok {
 		return nil
 	}
 
-	return slices.SortedFunc(maps.Values(conns), func(l, r *directConnectConn) int {
+	return slices.SortedFunc(maps.Values(conns), func(l, r *directAuthenticatedConn) int {
 		ld := l.conn.ConnectionStats().SmoothedRTT
 		rd := r.conn.ConnectionStats().SmoothedRTT
 
@@ -411,32 +411,14 @@ func (s *directPeerServer) connectSource(ctx context.Context, srcStream *quic.St
 	return nil
 }
 
-func (s *directPeerServer) runRemote(ctx context.Context, conn *quic.Conn) {
+func (s *directPeerServer) runRemoteErr(ctx context.Context, authConn *directAuthenticatedConn) error {
+	notify.MapPut(s.remoteConns, authConn.key, authConn)
 	defer func() {
-		if err := conn.CloseWithError(quic.ApplicationErrorCode(pberror.Code_Unknown), "connection closed"); err != nil {
-			slogc.Fine(s.logger, "error closing connection", "err", err)
-		}
-	}()
-
-	if err := s.runRemoteErr(ctx, conn); err != nil {
-		s.logger.Debug("error while running client conn", "err", err)
-	}
-}
-
-func (s *directPeerServer) runRemoteErr(ctx context.Context, conn *quic.Conn) error {
-	auth, err := s.localConn.server.authenticate(ctx, conn, false)
-	if err != nil {
-		return err
-	}
-
-	key := model.NewKeyConn(conn)
-	notify.MapPut(s.remoteConns, key, &directConnectConn{conn, *auth})
-	defer func() {
-		notify.MapDelete(s.remoteConns, key)
+		notify.MapDelete(s.remoteConns, authConn.key)
 	}()
 
 	for {
-		stream, err := conn.AcceptStream(ctx)
+		stream, err := authConn.conn.AcceptStream(ctx)
 		if err != nil {
 			return err
 		}

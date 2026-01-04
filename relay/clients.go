@@ -160,14 +160,9 @@ func (s *clientsServer) run(ctx context.Context, cfg clientsServerCfg) error {
 			}
 			go rc.run(ctx)
 		case netc.IsSubdomain(serverName, "connet.relay"):
-			go s.directServer.runDirectConn(ctx, conn)
+			go s.directServer.runConnectConn(ctx, conn)
 		default:
-			rc := &directReserveConn{
-				server: s.directServer,
-				conn:   conn,
-				logger: s.directServer.logger,
-			}
-			go rc.run(ctx)
+			go s.directServer.runReserveConn(ctx, conn)
 		}
 	}
 }
