@@ -52,7 +52,7 @@ func (v ConnectRelayNextProto) String() string {
 
 var (
 	CRv01 = ConnectRelayNextProto{"connet-peer-relay/0.1"} // 0.7.0
-	CRv02 = ConnectRelayNextProto{"connet-peer-relay/0.2"} // 0.11.0
+	CRv02 = ConnectRelayNextProto{"connet-peer-relay/0.2"} // 0.12.0
 )
 
 var AllConnectRelayNextProtos = []ConnectRelayNextProto{CRv01, CRv02}

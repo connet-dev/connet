@@ -643,11 +643,11 @@ func (s *relayServer) update(msg logc.Message[ServerKey, ServerValue]) error {
 }
 
 func (s *relayServer) authenticate(certs []*x509.Certificate) *clientAuth {
-	s.mu.RLock()
-	defer s.mu.RUnlock()
-
 	cert := certs[0]
 	key := model.NewKey(cert)
+
+	s.mu.RLock()
+	defer s.mu.RUnlock()
 
 	if dst, ok := s.clients[serverClientKey{model.Destination, key}]; ok && dst.Equal(cert) {
 		return &clientAuth{s.endpoint, model.Destination, key}
