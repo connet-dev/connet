@@ -249,10 +249,10 @@ func (p *peer) runDirectRelays(ctx context.Context) error {
 			}
 			if rlg := runningRelays[id]; rlg != nil {
 				p.logger.Debug("updating direct relay", "id", id)
-				rlg.serverConf.Store(cfg)
+				rlg.serverConf.Store(&directRelayConfig{cfg, relay.ReserveAuthentication})
 			} else {
 				p.logger.Debug("starting direct relay", "id", id)
-				runningRelays[id] = runDirectRelay(ctx, p, id, hps, cfg, relay.ReserveAuthentication, p.logger)
+				runningRelays[id] = runDirectRelay(ctx, p, id, hps, &directRelayConfig{cfg, relay.ReserveAuthentication}, p.logger)
 			}
 		}
 

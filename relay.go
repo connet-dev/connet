@@ -163,26 +163,29 @@ type directRelay struct {
 
 	serverID        relayID
 	serverHostports []model.HostPort
-	serverConf      atomic.Pointer[serverTLSConfig]
-	authentication  []byte
+	serverConf      atomic.Pointer[directRelayConfig]
 
 	cancel context.CancelFunc
 	logger *slog.Logger
 }
 
-func runDirectRelay(ctx context.Context, local *peer, id relayID, hps []model.HostPort, serverConf *serverTLSConfig, authentication []byte, logger *slog.Logger) *directRelay {
+type directRelayConfig struct {
+	tls  *serverTLSConfig
+	auth []byte
+}
+
+func runDirectRelay(ctx context.Context, local *peer, id relayID, hps []model.HostPort, cfg *directRelayConfig, logger *slog.Logger) *directRelay {
 	ctx, cancel := context.WithCancel(ctx)
 	r := &directRelay{
 		local: local,
 
 		serverID:        id,
 		serverHostports: hps,
-		authentication:  authentication,
 
 		cancel: cancel,
 		logger: logger.With("direct-relay", id, "addrs", hps),
 	}
-	r.serverConf.Store(serverConf)
+	r.serverConf.Store(cfg)
 	go r.run(ctx)
 	return r
 }
@@ -237,25 +240,25 @@ func (r *directRelay) connect(ctx context.Context, hp model.HostPort) (*quic.Con
 	}
 
 	cfg := r.serverConf.Load()
-	r.logger.Debug("dialing direct relay", "addr", addr, "server", cfg.name, "cert", cfg.key)
+	r.logger.Debug("dialing direct relay", "addr", addr, "server", cfg.tls.name, "cert", cfg.tls.key)
 	conn, err := r.local.direct.transport.Dial(ctx, addr, &tls.Config{
 		Certificates: []tls.Certificate{r.local.clientCert},
-		RootCAs:      cfg.cas,
-		ServerName:   cfg.name,
+		RootCAs:      cfg.tls.cas,
+		ServerName:   cfg.tls.name,
 		NextProtos:   model.ConnectRelayDirectNextProtos,
 	}, quicc.ClientConfig(r.local.direct.handshakeIdleTimeout))
 	if err != nil {
 		return nil, err
 	}
 
-	if err := r.authenticate(ctx, conn); err != nil {
+	if err := r.authenticate(ctx, conn, cfg.auth); err != nil {
 		cerr := conn.CloseWithError(quic.ApplicationErrorCode(pberror.Code_ConnectionCheckFailed), "connection check failed")
 		return nil, errors.Join(err, cerr)
 	}
 	return conn, nil
 }
 
-func (r *directRelay) authenticate(ctx context.Context, conn *quic.Conn) error {
+func (r *directRelay) authenticate(ctx context.Context, conn *quic.Conn, auth []byte) error {
 	stream, err := conn.OpenStreamSync(ctx)
 	if err != nil {
 		return err
@@ -267,7 +270,7 @@ func (r *directRelay) authenticate(ctx context.Context, conn *quic.Conn) error {
 	}()
 
 	if err := proto.Write(stream, &pbclientrelay.AuthenticateReq{
-		Authentication: r.authentication,
+		Authentication: auth,
 		Metadata:       r.local.metadata,
 		BuildVersion:   model.BuildVersion(),
 	}); err != nil {

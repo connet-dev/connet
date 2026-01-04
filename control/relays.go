@@ -74,8 +74,8 @@ func newRelayServer(
 	directsCache := map[RelayID]directRelay{}
 	for _, msg := range directsMsgs {
 		directsCache[msg.Key.ID] = directRelay{
-			auth:   msg.Value.Authentication,
-			secret: msg.Value.Secret,
+			auth:    msg.Value.Authentication,
+			signKey: msg.Value.AuthenticationSignKey,
 			proto: &pbclient.DirectRelay{
 				Id:                 msg.Key.ID.string,
 				Addresses:          model.PBsFromHostPorts(msg.Value.Hostports),
@@ -180,9 +180,9 @@ type relayServer struct {
 }
 
 type directRelay struct {
-	auth   RelayAuthentication
-	secret ed25519.PrivateKey
-	proto  *pbclient.DirectRelay
+	auth    RelayAuthentication
+	signKey ed25519.PrivateKey
+	proto   *pbclient.DirectRelay
 }
 
 func (s *relayServer) getEndpoint(endpoint model.Endpoint) (map[RelayID]relayCacheValue, int64) {
@@ -268,7 +268,7 @@ func (s *relayServer) Active(ctx context.Context, ep model.Endpoint, cert *x509.
 				Id:                    relay.proto.Id,
 				Addresses:             relay.proto.Addresses,
 				ReserveCertificate:    relay.proto.ReserveCertificate,
-				ReserveAuthentication: ed25519.Sign(relay.secret, cert.Raw),
+				ReserveAuthentication: ed25519.Sign(relay.signKey, cert.Raw),
 			}
 		}
 	}
@@ -294,7 +294,7 @@ func (s *relayServer) Active(ctx context.Context, ep model.Endpoint, cert *x509.
 					Id:                    msg.Key.ID.string,
 					Addresses:             model.PBsFromHostPorts(msg.Value.Hostports),
 					ReserveCertificate:    msg.Value.Certificate.Raw,
-					ReserveAuthentication: ed25519.Sign(msg.Value.Secret, cert.Raw),
+					ReserveAuthentication: ed25519.Sign(msg.Value.AuthenticationSignKey, cert.Raw),
 				}
 				changed = true
 			}
@@ -441,8 +441,8 @@ func (s *relayServer) runDirectsCache(ctx context.Context) error {
 			delete(s.directsCache, msg.Key.ID)
 		} else {
 			s.directsCache[msg.Key.ID] = directRelay{
-				auth:   msg.Value.Authentication,
-				secret: msg.Value.Secret,
+				auth:    msg.Value.Authentication,
+				signKey: msg.Value.AuthenticationSignKey,
 				proto: &pbclient.DirectRelay{
 					Id:                 msg.Key.ID.string,
 					Addresses:          model.PBsFromHostPorts(msg.Value.Hostports),
@@ -505,7 +505,7 @@ type relayConnAuth struct {
 	hostports   []model.HostPort
 	metadata    string
 	certificate *x509.Certificate
-	signer      ed25519.PrivateKey
+	signKey     ed25519.PrivateKey
 }
 
 func (c *relayConn) run(ctx context.Context) {
@@ -551,7 +551,7 @@ func (c *relayConn) runErr(ctx context.Context) error {
 	c.endpoints = endpoints
 
 	key := RelayConnKey{ID: c.id}
-	value := RelayConnValue{c.auth, c.hostports, c.metadata, c.certificate, c.signer}
+	value := RelayConnValue{c.auth, c.hostports, c.metadata, c.certificate, c.signKey}
 	if err := c.server.conns.Put(key, value); err != nil {
 		return err
 	}

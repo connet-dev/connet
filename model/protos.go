@@ -58,7 +58,7 @@ var (
 var AllConnectRelayNextProtos = []ConnectRelayNextProto{CRv01, CRv02}
 
 var ConnectRelayControlNextProtos = []string{CRv01.string}
-var ConnectRelayDirectNextProtos = []string{CRv02.string} // TODO maybe split in reserve/connect?
+var ConnectRelayDirectNextProtos = []string{CRv02.string}
 var ConnectRelayNextProtos = iterc.MapSlice(AllConnectRelayNextProtos, ConnectRelayNextProto.String)
 
 type RelayNextProto struct{ string }

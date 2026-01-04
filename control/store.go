@@ -112,28 +112,28 @@ type RelayConnKey struct {
 }
 
 type RelayConnValue struct {
-	Authentication RelayAuthentication `json:"authentication"`
-	Hostports      []model.HostPort    `json:"hostports"`
-	Metadata       string              `json:"metadata"`
-	Certificate    *x509.Certificate   `json:"certificate"`
-	Secret         ed25519.PrivateKey  `json:"secret"`
+	Authentication        RelayAuthentication `json:"authentication"`
+	Hostports             []model.HostPort    `json:"hostports"`
+	Metadata              string              `json:"metadata"`
+	Certificate           *x509.Certificate   `json:"certificate"`
+	AuthenticationSignKey ed25519.PrivateKey  `json:"authentication-sign-key"`
 }
 
 type jsonRelayConnValue struct {
-	Authentication RelayAuthentication `json:"authentication"`
-	Hostports      []model.HostPort    `json:"hostports"`
-	Metadata       string              `json:"metadata"`
-	Certificate    []byte              `json:"certificate"`
-	Secret         []byte              `json:"secret"`
+	Authentication        RelayAuthentication `json:"authentication"`
+	Hostports             []model.HostPort    `json:"hostports"`
+	Metadata              string              `json:"metadata"`
+	Certificate           []byte              `json:"certificate"`
+	AuthenticationSignKey []byte              `json:"authentication-sign-key"`
 }
 
 func (v RelayConnValue) MarshalJSON() ([]byte, error) {
 	return json.Marshal(jsonRelayConnValue{
-		Authentication: v.Authentication,
-		Hostports:      v.Hostports,
-		Metadata:       v.Metadata,
-		Certificate:    v.Certificate.Raw,
-		Secret:         v.Secret,
+		Authentication:        v.Authentication,
+		Hostports:             v.Hostports,
+		Metadata:              v.Metadata,
+		Certificate:           v.Certificate.Raw,
+		AuthenticationSignKey: v.AuthenticationSignKey,
 	})
 }
 
@@ -148,7 +148,7 @@ func (v *RelayConnValue) UnmarshalJSON(b []byte) error {
 		return err
 	}
 
-	*v = RelayConnValue{s.Authentication, s.Hostports, s.Metadata, cert, s.Secret}
+	*v = RelayConnValue{s.Authentication, s.Hostports, s.Metadata, cert, s.AuthenticationSignKey}
 	return nil
 }
 

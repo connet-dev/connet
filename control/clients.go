@@ -652,6 +652,7 @@ func (s *clientStream) announce(ctx context.Context, req *pbclient.Request_Annou
 				return err
 			}
 
+			// TODO if client cert rotate, this need to update and rekey the relay auth
 			if _, _, err := validatePeerCerts(endpoint, req.Announce.Peer); err != nil {
 				if err := proto.Write(s.stream, &pbclient.Response{Error: err}); err != nil {
 					return fmt.Errorf("client write cert err: %w", err)
