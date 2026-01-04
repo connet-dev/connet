@@ -77,6 +77,7 @@ message DirectRelay {
   string id = 1;
   repeated model.HostPort addresses = 2;
   bytes reserve_certificate = 3;
+  bytes reserve_authentication = 4;
 }
 
 message PeerDirectRelay {

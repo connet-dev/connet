@@ -2,6 +2,7 @@ package relay
 
 import (
 	"context"
+	"crypto/ed25519"
 	"crypto/tls"
 	"crypto/x509"
 	"errors"
@@ -50,7 +51,9 @@ type controlClient struct {
 	clientsStreamOffset int64
 	clientsLogOffset    int64
 
-	connStatus atomic.Value
+	connStatus        atomic.Value
+	directVerifyKey   ed25519.PublicKey // TODO concurrent access
+	directVerifyKeyMu sync.RWMutex
 
 	logger *slog.Logger
 }
@@ -173,6 +176,17 @@ func (s *controlClient) authenticate(serverName string, certs []*x509.Certificat
 	return nil
 }
 
+func (s *controlClient) directAuthenticate(cert *x509.Certificate, signature []byte) bool {
+	s.directVerifyKeyMu.RLock()
+	defer s.directVerifyKeyMu.RUnlock()
+
+	if s.directVerifyKey == nil {
+		return false
+	}
+
+	return ed25519.Verify(s.directVerifyKey, cert.Raw, signature)
+}
+
 type TransportsFn func(ctx context.Context) ([]*quic.Transport, error)
 
 func (s *controlClient) run(ctx context.Context, tfn TransportsFn) error {
@@ -286,6 +300,10 @@ func (s *controlClient) connectSingle(ctx context.Context, transport *quic.Trans
 	if err := s.config.Put(configControlReconnect, reconnConfig); err != nil {
 		return nil, fmt.Errorf("server reconnect set: %w", err)
 	}
+
+	s.directVerifyKeyMu.Lock()
+	s.directVerifyKey = resp.AuthenticationVerifyKey
+	s.directVerifyKeyMu.Unlock()
 
 	return conn, nil
 }

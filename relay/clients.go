@@ -18,7 +18,14 @@ import (
 
 type tlsAuthenticator func(chi *tls.ClientHelloInfo, base *tls.Config) (*tls.Config, error)
 
-func newClientsServer(cfg Config, tlsAuth tlsAuthenticator, clAuth clientAuthenticator, rootCert *certc.Cert, directCert *certc.Cert) (*clientsServer, error) {
+func newClientsServer(
+	cfg Config,
+	tlsAuth tlsAuthenticator,
+	clAuth clientAuthenticator,
+	directAuth directClientAuthenticator,
+	rootCert *certc.Cert,
+	directCert *certc.Cert,
+) (*clientsServer, error) {
 	directTLS, err := directCert.TLSCert()
 	if err != nil {
 		return nil, fmt.Errorf("direct TLS cert: %w", err)
@@ -43,6 +50,7 @@ func newClientsServer(cfg Config, tlsAuth tlsAuthenticator, clAuth clientAuthent
 
 		directServer: &clientsDirectServer{
 			rootCert: rootCert,
+			auth:     directAuth,
 
 			peerServers: map[string]*directPeerServer{},
 

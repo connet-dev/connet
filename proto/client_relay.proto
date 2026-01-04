@@ -6,8 +6,9 @@ import "error.proto";
 option go_package = "github.com/connet-dev/connet/proto/pbclientrelay";
 
 message AuthenticateReq {
-  string metadata = 1;
-  string build_version = 2;
+  bytes authentication = 1;
+  string metadata = 2;
+  string build_version = 3;
 }
 
 message AuthenticateResp {

@@ -27,8 +27,11 @@ import (
 	"github.com/quic-go/quic-go"
 )
 
+type directClientAuthenticator func(cert *x509.Certificate, signature []byte) bool
+
 type clientsDirectServer struct {
 	rootCert *certc.Cert
+	auth     directClientAuthenticator
 
 	peerServers   map[string]*directPeerServer
 	peerServersMu sync.RWMutex
@@ -36,7 +39,7 @@ type clientsDirectServer struct {
 	logger *slog.Logger
 }
 
-func (s *clientsDirectServer) authenticate(ctx context.Context, conn *quic.Conn) (*directAuth, error) {
+func (s *clientsDirectServer) authenticate(ctx context.Context, conn *quic.Conn, validateSignature bool) (*directAuth, error) {
 	s.logger.Debug("waiting for authentication")
 	authStream, err := conn.AcceptStream(ctx)
 	if err != nil {
@@ -53,11 +56,18 @@ func (s *clientsDirectServer) authenticate(ctx context.Context, conn *quic.Conn)
 		return nil, fmt.Errorf("client auth read: %w", err)
 	}
 
+	cert := conn.ConnectionState().TLS.PeerCertificates[0]
+	if validateSignature {
+		if valid := s.auth(cert, req.Authentication); !valid {
+			return nil, fmt.Errorf("failed to validate signature")
+		}
+	}
+
 	if err := proto.Write(authStream, &pbclientrelay.AuthenticateResp{}); err != nil {
 		return nil, fmt.Errorf("client auth write: %w", err)
 	}
 
-	key := model.NewKeyConn(conn)
+	key := model.NewKey(cert)
 	s.logger.Debug("authentication completed", "local", conn.LocalAddr(), "remote", conn.RemoteAddr(), "build", req.BuildVersion)
 	return &directAuth{key, req.Metadata}, nil
 }
@@ -106,7 +116,7 @@ func (c *directReserveConn) run(ctx context.Context) {
 }
 
 func (c *directReserveConn) runErr(ctx context.Context) error {
-	if auth, err := c.server.authenticate(ctx, c.conn); err != nil {
+	if auth, err := c.server.authenticate(ctx, c.conn, true); err != nil {
 		if perr := pberror.GetError(err); perr != nil {
 			cerr := c.conn.CloseWithError(quic.ApplicationErrorCode(perr.Code), perr.Message)
 			err = errors.Join(perr, cerr)
@@ -414,7 +424,7 @@ func (s *directPeerServer) runRemote(ctx context.Context, conn *quic.Conn) {
 }
 
 func (s *directPeerServer) runRemoteErr(ctx context.Context, conn *quic.Conn) error {
-	auth, err := s.localConn.server.authenticate(ctx, conn)
+	auth, err := s.localConn.server.authenticate(ctx, conn, false)
 	if err != nil {
 		return err
 	}

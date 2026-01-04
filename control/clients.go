@@ -44,7 +44,7 @@ type ClientAuthentication []byte
 type ClientRelays interface {
 	Client(ctx context.Context, endpoint model.Endpoint, role model.Role, cert *x509.Certificate, auth ClientAuthentication,
 		notify func(map[RelayID]relayCacheValue) error) error
-	Active(ctx context.Context, ep model.Endpoint, auth ClientAuthentication,
+	Active(ctx context.Context, ep model.Endpoint, cert *x509.Certificate, auth ClientAuthentication,
 		notify func(map[RelayID]*pbclient.DirectRelay) error) error
 }
 
@@ -590,14 +590,16 @@ func (s *clientStream) runErr(ctx context.Context) error {
 	}
 }
 
-func validatePeerCert(endpoint model.Endpoint, peer *pbclient.Peer) *pberror.Error {
-	if _, err := x509.ParseCertificate(peer.ClientCertificate); err != nil {
-		return pberror.NewError(pberror.Code_AnnounceInvalidClientCertificate, "'%s' client cert is invalid", endpoint)
+func validatePeerCerts(endpoint model.Endpoint, peer *pbclient.Peer) (*x509.Certificate, *x509.Certificate, *pberror.Error) {
+	clientCert, err := x509.ParseCertificate(peer.ClientCertificate)
+	if err != nil {
+		return nil, nil, pberror.NewError(pberror.Code_AnnounceInvalidClientCertificate, "'%s' client cert is invalid", endpoint)
 	}
-	if _, err := x509.ParseCertificate(peer.ServerCertificate); err != nil {
-		return pberror.NewError(pberror.Code_AnnounceInvalidServerCertificate, "'%s' server cert is invalid", endpoint)
+	serverCert, err := x509.ParseCertificate(peer.ServerCertificate)
+	if err != nil {
+		return nil, nil, pberror.NewError(pberror.Code_AnnounceInvalidServerCertificate, "'%s' server cert is invalid", endpoint)
 	}
-	return nil
+	return clientCert, serverCert, nil
 }
 
 func (s *clientStream) announce(ctx context.Context, req *pbclient.Request_Announce) error {
@@ -616,7 +618,8 @@ func (s *clientStream) announce(ctx context.Context, req *pbclient.Request_Annou
 		endpoint = newEp
 	}
 
-	if err := validatePeerCert(endpoint, req.Peer); err != nil {
+	clientCert, _, err := validatePeerCerts(endpoint, req.Peer)
+	if err != nil {
 		if err := proto.Write(s.stream, &pbclient.Response{Error: err}); err != nil {
 			return fmt.Errorf("client write cert err: %w", err)
 		}
@@ -649,7 +652,7 @@ func (s *clientStream) announce(ctx context.Context, req *pbclient.Request_Annou
 				return err
 			}
 
-			if err := validatePeerCert(endpoint, req.Announce.Peer); err != nil {
+			if _, _, err := validatePeerCerts(endpoint, req.Announce.Peer); err != nil {
 				if err := proto.Write(s.stream, &pbclient.Response{Error: err}); err != nil {
 					return fmt.Errorf("client write cert err: %w", err)
 				}
@@ -675,7 +678,7 @@ func (s *clientStream) announce(ctx context.Context, req *pbclient.Request_Annou
 		})
 	})
 	g.Go(func(ctx context.Context) error {
-		return s.conn.server.relays.Active(ctx, endpoint, s.conn.auth, func(relays map[RelayID]*pbclient.DirectRelay) error {
+		return s.conn.server.relays.Active(ctx, endpoint, clientCert, s.conn.auth, func(relays map[RelayID]*pbclient.DirectRelay) error {
 			peerAnnounce.Update(func(t *pbclient.Response_Announce) *pbclient.Response_Announce {
 				return &pbclient.Response_Announce{
 					Peers:  t.GetPeers(),

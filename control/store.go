@@ -1,6 +1,7 @@
 package control
 
 import (
+	"crypto/ed25519"
 	"crypto/x509"
 	"encoding/json"
 	"path/filepath"
@@ -111,25 +112,28 @@ type RelayConnKey struct {
 }
 
 type RelayConnValue struct {
-	Authentication    RelayAuthentication `json:"authentication"`
-	Hostports         []model.HostPort    `json:"hostports"`
-	Metadata          string              `json:"metadata"`
-	ServerCertificate *x509.Certificate   `json:"server_certificate"`
+	Authentication RelayAuthentication `json:"authentication"`
+	Hostports      []model.HostPort    `json:"hostports"`
+	Metadata       string              `json:"metadata"`
+	Certificate    *x509.Certificate   `json:"certificate"`
+	Secret         ed25519.PrivateKey  `json:"secret"`
 }
 
 type jsonRelayConnValue struct {
-	Authentication    RelayAuthentication `json:"authentication"`
-	Hostports         []model.HostPort    `json:"hostports"`
-	Metadata          string              `json:"metadata"`
-	ServerCertificate []byte              `json:"server_certificate"`
+	Authentication RelayAuthentication `json:"authentication"`
+	Hostports      []model.HostPort    `json:"hostports"`
+	Metadata       string              `json:"metadata"`
+	Certificate    []byte              `json:"certificate"`
+	Secret         []byte              `json:"secret"`
 }
 
 func (v RelayConnValue) MarshalJSON() ([]byte, error) {
 	return json.Marshal(jsonRelayConnValue{
-		Authentication:    v.Authentication,
-		Hostports:         v.Hostports,
-		Metadata:          v.Metadata,
-		ServerCertificate: v.ServerCertificate.Raw,
+		Authentication: v.Authentication,
+		Hostports:      v.Hostports,
+		Metadata:       v.Metadata,
+		Certificate:    v.Certificate.Raw,
+		Secret:         v.Secret,
 	})
 }
 
@@ -139,12 +143,12 @@ func (v *RelayConnValue) UnmarshalJSON(b []byte) error {
 		return err
 	}
 
-	cert, err := x509.ParseCertificate(s.ServerCertificate)
+	cert, err := x509.ParseCertificate(s.Certificate)
 	if err != nil {
 		return err
 	}
 
-	*v = RelayConnValue{s.Authentication, s.Hostports, s.Metadata, cert}
+	*v = RelayConnValue{s.Authentication, s.Hostports, s.Metadata, cert, s.Secret}
 	return nil
 }
 

@@ -164,19 +164,23 @@ type directRelay struct {
 	serverID        relayID
 	serverHostports []model.HostPort
 	serverConf      atomic.Pointer[serverTLSConfig]
+	authentication  []byte
 
 	cancel context.CancelFunc
 	logger *slog.Logger
 }
 
-func runDirectRelay(ctx context.Context, local *peer, id relayID, hps []model.HostPort, serverConf *serverTLSConfig, logger *slog.Logger) *directRelay {
+func runDirectRelay(ctx context.Context, local *peer, id relayID, hps []model.HostPort, serverConf *serverTLSConfig, authentication []byte, logger *slog.Logger) *directRelay {
 	ctx, cancel := context.WithCancel(ctx)
 	r := &directRelay{
-		local:           local,
+		local: local,
+
 		serverID:        id,
 		serverHostports: hps,
-		cancel:          cancel,
-		logger:          logger.With("direct-relay", id, "addrs", hps),
+		authentication:  authentication,
+
+		cancel: cancel,
+		logger: logger.With("direct-relay", id, "addrs", hps),
 	}
 	r.serverConf.Store(serverConf)
 	go r.run(ctx)
@@ -263,8 +267,9 @@ func (r *directRelay) authenticate(ctx context.Context, conn *quic.Conn) error {
 	}()
 
 	if err := proto.Write(stream, &pbclientrelay.AuthenticateReq{
-		Metadata:     r.local.metadata,
-		BuildVersion: model.BuildVersion(),
+		Authentication: r.authentication,
+		Metadata:       r.local.metadata,
+		BuildVersion:   model.BuildVersion(),
 	}); err != nil {
 		return fmt.Errorf("cannot write auth request: %w", err)
 	}

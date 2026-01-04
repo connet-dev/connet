@@ -157,12 +157,13 @@ func (x *AuthenticateReq) GetServerCertificate() []byte {
 }
 
 type AuthenticateResp struct {
-	state          protoimpl.MessageState `protogen:"open.v1"`
-	Error          *pberror.Error         `protobuf:"bytes,1,opt,name=error,proto3" json:"error,omitempty"`
-	ControlId      string                 `protobuf:"bytes,2,opt,name=control_id,json=controlId,proto3" json:"control_id,omitempty"`
-	ReconnectToken []byte                 `protobuf:"bytes,3,opt,name=reconnect_token,json=reconnectToken,proto3" json:"reconnect_token,omitempty"`
-	unknownFields  protoimpl.UnknownFields
-	sizeCache      protoimpl.SizeCache
+	state                   protoimpl.MessageState `protogen:"open.v1"`
+	Error                   *pberror.Error         `protobuf:"bytes,1,opt,name=error,proto3" json:"error,omitempty"`
+	ControlId               string                 `protobuf:"bytes,2,opt,name=control_id,json=controlId,proto3" json:"control_id,omitempty"`
+	ReconnectToken          []byte                 `protobuf:"bytes,3,opt,name=reconnect_token,json=reconnectToken,proto3" json:"reconnect_token,omitempty"`
+	AuthenticationVerifyKey []byte                 `protobuf:"bytes,4,opt,name=authentication_verify_key,json=authenticationVerifyKey,proto3" json:"authentication_verify_key,omitempty"`
+	unknownFields           protoimpl.UnknownFields
+	sizeCache               protoimpl.SizeCache
 }
 
 func (x *AuthenticateResp) Reset() {
@@ -212,6 +213,13 @@ func (x *AuthenticateResp) GetControlId() string {
 func (x *AuthenticateResp) GetReconnectToken() []byte {
 	if x != nil {
 		return x.ReconnectToken
+	}
+	return nil
+}
+
+func (x *AuthenticateResp) GetAuthenticationVerifyKey() []byte {
+	if x != nil {
+		return x.AuthenticationVerifyKey
 	}
 	return nil
 }
@@ -571,12 +579,13 @@ const file_relay_proto_rawDesc = "" +
 	"\x0freconnect_token\x18\x03 \x01(\fR\x0ereconnectToken\x12#\n" +
 	"\rbuild_version\x18\x04 \x01(\tR\fbuildVersion\x12\x1a\n" +
 	"\bmetadata\x18\x06 \x01(\tR\bmetadata\x12-\n" +
-	"\x12server_certificate\x18\a \x01(\fR\x11serverCertificate\"~\n" +
+	"\x12server_certificate\x18\a \x01(\fR\x11serverCertificate\"\xba\x01\n" +
 	"\x10AuthenticateResp\x12\"\n" +
 	"\x05error\x18\x01 \x01(\v2\f.error.ErrorR\x05error\x12\x1d\n" +
 	"\n" +
 	"control_id\x18\x02 \x01(\tR\tcontrolId\x12'\n" +
-	"\x0freconnect_token\x18\x03 \x01(\fR\x0ereconnectToken\"$\n" +
+	"\x0freconnect_token\x18\x03 \x01(\fR\x0ereconnectToken\x12:\n" +
+	"\x19authentication_verify_key\x18\x04 \x01(\fR\x17authenticationVerifyKey\"$\n" +
 	"\n" +
 	"ClientsReq\x12\x16\n" +
 	"\x06offset\x18\x01 \x01(\x03R\x06offset\"\xc3\x02\n" +

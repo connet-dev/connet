@@ -462,12 +462,13 @@ func (x *Relay) GetServerCertificate() []byte {
 }
 
 type DirectRelay struct {
-	state              protoimpl.MessageState `protogen:"open.v1"`
-	Id                 string                 `protobuf:"bytes,1,opt,name=id,proto3" json:"id,omitempty"`
-	Addresses          []*pbmodel.HostPort    `protobuf:"bytes,2,rep,name=addresses,proto3" json:"addresses,omitempty"`
-	ReserveCertificate []byte                 `protobuf:"bytes,3,opt,name=reserve_certificate,json=reserveCertificate,proto3" json:"reserve_certificate,omitempty"`
-	unknownFields      protoimpl.UnknownFields
-	sizeCache          protoimpl.SizeCache
+	state                 protoimpl.MessageState `protogen:"open.v1"`
+	Id                    string                 `protobuf:"bytes,1,opt,name=id,proto3" json:"id,omitempty"`
+	Addresses             []*pbmodel.HostPort    `protobuf:"bytes,2,rep,name=addresses,proto3" json:"addresses,omitempty"`
+	ReserveCertificate    []byte                 `protobuf:"bytes,3,opt,name=reserve_certificate,json=reserveCertificate,proto3" json:"reserve_certificate,omitempty"`
+	ReserveAuthentication []byte                 `protobuf:"bytes,4,opt,name=reserve_authentication,json=reserveAuthentication,proto3" json:"reserve_authentication,omitempty"`
+	unknownFields         protoimpl.UnknownFields
+	sizeCache             protoimpl.SizeCache
 }
 
 func (x *DirectRelay) Reset() {
@@ -517,6 +518,13 @@ func (x *DirectRelay) GetAddresses() []*pbmodel.HostPort {
 func (x *DirectRelay) GetReserveCertificate() []byte {
 	if x != nil {
 		return x.ReserveCertificate
+	}
+	return nil
+}
+
+func (x *DirectRelay) GetReserveAuthentication() []byte {
+	if x != nil {
+		return x.ReserveAuthentication
 	}
 	return nil
 }
@@ -845,11 +853,12 @@ const file_client_proto_rawDesc = "" +
 	"\x05Relay\x12\x0e\n" +
 	"\x02id\x18\x03 \x01(\tR\x02id\x12-\n" +
 	"\taddresses\x18\x04 \x03(\v2\x0f.model.HostPortR\taddresses\x12-\n" +
-	"\x12server_certificate\x18\x02 \x01(\fR\x11serverCertificate\"}\n" +
+	"\x12server_certificate\x18\x02 \x01(\fR\x11serverCertificate\"\xb4\x01\n" +
 	"\vDirectRelay\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12-\n" +
 	"\taddresses\x18\x02 \x03(\v2\x0f.model.HostPortR\taddresses\x12/\n" +
-	"\x13reserve_certificate\x18\x03 \x01(\fR\x12reserveCertificate\"\x81\x01\n" +
+	"\x13reserve_certificate\x18\x03 \x01(\fR\x12reserveCertificate\x125\n" +
+	"\x16reserve_authentication\x18\x04 \x01(\fR\x15reserveAuthentication\"\x81\x01\n" +
 	"\x0fPeerDirectRelay\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12-\n" +
 	"\taddresses\x18\x02 \x03(\v2\x0f.model.HostPortR\taddresses\x12/\n" +

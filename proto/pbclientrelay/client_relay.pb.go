@@ -23,11 +23,12 @@ const (
 )
 
 type AuthenticateReq struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Metadata      string                 `protobuf:"bytes,1,opt,name=metadata,proto3" json:"metadata,omitempty"`
-	BuildVersion  string                 `protobuf:"bytes,2,opt,name=build_version,json=buildVersion,proto3" json:"build_version,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	state          protoimpl.MessageState `protogen:"open.v1"`
+	Authentication []byte                 `protobuf:"bytes,1,opt,name=authentication,proto3" json:"authentication,omitempty"`
+	Metadata       string                 `protobuf:"bytes,2,opt,name=metadata,proto3" json:"metadata,omitempty"`
+	BuildVersion   string                 `protobuf:"bytes,3,opt,name=build_version,json=buildVersion,proto3" json:"build_version,omitempty"`
+	unknownFields  protoimpl.UnknownFields
+	sizeCache      protoimpl.SizeCache
 }
 
 func (x *AuthenticateReq) Reset() {
@@ -58,6 +59,13 @@ func (x *AuthenticateReq) ProtoReflect() protoreflect.Message {
 // Deprecated: Use AuthenticateReq.ProtoReflect.Descriptor instead.
 func (*AuthenticateReq) Descriptor() ([]byte, []int) {
 	return file_client_relay_proto_rawDescGZIP(), []int{0}
+}
+
+func (x *AuthenticateReq) GetAuthentication() []byte {
+	if x != nil {
+		return x.Authentication
+	}
+	return nil
 }
 
 func (x *AuthenticateReq) GetMetadata() string {
@@ -314,10 +322,11 @@ var File_client_relay_proto protoreflect.FileDescriptor
 
 const file_client_relay_proto_rawDesc = "" +
 	"\n" +
-	"\x12client_relay.proto\x12\fclient_relay\x1a\verror.proto\"R\n" +
-	"\x0fAuthenticateReq\x12\x1a\n" +
-	"\bmetadata\x18\x01 \x01(\tR\bmetadata\x12#\n" +
-	"\rbuild_version\x18\x02 \x01(\tR\fbuildVersion\"6\n" +
+	"\x12client_relay.proto\x12\fclient_relay\x1a\verror.proto\"z\n" +
+	"\x0fAuthenticateReq\x12&\n" +
+	"\x0eauthentication\x18\x01 \x01(\fR\x0eauthentication\x12\x1a\n" +
+	"\bmetadata\x18\x02 \x01(\tR\bmetadata\x12#\n" +
+	"\rbuild_version\x18\x03 \x01(\tR\fbuildVersion\"6\n" +
 	"\x10AuthenticateResp\x12\"\n" +
 	"\x05error\x18\x01 \x01(\v2\f.error.ErrorR\x05error\"=\n" +
 	"\n" +

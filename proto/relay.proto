@@ -19,6 +19,7 @@ message AuthenticateResp {
   error.Error error = 1;
   string control_id = 2;
   bytes reconnect_token = 3;
+  bytes authentication_verify_key = 4;
 }
 
 enum ChangeType {
