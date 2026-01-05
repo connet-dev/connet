@@ -128,11 +128,15 @@ type jsonRelayConnValue struct {
 }
 
 func (v RelayConnValue) MarshalJSON() ([]byte, error) {
+	var certificate []byte
+	if v.Certificate != nil { // compat, remove in v0.13.0
+		certificate = v.Certificate.Raw
+	}
 	return json.Marshal(jsonRelayConnValue{
 		Authentication:        v.Authentication,
 		Hostports:             v.Hostports,
 		Metadata:              v.Metadata,
-		Certificate:           v.Certificate.Raw,
+		Certificate:           certificate,
 		AuthenticationSignKey: v.AuthenticationSignKey,
 	})
 }
@@ -143,9 +147,14 @@ func (v *RelayConnValue) UnmarshalJSON(b []byte) error {
 		return err
 	}
 
-	cert, err := x509.ParseCertificate(s.Certificate)
-	if err != nil {
-		return err
+	var cert *x509.Certificate
+	var err error
+	if len(s.Certificate) > 0 {
+		// compat, remove condition in v0.13.0
+		cert, err = x509.ParseCertificate(s.Certificate)
+		if err != nil {
+			return err
+		}
 	}
 
 	*v = RelayConnValue{s.Authentication, s.Hostports, s.Metadata, cert, s.AuthenticationSignKey}

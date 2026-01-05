@@ -434,6 +434,7 @@ type clientConnAuth struct {
 	id       ClientID
 	auth     ClientAuthentication
 	metadata string
+	protocol model.ClientControlNextProto
 }
 
 func (c *clientConn) run(ctx context.Context) {
@@ -555,7 +556,7 @@ func (c *clientConn) authenticate(ctx context.Context) (*clientConnAuth, error) 
 	}
 
 	c.logger.Debug("authentication completed", "local", c.conn.LocalAddr(), "remote", c.conn.RemoteAddr(), "proto", protocol, "build", req.BuildVersion)
-	return &clientConnAuth{id, auth, req.Metadata}, nil
+	return &clientConnAuth{id, auth, req.Metadata, protocol}, nil
 }
 
 type clientStream struct {
@@ -680,6 +681,11 @@ func (s *clientStream) announce(ctx context.Context, req *pbclient.Request_Annou
 		})
 	})
 	g.Go(func(ctx context.Context) error {
+		if s.conn.protocol == model.ClientControlV02 {
+			// do not send direct relays if client will not understand them
+			return nil
+		}
+
 		return s.conn.server.relays.Active(ctx, endpoint, clientCert, s.conn.auth, func(relays map[RelayID]*pbclient.DirectRelay) error {
 			peerAnnounce.Update(func(t *pbclient.Response_Announce) *pbclient.Response_Announce {
 				return &pbclient.Response_Announce{
