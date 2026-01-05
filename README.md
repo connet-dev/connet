@@ -581,6 +581,7 @@ by adding account management and it is one of the easiest way to start.
 
 ### Next
  - [ ] rewrite relay to not depend on control connection
+ - [ ] rename control to announce server
  - [ ] peer identity and support for options in p2p
  - [ ] raw endpoint protocols
  - [ ] UPnP/IDG and PCP for hole-punching

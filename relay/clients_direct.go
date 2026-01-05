@@ -14,6 +14,7 @@ import (
 	"sync/atomic"
 
 	"github.com/connet-dev/connet/certc"
+	"github.com/connet-dev/connet/iterc"
 	"github.com/connet-dev/connet/model"
 	"github.com/connet-dev/connet/netc"
 	"github.com/connet-dev/connet/notify"
@@ -223,7 +224,7 @@ func newDirectPeerServer(server *clientsDirectServer, localConn *directAuthentic
 			ServerName:   serverName,
 			Certificates: []tls.Certificate{serverTLSCert},
 			ClientAuth:   tls.RequireAndVerifyClientCert,
-			NextProtos:   model.ConnectRelayDirectNextProtos,
+			NextProtos:   iterc.MapSliceStringsVar(model.ConnectRelayV02),
 		},
 
 		expectConns: notify.NewEmpty[map[model.Key]struct{}](),

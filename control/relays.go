@@ -13,6 +13,7 @@ import (
 	"net"
 	"sync"
 
+	"github.com/connet-dev/connet/iterc"
 	"github.com/connet-dev/connet/logc"
 	"github.com/connet-dev/connet/model"
 	"github.com/connet-dev/connet/netc"
@@ -27,7 +28,7 @@ import (
 )
 
 type RelayAuthenticateRequest struct {
-	Proto        model.RelayNextProto
+	Proto        model.RelayControlNextProto
 	Token        string
 	Addr         net.Addr
 	BuildVersion string
@@ -349,7 +350,7 @@ func (s *relayServer) runListener(ctx context.Context, ingress Ingress) error {
 
 	tlsConf := ingress.TLS.Clone()
 	if len(tlsConf.NextProtos) == 0 {
-		tlsConf.NextProtos = model.RelayNextProtos
+		tlsConf.NextProtos = iterc.MapSliceStringsVar(model.RelayControlV02, model.RelayControlV03)
 	}
 
 	quicConf := quicc.ServerConfig()
@@ -598,7 +599,7 @@ func (c *relayConn) authenticate(ctx context.Context) (*relayConnAuth, error) {
 		return nil, fmt.Errorf("auth failed: %w", perr)
 	}
 
-	protocol := model.GetRelayNextProto(c.conn)
+	protocol := model.GetRelayControlNextProto(c.conn)
 	auth, err := c.server.auth.Authenticate(RelayAuthenticateRequest{
 		Proto:        protocol,
 		Token:        req.Token,

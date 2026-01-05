@@ -108,7 +108,7 @@ func newControlClient(cfg Config, root *certc.Cert, directCert *certc.Cert, conf
 		controlTLSConf: &tls.Config{
 			ServerName: cfg.ControlHost,
 			RootCAs:    cfg.ControlCAs,
-			NextProtos: model.RelayNextProtos,
+			NextProtos: iterc.MapSliceStringsVar(model.RelayControlV03),
 		},
 		handshakeIdleTimeout: cfg.HandshakeIdleTimeout,
 
@@ -165,6 +165,7 @@ func (s *controlClient) tlsAuthenticate(chi *tls.ClientHelloInfo, base *tls.Conf
 		cfg.ClientAuth = tls.RequireAndVerifyClientCert
 		cfg.Certificates = srv.tls
 		cfg.ClientCAs = srv.cas.Load()
+		cfg.NextProtos = iterc.MapSliceStringsVar(model.ConnectRelayV01)
 		return cfg, nil
 	}
 	return base, nil

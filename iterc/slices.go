@@ -15,6 +15,10 @@ func MapSliceStrings[S ~[]P, P fmt.Stringer](s S) []string {
 	return slices.Collect(Map(slices.Values(s), P.String))
 }
 
+func MapSliceStringsVar[P fmt.Stringer](s ...P) []string {
+	return MapSliceStrings(s)
+}
+
 // FilterSlice returns a copy of the slice which contains only elements for which f returns true
 func FilterSlice[S ~[]P, P any](s S, f func(P) bool) S {
 	return slices.Collect(Filter(slices.Values(s), f))

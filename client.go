@@ -13,6 +13,7 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/connet-dev/connet/iterc"
 	"github.com/connet-dev/connet/model"
 	"github.com/connet-dev/connet/nat"
 	"github.com/connet-dev/connet/notify"
@@ -306,7 +307,7 @@ func (c *Client) connect(ctx context.Context, transport *quic.Transport, retoken
 	conn, err := transport.Dial(ctx, c.controlAddr, &tls.Config{
 		ServerName: c.controlHost,
 		RootCAs:    c.controlCAs,
-		NextProtos: model.ClientNextProtos,
+		NextProtos: iterc.MapSliceStringsVar(model.ClientControlV03),
 	}, quicc.ClientConfig(c.handshakeIdleTimeout))
 	if err != nil {
 		return nil, fmt.Errorf("dial server %s: %w", c.controlAddr, err)

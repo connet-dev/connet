@@ -6,9 +6,9 @@ import (
 	"fmt"
 	"log/slog"
 	"net"
-	"slices"
 
 	"github.com/connet-dev/connet/certc"
+	"github.com/connet-dev/connet/iterc"
 	"github.com/connet-dev/connet/model"
 	"github.com/connet-dev/connet/netc"
 	"github.com/connet-dev/connet/quicc"
@@ -36,7 +36,7 @@ func newClientsServer(
 			ServerName:   directTLS.Leaf.DNSNames[0],
 			Certificates: []tls.Certificate{directTLS},
 			ClientAuth:   tls.RequireAnyClientCert,
-			NextProtos:   model.ConnectRelayNextProtos,
+			NextProtos:   iterc.MapSliceStringsVar(model.ConnectRelayV02),
 		},
 		controlAuth: tlsAuth,
 
@@ -76,10 +76,10 @@ type clientsServer struct {
 }
 
 func (s *clientsServer) tlsAuth(chi *tls.ClientHelloInfo) (*tls.Config, error) {
-	if netc.IsSubdomain(chi.ServerName, "connet.control.relay") && slices.Contains(chi.SupportedProtos, model.CRv01.String()) {
+	if netc.IsSubdomain(chi.ServerName, "connet.control.relay") {
 		return s.controlAuth(chi, s.tlsConf)
 	}
-	if netc.IsSubdomain(chi.ServerName, "connet.relay") && slices.Contains(chi.SupportedProtos, model.CRv02.String()) {
+	if netc.IsSubdomain(chi.ServerName, "connet.relay") {
 		s.directServer.peerServersMu.RLock()
 		srv := s.directServer.peerServers[chi.ServerName]
 		s.directServer.peerServersMu.RUnlock()
