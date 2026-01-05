@@ -382,6 +382,9 @@ func (s *Source) dialStream(ctx context.Context, dest sourceConn, stream *quic.S
 			connect.SourceDhX25519 = cfg
 			srcSecret = secret
 		}
+
+		// TODO if relay-outgoing, we don't actually control which peer would be selected
+		// for now this is preserving the current behavior, but it would useful to be able to decide in client
 	}
 
 	if err := proto.Write(stream, &pbconnect.Request{
