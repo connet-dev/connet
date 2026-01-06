@@ -24,6 +24,7 @@ func GetClientControlNextProto(conn *quic.Conn) ClientControlNextProto {
 var (
 	ClientControlUnknown = ClientControlNextProto{}
 	ClientControlV02     = ClientControlNextProto{"connet-client/0.2"} // 0.8.0
+	// Update GetClientControlNextProto when adding a new one
 )
 
 // ConnectClientNextProto describes TLS NextProtos for clients connecting to other clients
@@ -48,6 +49,7 @@ var (
 	ConnectRelayV01 = ConnectRelayNextProto{"connet-peer-relay/0.1"} // 0.7.0
 )
 
+// RelayControlNextProto describes TLS NextProtos for relays connecting to control servers
 type RelayControlNextProto struct{ string }
 
 func (v RelayControlNextProto) String() string {
@@ -67,4 +69,5 @@ func GetRelayControlNextProto(conn *quic.Conn) RelayControlNextProto {
 var (
 	RelayControlUnknown = RelayControlNextProto{}
 	RelayControlV02     = RelayControlNextProto{"connet-relay/0.2"} // 0.8.0
+	// Update GetRelayControlNextProto when adding a new one
 )
