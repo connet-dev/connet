@@ -6,10 +6,10 @@ import (
 	"log/slog"
 	"net"
 
-	"github.com/connet-dev/connet/control"
-	"github.com/connet-dev/connet/restr"
-	"github.com/connet-dev/connet/selfhosted"
+	"github.com/connet-dev/connet/pkg/restr"
 	"github.com/connet-dev/connet/server"
+	"github.com/connet-dev/connet/server/control"
+	"github.com/connet-dev/connet/server/selfhosted"
 	"github.com/spf13/cobra"
 )
 

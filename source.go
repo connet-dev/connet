@@ -17,12 +17,12 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/connet-dev/connet/cryptoc"
 	"github.com/connet-dev/connet/model"
+	"github.com/connet-dev/connet/pkg/cryptoc"
+	"github.com/connet-dev/connet/pkg/quicc"
+	"github.com/connet-dev/connet/pkg/statusc"
 	"github.com/connet-dev/connet/proto"
 	"github.com/connet-dev/connet/proto/pbconnect"
-	"github.com/connet-dev/connet/quicc"
-	"github.com/connet-dev/connet/statusc"
 	"github.com/quic-go/quic-go"
 )
 

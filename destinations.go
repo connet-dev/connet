@@ -11,8 +11,8 @@ import (
 	"net/url"
 	"time"
 
-	"github.com/connet-dev/connet/netc"
-	"github.com/connet-dev/connet/slogc"
+	"github.com/connet-dev/connet/pkg/netc"
+	"github.com/connet-dev/connet/pkg/slogc"
 )
 
 // DestinationTCP creates a new destination which connects to a downstream TCP server

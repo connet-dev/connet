@@ -6,10 +6,10 @@ import (
 	"net"
 	"os"
 
-	"github.com/connet-dev/connet/control"
 	"github.com/connet-dev/connet/model"
-	"github.com/connet-dev/connet/relay"
-	"github.com/connet-dev/connet/selfhosted"
+	"github.com/connet-dev/connet/server/control"
+	"github.com/connet-dev/connet/server/relay"
+	"github.com/connet-dev/connet/server/selfhosted"
 )
 
 type serverConfig struct {

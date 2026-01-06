@@ -600,6 +600,7 @@ by adding account management and it is one of the easiest way to start.
 ## Changelog
 
 ### v0.12.0
+ - [x] reorganize packages
  - [ ] rewrite relay to not depend on control connection
 
 ### v0.11.0

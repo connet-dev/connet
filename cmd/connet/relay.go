@@ -8,8 +8,8 @@ import (
 	"net"
 	"os"
 
-	"github.com/connet-dev/connet/relay"
 	"github.com/connet-dev/connet/server"
+	"github.com/connet-dev/connet/server/relay"
 	"github.com/spf13/cobra"
 )
 

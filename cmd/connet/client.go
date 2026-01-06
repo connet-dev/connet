@@ -13,10 +13,10 @@ import (
 
 	"github.com/connet-dev/connet"
 	"github.com/connet-dev/connet/model"
-	"github.com/connet-dev/connet/nat"
-	"github.com/connet-dev/connet/netc"
-	"github.com/connet-dev/connet/reliable"
-	"github.com/connet-dev/connet/statusc"
+	"github.com/connet-dev/connet/pkg/nat"
+	"github.com/connet-dev/connet/pkg/netc"
+	"github.com/connet-dev/connet/pkg/reliable"
+	"github.com/connet-dev/connet/pkg/statusc"
 	"github.com/quic-go/quic-go"
 	"github.com/spf13/cobra"
 )

@@ -3,7 +3,7 @@ package model
 import (
 	"fmt"
 
-	"github.com/connet-dev/connet/iterc"
+	"github.com/connet-dev/connet/pkg/iterc"
 	"github.com/connet-dev/connet/proto/pbmodel"
 )
 

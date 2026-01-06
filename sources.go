@@ -12,9 +12,9 @@ import (
 	"net/url"
 
 	"github.com/connet-dev/connet/model"
-	"github.com/connet-dev/connet/netc"
-	"github.com/connet-dev/connet/slogc"
-	"github.com/connet-dev/connet/websocketc"
+	"github.com/connet-dev/connet/pkg/netc"
+	"github.com/connet-dev/connet/pkg/slogc"
+	"github.com/connet-dev/connet/pkg/websocketc"
 	"github.com/gorilla/websocket"
 )
 

@@ -17,10 +17,10 @@ import (
 	"time"
 
 	"github.com/connet-dev/connet/model"
-	"github.com/connet-dev/connet/netc"
-	"github.com/connet-dev/connet/reliable"
-	"github.com/connet-dev/connet/slogc"
-	"github.com/connet-dev/connet/statusc"
+	"github.com/connet-dev/connet/pkg/netc"
+	"github.com/connet-dev/connet/pkg/reliable"
+	"github.com/connet-dev/connet/pkg/slogc"
+	"github.com/connet-dev/connet/pkg/statusc"
 	"github.com/pelletier/go-toml/v2"
 	"github.com/spf13/cobra"
 )

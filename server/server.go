@@ -7,12 +7,12 @@ import (
 	"net"
 	"path/filepath"
 
-	"github.com/connet-dev/connet/certc"
-	"github.com/connet-dev/connet/control"
-	"github.com/connet-dev/connet/netc"
-	"github.com/connet-dev/connet/relay"
-	"github.com/connet-dev/connet/reliable"
-	"github.com/connet-dev/connet/selfhosted"
+	"github.com/connet-dev/connet/pkg/certc"
+	"github.com/connet-dev/connet/pkg/netc"
+	"github.com/connet-dev/connet/pkg/reliable"
+	"github.com/connet-dev/connet/server/control"
+	"github.com/connet-dev/connet/server/relay"
+	"github.com/connet-dev/connet/server/selfhosted"
 )
 
 type Server struct {

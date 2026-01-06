@@ -10,11 +10,11 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/connet-dev/connet/iterc"
 	"github.com/connet-dev/connet/model"
+	"github.com/connet-dev/connet/pkg/iterc"
+	"github.com/connet-dev/connet/pkg/quicc"
+	"github.com/connet-dev/connet/pkg/slogc"
 	"github.com/connet-dev/connet/proto/pberror"
-	"github.com/connet-dev/connet/quicc"
-	"github.com/connet-dev/connet/slogc"
 	"github.com/quic-go/quic-go"
 )
 
