@@ -599,6 +599,9 @@ by adding account management and it is one of the easiest way to start.
 
 ## Changelog
 
+### v0.12.0
+ - [x] reorganize packages
+
 ### v0.11.0
  - [x] disable quic version negotiation, use quic v1
  - [x] expose errors for use by clients
