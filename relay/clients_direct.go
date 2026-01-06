@@ -224,7 +224,7 @@ func newDirectPeerServer(server *clientsDirectServer, localConn *directAuthentic
 			ServerName:   serverName,
 			Certificates: []tls.Certificate{serverTLSCert},
 			ClientAuth:   tls.RequireAndVerifyClientCert,
-			NextProtos:   iterc.MapSliceStringsVar(model.ConnectRelayV02),
+			NextProtos:   iterc.MapVarStrings(model.ConnectRelayV02),
 		},
 
 		expectConns: notify.NewEmpty[map[model.Key]struct{}](),

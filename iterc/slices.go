@@ -15,7 +15,8 @@ func MapSliceStrings[S ~[]P, P fmt.Stringer](s S) []string {
 	return slices.Collect(Map(slices.Values(s), P.String))
 }
 
-func MapSliceStringsVar[P fmt.Stringer](s ...P) []string {
+// MapVarStrings is like map, but uses [fmt.Stringer] to map varargs to slice of strings
+func MapVarStrings[P fmt.Stringer](s ...P) []string {
 	return MapSliceStrings(s)
 }
 

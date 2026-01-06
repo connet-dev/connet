@@ -355,7 +355,7 @@ func (s *relayServer) runListener(ctx context.Context, ingress Ingress) error {
 
 	tlsConf := ingress.TLS.Clone()
 	if len(tlsConf.NextProtos) == 0 {
-		tlsConf.NextProtos = iterc.MapSliceStringsVar(model.RelayControlV02, model.RelayControlV03)
+		tlsConf.NextProtos = iterc.MapVarStrings(model.RelayControlV02, model.RelayControlV03)
 	}
 
 	quicConf := quicc.ServerConfig()

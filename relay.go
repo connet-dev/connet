@@ -111,7 +111,7 @@ func (r *relay) connect(ctx context.Context, hp model.HostPort) (*quic.Conn, err
 		Certificates: []tls.Certificate{r.local.clientCert},
 		RootCAs:      cfg.cas,
 		ServerName:   cfg.name,
-		NextProtos:   iterc.MapSliceStringsVar(model.ConnectRelayV01),
+		NextProtos:   iterc.MapVarStrings(model.ConnectRelayV01),
 	}, quicc.ClientConfig(r.local.direct.handshakeIdleTimeout))
 	if err != nil {
 		return nil, err
@@ -245,7 +245,7 @@ func (r *directRelay) connect(ctx context.Context, hp model.HostPort) (*quic.Con
 		Certificates: []tls.Certificate{r.local.clientCert},
 		RootCAs:      cfg.tls.cas,
 		ServerName:   cfg.tls.name,
-		NextProtos:   iterc.MapSliceStringsVar(model.ConnectRelayV02),
+		NextProtos:   iterc.MapVarStrings(model.ConnectRelayV02),
 	}, quicc.ClientConfig(r.local.direct.handshakeIdleTimeout))
 	if err != nil {
 		return nil, err

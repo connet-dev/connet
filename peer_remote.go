@@ -314,7 +314,7 @@ func (p *remotePeerOutgoing) connect(ctx context.Context) (*quic.Conn, error) {
 			Certificates: []tls.Certificate{p.parent.local.clientCert},
 			RootCAs:      p.serverConf.cas,
 			ServerName:   p.serverConf.name,
-			NextProtos:   iterc.MapSliceStringsVar(model.ConnectClientV01),
+			NextProtos:   iterc.MapVarStrings(model.ConnectClientV01),
 		}, quicc.ClientConfig(p.parent.local.direct.handshakeIdleTimeout))
 		switch {
 		case isPeerTerminalError(err):
@@ -557,7 +557,7 @@ func (c *remotePeerDirectRelayConn) connect(ctx context.Context, spec remotePeer
 			Certificates: []tls.Certificate{c.parent.parent.local.clientCert},
 			RootCAs:      spec.serverConf.cas,
 			ServerName:   spec.serverConf.name,
-			NextProtos:   iterc.MapSliceStringsVar(model.ConnectRelayV02),
+			NextProtos:   iterc.MapVarStrings(model.ConnectRelayV02),
 		}, quicc.ClientConfig(c.parent.parent.local.direct.handshakeIdleTimeout))
 		if err != nil {
 			errs = append(errs, err)

@@ -36,7 +36,7 @@ func newClientsServer(
 			ServerName:   directTLS.Leaf.DNSNames[0],
 			Certificates: []tls.Certificate{directTLS},
 			ClientAuth:   tls.RequireAnyClientCert,
-			NextProtos:   iterc.MapSliceStringsVar(model.ConnectRelayV02),
+			NextProtos:   iterc.MapVarStrings(model.ConnectRelayV02),
 		},
 		controlAuth: tlsAuth,
 

@@ -277,7 +277,7 @@ func (s *clientServer) runListener(ctx context.Context, ingress Ingress) error {
 
 	tlsConf := ingress.TLS.Clone()
 	if len(tlsConf.NextProtos) == 0 {
-		tlsConf.NextProtos = iterc.MapSliceStringsVar(model.ClientControlV02, model.ClientControlV03)
+		tlsConf.NextProtos = iterc.MapVarStrings(model.ClientControlV02, model.ClientControlV03)
 	}
 
 	quicConf := quicc.ServerConfig()
