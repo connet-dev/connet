@@ -107,7 +107,7 @@ func newControlClient(cfg Config, configStore logc.KV[ConfigKey, ConfigValue]) (
 		controlTLSConf: &tls.Config{
 			ServerName: cfg.ControlHost,
 			RootCAs:    cfg.ControlCAs,
-			NextProtos: model.RelayNextProtos,
+			NextProtos: iterc.MapVarStrings(model.RelayControlV02),
 		},
 		handshakeIdleTimeout: cfg.HandshakeIdleTimeout,
 

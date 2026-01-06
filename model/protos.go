@@ -1,49 +1,43 @@
 package model
 
 import (
-	"github.com/connet-dev/connet/iterc"
 	"github.com/quic-go/quic-go"
 )
 
-type ClientNextProto struct{ string }
+// ClientControlNextProto describes TLS NextProtos for clients connecting to control servers
+type ClientControlNextProto struct{ string }
 
-func (v ClientNextProto) String() string {
+func (v ClientControlNextProto) String() string {
 	return v.string
 }
 
-func GetClientNextProto(conn *quic.Conn) ClientNextProto {
+func GetClientControlNextProto(conn *quic.Conn) ClientControlNextProto {
 	proto := conn.ConnectionState().TLS.NegotiatedProtocol
-	for _, v := range AllClientNextProtos {
+	for _, v := range []ClientControlNextProto{ClientControlV02} {
 		if v.string == proto {
 			return v
 		}
 	}
-	return CNUnknown
+	return ClientControlUnknown
 }
 
 var (
-	CNUnknown = ClientNextProto{}
-	CNv02     = ClientNextProto{"connet-client/0.2"} // 0.8.0
+	ClientControlUnknown = ClientControlNextProto{}
+	ClientControlV02     = ClientControlNextProto{"connet-client/0.2"} // 0.8.0
 )
 
-var AllClientNextProtos = []ClientNextProto{CNv02}
+// ConnectClientNextProto describes TLS NextProtos for clients connecting to other clients
+type ConnectClientNextProto struct{ string }
 
-var ClientNextProtos = iterc.MapSliceStrings(AllClientNextProtos)
-
-type ConnectDirectNextProto struct{ string }
-
-func (v ConnectDirectNextProto) String() string {
+func (v ConnectClientNextProto) String() string {
 	return v.string
 }
 
 var (
-	CCv01 = ConnectDirectNextProto{"connet-peer/0.1"} // 0.7.0
+	ConnectClientV01 = ConnectClientNextProto{"connet-peer/0.1"} // 0.7.0
 )
 
-var AllConnectDirectNextProtos = []ConnectDirectNextProto{CCv01}
-
-var ConnectDirectNextProtos = iterc.MapSlice(AllConnectDirectNextProtos, ConnectDirectNextProto.String)
-
+// ConnectRelayNextProto describes TLS NextProtos for clients connecting to relays
 type ConnectRelayNextProto struct{ string }
 
 func (v ConnectRelayNextProto) String() string {
@@ -51,34 +45,26 @@ func (v ConnectRelayNextProto) String() string {
 }
 
 var (
-	CRv01 = ConnectRelayNextProto{"connet-peer-relay/0.1"} // 0.7.0
+	ConnectRelayV01 = ConnectRelayNextProto{"connet-peer-relay/0.1"} // 0.7.0
 )
 
-var AllConnectRelayNextProtos = []ConnectRelayNextProto{CRv01}
+type RelayControlNextProto struct{ string }
 
-var ConnectRelayNextProtos = iterc.MapSlice(AllConnectRelayNextProtos, ConnectRelayNextProto.String)
-
-type RelayNextProto struct{ string }
-
-func (v RelayNextProto) String() string {
+func (v RelayControlNextProto) String() string {
 	return v.string
 }
 
-func GetRelayNextProto(conn *quic.Conn) RelayNextProto {
+func GetRelayControlNextProto(conn *quic.Conn) RelayControlNextProto {
 	proto := conn.ConnectionState().TLS.NegotiatedProtocol
-	for _, v := range AllRelayNextProtos {
+	for _, v := range []RelayControlNextProto{RelayControlV02} {
 		if v.string == proto {
 			return v
 		}
 	}
-	return RNUnknown
+	return RelayControlUnknown
 }
 
 var (
-	RNUnknown = RelayNextProto{}
-	RNv02     = RelayNextProto{"connet-relay/0.2"} // 0.8.0
+	RelayControlUnknown = RelayControlNextProto{}
+	RelayControlV02     = RelayControlNextProto{"connet-relay/0.2"} // 0.8.0
 )
-
-var AllRelayNextProtos = []RelayNextProto{RNv02}
-
-var RelayNextProtos = iterc.MapSliceStrings(AllRelayNextProtos)

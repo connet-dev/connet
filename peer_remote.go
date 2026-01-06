@@ -11,6 +11,7 @@ import (
 	"net/netip"
 	"time"
 
+	"github.com/connet-dev/connet/iterc"
 	"github.com/connet-dev/connet/model"
 	"github.com/connet-dev/connet/notify"
 	"github.com/connet-dev/connet/proto"
@@ -288,7 +289,7 @@ func (p *remotePeerOutgoing) connect(ctx context.Context) (*quic.Conn, error) {
 			Certificates: []tls.Certificate{p.parent.local.clientCert},
 			RootCAs:      p.serverConf.cas,
 			ServerName:   p.serverConf.name,
-			NextProtos:   model.ConnectDirectNextProtos,
+			NextProtos:   iterc.MapVarStrings(model.ConnectClientV01),
 		}, quicc.ClientConfig(p.parent.local.direct.handshakeIdleTimeout))
 		switch {
 		case isPeerTerminalError(err):

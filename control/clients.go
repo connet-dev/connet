@@ -13,6 +13,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/connet-dev/connet/iterc"
 	"github.com/connet-dev/connet/logc"
 	"github.com/connet-dev/connet/model"
 	"github.com/connet-dev/connet/proto"
@@ -26,7 +27,7 @@ import (
 )
 
 type ClientAuthenticateRequest struct {
-	Proto        model.ClientNextProto
+	Proto        model.ClientControlNextProto
 	Token        string
 	Addr         net.Addr
 	BuildVersion string
@@ -272,7 +273,7 @@ func (s *clientServer) runListener(ctx context.Context, ingress Ingress) error {
 
 	tlsConf := ingress.TLS.Clone()
 	if len(tlsConf.NextProtos) == 0 {
-		tlsConf.NextProtos = model.ClientNextProtos
+		tlsConf.NextProtos = iterc.MapVarStrings(model.ClientControlV02)
 	}
 
 	quicConf := quicc.ServerConfig()
@@ -502,7 +503,7 @@ func (c *clientConn) authenticate(ctx context.Context) (*clientConnAuth, error) 
 		return nil, fmt.Errorf("client auth read: %w", err)
 	}
 
-	protocol := model.GetClientNextProto(c.conn)
+	protocol := model.GetClientControlNextProto(c.conn)
 	auth, err := c.server.auth.Authenticate(ClientAuthenticateRequest{
 		Proto:        protocol,
 		Token:        req.Token,

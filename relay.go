@@ -10,6 +10,7 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/connet-dev/connet/iterc"
 	"github.com/connet-dev/connet/model"
 	"github.com/connet-dev/connet/proto"
 	"github.com/connet-dev/connet/proto/pbconnect"
@@ -106,7 +107,7 @@ func (r *relay) connect(ctx context.Context, hp model.HostPort) (*quic.Conn, err
 		Certificates: []tls.Certificate{r.local.clientCert},
 		RootCAs:      cfg.cas,
 		ServerName:   cfg.name,
-		NextProtos:   model.ConnectRelayNextProtos,
+		NextProtos:   iterc.MapVarStrings(model.ConnectRelayV01),
 	}, quicc.ClientConfig(r.local.direct.handshakeIdleTimeout))
 	if err != nil {
 		return nil, err

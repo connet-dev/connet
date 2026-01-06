@@ -13,6 +13,7 @@ import (
 	"slices"
 	"sync"
 
+	"github.com/connet-dev/connet/iterc"
 	"github.com/connet-dev/connet/model"
 	"github.com/connet-dev/connet/netc"
 	"github.com/connet-dev/connet/proto"
@@ -36,7 +37,7 @@ type clientAuthenticator func(serverName string, certs []*x509.Certificate) *cli
 func newClientsServer(cfg Config, tlsAuth tlsAuthenticator, clAuth clientAuthenticator) *clientsServer {
 	tlsConf := &tls.Config{
 		ClientAuth: tls.RequireAndVerifyClientCert,
-		NextProtos: model.ConnectRelayNextProtos,
+		NextProtos: iterc.MapVarStrings(model.ConnectRelayV01),
 	}
 	tlsConf.GetConfigForClient = func(chi *tls.ClientHelloInfo) (*tls.Config, error) {
 		return tlsAuth(chi, tlsConf)
