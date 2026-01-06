@@ -580,7 +580,6 @@ by adding account management and it is one of the easiest way to start.
 ## Planlog
 
 ### Next
- - [ ] rewrite relay to not depend on control connection
  - [ ] rename control to announce server
  - [ ] peer identity and support for options in p2p
  - [ ] raw endpoint protocols
@@ -599,6 +598,9 @@ by adding account management and it is one of the easiest way to start.
  - [ ] relay-to-relay forwarding
 
 ## Changelog
+
+### v0.12.0
+ - [ ] rewrite relay to not depend on control connection
 
 ### v0.11.0
  - [x] disable quic version negotiation, use quic v1
