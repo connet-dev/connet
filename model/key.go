@@ -3,7 +3,7 @@ package model
 import (
 	"crypto/x509"
 
-	"github.com/connet-dev/connet/netc"
+	"github.com/connet-dev/connet/pkg/netc"
 	"golang.org/x/crypto/blake2s"
 )
 

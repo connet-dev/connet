@@ -14,14 +14,14 @@ import (
 	"strings"
 	"time"
 
-	"github.com/connet-dev/connet/certc"
 	"github.com/connet-dev/connet/model"
-	"github.com/connet-dev/connet/netc"
-	"github.com/connet-dev/connet/notify"
+	"github.com/connet-dev/connet/pkg/certc"
+	"github.com/connet-dev/connet/pkg/netc"
+	"github.com/connet-dev/connet/pkg/notify"
+	"github.com/connet-dev/connet/pkg/reliable"
 	"github.com/connet-dev/connet/proto/pbclient"
 	"github.com/connet-dev/connet/proto/pbconnect"
 	"github.com/connet-dev/connet/proto/pbmodel"
-	"github.com/connet-dev/connet/reliable"
 	"github.com/quic-go/quic-go"
 )
 

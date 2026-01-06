@@ -4,7 +4,7 @@ import (
 	"net"
 	"net/netip"
 
-	"github.com/connet-dev/connet/netc"
+	"github.com/connet-dev/connet/pkg/netc"
 )
 
 func AddrFromNetip(addr netip.Addr) *Addr {

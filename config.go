@@ -13,7 +13,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/connet-dev/connet/nat"
+	"github.com/connet-dev/connet/pkg/nat"
 	"github.com/quic-go/quic-go"
 )
 
