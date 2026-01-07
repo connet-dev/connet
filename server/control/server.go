@@ -79,6 +79,11 @@ func (s *Server) Status(ctx context.Context) (Status, error) {
 		return Status{}, err
 	}
 
+	directs, err := s.getDirects()
+	if err != nil {
+		return Status{}, err
+	}
+
 	return Status{
 		ClientIngresses: iterc.MapSlice(s.clients.ingresses, StatusIngressFn),
 		Clients:         clients,
@@ -87,6 +92,7 @@ func (s *Server) Status(ctx context.Context) (Status, error) {
 		RelayServerID:  s.relays.id,
 		RelayIngresses: iterc.MapSlice(s.relays.ingresses, StatusIngressFn),
 		Relays:         relays,
+		Directs:        directs,
 	}, nil
 }
 
@@ -142,19 +148,33 @@ func (s *Server) getRelays() (map[string]StatusRelay, error) {
 
 	relays := map[string]StatusRelay{}
 	for _, msg := range msgs {
-		protocol := model.RelayControlV02
-		if msg.Value.Certificate != nil {
-			protocol = model.RelayControlV03
-		}
 		relays[msg.Key.ID.string] = StatusRelay{
 			ID:        msg.Key.ID,
-			Hostports: iterc.MapSlice(msg.Value.Hostports, model.HostPort.String),
+			Hostports: iterc.MapSliceStrings(msg.Value.Hostports),
 			Metadata:  msg.Value.Metadata,
-			Protocol:  protocol.String(),
 		}
 	}
 
 	return relays, nil
+}
+
+func (s *Server) getDirects() (map[string]StatusRelay, error) {
+	msgs, _, err := s.relays.directs.Snapshot()
+	if err != nil {
+		return nil, err
+	}
+
+	relays := map[string]StatusRelay{}
+	for _, msg := range msgs {
+		relays[msg.Key.ID.string] = StatusRelay{
+			ID:        msg.Key.ID,
+			Hostports: iterc.MapSliceStrings(msg.Value.Hostports),
+			Metadata:  msg.Value.Metadata,
+		}
+	}
+
+	return relays, nil
+
 }
 
 type Status struct {
@@ -165,6 +185,7 @@ type Status struct {
 	RelayServerID  string                 `json:"relay-server-id"`
 	RelayIngresses []StatusIngress        `json:"relay-ingresses"`
 	Relays         map[string]StatusRelay `json:"relays"`
+	Directs        map[string]StatusRelay `json:"directs"`
 }
 
 type StatusIngress struct {
@@ -188,7 +209,6 @@ type StatusRelay struct {
 	ID        RelayID  `json:"id"`
 	Hostports []string `json:"hostport"`
 	Metadata  string   `json:"metadata"`
-	Protocol  string   `json:"protocol"`
 }
 
 func StatusIngressFn(ing Ingress) StatusIngress {

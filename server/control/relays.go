@@ -68,23 +68,25 @@ func newRelayServer(
 		return nil, fmt.Errorf("relay server offsets store open: %w", err)
 	}
 
-	directsMsgs, directsOffset, err := conns.Snapshot()
+	directs, err := stores.RelayDirects()
+	if err != nil {
+		return nil, fmt.Errorf("relay directs store open: %w", err)
+	}
+
+	directsMsgs, directsOffset, err := directs.Snapshot()
 	if err != nil {
 		return nil, fmt.Errorf("relay conns snapshot: %w", err)
 	}
 	directsCache := map[RelayID]directRelay{}
 	for _, msg := range directsMsgs {
-		if msg.Value.Certificate != nil {
-			// compat, remove condition in v0.13.0
-			directsCache[msg.Key.ID] = directRelay{
-				auth:    msg.Value.Authentication,
-				signKey: msg.Value.AuthenticationSignKey,
-				proto: &pbclient.DirectRelay{
-					Id:                 msg.Key.ID.string,
-					Addresses:          model.PBsFromHostPorts(msg.Value.Hostports),
-					ReserveCertificate: msg.Value.Certificate.Raw,
-				},
-			}
+		directsCache[msg.Key.ID] = directRelay{
+			auth:    msg.Value.Authentication,
+			signKey: msg.Value.AuthenticationSignKey,
+			proto: &pbclient.DirectRelay{
+				Id:                 msg.Key.ID.string,
+				Addresses:          model.PBsFromHostPorts(msg.Value.Hostports),
+				ReserveCertificate: msg.Value.Certificate.Raw,
+			},
 		}
 	}
 
@@ -149,6 +151,7 @@ func newRelayServer(
 		clients:       clients,
 		servers:       servers,
 		serverOffsets: serverOffsets,
+		directs:       directs,
 
 		endpointsCache:  endpointsCache,
 		endpointsOffset: endpointsOffset,
@@ -173,6 +176,7 @@ type relayServer struct {
 	clients       logc.KV[RelayClientKey, RelayClientValue]
 	servers       logc.KV[RelayServerKey, RelayServerValue]
 	serverOffsets logc.KV[RelayConnKey, int64]
+	directs       logc.KV[RelayConnKey, RelayDirectValue]
 
 	endpointsCache  map[model.Endpoint]map[RelayID]relayCacheValue
 	endpointsOffset int64
@@ -281,7 +285,7 @@ func (s *relayServer) Active(ctx context.Context, ep model.Endpoint, cert *x509.
 	}
 
 	for {
-		msgs, nextOffset, err := s.conns.Consume(ctx, offset)
+		msgs, nextOffset, err := s.directs.Consume(ctx, offset)
 		if err != nil {
 			return err
 		}
@@ -291,8 +295,6 @@ func (s *relayServer) Active(ctx context.Context, ep model.Endpoint, cert *x509.
 			if msg.Delete {
 				delete(localDirectRelays, msg.Key.ID)
 				changed = true
-			} else if msg.Value.Certificate == nil {
-				// compat, remove condition in v0.13.0
 			} else if ok, err := s.auth.Allow(msg.Value.Authentication, auth, ep); err != nil {
 				return fmt.Errorf("auth allow error: %w", err)
 			} else if ok {
@@ -439,14 +441,12 @@ func (s *relayServer) runEndpointsCache(ctx context.Context) error {
 }
 
 func (s *relayServer) runDirectsCache(ctx context.Context) error {
-	update := func(msg logc.Message[RelayConnKey, RelayConnValue]) {
+	update := func(msg logc.Message[RelayConnKey, RelayDirectValue]) {
 		s.directsMu.Lock()
 		defer s.directsMu.Unlock()
 
 		if msg.Delete {
 			delete(s.directsCache, msg.Key.ID)
-		} else if msg.Value.Certificate == nil {
-			// compat, remove condition in v0.13.0
 		} else {
 			s.directsCache[msg.Key.ID] = directRelay{
 				auth:    msg.Value.Authentication,
@@ -467,7 +467,7 @@ func (s *relayServer) runDirectsCache(ctx context.Context) error {
 		offset := s.directsOffset
 		s.directsMu.RUnlock()
 
-		msgs, nextOffset, err := s.conns.Consume(ctx, offset)
+		msgs, nextOffset, err := s.directs.Consume(ctx, offset)
 		if err != nil {
 			return fmt.Errorf("relay conns consume: %w", err)
 		}
@@ -571,7 +571,7 @@ func (c *relayConn) runV2Err(ctx context.Context) error {
 	c.endpoints = endpoints
 
 	key := RelayConnKey{ID: c.id}
-	value := RelayConnValue{c.auth, c.hostports, c.metadata, c.certificate, c.signKey}
+	value := RelayConnValue{c.auth, c.hostports, c.metadata}
 	if err := c.server.conns.Put(key, value); err != nil {
 		return err
 	}
@@ -591,12 +591,12 @@ func (c *relayConn) runV2Err(ctx context.Context) error {
 
 func (c *relayConn) runV3Err(ctx context.Context) error {
 	key := RelayConnKey{ID: c.id}
-	value := RelayConnValue{c.auth, c.hostports, c.metadata, c.certificate, c.signKey}
-	if err := c.server.conns.Put(key, value); err != nil {
+	value := RelayDirectValue{c.auth, c.hostports, c.metadata, c.certificate, c.signKey}
+	if err := c.server.directs.Put(key, value); err != nil {
 		return err
 	}
 	defer func() {
-		if err := c.server.conns.Del(key); err != nil {
+		if err := c.server.directs.Del(key); err != nil {
 			c.logger.Warn("failed to delete conn", "key", key, "err", err)
 		}
 	}()
