@@ -2,7 +2,6 @@ package relay
 
 import (
 	"context"
-	"crypto/ed25519"
 	"crypto/tls"
 	"crypto/x509"
 	"errors"
@@ -32,7 +31,6 @@ import (
 type controlClient struct {
 	hostports []model.HostPort
 	root      *certc.Cert
-	direct    *certc.Cert
 	metadata  string
 
 	controlAddr          *net.UDPAddr
@@ -52,14 +50,10 @@ type controlClient struct {
 	clientsLogOffset    int64
 
 	connStatus atomic.Value
-
-	directVerifyKey   ed25519.PublicKey
-	directVerifyKeyMu sync.RWMutex
-
-	logger *slog.Logger
+	logger     *slog.Logger
 }
 
-func newControlClient(cfg Config, root *certc.Cert, directCert *certc.Cert, configStore logc.KV[ConfigKey, ConfigValue]) (*controlClient, error) {
+func newControlClient(cfg Config, root *certc.Cert, configStore logc.KV[ConfigKey, ConfigValue]) (*controlClient, error) {
 	clients, err := cfg.Stores.Clients()
 	if err != nil {
 		return nil, err
@@ -100,7 +94,6 @@ func newControlClient(cfg Config, root *certc.Cert, directCert *certc.Cert, conf
 	c := &controlClient{
 		hostports: hostports,
 		root:      root,
-		direct:    directCert,
 		metadata:  cfg.Metadata,
 
 		controlAddr:  cfg.ControlAddr,
@@ -108,7 +101,7 @@ func newControlClient(cfg Config, root *certc.Cert, directCert *certc.Cert, conf
 		controlTLSConf: &tls.Config{
 			ServerName: cfg.ControlHost,
 			RootCAs:    cfg.ControlCAs,
-			NextProtos: iterc.MapVarStrings(model.RelayControlV03),
+			NextProtos: iterc.MapVarStrings(model.RelayControlV02),
 		},
 		handshakeIdleTimeout: cfg.HandshakeIdleTimeout,
 
@@ -176,18 +169,6 @@ func (s *controlClient) authenticate(serverName string, certs []*x509.Certificat
 		return srv.authenticate(certs)
 	}
 	return nil
-}
-
-func (s *controlClient) directAuthenticate(cert *x509.Certificate, authentication []byte) bool {
-	s.directVerifyKeyMu.RLock()
-	directVerifyKey := s.directVerifyKey
-	s.directVerifyKeyMu.RUnlock()
-
-	if directVerifyKey == nil {
-		return false
-	}
-
-	return ed25519.Verify(directVerifyKey, cert.Raw, authentication)
 }
 
 type TransportsFn func(ctx context.Context) ([]*quic.Transport, error)
@@ -269,12 +250,11 @@ func (s *controlClient) connectSingle(ctx context.Context, transport *quic.Trans
 	}()
 
 	if err := proto.Write(authStream, &pbrelay.AuthenticateReq{
-		Token:             s.controlToken,
-		Addresses:         model.PBsFromHostPorts(s.hostports),
-		ReconnectToken:    reconnConfig.Bytes,
-		BuildVersion:      model.BuildVersion(),
-		Metadata:          s.metadata,
-		ServerCertificate: s.direct.Raw(),
+		Token:          s.controlToken,
+		Addresses:      model.PBsFromHostPorts(s.hostports),
+		ReconnectToken: reconnConfig.Bytes,
+		BuildVersion:   model.BuildVersion(),
+		Metadata:       s.metadata,
 	}); err != nil {
 		return nil, fmt.Errorf("auth write error: %w", err)
 	}
@@ -303,10 +283,6 @@ func (s *controlClient) connectSingle(ctx context.Context, transport *quic.Trans
 	if err := s.config.Put(configControlReconnect, reconnConfig); err != nil {
 		return nil, fmt.Errorf("server reconnect set: %w", err)
 	}
-
-	s.directVerifyKeyMu.Lock()
-	s.directVerifyKey = resp.AuthenticationVerifyKey
-	s.directVerifyKeyMu.Unlock()
 
 	return conn, nil
 }

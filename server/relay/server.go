@@ -74,12 +74,17 @@ func NewServer(cfg Config) (*Server, error) {
 		return nil, fmt.Errorf("generate direct relay cert: %w", err)
 	}
 
-	control, err := newControlClient(cfg, rootCert, directCert, configStore)
+	control, err := newControlClient(cfg, rootCert, configStore)
 	if err != nil {
 		return nil, fmt.Errorf("relay control client: %w", err)
 	}
 
-	clients, err := newClientsServer(cfg, control.tlsAuthenticate, control.authenticate, control.directAuthenticate, rootCert, directCert)
+	direct, err := newDirectClient(cfg, directCert, configStore)
+	if err != nil {
+		return nil, fmt.Errorf("relay control client: %w", err)
+	}
+
+	clients, err := newClientsServer(cfg, control.tlsAuthenticate, control.authenticate, direct.authenticate, rootCert, directCert)
 	if err != nil {
 		return nil, fmt.Errorf("relay clients server: %w", err)
 	}
@@ -89,6 +94,7 @@ func NewServer(cfg Config) (*Server, error) {
 		statelessResetKey: &statelessResetKey,
 
 		control: control,
+		direct:  direct,
 		clients: clients,
 	}, nil
 }
@@ -98,6 +104,7 @@ type Server struct {
 	statelessResetKey *quic.StatelessResetKey
 
 	control *controlClient
+	direct  *directClient
 	clients *clientsServer
 }
 
@@ -125,6 +132,7 @@ func (s *Server) Run(ctx context.Context) error {
 	}
 
 	g.Go(reliable.Bind(waitForTransport, s.control.run))
+	g.Go(reliable.Bind(waitForTransport, s.direct.run))
 
 	return g.Wait()
 }

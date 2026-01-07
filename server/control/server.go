@@ -142,10 +142,15 @@ func (s *Server) getRelays() (map[string]StatusRelay, error) {
 
 	relays := map[string]StatusRelay{}
 	for _, msg := range msgs {
+		protocol := model.RelayControlV02
+		if msg.Value.Certificate != nil {
+			protocol = model.RelayControlV03
+		}
 		relays[msg.Key.ID.string] = StatusRelay{
 			ID:        msg.Key.ID,
 			Hostports: iterc.MapSlice(msg.Value.Hostports, model.HostPort.String),
 			Metadata:  msg.Value.Metadata,
+			Protocol:  protocol.String(),
 		}
 	}
 
@@ -183,6 +188,7 @@ type StatusRelay struct {
 	ID        RelayID  `json:"id"`
 	Hostports []string `json:"hostport"`
 	Metadata  string   `json:"metadata"`
+	Protocol  string   `json:"protocol"`
 }
 
 func StatusIngressFn(ing Ingress) StatusIngress {

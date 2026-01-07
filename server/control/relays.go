@@ -548,6 +548,17 @@ func (c *relayConn) runErr(ctx context.Context) error {
 	c.logger.Info("relay connected", "addr", c.conn.RemoteAddr(), "metadata", c.metadata)
 	defer c.logger.Info("relay disconnected", "addr", c.conn.RemoteAddr(), "metadata", c.metadata)
 
+	switch c.protocol {
+	case model.RelayControlV02:
+		return c.runV2Err(ctx)
+	case model.RelayControlV03:
+		return c.runV3Err(ctx)
+	default:
+		return fmt.Errorf("unsupported protocol: %s", c.protocol)
+	}
+}
+
+func (c *relayConn) runV2Err(ctx context.Context) error {
 	endpoints, err := c.server.stores.RelayEndpoints(c.id)
 	if err != nil {
 		return err
@@ -576,6 +587,21 @@ func (c *relayConn) runErr(ctx context.Context) error {
 		c.runRelayServers,
 		logc.ScheduleCompactAcc(c.endpoints),
 	)
+}
+
+func (c *relayConn) runV3Err(ctx context.Context) error {
+	key := RelayConnKey{ID: c.id}
+	value := RelayConnValue{c.auth, c.hostports, c.metadata, c.certificate, c.signKey}
+	if err := c.server.conns.Put(key, value); err != nil {
+		return err
+	}
+	defer func() {
+		if err := c.server.conns.Del(key); err != nil {
+			c.logger.Warn("failed to delete conn", "key", key, "err", err)
+		}
+	}()
+
+	return quicc.WaitLogRTTStats(ctx, c.conn, c.logger)
 }
 
 func (c *relayConn) authenticate(ctx context.Context) (*relayConnAuth, error) {
