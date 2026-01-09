@@ -42,6 +42,8 @@ var (
 	configStatelessReset      ConfigKey = "stateless-reset"
 	configControlID           ConfigKey = "control-id"
 	configControlReconnect    ConfigKey = "control-reconnect"
+	configDirectID            ConfigKey = "control-direct-id"
+	configDirectReconnect     ConfigKey = "control-direct-reconnect"
 	configClientsStreamOffset ConfigKey = "clients-stream-offset"
 	configClientsLogOffset    ConfigKey = "clients-log-offset"
 )

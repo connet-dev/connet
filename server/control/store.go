@@ -1,6 +1,7 @@
 package control
 
 import (
+	"crypto/ed25519"
 	"crypto/x509"
 	"encoding/json"
 	"path/filepath"
@@ -22,6 +23,7 @@ type Stores interface {
 	RelayEndpoints(id RelayID) (logc.KV[RelayEndpointKey, RelayEndpointValue], error)
 	RelayServers() (logc.KV[RelayServerKey, RelayServerValue], error)
 	RelayServerOffsets() (logc.KV[RelayConnKey, int64], error)
+	RelayDirects() (logc.KV[RelayConnKey, RelayDirectValue], error)
 }
 
 func NewFileStores(dir string) Stores {
@@ -62,6 +64,10 @@ func (f *fileStores) RelayServers() (logc.KV[RelayServerKey, RelayServerValue], 
 
 func (f *fileStores) RelayServerOffsets() (logc.KV[RelayConnKey, int64], error) {
 	return logc.NewKV[RelayConnKey, int64](filepath.Join(f.dir, "relay-server-offsets"))
+}
+
+func (f *fileStores) RelayDirects() (logc.KV[RelayConnKey, RelayDirectValue], error) {
+	return logc.NewKV[RelayConnKey, RelayDirectValue](filepath.Join(f.dir, "relay-directs"))
 }
 
 type ConfigKey string
@@ -114,6 +120,47 @@ type RelayConnValue struct {
 	Authentication RelayAuthentication `json:"authentication"`
 	Hostports      []model.HostPort    `json:"hostports"`
 	Metadata       string              `json:"metadata"`
+}
+
+type RelayDirectValue struct {
+	Authentication        RelayAuthentication `json:"authentication"`
+	Hostports             []model.HostPort    `json:"hostports"`
+	Metadata              string              `json:"metadata"`
+	Certificate           *x509.Certificate   `json:"certificate"`
+	AuthenticationSignKey ed25519.PrivateKey  `json:"authentication-sign-key"`
+}
+
+type jsonRelayDirectValue struct {
+	Authentication        RelayAuthentication `json:"authentication"`
+	Hostports             []model.HostPort    `json:"hostports"`
+	Metadata              string              `json:"metadata"`
+	Certificate           []byte              `json:"certificate"`
+	AuthenticationSignKey []byte              `json:"authentication-sign-key"`
+}
+
+func (v RelayDirectValue) MarshalJSON() ([]byte, error) {
+	return json.Marshal(jsonRelayDirectValue{
+		Authentication:        v.Authentication,
+		Hostports:             v.Hostports,
+		Metadata:              v.Metadata,
+		Certificate:           v.Certificate.Raw,
+		AuthenticationSignKey: v.AuthenticationSignKey,
+	})
+}
+
+func (v *RelayDirectValue) UnmarshalJSON(b []byte) error {
+	s := jsonRelayDirectValue{}
+	if err := json.Unmarshal(b, &s); err != nil {
+		return err
+	}
+
+	cert, err := x509.ParseCertificate(s.Certificate)
+	if err != nil {
+		return err
+	}
+
+	*v = RelayDirectValue{s.Authentication, s.Hostports, s.Metadata, cert, s.AuthenticationSignKey}
+	return nil
 }
 
 type RelayClientKey struct {

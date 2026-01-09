@@ -50,16 +50,10 @@ type controlClient struct {
 	clientsLogOffset    int64
 
 	connStatus atomic.Value
-
-	logger *slog.Logger
+	logger     *slog.Logger
 }
 
-func newControlClient(cfg Config, configStore logc.KV[ConfigKey, ConfigValue]) (*controlClient, error) {
-	root, err := certc.NewRoot()
-	if err != nil {
-		return nil, err
-	}
-
+func newControlClient(cfg Config, root *certc.Cert, configStore logc.KV[ConfigKey, ConfigValue]) (*controlClient, error) {
 	clients, err := cfg.Stores.Clients()
 	if err != nil {
 		return nil, err
@@ -161,8 +155,10 @@ func (s *controlClient) getServer(name string) *relayServer {
 func (s *controlClient) tlsAuthenticate(chi *tls.ClientHelloInfo, base *tls.Config) (*tls.Config, error) {
 	if srv := s.getServer(chi.ServerName); srv != nil {
 		cfg := base.Clone()
+		cfg.ClientAuth = tls.RequireAndVerifyClientCert
 		cfg.Certificates = srv.tls
 		cfg.ClientCAs = srv.cas.Load()
+		cfg.NextProtos = iterc.MapVarStrings(model.ConnectRelayV01)
 		return cfg, nil
 	}
 	return base, nil
@@ -255,7 +251,7 @@ func (s *controlClient) connectSingle(ctx context.Context, transport *quic.Trans
 
 	if err := proto.Write(authStream, &pbrelay.AuthenticateReq{
 		Token:          s.controlToken,
-		Addresses:      iterc.MapSlice(s.hostports, model.HostPort.PB),
+		Addresses:      model.PBsFromHostPorts(s.hostports),
 		ReconnectToken: reconnConfig.Bytes,
 		BuildVersion:   model.BuildVersion(),
 		Metadata:       s.metadata,
@@ -626,11 +622,11 @@ func (s *relayServer) update(msg logc.Message[ServerKey, ServerValue]) error {
 }
 
 func (s *relayServer) authenticate(certs []*x509.Certificate) *clientAuth {
-	s.mu.RLock()
-	defer s.mu.RUnlock()
-
 	cert := certs[0]
 	key := model.NewKey(cert)
+
+	s.mu.RLock()
+	defer s.mu.RUnlock()
 
 	if dst, ok := s.clients[serverClientKey{model.Destination, key}]; ok && dst.Equal(cert) {
 		return &clientAuth{s.endpoint, model.Destination, key}

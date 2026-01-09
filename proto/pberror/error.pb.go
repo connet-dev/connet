@@ -40,6 +40,7 @@ const (
 	Code_RelayValidationFailed   Code = 300
 	Code_RelayInvalidCertificate Code = 301
 	Code_RelayKeepaliveClosed    Code = 302
+	Code_RelayReserveFailed      Code = 303
 	// Direct
 	Code_DirectConnectionClosed Code = 400
 	Code_DirectKeepaliveClosed  Code = 401
@@ -64,6 +65,7 @@ var (
 		300: "RelayValidationFailed",
 		301: "RelayInvalidCertificate",
 		302: "RelayKeepaliveClosed",
+		303: "RelayReserveFailed",
 		400: "DirectConnectionClosed",
 		401: "DirectKeepaliveClosed",
 		500: "DestinationNotFound",
@@ -83,6 +85,7 @@ var (
 		"RelayValidationFailed":            300,
 		"RelayInvalidCertificate":          301,
 		"RelayKeepaliveClosed":             302,
+		"RelayReserveFailed":               303,
 		"DirectConnectionClosed":           400,
 		"DirectKeepaliveClosed":            401,
 		"DestinationNotFound":              500,
@@ -177,7 +180,7 @@ const file_error_proto_rawDesc = "" +
 	"\verror.proto\x12\x05error\"B\n" +
 	"\x05Error\x12\x1f\n" +
 	"\x04code\x18\x01 \x01(\x0e2\v.error.CodeR\x04code\x12\x18\n" +
-	"\amessage\x18\x02 \x01(\tR\amessage*\xdf\x03\n" +
+	"\amessage\x18\x02 \x01(\tR\amessage*\xf8\x03\n" +
 	"\x04Code\x12\v\n" +
 	"\aUnknown\x10\x00\x12\x12\n" +
 	"\x0eRequestUnknown\x10\x01\x12\x19\n" +
@@ -190,7 +193,8 @@ const file_error_proto_rawDesc = "" +
 	" AnnounceInvalidServerCertificate\x10\xca\x01\x12\x1a\n" +
 	"\x15RelayValidationFailed\x10\xac\x02\x12\x1c\n" +
 	"\x17RelayInvalidCertificate\x10\xad\x02\x12\x19\n" +
-	"\x14RelayKeepaliveClosed\x10\xae\x02\x12\x1b\n" +
+	"\x14RelayKeepaliveClosed\x10\xae\x02\x12\x17\n" +
+	"\x12RelayReserveFailed\x10\xaf\x02\x12\x1b\n" +
 	"\x16DirectConnectionClosed\x10\x90\x03\x12\x1a\n" +
 	"\x15DirectKeepaliveClosed\x10\x91\x03\x12\x18\n" +
 	"\x13DestinationNotFound\x10\xf4\x03\x12\x1a\n" +

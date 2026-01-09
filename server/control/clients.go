@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"io"
 	"log/slog"
+	"maps"
 	"net"
 	"slices"
 	"sync"
@@ -16,6 +17,7 @@ import (
 	"github.com/connet-dev/connet/model"
 	"github.com/connet-dev/connet/pkg/iterc"
 	"github.com/connet-dev/connet/pkg/logc"
+	"github.com/connet-dev/connet/pkg/notify"
 	"github.com/connet-dev/connet/pkg/quicc"
 	"github.com/connet-dev/connet/pkg/reliable"
 	"github.com/connet-dev/connet/pkg/slogc"
@@ -43,6 +45,8 @@ type ClientAuthentication []byte
 type ClientRelays interface {
 	Client(ctx context.Context, endpoint model.Endpoint, role model.Role, cert *x509.Certificate, auth ClientAuthentication,
 		notify func(map[RelayID]relayCacheValue) error) error
+	Active(ctx context.Context, ep model.Endpoint, cert *x509.Certificate, auth ClientAuthentication,
+		notify func(map[RelayID]*pbclient.DirectRelay) error) error
 }
 
 func newClientServer(
@@ -273,7 +277,7 @@ func (s *clientServer) runListener(ctx context.Context, ingress Ingress) error {
 
 	tlsConf := ingress.TLS.Clone()
 	if len(tlsConf.NextProtos) == 0 {
-		tlsConf.NextProtos = iterc.MapVarStrings(model.ClientControlV02)
+		tlsConf.NextProtos = iterc.MapVarStrings(model.ClientControlV02, model.ClientControlV03)
 	}
 
 	quicConf := quicc.ServerConfig()
@@ -430,15 +434,16 @@ type clientConnAuth struct {
 	id       ClientID
 	auth     ClientAuthentication
 	metadata string
+	protocol model.ClientControlNextProto
 }
 
 func (c *clientConn) run(ctx context.Context) {
-	c.logger.Debug("new client connection", "proto", c.conn.ConnectionState().TLS.NegotiatedProtocol, "remote", c.conn.RemoteAddr())
 	defer func() {
 		if err := c.conn.CloseWithError(quic.ApplicationErrorCode(pberror.Code_Unknown), "connection closed"); err != nil {
 			slogc.Fine(c.logger, "error closing connection", "err", err)
 		}
 	}()
+	c.logger.Debug("new client connection", "proto", c.conn.ConnectionState().TLS.NegotiatedProtocol, "remote", c.conn.RemoteAddr())
 
 	if err := c.runErr(ctx); err != nil {
 		c.logger.Debug("error while running client conn", "err", err)
@@ -551,7 +556,7 @@ func (c *clientConn) authenticate(ctx context.Context) (*clientConnAuth, error) 
 	}
 
 	c.logger.Debug("authentication completed", "local", c.conn.LocalAddr(), "remote", c.conn.RemoteAddr(), "proto", protocol, "build", req.BuildVersion)
-	return &clientConnAuth{id, auth, req.Metadata}, nil
+	return &clientConnAuth{id, auth, req.Metadata, protocol}, nil
 }
 
 type clientStream struct {
@@ -587,14 +592,16 @@ func (s *clientStream) runErr(ctx context.Context) error {
 	}
 }
 
-func validatePeerCert(endpoint model.Endpoint, peer *pbclient.Peer) *pberror.Error {
-	if _, err := x509.ParseCertificate(peer.ClientCertificate); err != nil {
-		return pberror.NewError(pberror.Code_AnnounceInvalidClientCertificate, "'%s' client cert is invalid", endpoint)
+func validatePeerCerts(endpoint model.Endpoint, peer *pbclient.Peer) (*x509.Certificate, *x509.Certificate, *pberror.Error) {
+	clientCert, err := x509.ParseCertificate(peer.ClientCertificate)
+	if err != nil {
+		return nil, nil, pberror.NewError(pberror.Code_AnnounceInvalidClientCertificate, "'%s' client cert is invalid", endpoint)
 	}
-	if _, err := x509.ParseCertificate(peer.ServerCertificate); err != nil {
-		return pberror.NewError(pberror.Code_AnnounceInvalidServerCertificate, "'%s' server cert is invalid", endpoint)
+	serverCert, err := x509.ParseCertificate(peer.ServerCertificate)
+	if err != nil {
+		return nil, nil, pberror.NewError(pberror.Code_AnnounceInvalidServerCertificate, "'%s' server cert is invalid", endpoint)
 	}
-	return nil
+	return clientCert, serverCert, nil
 }
 
 func (s *clientStream) announce(ctx context.Context, req *pbclient.Request_Announce) error {
@@ -613,7 +620,8 @@ func (s *clientStream) announce(ctx context.Context, req *pbclient.Request_Annou
 		endpoint = newEp
 	}
 
-	if err := validatePeerCert(endpoint, req.Peer); err != nil {
+	clientCert, _, err := validatePeerCerts(endpoint, req.Peer)
+	if err != nil {
 		if err := proto.Write(s.stream, &pbclient.Response{Error: err}); err != nil {
 			return fmt.Errorf("client write cert err: %w", err)
 		}
@@ -646,7 +654,8 @@ func (s *clientStream) announce(ctx context.Context, req *pbclient.Request_Annou
 				return err
 			}
 
-			if err := validatePeerCert(endpoint, req.Announce.Peer); err != nil {
+			// TODO if client cert rotate, this need to update and rekey the relay auth
+			if _, _, err := validatePeerCerts(endpoint, req.Announce.Peer); err != nil {
 				if err := proto.Write(s.stream, &pbclient.Response{Error: err}); err != nil {
 					return fmt.Errorf("client write cert err: %w", err)
 				}
@@ -659,15 +668,43 @@ func (s *clientStream) announce(ctx context.Context, req *pbclient.Request_Annou
 		}
 	})
 
+	peerAnnounce := notify.NewEmpty[*pbclient.Response_Announce]()
 	g.Go(func(ctx context.Context) error {
-		defer s.conn.logger.Debug("completed sources notify")
 		return s.conn.server.listen(ctx, endpoint, role.Invert(), func(peers []*pbclient.RemotePeer) error {
-			s.conn.logger.Debug("updated sources list", "peers", len(peers))
+			peerAnnounce.Update(func(t *pbclient.Response_Announce) *pbclient.Response_Announce {
+				return &pbclient.Response_Announce{
+					Peers:  slices.Clone(peers),
+					Relays: t.GetRelays(),
+				}
+			})
+			return nil
+		})
+	})
+	g.Go(func(ctx context.Context) error {
+		if s.conn.protocol == model.ClientControlV02 {
+			// do not send direct relays if client will not understand them
+			return nil
+		}
+
+		return s.conn.server.relays.Active(ctx, endpoint, clientCert, s.conn.auth, func(relays map[RelayID]*pbclient.DirectRelay) error {
+			peerAnnounce.Update(func(t *pbclient.Response_Announce) *pbclient.Response_Announce {
+				return &pbclient.Response_Announce{
+					Peers:  t.GetPeers(),
+					Relays: slices.Collect(maps.Values(relays)),
+				}
+			})
+			return nil
+		})
+	})
+
+	g.Go(func(ctx context.Context) error {
+		defer s.conn.logger.Debug("completed announce notify")
+
+		return peerAnnounce.Listen(ctx, func(announce *pbclient.Response_Announce) error {
+			s.conn.logger.Debug("updated announce list", "peers", len(announce.Peers), "relays", len(announce.Relays))
 
 			if err := proto.Write(s.stream, &pbclient.Response{
-				Announce: &pbclient.Response_Announce{
-					Peers: peers,
-				},
+				Announce: announce,
 			}); err != nil {
 				return fmt.Errorf("client announce write: %w", err)
 			}

@@ -46,6 +46,7 @@ message Response {
 
   message Announce {
     repeated RemotePeer peers = 1;
+    repeated DirectRelay relays = 2;
   }
   message Relays {
     repeated Relay relays = 1;
@@ -54,9 +55,10 @@ message Response {
 
 message Peer {
   repeated model.AddrPort directs = 3;
-  repeated string relayIds = 6;
+  repeated string relay_ids = 6;
   bytes server_certificate = 4; // certificate to use when connecting to this client
   bytes client_certificate = 5; // certificate that this client uses when connecting
+  repeated PeerDirectRelay relays = 7;
 }
 
 message RemotePeer {
@@ -69,4 +71,17 @@ message Relay {
   string id = 3;
   repeated model.HostPort addresses = 4;
   bytes server_certificate = 2;
+}
+
+message DirectRelay {
+  string id = 1;
+  repeated model.HostPort addresses = 2;
+  bytes reserve_certificate = 3;
+  bytes reserve_authentication = 4;
+}
+
+message PeerDirectRelay {
+  string id = 1;
+  repeated model.HostPort addresses = 2;
+  bytes connect_certificate = 3;
 }

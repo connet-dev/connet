@@ -1,0 +1,34 @@
+syntax = "proto3";
+package client_relay;
+
+import "error.proto";
+
+option go_package = "github.com/connet-dev/connet/proto/pbclientrelay";
+
+message AuthenticateReq {
+  bytes authentication = 1;
+  string metadata = 2;
+  string build_version = 3;
+}
+
+message AuthenticateResp {
+  error.Error error = 1;
+}
+
+message ReserveReq {
+  repeated ReservePeer peers = 1;
+}
+
+message ReservePeer {
+  bytes client_certificate = 1; // certificate that peer use to connect to the relay
+}
+
+message ReserveResp {
+  error.Error error = 1;
+  bytes server_certificate = 2; // certificate that peers use to connect to the relay
+  repeated ConnectedPeer peers = 3;
+}
+
+message ConnectedPeer {
+  string client_certificate_key = 1; // certificate key for a connected peer
+}

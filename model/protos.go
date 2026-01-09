@@ -13,7 +13,7 @@ func (v ClientControlNextProto) String() string {
 
 func GetClientControlNextProto(conn *quic.Conn) ClientControlNextProto {
 	proto := conn.ConnectionState().TLS.NegotiatedProtocol
-	for _, v := range []ClientControlNextProto{ClientControlV02} {
+	for _, v := range []ClientControlNextProto{ClientControlV02, ClientControlV03} {
 		if v.string == proto {
 			return v
 		}
@@ -24,6 +24,7 @@ func GetClientControlNextProto(conn *quic.Conn) ClientControlNextProto {
 var (
 	ClientControlUnknown = ClientControlNextProto{}
 	ClientControlV02     = ClientControlNextProto{"connet-client/0.2"} // 0.8.0
+	ClientControlV03     = ClientControlNextProto{"connet-client/0.3"} // 0.12.0, adds direct relay support
 	// Update GetClientControlNextProto when adding a new one
 )
 
@@ -47,6 +48,7 @@ func (v ConnectRelayNextProto) String() string {
 
 var (
 	ConnectRelayV01 = ConnectRelayNextProto{"connet-peer-relay/0.1"} // 0.7.0
+	ConnectRelayV02 = ConnectRelayNextProto{"connet-peer-relay/0.2"} // 0.12.0, support for direct relays
 )
 
 // RelayControlNextProto describes TLS NextProtos for relays connecting to control servers
@@ -58,7 +60,7 @@ func (v RelayControlNextProto) String() string {
 
 func GetRelayControlNextProto(conn *quic.Conn) RelayControlNextProto {
 	proto := conn.ConnectionState().TLS.NegotiatedProtocol
-	for _, v := range []RelayControlNextProto{RelayControlV02} {
+	for _, v := range []RelayControlNextProto{RelayControlV02, RelayControlV03} {
 		if v.string == proto {
 			return v
 		}
@@ -69,5 +71,6 @@ func GetRelayControlNextProto(conn *quic.Conn) RelayControlNextProto {
 var (
 	RelayControlUnknown = RelayControlNextProto{}
 	RelayControlV02     = RelayControlNextProto{"connet-relay/0.2"} // 0.8.0
+	RelayControlV03     = RelayControlNextProto{"connet-relay/0.3"} // 0.12.0, support for direct relays
 	// Update GetRelayControlNextProto when adding a new one
 )
