@@ -16,6 +16,7 @@ import (
 	"github.com/connet-dev/connet/pkg/reliable"
 	"github.com/connet-dev/connet/pkg/slogc"
 	"github.com/connet-dev/connet/proto"
+	"github.com/connet-dev/connet/proto/pbclientrelay"
 	"github.com/connet-dev/connet/proto/pbconnect"
 	"github.com/connet-dev/connet/proto/pberror"
 	"github.com/quic-go/quic-go"
@@ -30,13 +31,18 @@ type relay struct {
 
 	serverID        relayID
 	serverHostports []model.HostPort
-	serverConf      atomic.Pointer[serverTLSConfig]
+	serverConf      atomic.Pointer[relayConfig]
 
 	cancel context.CancelCauseFunc
 	logger *slog.Logger
 }
 
-func runRelay(ctx context.Context, local *peer, id relayID, hps []model.HostPort, serverConf *serverTLSConfig, logger *slog.Logger) *relay {
+type relayConfig struct {
+	tls  *serverTLSConfig
+	auth *pbclientrelay.AuthenticateReq
+}
+
+func runRelay(ctx context.Context, local *peer, id relayID, hps []model.HostPort, cfg *relayConfig, logger *slog.Logger) *relay {
 	ctx, cancel := context.WithCancelCause(ctx)
 	r := &relay{
 		local: local,
@@ -47,7 +53,7 @@ func runRelay(ctx context.Context, local *peer, id relayID, hps []model.HostPort
 		cancel: cancel,
 		logger: logger.With("relay", id, "addrs", hps),
 	}
-	r.serverConf.Store(serverConf)
+	r.serverConf.Store(cfg)
 	go r.run(ctx)
 	return r
 }
@@ -102,20 +108,35 @@ func (r *relay) connect(ctx context.Context, hp model.HostPort) (*quic.Conn, err
 	}
 
 	cfg := r.serverConf.Load()
-	r.logger.Debug("dialing relay", "addr", addr, "server", cfg.name, "cert", cfg.key)
+
+	nextProtos := iterc.MapVarStrings(model.ConnectRelayV02, model.ConnectRelayV01)
+	if cfg.auth == nil {
+		nextProtos = iterc.MapVarStrings(model.ConnectRelayV01)
+	}
+
+	r.logger.Debug("dialing relay", "addr", addr, "server", cfg.tls.name, "cert", cfg.tls.key, "protos", nextProtos)
 	conn, err := r.local.direct.transport.Dial(ctx, addr, &tls.Config{
 		Certificates: []tls.Certificate{r.local.clientCert},
-		RootCAs:      cfg.cas,
-		ServerName:   cfg.name,
-		NextProtos:   iterc.MapVarStrings(model.ConnectRelayV01),
+		RootCAs:      cfg.tls.cas,
+		ServerName:   cfg.tls.name,
+		NextProtos:   nextProtos,
 	}, quicc.ClientConfig(r.local.direct.handshakeIdleTimeout))
 	if err != nil {
 		return nil, err
 	}
 
-	if err := r.check(ctx, conn); err != nil {
-		cerr := conn.CloseWithError(quic.ApplicationErrorCode(pberror.Code_ConnectionCheckFailed), "connection check failed")
-		return nil, errors.Join(err, cerr)
+	protocol := model.GetConnectRelayNextProto(conn)
+	if protocol == model.ConnectRelayV01 {
+		if err := r.check(ctx, conn); err != nil {
+			cerr := conn.CloseWithError(quic.ApplicationErrorCode(pberror.Code_ConnectionCheckFailed), "connection check failed")
+			return nil, errors.Join(err, cerr)
+		}
+	} else {
+		if err := r.authenticate(ctx, conn, cfg.auth); err != nil {
+			// TODO better error
+			cerr := conn.CloseWithError(quic.ApplicationErrorCode(pberror.Code_ConnectionCheckFailed), "connection check failed")
+			return nil, errors.Join(err, cerr)
+		}
 	}
 	return conn, nil
 }
@@ -136,6 +157,32 @@ func (r *relay) check(ctx context.Context, conn *quic.Conn) error {
 	}
 	if _, err := pbconnect.ReadResponse(stream); err != nil {
 		return err
+	}
+
+	return nil
+}
+
+func (r *relay) authenticate(ctx context.Context, conn *quic.Conn, auth *pbclientrelay.AuthenticateReq) error {
+	stream, err := conn.OpenStreamSync(ctx)
+	if err != nil {
+		return err
+	}
+	defer func() {
+		if err := stream.Close(); err != nil {
+			slogc.Fine(r.logger, "error closing check stream", "err", err)
+		}
+	}()
+
+	if err := proto.Write(stream, auth); err != nil {
+		return fmt.Errorf("cannot write auth request: %w", err)
+	}
+
+	resp := &pbclientrelay.AuthenticateResp{}
+	if err := proto.Read(stream, resp); err != nil {
+		return fmt.Errorf("cannot read auth response: %w", err)
+	}
+	if resp.Error != nil {
+		return fmt.Errorf("error in auth response: %w", resp.Error)
 	}
 
 	return nil

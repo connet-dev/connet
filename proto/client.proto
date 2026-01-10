@@ -49,18 +49,19 @@ message Response {
   }
   message Relays {
     repeated Relay relays = 1;
+    repeated DirectRelay directs = 2;
   }
 }
 
 message Peer {
   repeated model.AddrPort directs = 3;
-  repeated string relayIds = 6;
+  repeated string relay_ids = 6;
   bytes server_certificate = 4; // certificate to use when connecting to this client
   bytes client_certificate = 5; // certificate that this client uses when connecting
 }
 
 message RemotePeer {
-  string id = 1;
+  string id = 1; // peer id as assigned by the control server
   string metadata = 9;
   Peer peer = 8;
 }
@@ -68,5 +69,12 @@ message RemotePeer {
 message Relay {
   string id = 3;
   repeated model.HostPort addresses = 4;
-  bytes server_certificate = 2;
+  bytes server_certificate = 2; // endpoint specific certificate to be used by the client
+}
+
+message DirectRelay {
+  string id = 1; // relay id as assigned by the control server
+  repeated model.HostPort addresses = 2;
+  bytes server_certificate = 3; // generic certificate used by this relay
+  bytes authentication = 4; // endpoint/role specific signature to use at the relay
 }

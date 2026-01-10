@@ -5,6 +5,7 @@ import (
 	"context"
 	"crypto/tls"
 	"crypto/x509"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"log/slog"
@@ -14,12 +15,14 @@ import (
 	"sync"
 
 	"github.com/connet-dev/connet/model"
+	"github.com/connet-dev/connet/pkg/certc"
 	"github.com/connet-dev/connet/pkg/iterc"
 	"github.com/connet-dev/connet/pkg/netc"
 	"github.com/connet-dev/connet/pkg/quicc"
 	"github.com/connet-dev/connet/pkg/reliable"
 	"github.com/connet-dev/connet/pkg/slogc"
 	"github.com/connet-dev/connet/proto"
+	"github.com/connet-dev/connet/proto/pbclientrelay"
 	"github.com/connet-dev/connet/proto/pbconnect"
 	"github.com/connet-dev/connet/proto/pberror"
 	"github.com/quic-go/quic-go"
@@ -31,31 +34,45 @@ type clientAuth struct {
 	key      model.Key
 }
 
-type tlsAuthenticator func(chi *tls.ClientHelloInfo, base *tls.Config) (*tls.Config, error)
+type tlsAuthenticator func(chi *tls.ClientHelloInfo) (*tls.Config, error)
 type clientAuthenticator func(serverName string, certs []*x509.Certificate) *clientAuth
+type directAuthenticator func(message []byte, authentication []byte) bool
 
-func newClientsServer(cfg Config, tlsAuth tlsAuthenticator, clAuth clientAuthenticator) *clientsServer {
-	tlsConf := &tls.Config{
-		ClientAuth: tls.RequireAndVerifyClientCert,
-		NextProtos: iterc.MapVarStrings(model.ConnectRelayV01),
+func newClientsServer(cfg Config, tlsAuth tlsAuthenticator, clAuth clientAuthenticator, directAuth directAuthenticator, directCert *certc.Cert) (*clientsServer, error) {
+	directTLS, err := directCert.TLSCert()
+	if err != nil {
+		return nil, fmt.Errorf("direct TLS cert: %w", err)
 	}
-	tlsConf.GetConfigForClient = func(chi *tls.ClientHelloInfo) (*tls.Config, error) {
-		return tlsAuth(chi, tlsConf)
+	directTLSConf := &tls.Config{
+		ServerName:   directTLS.Leaf.DNSNames[0],
+		Certificates: []tls.Certificate{directTLS},
+		ClientAuth:   tls.RequireAnyClientCert,
+		NextProtos:   iterc.MapVarStrings(model.ConnectRelayV02),
 	}
 
 	return &clientsServer{
-		tlsConf: tlsConf,
-		auth:    clAuth,
+		tlsConf: &tls.Config{
+			NextProtos: iterc.MapVarStrings(model.ConnectRelayV01, model.ConnectRelayV02), // TODO maybe empty?
+			GetConfigForClient: func(chi *tls.ClientHelloInfo) (*tls.Config, error) {
+				if chi.ServerName == directTLSConf.ServerName {
+					return directTLSConf, nil
+				}
+				return tlsAuth(chi)
+			},
+		},
+		auth:   clAuth,
+		direct: directAuth,
 
 		endpoints: map[model.Endpoint]*endpointClients{},
 
 		logger: cfg.Logger.With("server", "relay-clients"),
-	}
+	}, nil
 }
 
 type clientsServer struct {
 	tlsConf *tls.Config
 	auth    clientAuthenticator
+	direct  directAuthenticator
 
 	endpoints   map[model.Endpoint]*endpointClients
 	endpointsMu sync.RWMutex
@@ -267,17 +284,27 @@ func (c *clientConn) run(ctx context.Context) {
 var errNotRecognizedClient = errors.New("client not recognized as a destination or a source")
 
 func (c *clientConn) runErr(ctx context.Context) error {
-	serverName := c.conn.ConnectionState().TLS.ServerName
-	certs := c.conn.ConnectionState().TLS.PeerCertificates
-	if auth := c.server.auth(serverName, certs); auth == nil {
-		return c.conn.CloseWithError(quic.ApplicationErrorCode(pberror.Code_AuthenticationFailed), "authentication missing")
+	protocol := model.GetConnectRelayNextProto(c.conn)
+	if protocol == model.ConnectRelayV02 {
+		if auth, err := c.authenticate(ctx); err != nil {
+			return c.conn.CloseWithError(quic.ApplicationErrorCode(pberror.Code_AuthenticationFailed), "authentication missing")
+		} else {
+			c.auth = auth
+			c.logger = c.logger.With("endpoint", auth.endpoint, "role", auth.role, "key", auth.key)
+		}
 	} else {
-		c.auth = auth
-		c.logger = c.logger.With("endpoint", auth.endpoint, "role", auth.role, "key", auth.key)
-	}
+		serverName := c.conn.ConnectionState().TLS.ServerName
+		certs := c.conn.ConnectionState().TLS.PeerCertificates
+		if auth := c.server.auth(serverName, certs); auth == nil {
+			return c.conn.CloseWithError(quic.ApplicationErrorCode(pberror.Code_AuthenticationFailed), "authentication missing")
+		} else {
+			c.auth = auth
+			c.logger = c.logger.With("endpoint", auth.endpoint, "role", auth.role, "key", auth.key)
+		}
 
-	if err := c.check(ctx); err != nil {
-		return err
+		if err := c.check(ctx); err != nil {
+			return err
+		}
 	}
 
 	switch c.auth.role {
@@ -288,6 +315,45 @@ func (c *clientConn) runErr(ctx context.Context) error {
 	default:
 		return errNotRecognizedClient
 	}
+}
+
+type directSignature struct { // TODO go through protobuf? share globally?
+	Endpoint    model.Endpoint `json:"endpoint"`
+	Role        model.Role     `json:"role"`
+	Certificate []byte         `json:"certificate"`
+}
+
+func (c *clientConn) authenticate(ctx context.Context) (*clientAuth, error) {
+	c.logger.Debug("waiting for authentication")
+	authStream, err := c.conn.AcceptStream(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("client auth stream: %w", err)
+	}
+	defer func() {
+		if err := authStream.Close(); err != nil {
+			slogc.Fine(c.logger, "error closing auth stream", "err", err)
+		}
+	}()
+
+	req := &pbclientrelay.AuthenticateReq{}
+	if err := proto.Read(authStream, req); err != nil {
+		return nil, fmt.Errorf("client auth read: %w", err)
+	}
+
+	sig := directSignature{model.EndpointFromPB(req.Endpoint), model.RoleFromPB(req.Role), c.conn.ConnectionState().TLS.PeerCertificates[0].Raw}
+	if signatureData, err := json.Marshal(sig); err != nil {
+		return nil, fmt.Errorf("signature data error: %w", err)
+	} else if valid := c.server.direct(signatureData, req.Authentication); !valid {
+		return nil, fmt.Errorf("cannot authenticate: %w", err)
+	}
+
+	if err := proto.Write(authStream, &pbclientrelay.AuthenticateResp{}); err != nil {
+		return nil, fmt.Errorf("client auth write: %w", err)
+	}
+
+	key := model.NewKey(c.conn.ConnectionState().TLS.PeerCertificates[0])
+	c.logger.Debug("authentication completed", "remote", c.conn.RemoteAddr(), "build", req.BuildVersion)
+	return &clientAuth{sig.Endpoint, sig.Role, key}, nil
 }
 
 func (c *clientConn) check(ctx context.Context) error {

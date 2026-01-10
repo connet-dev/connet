@@ -13,7 +13,7 @@ func (v ClientControlNextProto) String() string {
 
 func GetClientControlNextProto(conn *quic.Conn) ClientControlNextProto {
 	proto := conn.ConnectionState().TLS.NegotiatedProtocol
-	for _, v := range []ClientControlNextProto{ClientControlV02} {
+	for _, v := range []ClientControlNextProto{ClientControlV02, ClientControlV03} {
 		if v.string == proto {
 			return v
 		}
@@ -24,6 +24,7 @@ func GetClientControlNextProto(conn *quic.Conn) ClientControlNextProto {
 var (
 	ClientControlUnknown = ClientControlNextProto{}
 	ClientControlV02     = ClientControlNextProto{"connet-client/0.2"} // 0.8.0
+	ClientControlV03     = ClientControlNextProto{"connet-client/0.3"} // 0.12.0
 	// Update GetClientControlNextProto when adding a new one
 )
 
@@ -45,8 +46,20 @@ func (v ConnectRelayNextProto) String() string {
 	return v.string
 }
 
+func GetConnectRelayNextProto(conn *quic.Conn) ConnectRelayNextProto {
+	proto := conn.ConnectionState().TLS.NegotiatedProtocol
+	for _, v := range []ConnectRelayNextProto{ConnectRelayV01, ConnectRelayV02} {
+		if v.string == proto {
+			return v
+		}
+	}
+	return ConnectRelayUnknown
+}
+
 var (
-	ConnectRelayV01 = ConnectRelayNextProto{"connet-peer-relay/0.1"} // 0.7.0
+	ConnectRelayUnknown = ConnectRelayNextProto{}
+	ConnectRelayV01     = ConnectRelayNextProto{"connet-peer-relay/0.1"} // 0.7.0
+	ConnectRelayV02     = ConnectRelayNextProto{"connet-peer-relay/0.2"} // 0.12.0
 )
 
 // RelayControlNextProto describes TLS NextProtos for relays connecting to control servers
@@ -58,7 +71,7 @@ func (v RelayControlNextProto) String() string {
 
 func GetRelayControlNextProto(conn *quic.Conn) RelayControlNextProto {
 	proto := conn.ConnectionState().TLS.NegotiatedProtocol
-	for _, v := range []RelayControlNextProto{RelayControlV02} {
+	for _, v := range []RelayControlNextProto{RelayControlV02, RelayControlV03} {
 		if v.string == proto {
 			return v
 		}
@@ -69,5 +82,6 @@ func GetRelayControlNextProto(conn *quic.Conn) RelayControlNextProto {
 var (
 	RelayControlUnknown = RelayControlNextProto{}
 	RelayControlV02     = RelayControlNextProto{"connet-relay/0.2"} // 0.8.0
+	RelayControlV03     = RelayControlNextProto{"connet-relay/0.3"} // 0.12.0
 	// Update GetRelayControlNextProto when adding a new one
 )

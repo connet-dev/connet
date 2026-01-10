@@ -73,14 +73,15 @@ func (ChangeType) EnumDescriptor() ([]byte, []int) {
 }
 
 type AuthenticateReq struct {
-	state          protoimpl.MessageState `protogen:"open.v1"`
-	Token          string                 `protobuf:"bytes,1,opt,name=token,proto3" json:"token,omitempty"`
-	Addresses      []*pbmodel.HostPort    `protobuf:"bytes,5,rep,name=addresses,proto3" json:"addresses,omitempty"`
-	ReconnectToken []byte                 `protobuf:"bytes,3,opt,name=reconnect_token,json=reconnectToken,proto3" json:"reconnect_token,omitempty"`
-	BuildVersion   string                 `protobuf:"bytes,4,opt,name=build_version,json=buildVersion,proto3" json:"build_version,omitempty"`
-	Metadata       string                 `protobuf:"bytes,6,opt,name=metadata,proto3" json:"metadata,omitempty"`
-	unknownFields  protoimpl.UnknownFields
-	sizeCache      protoimpl.SizeCache
+	state             protoimpl.MessageState `protogen:"open.v1"`
+	Token             string                 `protobuf:"bytes,1,opt,name=token,proto3" json:"token,omitempty"`
+	Addresses         []*pbmodel.HostPort    `protobuf:"bytes,5,rep,name=addresses,proto3" json:"addresses,omitempty"`
+	ReconnectToken    []byte                 `protobuf:"bytes,3,opt,name=reconnect_token,json=reconnectToken,proto3" json:"reconnect_token,omitempty"`
+	BuildVersion      string                 `protobuf:"bytes,4,opt,name=build_version,json=buildVersion,proto3" json:"build_version,omitempty"`
+	Metadata          string                 `protobuf:"bytes,6,opt,name=metadata,proto3" json:"metadata,omitempty"`
+	ServerCertificate []byte                 `protobuf:"bytes,7,opt,name=server_certificate,json=serverCertificate,proto3" json:"server_certificate,omitempty"`
+	unknownFields     protoimpl.UnknownFields
+	sizeCache         protoimpl.SizeCache
 }
 
 func (x *AuthenticateReq) Reset() {
@@ -148,13 +149,21 @@ func (x *AuthenticateReq) GetMetadata() string {
 	return ""
 }
 
+func (x *AuthenticateReq) GetServerCertificate() []byte {
+	if x != nil {
+		return x.ServerCertificate
+	}
+	return nil
+}
+
 type AuthenticateResp struct {
-	state          protoimpl.MessageState `protogen:"open.v1"`
-	Error          *pberror.Error         `protobuf:"bytes,1,opt,name=error,proto3" json:"error,omitempty"`
-	ControlId      string                 `protobuf:"bytes,2,opt,name=control_id,json=controlId,proto3" json:"control_id,omitempty"`
-	ReconnectToken []byte                 `protobuf:"bytes,3,opt,name=reconnect_token,json=reconnectToken,proto3" json:"reconnect_token,omitempty"`
-	unknownFields  protoimpl.UnknownFields
-	sizeCache      protoimpl.SizeCache
+	state                   protoimpl.MessageState `protogen:"open.v1"`
+	Error                   *pberror.Error         `protobuf:"bytes,1,opt,name=error,proto3" json:"error,omitempty"`
+	ControlId               string                 `protobuf:"bytes,2,opt,name=control_id,json=controlId,proto3" json:"control_id,omitempty"`
+	ReconnectToken          []byte                 `protobuf:"bytes,3,opt,name=reconnect_token,json=reconnectToken,proto3" json:"reconnect_token,omitempty"`
+	AuthenticationVerifyKey []byte                 `protobuf:"bytes,4,opt,name=authentication_verify_key,json=authenticationVerifyKey,proto3" json:"authentication_verify_key,omitempty"`
+	unknownFields           protoimpl.UnknownFields
+	sizeCache               protoimpl.SizeCache
 }
 
 func (x *AuthenticateResp) Reset() {
@@ -204,6 +213,13 @@ func (x *AuthenticateResp) GetControlId() string {
 func (x *AuthenticateResp) GetReconnectToken() []byte {
 	if x != nil {
 		return x.ReconnectToken
+	}
+	return nil
+}
+
+func (x *AuthenticateResp) GetAuthenticationVerifyKey() []byte {
+	if x != nil {
+		return x.AuthenticationVerifyKey
 	}
 	return nil
 }
@@ -556,18 +572,20 @@ var File_relay_proto protoreflect.FileDescriptor
 
 const file_relay_proto_rawDesc = "" +
 	"\n" +
-	"\vrelay.proto\x12\x05relay\x1a\verror.proto\x1a\vmodel.proto\"\xc0\x01\n" +
+	"\vrelay.proto\x12\x05relay\x1a\verror.proto\x1a\vmodel.proto\"\xef\x01\n" +
 	"\x0fAuthenticateReq\x12\x14\n" +
 	"\x05token\x18\x01 \x01(\tR\x05token\x12-\n" +
 	"\taddresses\x18\x05 \x03(\v2\x0f.model.HostPortR\taddresses\x12'\n" +
 	"\x0freconnect_token\x18\x03 \x01(\fR\x0ereconnectToken\x12#\n" +
 	"\rbuild_version\x18\x04 \x01(\tR\fbuildVersion\x12\x1a\n" +
-	"\bmetadata\x18\x06 \x01(\tR\bmetadata\"~\n" +
+	"\bmetadata\x18\x06 \x01(\tR\bmetadata\x12-\n" +
+	"\x12server_certificate\x18\a \x01(\fR\x11serverCertificate\"\xba\x01\n" +
 	"\x10AuthenticateResp\x12\"\n" +
 	"\x05error\x18\x01 \x01(\v2\f.error.ErrorR\x05error\x12\x1d\n" +
 	"\n" +
 	"control_id\x18\x02 \x01(\tR\tcontrolId\x12'\n" +
-	"\x0freconnect_token\x18\x03 \x01(\fR\x0ereconnectToken\"$\n" +
+	"\x0freconnect_token\x18\x03 \x01(\fR\x0ereconnectToken\x12:\n" +
+	"\x19authentication_verify_key\x18\x04 \x01(\fR\x17authenticationVerifyKey\"$\n" +
 	"\n" +
 	"ClientsReq\x12\x16\n" +
 	"\x06offset\x18\x01 \x01(\x03R\x06offset\"\xc3\x02\n" +

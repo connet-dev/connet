@@ -2,6 +2,7 @@ package relay
 
 import (
 	"context"
+	"crypto/ed25519"
 	"crypto/tls"
 	"crypto/x509"
 	"errors"
@@ -31,6 +32,7 @@ import (
 type controlClient struct {
 	hostports []model.HostPort
 	root      *certc.Cert
+	direct    *certc.Cert
 	metadata  string
 
 	controlAddr          *net.UDPAddr
@@ -49,17 +51,14 @@ type controlClient struct {
 	clientsStreamOffset int64
 	clientsLogOffset    int64
 
-	connStatus atomic.Value
+	directVerifyKey   ed25519.PublicKey
+	directVerifyKeyMu sync.RWMutex
 
-	logger *slog.Logger
+	connStatus atomic.Value
+	logger     *slog.Logger
 }
 
-func newControlClient(cfg Config, configStore logc.KV[ConfigKey, ConfigValue]) (*controlClient, error) {
-	root, err := certc.NewRoot()
-	if err != nil {
-		return nil, err
-	}
-
+func newControlClient(cfg Config, root *certc.Cert, direct *certc.Cert, configStore logc.KV[ConfigKey, ConfigValue]) (*controlClient, error) {
 	clients, err := cfg.Stores.Clients()
 	if err != nil {
 		return nil, err
@@ -100,6 +99,7 @@ func newControlClient(cfg Config, configStore logc.KV[ConfigKey, ConfigValue]) (
 	c := &controlClient{
 		hostports: hostports,
 		root:      root,
+		direct:    direct,
 		metadata:  cfg.Metadata,
 
 		controlAddr:  cfg.ControlAddr,
@@ -107,7 +107,7 @@ func newControlClient(cfg Config, configStore logc.KV[ConfigKey, ConfigValue]) (
 		controlTLSConf: &tls.Config{
 			ServerName: cfg.ControlHost,
 			RootCAs:    cfg.ControlCAs,
-			NextProtos: iterc.MapVarStrings(model.RelayControlV02),
+			NextProtos: iterc.MapVarStrings(model.RelayControlV03, model.RelayControlV02),
 		},
 		handshakeIdleTimeout: cfg.HandshakeIdleTimeout,
 
@@ -158,21 +158,35 @@ func (s *controlClient) getServer(name string) *relayServer {
 	return s.serverByName[name]
 }
 
-func (s *controlClient) tlsAuthenticate(chi *tls.ClientHelloInfo, base *tls.Config) (*tls.Config, error) {
+func (s *controlClient) tlsAuthenticate(chi *tls.ClientHelloInfo) (*tls.Config, error) {
 	if srv := s.getServer(chi.ServerName); srv != nil {
-		cfg := base.Clone()
-		cfg.Certificates = srv.tls
-		cfg.ClientCAs = srv.cas.Load()
-		return cfg, nil
+		return &tls.Config{
+			ClientAuth:   tls.RequireAndVerifyClientCert,
+			Certificates: srv.tls,
+			ClientCAs:    srv.cas.Load(),
+			NextProtos:   iterc.MapVarStrings(model.ConnectRelayV01),
+		}, nil
 	}
-	return base, nil
+	return nil, nil
 }
 
-func (s *controlClient) authenticate(serverName string, certs []*x509.Certificate) *clientAuth {
+func (s *controlClient) v1Auth(serverName string, certs []*x509.Certificate) *clientAuth {
 	if srv := s.getServer(serverName); srv != nil {
 		return srv.authenticate(certs)
 	}
 	return nil
+}
+
+func (s *controlClient) v2Auth(message []byte, authentication []byte) bool { // TODO pass in params explicitly
+	s.directVerifyKeyMu.RLock()
+	directVerifyKey := s.directVerifyKey
+	s.directVerifyKeyMu.RUnlock()
+
+	if directVerifyKey == nil {
+		return false
+	}
+
+	return ed25519.Verify(directVerifyKey, message, authentication)
 }
 
 type TransportsFn func(ctx context.Context) ([]*quic.Transport, error)
@@ -253,12 +267,20 @@ func (s *controlClient) connectSingle(ctx context.Context, transport *quic.Trans
 		}
 	}()
 
+	protocol := model.GetRelayControlNextProto(conn)
+
+	var serverCert []byte
+	if protocol == model.RelayControlV03 {
+		serverCert = s.direct.Raw()
+	}
+
 	if err := proto.Write(authStream, &pbrelay.AuthenticateReq{
-		Token:          s.controlToken,
-		Addresses:      iterc.MapSlice(s.hostports, model.HostPort.PB),
-		ReconnectToken: reconnConfig.Bytes,
-		BuildVersion:   model.BuildVersion(),
-		Metadata:       s.metadata,
+		Token:             s.controlToken,
+		Addresses:         model.PBsFromHostPorts(s.hostports),
+		ReconnectToken:    reconnConfig.Bytes,
+		BuildVersion:      model.BuildVersion(),
+		Metadata:          s.metadata,
+		ServerCertificate: serverCert,
 	}); err != nil {
 		return nil, fmt.Errorf("auth write error: %w", err)
 	}
@@ -286,6 +308,12 @@ func (s *controlClient) connectSingle(ctx context.Context, transport *quic.Trans
 	reconnConfig.Bytes = resp.ReconnectToken
 	if err := s.config.Put(configControlReconnect, reconnConfig); err != nil {
 		return nil, fmt.Errorf("server reconnect set: %w", err)
+	}
+
+	if protocol == model.RelayControlV03 {
+		s.directVerifyKeyMu.Lock()
+		s.directVerifyKey = resp.AuthenticationVerifyKey
+		s.directVerifyKeyMu.Unlock()
 	}
 
 	return conn, nil
@@ -328,7 +356,9 @@ func (s *controlClient) runConnection(ctx context.Context, conn *quic.Conn) erro
 		reliable.Bind(conn, s.runClientsStream),
 		s.runClientsLog,
 		s.runServersLog,
-		reliable.Bind(conn, s.runServersStream))
+		reliable.Bind(conn, s.runServersStream),
+		func(ctx context.Context) error { return quicc.WaitLogRTTStats(ctx, conn, s.logger) }, // TODO exchange auth?
+	)
 }
 
 func (s *controlClient) runClientsStream(ctx context.Context, conn *quic.Conn) error {
@@ -626,11 +656,11 @@ func (s *relayServer) update(msg logc.Message[ServerKey, ServerValue]) error {
 }
 
 func (s *relayServer) authenticate(certs []*x509.Certificate) *clientAuth {
-	s.mu.RLock()
-	defer s.mu.RUnlock()
-
 	cert := certs[0]
 	key := model.NewKey(cert)
+
+	s.mu.RLock()
+	defer s.mu.RUnlock()
 
 	if dst, ok := s.clients[serverClientKey{model.Destination, key}]; ok && dst.Equal(cert) {
 		return &clientAuth{s.endpoint, model.Destination, key}

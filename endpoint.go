@@ -16,6 +16,7 @@ import (
 	"github.com/connet-dev/connet/pkg/statusc"
 	"github.com/connet-dev/connet/proto"
 	"github.com/connet-dev/connet/proto/pbclient"
+	"github.com/connet-dev/connet/proto/pbclientrelay"
 	"github.com/quic-go/quic-go"
 )
 
@@ -54,7 +55,7 @@ type endpoint struct {
 //   - an error happens in runPeer
 //   - a terminal error happens in runAnnounce
 func newEndpoint(ctx context.Context, cl *Client, cfg endpointConfig, logger *slog.Logger) (*endpoint, error) {
-	p, err := newPeer(cl.directServer, cl.addrs, cl.metadata, logger)
+	p, err := newPeer(cl.directServer, cl.addrs, logger)
 	if err != nil {
 		return nil, err
 	}
@@ -283,7 +284,29 @@ func (ep *endpoint) runRelay(ctx context.Context, conn *quic.Conn) error {
 				return fmt.Errorf("relay unexpected response")
 			}
 
-			ep.peer.setRelays(resp.Relay.Relays)
+			var relays []relayPeer
+			relays = append(relays, iterc.MapSlice(resp.Relay.Relays, func(relay *pbclient.Relay) relayPeer {
+				return relayPeer{proto: relay}
+			})...)
+			relays = append(relays, iterc.MapSlice(resp.Relay.Directs, func(relay *pbclient.DirectRelay) relayPeer {
+				return relayPeer{
+					proto: &pbclient.Relay{
+						Id:                relay.Id,
+						Addresses:         relay.Addresses,
+						ServerCertificate: relay.ServerCertificate,
+					},
+					auth: &pbclientrelay.AuthenticateReq{
+						Endpoint:       ep.cfg.endpoint.PB(),
+						Role:           ep.cfg.role.PB(),
+						Authentication: relay.Authentication,
+						Metadata:       ep.client.metadata,
+						BuildVersion:   model.BuildVersion(),
+					},
+				}
+
+			})...)
+
+			ep.peer.setRelays(relays)
 		}
 	})
 
