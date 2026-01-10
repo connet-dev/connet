@@ -13,7 +13,9 @@ import (
 	"time"
 
 	"github.com/connet-dev/connet/model"
+	"github.com/connet-dev/connet/pkg/certc"
 	"github.com/connet-dev/connet/pkg/iterc"
+	"github.com/connet-dev/connet/pkg/netc"
 	"github.com/connet-dev/connet/pkg/notify"
 	"github.com/connet-dev/connet/pkg/reliable"
 	"github.com/connet-dev/connet/pkg/statusc"
@@ -60,12 +62,27 @@ func NewServer(cfg Config) (*Server, error) {
 	var statelessResetKey quic.StatelessResetKey
 	copy(statelessResetKey[:], statelessResetVal.Bytes)
 
-	control, err := newControlClient(cfg, configStore)
+	rootCert, err := certc.NewRoot()
+	if err != nil {
+		return nil, fmt.Errorf("generate relay cert: %w", err)
+	}
+
+	directCert, err := rootCert.NewServer(certc.CertOpts{
+		Domains: []string{netc.GenDomainName("reserve.relay")},
+	})
+	if err != nil {
+		return nil, fmt.Errorf("generate direct relay cert: %w", err)
+	}
+
+	control, err := newControlClient(cfg, rootCert, directCert, configStore)
 	if err != nil {
 		return nil, fmt.Errorf("relay control client: %w", err)
 	}
 
-	clients := newClientsServer(cfg, control.tlsAuthenticate, control.authenticate)
+	clients, err := newClientsServer(cfg, control.tlsAuthenticate, control.v1Auth, control.v2Auth, directCert)
+	if err != nil {
+		return nil, fmt.Errorf("relay clients server: %w", err)
+	}
 
 	return &Server{
 		ingress:           cfg.Ingress,

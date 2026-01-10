@@ -2,8 +2,10 @@ package control
 
 import (
 	"context"
+	"crypto/ed25519"
 	"crypto/rand"
 	"crypto/x509"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
@@ -20,6 +22,7 @@ import (
 	"github.com/connet-dev/connet/pkg/reliable"
 	"github.com/connet-dev/connet/pkg/slogc"
 	"github.com/connet-dev/connet/proto"
+	"github.com/connet-dev/connet/proto/pbclient"
 	"github.com/connet-dev/connet/proto/pberror"
 	"github.com/connet-dev/connet/proto/pbrelay"
 	"github.com/quic-go/quic-go"
@@ -81,6 +84,28 @@ func newRelayServer(
 		srv[msg.Key.RelayID] = relayCacheValue{Hostports: msg.Value.Hostports, Cert: msg.Value.Cert}
 	}
 
+	directs, err := stores.RelayDirects()
+	if err != nil {
+		return nil, fmt.Errorf("relay directs store open: %w", err)
+	}
+
+	directsMsgs, directsOffset, err := directs.Snapshot()
+	if err != nil {
+		return nil, fmt.Errorf("relay conns snapshot: %w", err)
+	}
+	directsCache := map[RelayID]directRelay{}
+	for _, msg := range directsMsgs {
+		directsCache[msg.Key.ID] = directRelay{
+			auth:    msg.Value.Authentication,
+			signKey: msg.Value.AuthenticationSignKey,
+			proto: &pbclient.DirectRelay{
+				Id:                msg.Key.ID.string,
+				Addresses:         model.PBsFromHostPorts(msg.Value.Hostports),
+				ServerCertificate: msg.Value.Certificate.Raw,
+			},
+		}
+	}
+
 	serverIDConfig, err := config.GetOrInit(configServerID, func(_ ConfigKey) (ConfigValue, error) {
 		return ConfigValue{String: netc.GenDomainName("relay.control")}, nil
 	})
@@ -130,6 +155,10 @@ func newRelayServer(
 
 		endpointsCache:  endpointsCache,
 		endpointsOffset: endpointsOffset,
+
+		directs:       directs,
+		directsCache:  directsCache,
+		directsOffset: directsOffset,
 	}, nil
 }
 
@@ -152,6 +181,17 @@ type relayServer struct {
 	endpointsCache  map[model.Endpoint]map[RelayID]relayCacheValue
 	endpointsOffset int64
 	endpointsMu     sync.RWMutex
+
+	directs       logc.KV[RelayConnKey, RelayDirectValue]
+	directsCache  map[RelayID]directRelay
+	directsOffset int64
+	directsMu     sync.RWMutex
+}
+
+type directRelay struct {
+	auth    RelayAuthentication
+	signKey ed25519.PrivateKey
+	proto   *pbclient.DirectRelay
 }
 
 func (s *relayServer) getEndpoint(endpoint model.Endpoint) (map[RelayID]relayCacheValue, int64) {
@@ -219,6 +259,79 @@ func (s *relayServer) listen(ctx context.Context, endpoint model.Endpoint,
 	}
 }
 
+func (s *relayServer) cachedDirects() (map[RelayID]directRelay, int64) {
+	s.directsMu.RLock()
+	defer s.directsMu.RUnlock()
+
+	return maps.Clone(s.directsCache), s.directsOffset
+}
+
+type directSignature struct {
+	Endpoint    model.Endpoint `json:"endpoint"`
+	Role        model.Role     `json:"role"`
+	Certificate []byte         `json:"certificate"`
+}
+
+func (s *relayServer) Directs(ctx context.Context, endpoint model.Endpoint, role model.Role, cert *x509.Certificate, auth ClientAuthentication,
+	notify func(map[RelayID]*pbclient.DirectRelay) error) error {
+
+	signatureData, err := json.Marshal(directSignature{endpoint, role, cert.Raw})
+	if err != nil {
+		return fmt.Errorf("signature data error: %w", err)
+	}
+
+	directRelays, offset := s.cachedDirects()
+	localDirectRelays := map[RelayID]*pbclient.DirectRelay{}
+	for id, relay := range directRelays {
+		if ok, err := s.auth.Allow(relay.auth, auth, endpoint); err != nil {
+			return fmt.Errorf("auth allow error: %w", err)
+		} else if ok {
+			localDirectRelays[id] = &pbclient.DirectRelay{
+				Id:                relay.proto.Id,
+				Addresses:         relay.proto.Addresses,
+				ServerCertificate: relay.proto.ServerCertificate,
+				Authentication:    ed25519.Sign(relay.signKey, signatureData),
+			}
+		}
+	}
+	if err := notify(localDirectRelays); err != nil {
+		return err
+	}
+
+	for {
+		msgs, nextOffset, err := s.directs.Consume(ctx, offset)
+		if err != nil {
+			return err
+		}
+
+		var changed bool
+		for _, msg := range msgs {
+			if msg.Delete {
+				delete(localDirectRelays, msg.Key.ID)
+				changed = true
+			} else if ok, err := s.auth.Allow(msg.Value.Authentication, auth, endpoint); err != nil {
+				return fmt.Errorf("auth allow error: %w", err)
+			} else if ok {
+				localDirectRelays[msg.Key.ID] = &pbclient.DirectRelay{
+					Id:                msg.Key.ID.string,
+					Addresses:         model.PBsFromHostPorts(msg.Value.Hostports),
+					ServerCertificate: msg.Value.Certificate.Raw,
+					Authentication:    ed25519.Sign(msg.Value.AuthenticationSignKey, signatureData),
+				}
+				changed = true
+			}
+		}
+
+		offset = nextOffset
+
+		if changed {
+			if err := notify(localDirectRelays); err != nil {
+				return err
+			}
+		}
+	}
+}
+
 func (s *relayServer) run(ctx context.Context) error {
 	g := reliable.NewGroup(ctx)
 
@@ -226,6 +339,7 @@ func (s *relayServer) run(ctx context.Context) error {
 		g.Go(reliable.Bind(ingress, s.runListener))
 	}
 	g.Go(s.runEndpointsCache)
+	g.Go(s.runDirectsCache)
 
 	g.Go(logc.ScheduleCompact(s.conns))
 	g.Go(logc.ScheduleCompact(s.clients))
@@ -257,7 +371,7 @@ func (s *relayServer) runListener(ctx context.Context, ingress Ingress) error {
 
 	tlsConf := ingress.TLS.Clone()
 	if len(tlsConf.NextProtos) == 0 {
-		tlsConf.NextProtos = iterc.MapVarStrings(model.RelayControlV02)
+		tlsConf.NextProtos = iterc.MapVarStrings(model.RelayControlV03, model.RelayControlV02)
 	}
 
 	quicConf := quicc.ServerConfig()
@@ -340,6 +454,48 @@ func (s *relayServer) runEndpointsCache(ctx context.Context) error {
 	}
 }
 
+func (s *relayServer) runDirectsCache(ctx context.Context) error {
+	update := func(msg logc.Message[RelayConnKey, RelayDirectValue]) {
+		s.directsMu.Lock()
+		defer s.directsMu.Unlock()
+
+		if msg.Delete {
+			delete(s.directsCache, msg.Key.ID)
+		} else {
+			s.directsCache[msg.Key.ID] = directRelay{
+				auth:    msg.Value.Authentication,
+				signKey: msg.Value.AuthenticationSignKey,
+				proto: &pbclient.DirectRelay{
+					Id:                msg.Key.ID.string,
+					Addresses:         model.PBsFromHostPorts(msg.Value.Hostports),
+					ServerCertificate: msg.Value.Certificate.Raw,
+				},
+			}
+		}
+
+		s.directsOffset = msg.Offset + 1
+	}
+
+	for {
+		s.directsMu.RLock()
+		offset := s.directsOffset
+		s.directsMu.RUnlock()
+
+		msgs, nextOffset, err := s.directs.Consume(ctx, offset)
+		if err != nil {
+			return fmt.Errorf("relay conns consume: %w", err)
+		}
+
+		for _, msg := range msgs {
+			update(msg)
+		}
+
+		s.directsMu.Lock()
+		s.directsOffset = nextOffset
+		s.directsMu.Unlock()
+	}
+}
+
 func (s *relayServer) getRelayServerOffset(id RelayID) (int64, error) {
 	offset, err := s.serverOffsets.Get(RelayConnKey{id})
 	switch {
@@ -366,19 +522,22 @@ type relayConn struct {
 }
 
 type relayConnAuth struct {
-	id        RelayID
-	auth      RelayAuthentication
-	hostports []model.HostPort
-	metadata  string
+	id          RelayID
+	auth        RelayAuthentication
+	hostports   []model.HostPort
+	metadata    string
+	protocol    model.RelayControlNextProto
+	certificate *x509.Certificate
+	signKey     ed25519.PrivateKey
 }
 
 func (c *relayConn) run(ctx context.Context) {
-	c.logger.Debug("new relay connection", "proto", c.conn.ConnectionState().TLS.NegotiatedProtocol, "remote", c.conn.RemoteAddr())
 	defer func() {
 		if err := c.conn.CloseWithError(quic.ApplicationErrorCode(pberror.Code_Unknown), "connection closed"); err != nil {
 			slogc.Fine(c.logger, "error closing connection", "err", err)
 		}
 	}()
+	c.logger.Debug("new relay connection", "proto", c.conn.ConnectionState().TLS.NegotiatedProtocol, "remote", c.conn.RemoteAddr())
 
 	if err := c.runErr(ctx); err != nil {
 		c.logger.Debug("error while running zzz", "err", err)
@@ -425,11 +584,25 @@ func (c *relayConn) runErr(ctx context.Context) error {
 		}
 	}()
 
+	if c.protocol == model.RelayControlV03 {
+		key := RelayConnKey{ID: c.id}
+		value := RelayDirectValue{c.auth, c.hostports, c.metadata, c.certificate, c.signKey}
+		if err := c.server.directs.Put(key, value); err != nil {
+			return err
+		}
+		defer func() {
+			if err := c.server.directs.Del(key); err != nil {
+				c.logger.Warn("failed to delete conn", "key", key, "err", err)
+			}
+		}()
+	}
+
 	return reliable.RunGroup(ctx,
 		c.runRelayClients,
 		c.runRelayEndpoints,
 		c.runRelayServers,
 		logc.ScheduleCompactAcc(c.endpoints),
+		func(ctx context.Context) error { return quicc.WaitLogRTTStats(ctx, c.conn, c.logger) },
 	)
 }
 
@@ -451,6 +624,23 @@ func (c *relayConn) authenticate(ctx context.Context) (*relayConnAuth, error) {
 	}
 
 	protocol := model.GetRelayControlNextProto(c.conn)
+
+	var cert *x509.Certificate
+	if protocol != model.RelayControlV02 {
+		// old relays do not support direct relays, so no certificate
+		cert, err = x509.ParseCertificate(req.ServerCertificate)
+		if err != nil {
+			perr := pberror.GetError(err)
+			if perr == nil {
+				perr = pberror.NewError(pberror.Code_AuthenticationFailed, "authentication failed: %v", err)
+			}
+			if err := proto.Write(authStream, &pbrelay.AuthenticateResp{Error: perr}); err != nil {
+				return nil, fmt.Errorf("relay auth err write: %w", err)
+			}
+			return nil, fmt.Errorf("auth failed: %w", perr)
+		}
+	}
+
 	auth, err := c.server.auth.Authenticate(RelayAuthenticateRequest{
 		Proto:        protocol,
 		Token:        req.Token,
@@ -476,21 +666,38 @@ func (c *relayConn) authenticate(ctx context.Context) (*relayConnAuth, error) {
 		id = sid
 	}
 
+	var (
+		pk ed25519.PublicKey
+		sk ed25519.PrivateKey
+	)
+	if protocol != model.RelayControlV02 {
+		// old relays do not support direct relays, so need to generate keys
+		pk, sk, err = ed25519.GenerateKey(rand.Reader)
+		if err != nil {
+			perr := pberror.NewError(pberror.Code_AuthenticationFailed, "authentication failed: %v", err)
+			if err := proto.Write(authStream, &pbrelay.AuthenticateResp{Error: perr}); err != nil {
+				return nil, fmt.Errorf("relay auth err write: %w", err)
+			}
+			return nil, fmt.Errorf("auth failed: %w", perr)
+		}
+	}
+
 	retoken, err := c.server.reconnect.sealRelayID(id)
 	if err != nil {
 		c.logger.Debug("encrypting failed", "err", err)
 		retoken = nil
 	}
 	if err := proto.Write(authStream, &pbrelay.AuthenticateResp{
-		ControlId:      c.server.id,
-		ReconnectToken: retoken,
+		ControlId:               c.server.id,
+		ReconnectToken:          retoken,
+		AuthenticationVerifyKey: pk,
 	}); err != nil {
 		return nil, fmt.Errorf("auth write response: %w", err)
 	}
 
 	c.logger.Debug("authentication completed", "local", c.conn.LocalAddr(), "remote", c.conn.RemoteAddr(), "proto", protocol, "build", req.BuildVersion)
 	hostports := model.HostPortFromPBs(req.Addresses)
-	return &relayConnAuth{id, auth, hostports, req.Metadata}, nil
+	return &relayConnAuth{id, auth, hostports, req.Metadata, protocol, cert, sk}, nil
 }
 
 func (c *relayConn) runRelayClients(ctx context.Context) error {

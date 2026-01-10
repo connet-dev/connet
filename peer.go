@@ -20,6 +20,7 @@ import (
 	"github.com/connet-dev/connet/pkg/notify"
 	"github.com/connet-dev/connet/pkg/reliable"
 	"github.com/connet-dev/connet/proto/pbclient"
+	"github.com/connet-dev/connet/proto/pbclientrelay"
 	"github.com/connet-dev/connet/proto/pbconnect"
 	"github.com/connet-dev/connet/proto/pbmodel"
 	"github.com/quic-go/quic-go"
@@ -28,15 +29,14 @@ import (
 type peer struct {
 	self *notify.V[*pbclient.Peer]
 
-	relays     *notify.V[[]*pbclient.Relay]
+	relays     *notify.V[[]relayPeer]
 	relayConns *notify.V[map[relayID]*quic.Conn]
 
 	peers     *notify.V[[]*pbclient.RemotePeer]
 	peerConns *notify.V[map[peerConnKey]*quic.Conn]
 
-	direct   *directServer
-	addrs    *notify.V[advertiseAddrs]
-	metadata string
+	direct *directServer
+	addrs  *notify.V[advertiseAddrs]
 
 	serverCert tls.Certificate
 	clientCert tls.Certificate
@@ -85,7 +85,12 @@ func (s peerStyle) isRelay() bool {
 	return !s.isDirect()
 }
 
-func newPeer(direct *directServer, addrs *notify.V[advertiseAddrs], metadata string, logger *slog.Logger) (*peer, error) {
+type relayPeer struct {
+	proto *pbclient.Relay
+	auth  *pbclientrelay.AuthenticateReq
+}
+
+func newPeer(direct *directServer, addrs *notify.V[advertiseAddrs], logger *slog.Logger) (*peer, error) {
 	root, err := certc.NewRoot()
 	if err != nil {
 		return nil, err
@@ -118,15 +123,14 @@ func newPeer(direct *directServer, addrs *notify.V[advertiseAddrs], metadata str
 			ClientCertificate: clientTLSCert.Leaf.Raw,
 		}),
 
-		relays:     notify.NewEmpty[[]*pbclient.Relay](),
+		relays:     notify.NewEmpty[[]relayPeer](),
 		relayConns: notify.NewEmpty[map[relayID]*quic.Conn](),
 
 		peers:     notify.NewEmpty[[]*pbclient.RemotePeer](),
 		peerConns: notify.NewEmpty[map[peerConnKey]*quic.Conn](),
 
-		direct:   direct,
-		addrs:    addrs,
-		metadata: metadata,
+		direct: direct,
+		addrs:  addrs,
 
 		serverCert: serverTLSCert,
 		clientCert: clientTLSCert,
@@ -134,7 +138,7 @@ func newPeer(direct *directServer, addrs *notify.V[advertiseAddrs], metadata str
 	}, nil
 }
 
-func (p *peer) setRelays(relays []*pbclient.Relay) {
+func (p *peer) setRelays(relays []relayPeer) {
 	p.relays.Set(relays)
 }
 
@@ -171,20 +175,22 @@ func (p *peer) runDirectAddrs(ctx context.Context) error {
 
 func (p *peer) runRelays(ctx context.Context) error {
 	runningRelays := map[relayID]*relay{}
-	return p.relays.Listen(ctx, func(relays []*pbclient.Relay) error {
+	return p.relays.Listen(ctx, func(relays []relayPeer) error {
 		p.logger.Debug("relays updated", "len", len(relays))
 
 		activeRelays := map[relayID]struct{}{}
 		for _, relay := range relays {
-			id := relayID(relay.Id)
-			hps := model.HostPortFromPBs(relay.Addresses)
+			id := relayID(relay.proto.Id)
+			hps := model.HostPortFromPBs(relay.proto.Addresses)
 
 			activeRelays[id] = struct{}{}
 
-			cfg, err := newServerTLSConfig(relay.ServerCertificate)
+			tlsCfg, err := newServerTLSConfig(relay.proto.ServerCertificate)
 			if err != nil {
 				return err
 			}
+
+			cfg := &relayConfig{tlsCfg, relay.auth}
 			if rlg := runningRelays[id]; rlg != nil {
 				p.logger.Debug("updating relay", "id", id)
 				rlg.serverConf.Store(cfg)

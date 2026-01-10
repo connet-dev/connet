@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"io"
 	"log/slog"
+	"maps"
 	"net"
 	"slices"
 	"sync"
@@ -16,6 +17,7 @@ import (
 	"github.com/connet-dev/connet/model"
 	"github.com/connet-dev/connet/pkg/iterc"
 	"github.com/connet-dev/connet/pkg/logc"
+	"github.com/connet-dev/connet/pkg/notify"
 	"github.com/connet-dev/connet/pkg/quicc"
 	"github.com/connet-dev/connet/pkg/reliable"
 	"github.com/connet-dev/connet/pkg/slogc"
@@ -43,6 +45,8 @@ type ClientAuthentication []byte
 type ClientRelays interface {
 	Client(ctx context.Context, endpoint model.Endpoint, role model.Role, cert *x509.Certificate, auth ClientAuthentication,
 		notify func(map[RelayID]relayCacheValue) error) error
+	Directs(ctx context.Context, endpoint model.Endpoint, role model.Role, cert *x509.Certificate, auth ClientAuthentication,
+		notify func(map[RelayID]*pbclient.DirectRelay) error) error
 }
 
 func newClientServer(
@@ -273,7 +277,7 @@ func (s *clientServer) runListener(ctx context.Context, ingress Ingress) error {
 
 	tlsConf := ingress.TLS.Clone()
 	if len(tlsConf.NextProtos) == 0 {
-		tlsConf.NextProtos = iterc.MapVarStrings(model.ClientControlV02)
+		tlsConf.NextProtos = iterc.MapVarStrings(model.ClientControlV03, model.ClientControlV02)
 	}
 
 	quicConf := quicc.ServerConfig()
@@ -429,6 +433,7 @@ type clientConn struct {
 type clientConnAuth struct {
 	id       ClientID
 	auth     ClientAuthentication
+	protocol model.ClientControlNextProto
 	metadata string
 }
 
@@ -551,7 +556,7 @@ func (c *clientConn) authenticate(ctx context.Context) (*clientConnAuth, error) 
 	}
 
 	c.logger.Debug("authentication completed", "local", c.conn.LocalAddr(), "remote", c.conn.RemoteAddr(), "proto", protocol, "build", req.BuildVersion)
-	return &clientConnAuth{id, auth, req.Metadata}, nil
+	return &clientConnAuth{id, auth, protocol, req.Metadata}, nil
 }
 
 type clientStream struct {
@@ -705,11 +710,33 @@ func (s *clientStream) relay(ctx context.Context, req *pbclient.Request_Relay) e
 	}
 
 	g := reliable.NewGroup(ctx)
+	g.Go(quicc.CancelStream(s.stream))
 
+	relaysResp := notify.NewEmpty[*pbclient.Response_Relays]()
 	g.Go(func(ctx context.Context) error {
-		connCtx := s.conn.conn.Context()
-		<-connCtx.Done()
-		return context.Cause(connCtx)
+		defer s.conn.logger.Debug("completed relay write")
+		return relaysResp.Listen(ctx, func(resp *pbclient.Response_Relays) error {
+			directIds := map[string]struct{}{}
+			for _, d := range resp.Directs {
+				directIds[d.Id] = struct{}{}
+			}
+
+			resp = &pbclient.Response_Relays{
+				Relays: iterc.FilterSlice(resp.Relays, func(r *pbclient.Relay) bool {
+					_, ok := directIds[r.Id]
+					return !ok
+				}),
+				Directs: resp.Directs,
+			}
+
+			s.conn.logger.Debug("updated all relay list", "relays", len(resp.Relays), "directs", len(resp.Directs))
+			if err := proto.Write(s.stream, &pbclient.Response{
+				Relay: resp,
+			}); err != nil {
+				return fmt.Errorf("client relay response: %w", err)
+			}
+			return nil
+		})
 	})
 
 	g.Go(func(ctx context.Context) error {
@@ -726,13 +753,31 @@ func (s *clientStream) relay(ctx context.Context, req *pbclient.Request_Relay) e
 				})
 			}
 
-			if err := proto.Write(s.stream, &pbclient.Response{
-				Relay: &pbclient.Response_Relays{
-					Relays: addrs,
-				},
-			}); err != nil {
-				return fmt.Errorf("client relay response: %w", err)
-			}
+			relaysResp.Update(func(resp *pbclient.Response_Relays) *pbclient.Response_Relays {
+				return &pbclient.Response_Relays{
+					Relays:  addrs,
+					Directs: resp.GetDirects(),
+				}
+			})
+			return nil
+		})
+	})
+
+	g.Go(func(ctx context.Context) error {
+		if s.conn.protocol == model.ClientControlV02 {
+			// old clients don't support direct relays
+			return nil
+		}
+
+		defer s.conn.logger.Debug("completed direct relay notify")
+		return s.conn.server.relays.Directs(ctx, endpoint, role, clientCert, s.conn.auth, func(relays map[RelayID]*pbclient.DirectRelay) error {
+			s.conn.logger.Debug("updated direct relay list", "relays", len(relays))
+			relaysResp.Update(func(resp *pbclient.Response_Relays) *pbclient.Response_Relays {
+				return &pbclient.Response_Relays{
+					Relays:  resp.GetRelays(),
+					Directs: slices.Collect(maps.Values(relays)),
+				}
+			})
 			return nil
 		})
 	})
