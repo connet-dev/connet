@@ -371,7 +371,7 @@ func (s *controlClient) runConnection(ctx context.Context, conn *quic.Conn) erro
 		s.runClientsLog,
 		s.runServersLog,
 		reliable.Bind(conn, s.runServersStream),
-		func(ctx context.Context) error { return quicc.WaitLogRTTStats(ctx, conn, s.logger) }, // TODO exchange auth?
+		func(ctx context.Context) error { return quicc.WaitLogRTTStats(ctx, conn, s.logger) }, // TODO v0.14.0 exchange auth
 	)
 }
 

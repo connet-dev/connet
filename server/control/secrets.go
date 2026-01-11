@@ -70,7 +70,7 @@ func (s *reconnectToken) openRelayID(encryptedID []byte) (RelayID, error) {
 	return RelayID{string(data)}, nil
 }
 
-// TODO copied from ksuid, remove in v0.11.0
+// TODO copied from ksuid, remove in v0.14.0
 const base62Characters = "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz"
 const zeroString = "000000000000000000000000000"
 

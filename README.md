@@ -599,6 +599,9 @@ by adding account management and it is one of the easiest way to start.
 
 ## Changelog
 
+### v0.13.0
+ - [x] direct relay auth/stateless relay v1
+
 ### v0.12.0
  - [x] reorganize packages
 
