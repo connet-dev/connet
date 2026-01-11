@@ -87,7 +87,7 @@ func (s peerStyle) isRelay() bool {
 }
 
 type relayPeer struct {
-	proto *pbclient.Relay
+	proto *pbclient.DirectRelay
 	auth  *pbclientrelay.AuthenticateReq
 }
 

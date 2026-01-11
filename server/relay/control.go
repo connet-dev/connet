@@ -5,6 +5,7 @@ import (
 	"crypto/ed25519"
 	"crypto/tls"
 	"crypto/x509"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"log/slog"
@@ -177,16 +178,30 @@ func (s *controlClient) v1Auth(serverName string, certs []*x509.Certificate) *cl
 	return nil
 }
 
-func (s *controlClient) v2Auth(message []byte, authentication []byte) bool { // TODO pass in params explicitly
+type directSignature struct { // TODO go through protobuf? share globally?
+	Endpoint    model.Endpoint `json:"endpoint"`
+	Role        model.Role     `json:"role"`
+	Certificate []byte         `json:"certificate"`
+}
+
+func (s *controlClient) v2Auth(endpoint model.Endpoint, role model.Role, cert *x509.Certificate, authentication []byte) (*clientAuth, error) {
+	message, err := json.Marshal(directSignature{endpoint, role, cert.Raw})
+	if err != nil {
+		return nil, fmt.Errorf("signature data error: %w", err)
+	}
+
 	s.directVerifyKeyMu.RLock()
 	directVerifyKey := s.directVerifyKey
 	s.directVerifyKeyMu.RUnlock()
 
 	if directVerifyKey == nil {
-		return false
+		return nil, fmt.Errorf("no control verification key")
 	}
 
-	return ed25519.Verify(directVerifyKey, message, authentication)
+	if !ed25519.Verify(directVerifyKey, message, authentication) {
+		return nil, pberror.NewError(pberror.Code_AuthenticationFailed, "could not verify authentication")
+	}
+	return &clientAuth{endpoint, role, model.NewKey(cert)}, nil
 }
 
 type TransportsFn func(ctx context.Context) ([]*quic.Transport, error)

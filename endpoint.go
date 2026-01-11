@@ -286,15 +286,15 @@ func (ep *endpoint) runRelay(ctx context.Context, conn *quic.Conn) error {
 
 			var relays []relayPeer
 			relays = append(relays, iterc.MapSlice(resp.Relay.Relays, func(relay *pbclient.Relay) relayPeer {
-				return relayPeer{proto: relay}
+				return relayPeer{proto: &pbclient.DirectRelay{
+					Id:                relay.Id,
+					Addresses:         relay.Addresses,
+					ServerCertificate: relay.ServerCertificate,
+				}}
 			})...)
 			relays = append(relays, iterc.MapSlice(resp.Relay.Directs, func(relay *pbclient.DirectRelay) relayPeer {
 				return relayPeer{
-					proto: &pbclient.Relay{
-						Id:                relay.Id,
-						Addresses:         relay.Addresses,
-						ServerCertificate: relay.ServerCertificate,
-					},
+					proto: relay,
 					auth: &pbclientrelay.AuthenticateReq{
 						Endpoint:       ep.cfg.endpoint.PB(),
 						Role:           ep.cfg.role.PB(),

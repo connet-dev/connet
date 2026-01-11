@@ -5,7 +5,6 @@ import (
 	"context"
 	"crypto/tls"
 	"crypto/x509"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"log/slog"
@@ -36,7 +35,7 @@ type clientAuth struct {
 
 type tlsAuthenticator func(chi *tls.ClientHelloInfo) (*tls.Config, error)
 type clientAuthenticator func(serverName string, certs []*x509.Certificate) *clientAuth
-type directAuthenticator func(message []byte, authentication []byte) bool
+type directAuthenticator func(endpoint model.Endpoint, role model.Role, cert *x509.Certificate, authentication []byte) (*clientAuth, error)
 
 func newClientsServer(cfg Config, tlsAuth tlsAuthenticator, clAuth clientAuthenticator, directAuth directAuthenticator, directCert *certc.Cert) (*clientsServer, error) {
 	directTLS, err := directCert.TLSCert()
@@ -287,7 +286,14 @@ func (c *clientConn) runErr(ctx context.Context) error {
 	protocol := model.GetConnectRelayNextProto(c.conn)
 	if protocol == model.ConnectRelayV02 {
 		if auth, err := c.authenticate(ctx); err != nil {
-			return c.conn.CloseWithError(quic.ApplicationErrorCode(pberror.Code_AuthenticationFailed), "authentication missing")
+			if perr := pberror.GetError(err); perr != nil {
+				cerr := c.conn.CloseWithError(quic.ApplicationErrorCode(perr.Code), perr.Message)
+				err = errors.Join(perr, cerr)
+			} else {
+				cerr := c.conn.CloseWithError(quic.ApplicationErrorCode(pberror.Code_AuthenticationFailed), "Error while authenticating")
+				err = errors.Join(err, cerr)
+			}
+			return err
 		} else {
 			c.auth = auth
 			c.logger = c.logger.With("endpoint", auth.endpoint, "role", auth.role, "key", auth.key)
@@ -317,12 +323,6 @@ func (c *clientConn) runErr(ctx context.Context) error {
 	}
 }
 
-type directSignature struct { // TODO go through protobuf? share globally?
-	Endpoint    model.Endpoint `json:"endpoint"`
-	Role        model.Role     `json:"role"`
-	Certificate []byte         `json:"certificate"`
-}
-
 func (c *clientConn) authenticate(ctx context.Context) (*clientAuth, error) {
 	c.logger.Debug("waiting for authentication")
 	authStream, err := c.conn.AcceptStream(ctx)
@@ -340,20 +340,17 @@ func (c *clientConn) authenticate(ctx context.Context) (*clientAuth, error) {
 		return nil, fmt.Errorf("client auth read: %w", err)
 	}
 
-	sig := directSignature{model.EndpointFromPB(req.Endpoint), model.RoleFromPB(req.Role), c.conn.ConnectionState().TLS.PeerCertificates[0].Raw}
-	if signatureData, err := json.Marshal(sig); err != nil {
-		return nil, fmt.Errorf("signature data error: %w", err)
-	} else if valid := c.server.direct(signatureData, req.Authentication); !valid {
-		return nil, fmt.Errorf("cannot authenticate: %w", err)
+	auth, err := c.server.direct(model.EndpointFromPB(req.Endpoint), model.RoleFromPB(req.Role), c.conn.ConnectionState().TLS.PeerCertificates[0], req.Authentication)
+	if err != nil {
+		return nil, fmt.Errorf("authentication failed: %w", err)
 	}
 
 	if err := proto.Write(authStream, &pbclientrelay.AuthenticateResp{}); err != nil {
 		return nil, fmt.Errorf("client auth write: %w", err)
 	}
 
-	key := model.NewKey(c.conn.ConnectionState().TLS.PeerCertificates[0])
-	c.logger.Debug("authentication completed", "remote", c.conn.RemoteAddr(), "build", req.BuildVersion)
-	return &clientAuth{sig.Endpoint, sig.Role, key}, nil
+	c.logger.Debug("authentication completed", "remote", c.conn.RemoteAddr(), "endpoint", auth.endpoint, "role", auth.role, "build", req.BuildVersion)
+	return auth, nil
 }
 
 func (c *clientConn) check(ctx context.Context) error {
