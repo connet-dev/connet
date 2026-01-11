@@ -191,6 +191,7 @@ func TestE2E(t *testing.T) {
 	tetRestr, err := restr.ParseName("^tet$")
 	require.NoError(t, err)
 	clientAuth := selfhosted.NewClientAuthenticator(
+		selfhosted.ClientAuthentication{Token: "test-token-any"},
 		selfhosted.ClientAuthentication{Token: "test-token-dst"},
 		selfhosted.ClientAuthentication{Token: "test-token-src"},
 		selfhosted.ClientAuthentication{Token: "test-token-deny-ip", IPs: localRestr},
@@ -217,7 +218,14 @@ func TestE2E(t *testing.T) {
 	g.Go(reliable.Bind(echoListen, echoServer))
 	g.Go(srv.Run)
 
-	time.Sleep(time.Millisecond) // time for server to come online
+	for {
+		time.Sleep(time.Microsecond)
+		stat, err := srv.Status(ctx)
+		require.NoError(t, err)
+		if stat.Relay.Status == statusc.Connected {
+			break
+		}
+	}
 
 	t.Run("deny-ip", func(t *testing.T) {
 		clIPDeny, err := Connect(ctx,
@@ -262,7 +270,7 @@ func TestE2E(t *testing.T) {
 	})
 	t.Run("close-client", func(t *testing.T) {
 		cl, err := Connect(ctx,
-			Token("test-token-dst"),
+			Token("test-token-any"),
 			ServerAddress("localhost:20000"),
 			ServerCAs(cas),
 			DirectAddress(":20002"),
@@ -306,7 +314,7 @@ func TestE2E(t *testing.T) {
 	t.Run("cancel-client", func(t *testing.T) {
 		clCtx, clCancel := context.WithCancel(ctx)
 		cl, err := Connect(clCtx,
-			Token("test-token-dst"),
+			Token("test-token-any"),
 			ServerAddress("localhost:20000"),
 			ServerCAs(cas),
 			DirectAddress(":20002"),
@@ -357,7 +365,7 @@ func TestE2E(t *testing.T) {
 	})
 	t.Run("close-dst", func(t *testing.T) {
 		cl, err := Connect(ctx,
-			Token("test-token-dst"),
+			Token("test-token-any"),
 			ServerAddress("localhost:20000"),
 			ServerCAs(cas),
 			DirectAddress(":20002"),
@@ -374,7 +382,7 @@ func TestE2E(t *testing.T) {
 	})
 	t.Run("cancel-dst", func(t *testing.T) {
 		cl, err := Connect(ctx,
-			Token("test-token-dst"),
+			Token("test-token-any"),
 			ServerAddress("localhost:20000"),
 			ServerCAs(cas),
 			DirectAddress(":20002"),
@@ -397,6 +405,23 @@ func TestE2E(t *testing.T) {
 			}
 		}
 		require.Empty(t, cl.Destinations())
+	})
+	t.Run("addrs", func(t *testing.T) {
+		cl, err := Connect(ctx,
+			Token("test-token-any"),
+			ServerAddress("localhost:20000"),
+			ServerCAs(cas),
+			DirectAddress(":20002"),
+			Logger(logger.With("test", "cl-dst")),
+		)
+		require.NoError(t, err)
+		defer cl.Close()
+
+		stat, err := cl.Status(ctx)
+		require.NoError(t, err)
+
+		require.NotEmpty(t, stat.LocalAddrs)
+		require.NotEmpty(t, stat.STUNAddrs)
 	})
 
 	clDst, err := Connect(ctx,
