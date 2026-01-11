@@ -13,7 +13,7 @@ func (v ClientControlNextProto) String() string {
 
 func GetClientControlNextProto(conn *quic.Conn) ClientControlNextProto {
 	proto := conn.ConnectionState().TLS.NegotiatedProtocol
-	for _, v := range []ClientControlNextProto{ClientControlV02, ClientControlV03} {
+	for _, v := range []ClientControlNextProto{ClientControlV03, ClientControlV02} {
 		if v.string == proto {
 			return v
 		}
@@ -48,7 +48,7 @@ func (v ConnectRelayNextProto) String() string {
 
 func GetConnectRelayNextProto(conn *quic.Conn) ConnectRelayNextProto {
 	proto := conn.ConnectionState().TLS.NegotiatedProtocol
-	for _, v := range []ConnectRelayNextProto{ConnectRelayV01, ConnectRelayV02} {
+	for _, v := range []ConnectRelayNextProto{ConnectRelayV02, ConnectRelayV01} {
 		if v.string == proto {
 			return v
 		}
@@ -71,7 +71,7 @@ func (v RelayControlNextProto) String() string {
 
 func GetRelayControlNextProto(conn *quic.Conn) RelayControlNextProto {
 	proto := conn.ConnectionState().TLS.NegotiatedProtocol
-	for _, v := range []RelayControlNextProto{RelayControlV02, RelayControlV03} {
+	for _, v := range []RelayControlNextProto{RelayControlV03, RelayControlV02} {
 		if v.string == proto {
 			return v
 		}
