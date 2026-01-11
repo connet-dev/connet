@@ -21,4 +21,14 @@ func TestDeriveKeys(t *testing.T) {
 
 	require.Equal(t, sl, dl)
 	require.Equal(t, sr, dr)
+
+	hsl, hsr, err := DeriveKeys1(srcKey, dstKey.PublicKey(), true)
+	require.NoError(t, err)
+	hdl, hdr, err := DeriveKeys1(dstKey, srcKey.PublicKey(), false)
+	require.NoError(t, err)
+
+	require.Equal(t, sl, hsl)
+	require.Equal(t, sr, hsr)
+	require.Equal(t, dl, hdl)
+	require.Equal(t, dr, hdr)
 }
