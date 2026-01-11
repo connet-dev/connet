@@ -31,11 +31,13 @@ type clientAuth struct {
 	endpoint model.Endpoint
 	role     model.Role
 	key      model.Key
+	protocol model.ConnectRelayNextProto
+	metadata string
 }
 
 type tlsAuthenticator func(chi *tls.ClientHelloInfo) (*tls.Config, error)
 type clientAuthenticator func(serverName string, certs []*x509.Certificate) *clientAuth
-type directAuthenticator func(endpoint model.Endpoint, role model.Role, cert *x509.Certificate, authentication []byte) (*clientAuth, error)
+type directAuthenticator func(req *pbclientrelay.AuthenticateReq, cert *x509.Certificate) (*clientAuth, error)
 
 func newClientsServer(cfg Config, tlsAuth tlsAuthenticator, clAuth clientAuthenticator, directAuth directAuthenticator, directCert *certc.Cert) (*clientsServer, error) {
 	directTLS, err := directCert.TLSCert()
@@ -51,7 +53,6 @@ func newClientsServer(cfg Config, tlsAuth tlsAuthenticator, clAuth clientAuthent
 
 	return &clientsServer{
 		tlsConf: &tls.Config{
-			NextProtos: iterc.MapVarStrings(model.ConnectRelayV01, model.ConnectRelayV02), // TODO maybe empty?
 			GetConfigForClient: func(chi *tls.ClientHelloInfo) (*tls.Config, error) {
 				if chi.ServerName == directTLSConf.ServerName {
 					return directTLSConf, nil
@@ -340,7 +341,7 @@ func (c *clientConn) authenticate(ctx context.Context) (*clientAuth, error) {
 		return nil, fmt.Errorf("client auth read: %w", err)
 	}
 
-	auth, err := c.server.direct(model.EndpointFromPB(req.Endpoint), model.RoleFromPB(req.Role), c.conn.ConnectionState().TLS.PeerCertificates[0], req.Authentication)
+	auth, err := c.server.direct(req, c.conn.ConnectionState().TLS.PeerCertificates[0])
 	if err != nil {
 		return nil, fmt.Errorf("authentication failed: %w", err)
 	}

@@ -5,7 +5,6 @@ import (
 	"crypto/ed25519"
 	"crypto/tls"
 	"crypto/x509"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"log/slog"
@@ -24,10 +23,12 @@ import (
 	"github.com/connet-dev/connet/pkg/slogc"
 	"github.com/connet-dev/connet/pkg/statusc"
 	"github.com/connet-dev/connet/proto"
+	"github.com/connet-dev/connet/proto/pbclientrelay"
 	"github.com/connet-dev/connet/proto/pberror"
 	"github.com/connet-dev/connet/proto/pbrelay"
 	"github.com/klev-dev/klevdb"
 	"github.com/quic-go/quic-go"
+	protobuf "google.golang.org/protobuf/proto"
 )
 
 type controlClient struct {
@@ -178,14 +179,12 @@ func (s *controlClient) v1Auth(serverName string, certs []*x509.Certificate) *cl
 	return nil
 }
 
-type directSignature struct { // TODO go through protobuf? share globally?
-	Endpoint    model.Endpoint `json:"endpoint"`
-	Role        model.Role     `json:"role"`
-	Certificate []byte         `json:"certificate"`
-}
-
-func (s *controlClient) v2Auth(endpoint model.Endpoint, role model.Role, cert *x509.Certificate, authentication []byte) (*clientAuth, error) {
-	message, err := json.Marshal(directSignature{endpoint, role, cert.Raw})
+func (s *controlClient) v2Auth(authReq *pbclientrelay.AuthenticateReq, cert *x509.Certificate) (*clientAuth, error) {
+	signatureData, err := protobuf.Marshal(&pbrelay.ClientAuthentication{
+		Endpoint:    authReq.Endpoint,
+		Role:        authReq.Role,
+		Certificate: cert.Raw,
+	})
 	if err != nil {
 		return nil, fmt.Errorf("signature data error: %w", err)
 	}
@@ -198,10 +197,10 @@ func (s *controlClient) v2Auth(endpoint model.Endpoint, role model.Role, cert *x
 		return nil, fmt.Errorf("no control verification key")
 	}
 
-	if !ed25519.Verify(directVerifyKey, message, authentication) {
+	if !ed25519.Verify(directVerifyKey, signatureData, authReq.AuthenticationSignature) {
 		return nil, pberror.NewError(pberror.Code_AuthenticationFailed, "could not verify authentication")
 	}
-	return &clientAuth{endpoint, role, model.NewKey(cert)}, nil
+	return &clientAuth{model.EndpointFromPB(authReq.Endpoint), model.RoleFromPB(authReq.Role), model.NewKey(cert), model.ConnectRelayV02, authReq.Metadata}, nil
 }
 
 type TransportsFn func(ctx context.Context) ([]*quic.Transport, error)
@@ -678,10 +677,10 @@ func (s *relayServer) authenticate(certs []*x509.Certificate) *clientAuth {
 	defer s.mu.RUnlock()
 
 	if dst, ok := s.clients[serverClientKey{model.Destination, key}]; ok && dst.Equal(cert) {
-		return &clientAuth{s.endpoint, model.Destination, key}
+		return &clientAuth{s.endpoint, model.Destination, key, model.ConnectRelayV01, ""}
 	}
 	if src, ok := s.clients[serverClientKey{model.Source, key}]; ok && src.Equal(cert) {
-		return &clientAuth{s.endpoint, model.Source, key}
+		return &clientAuth{s.endpoint, model.Source, key, model.ConnectRelayV01, ""}
 	}
 
 	return nil

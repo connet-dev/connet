@@ -432,6 +432,66 @@ func (x *ServersResp) GetRestart() bool {
 	return false
 }
 
+type ClientAuthentication struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Endpoint      *pbmodel.Endpoint      `protobuf:"bytes,1,opt,name=endpoint,proto3" json:"endpoint,omitempty"`
+	Role          pbmodel.Role           `protobuf:"varint,2,opt,name=role,proto3,enum=model.Role" json:"role,omitempty"`
+	Certificate   []byte                 `protobuf:"bytes,3,opt,name=certificate,proto3" json:"certificate,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ClientAuthentication) Reset() {
+	*x = ClientAuthentication{}
+	mi := &file_relay_proto_msgTypes[6]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ClientAuthentication) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ClientAuthentication) ProtoMessage() {}
+
+func (x *ClientAuthentication) ProtoReflect() protoreflect.Message {
+	mi := &file_relay_proto_msgTypes[6]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ClientAuthentication.ProtoReflect.Descriptor instead.
+func (*ClientAuthentication) Descriptor() ([]byte, []int) {
+	return file_relay_proto_rawDescGZIP(), []int{6}
+}
+
+func (x *ClientAuthentication) GetEndpoint() *pbmodel.Endpoint {
+	if x != nil {
+		return x.Endpoint
+	}
+	return nil
+}
+
+func (x *ClientAuthentication) GetRole() pbmodel.Role {
+	if x != nil {
+		return x.Role
+	}
+	return pbmodel.Role(0)
+}
+
+func (x *ClientAuthentication) GetCertificate() []byte {
+	if x != nil {
+		return x.Certificate
+	}
+	return nil
+}
+
 type ClientsResp_Change struct {
 	state          protoimpl.MessageState `protogen:"open.v1"`
 	Change         ChangeType             `protobuf:"varint,1,opt,name=change,proto3,enum=relay.ChangeType" json:"change,omitempty"`
@@ -445,7 +505,7 @@ type ClientsResp_Change struct {
 
 func (x *ClientsResp_Change) Reset() {
 	*x = ClientsResp_Change{}
-	mi := &file_relay_proto_msgTypes[6]
+	mi := &file_relay_proto_msgTypes[7]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -457,7 +517,7 @@ func (x *ClientsResp_Change) String() string {
 func (*ClientsResp_Change) ProtoMessage() {}
 
 func (x *ClientsResp_Change) ProtoReflect() protoreflect.Message {
-	mi := &file_relay_proto_msgTypes[6]
+	mi := &file_relay_proto_msgTypes[7]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -519,7 +579,7 @@ type ServersResp_Change struct {
 
 func (x *ServersResp_Change) Reset() {
 	*x = ServersResp_Change{}
-	mi := &file_relay_proto_msgTypes[7]
+	mi := &file_relay_proto_msgTypes[8]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -531,7 +591,7 @@ func (x *ServersResp_Change) String() string {
 func (*ServersResp_Change) ProtoMessage() {}
 
 func (x *ServersResp_Change) ProtoReflect() protoreflect.Message {
-	mi := &file_relay_proto_msgTypes[7]
+	mi := &file_relay_proto_msgTypes[8]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -609,7 +669,11 @@ const file_relay_proto_rawDesc = "" +
 	"\x06Change\x12)\n" +
 	"\x06change\x18\x01 \x01(\x0e2\x11.relay.ChangeTypeR\x06change\x12+\n" +
 	"\bendpoint\x18\x02 \x01(\v2\x0f.model.EndpointR\bendpoint\x12-\n" +
-	"\x12server_certificate\x18\x03 \x01(\fR\x11serverCertificate*=\n" +
+	"\x12server_certificate\x18\x03 \x01(\fR\x11serverCertificate\"\x86\x01\n" +
+	"\x14ClientAuthentication\x12+\n" +
+	"\bendpoint\x18\x01 \x01(\v2\x0f.model.EndpointR\bendpoint\x12\x1f\n" +
+	"\x04role\x18\x02 \x01(\x0e2\v.model.RoleR\x04role\x12 \n" +
+	"\vcertificate\x18\x03 \x01(\fR\vcertificate*=\n" +
 	"\n" +
 	"ChangeType\x12\x11\n" +
 	"\rChangeUnknown\x10\x00\x12\r\n" +
@@ -629,37 +693,40 @@ func file_relay_proto_rawDescGZIP() []byte {
 }
 
 var file_relay_proto_enumTypes = make([]protoimpl.EnumInfo, 1)
-var file_relay_proto_msgTypes = make([]protoimpl.MessageInfo, 8)
+var file_relay_proto_msgTypes = make([]protoimpl.MessageInfo, 9)
 var file_relay_proto_goTypes = []any{
-	(ChangeType)(0),            // 0: relay.ChangeType
-	(*AuthenticateReq)(nil),    // 1: relay.AuthenticateReq
-	(*AuthenticateResp)(nil),   // 2: relay.AuthenticateResp
-	(*ClientsReq)(nil),         // 3: relay.ClientsReq
-	(*ClientsResp)(nil),        // 4: relay.ClientsResp
-	(*ServersReq)(nil),         // 5: relay.ServersReq
-	(*ServersResp)(nil),        // 6: relay.ServersResp
-	(*ClientsResp_Change)(nil), // 7: relay.ClientsResp.Change
-	(*ServersResp_Change)(nil), // 8: relay.ServersResp.Change
-	(*pbmodel.HostPort)(nil),   // 9: model.HostPort
-	(*pberror.Error)(nil),      // 10: error.Error
-	(*pbmodel.Endpoint)(nil),   // 11: model.Endpoint
-	(pbmodel.Role)(0),          // 12: model.Role
+	(ChangeType)(0),              // 0: relay.ChangeType
+	(*AuthenticateReq)(nil),      // 1: relay.AuthenticateReq
+	(*AuthenticateResp)(nil),     // 2: relay.AuthenticateResp
+	(*ClientsReq)(nil),           // 3: relay.ClientsReq
+	(*ClientsResp)(nil),          // 4: relay.ClientsResp
+	(*ServersReq)(nil),           // 5: relay.ServersReq
+	(*ServersResp)(nil),          // 6: relay.ServersResp
+	(*ClientAuthentication)(nil), // 7: relay.ClientAuthentication
+	(*ClientsResp_Change)(nil),   // 8: relay.ClientsResp.Change
+	(*ServersResp_Change)(nil),   // 9: relay.ServersResp.Change
+	(*pbmodel.HostPort)(nil),     // 10: model.HostPort
+	(*pberror.Error)(nil),        // 11: error.Error
+	(*pbmodel.Endpoint)(nil),     // 12: model.Endpoint
+	(pbmodel.Role)(0),            // 13: model.Role
 }
 var file_relay_proto_depIdxs = []int32{
-	9,  // 0: relay.AuthenticateReq.addresses:type_name -> model.HostPort
-	10, // 1: relay.AuthenticateResp.error:type_name -> error.Error
-	7,  // 2: relay.ClientsResp.changes:type_name -> relay.ClientsResp.Change
-	8,  // 3: relay.ServersResp.changes:type_name -> relay.ServersResp.Change
-	0,  // 4: relay.ClientsResp.Change.change:type_name -> relay.ChangeType
-	11, // 5: relay.ClientsResp.Change.endpoint:type_name -> model.Endpoint
-	12, // 6: relay.ClientsResp.Change.role:type_name -> model.Role
-	0,  // 7: relay.ServersResp.Change.change:type_name -> relay.ChangeType
-	11, // 8: relay.ServersResp.Change.endpoint:type_name -> model.Endpoint
-	9,  // [9:9] is the sub-list for method output_type
-	9,  // [9:9] is the sub-list for method input_type
-	9,  // [9:9] is the sub-list for extension type_name
-	9,  // [9:9] is the sub-list for extension extendee
-	0,  // [0:9] is the sub-list for field type_name
+	10, // 0: relay.AuthenticateReq.addresses:type_name -> model.HostPort
+	11, // 1: relay.AuthenticateResp.error:type_name -> error.Error
+	8,  // 2: relay.ClientsResp.changes:type_name -> relay.ClientsResp.Change
+	9,  // 3: relay.ServersResp.changes:type_name -> relay.ServersResp.Change
+	12, // 4: relay.ClientAuthentication.endpoint:type_name -> model.Endpoint
+	13, // 5: relay.ClientAuthentication.role:type_name -> model.Role
+	0,  // 6: relay.ClientsResp.Change.change:type_name -> relay.ChangeType
+	12, // 7: relay.ClientsResp.Change.endpoint:type_name -> model.Endpoint
+	13, // 8: relay.ClientsResp.Change.role:type_name -> model.Role
+	0,  // 9: relay.ServersResp.Change.change:type_name -> relay.ChangeType
+	12, // 10: relay.ServersResp.Change.endpoint:type_name -> model.Endpoint
+	11, // [11:11] is the sub-list for method output_type
+	11, // [11:11] is the sub-list for method input_type
+	11, // [11:11] is the sub-list for extension type_name
+	11, // [11:11] is the sub-list for extension extendee
+	0,  // [0:11] is the sub-list for field type_name
 }
 
 func init() { file_relay_proto_init() }
@@ -673,7 +740,7 @@ func file_relay_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_relay_proto_rawDesc), len(file_relay_proto_rawDesc)),
 			NumEnums:      1,
-			NumMessages:   8,
+			NumMessages:   9,
 			NumExtensions: 0,
 			NumServices:   0,
 		},

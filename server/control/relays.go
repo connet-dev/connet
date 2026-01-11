@@ -5,7 +5,6 @@ import (
 	"crypto/ed25519"
 	"crypto/rand"
 	"crypto/x509"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
@@ -26,6 +25,7 @@ import (
 	"github.com/connet-dev/connet/proto/pberror"
 	"github.com/connet-dev/connet/proto/pbrelay"
 	"github.com/quic-go/quic-go"
+	protobuf "google.golang.org/protobuf/proto"
 )
 
 type RelayAuthenticateRequest struct {
@@ -266,16 +266,14 @@ func (s *relayServer) cachedDirects() (map[RelayID]directRelay, int64) {
 	return maps.Clone(s.directsCache), s.directsOffset
 }
 
-type directSignature struct {
-	Endpoint    model.Endpoint `json:"endpoint"`
-	Role        model.Role     `json:"role"`
-	Certificate []byte         `json:"certificate"`
-}
-
 func (s *relayServer) Directs(ctx context.Context, endpoint model.Endpoint, role model.Role, cert *x509.Certificate, auth ClientAuthentication,
 	notify func(map[RelayID]*pbclient.DirectRelay) error) error {
 
-	signatureData, err := json.Marshal(directSignature{endpoint, role, cert.Raw})
+	signatureData, err := protobuf.Marshal(&pbrelay.ClientAuthentication{
+		Endpoint:    endpoint.PB(),
+		Role:        role.PB(),
+		Certificate: cert.Raw,
+	})
 	if err != nil {
 		return fmt.Errorf("signature data error: %w", err)
 	}
@@ -287,10 +285,10 @@ func (s *relayServer) Directs(ctx context.Context, endpoint model.Endpoint, role
 			return fmt.Errorf("auth allow error: %w", err)
 		} else if ok {
 			localDirectRelays[id] = &pbclient.DirectRelay{
-				Id:                relay.proto.Id,
-				Addresses:         relay.proto.Addresses,
-				ServerCertificate: relay.proto.ServerCertificate,
-				Authentication:    ed25519.Sign(relay.signKey, signatureData),
+				Id:                      relay.proto.Id,
+				Addresses:               relay.proto.Addresses,
+				ServerCertificate:       relay.proto.ServerCertificate,
+				AuthenticationSignature: ed25519.Sign(relay.signKey, signatureData),
 			}
 		}
 	}
@@ -313,10 +311,10 @@ func (s *relayServer) Directs(ctx context.Context, endpoint model.Endpoint, role
 				return fmt.Errorf("auth allow error: %w", err)
 			} else if ok {
 				localDirectRelays[msg.Key.ID] = &pbclient.DirectRelay{
-					Id:                msg.Key.ID.string,
-					Addresses:         model.PBsFromHostPorts(msg.Value.Hostports),
-					ServerCertificate: msg.Value.Certificate.Raw,
-					Authentication:    ed25519.Sign(msg.Value.AuthenticationSignKey, signatureData),
+					Id:                      msg.Key.ID.string,
+					Addresses:               model.PBsFromHostPorts(msg.Value.Hostports),
+					ServerCertificate:       msg.Value.Certificate.Raw,
+					AuthenticationSignature: ed25519.Sign(msg.Value.AuthenticationSignKey, signatureData),
 				}
 				changed = true
 			}

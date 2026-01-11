@@ -24,14 +24,14 @@ const (
 )
 
 type AuthenticateReq struct {
-	state          protoimpl.MessageState `protogen:"open.v1"`
-	Endpoint       *pbmodel.Endpoint      `protobuf:"bytes,1,opt,name=endpoint,proto3" json:"endpoint,omitempty"`
-	Role           pbmodel.Role           `protobuf:"varint,2,opt,name=role,proto3,enum=model.Role" json:"role,omitempty"`
-	Authentication []byte                 `protobuf:"bytes,3,opt,name=authentication,proto3" json:"authentication,omitempty"`
-	Metadata       string                 `protobuf:"bytes,4,opt,name=metadata,proto3" json:"metadata,omitempty"`
-	BuildVersion   string                 `protobuf:"bytes,5,opt,name=build_version,json=buildVersion,proto3" json:"build_version,omitempty"`
-	unknownFields  protoimpl.UnknownFields
-	sizeCache      protoimpl.SizeCache
+	state                   protoimpl.MessageState `protogen:"open.v1"`
+	Endpoint                *pbmodel.Endpoint      `protobuf:"bytes,1,opt,name=endpoint,proto3" json:"endpoint,omitempty"`
+	Role                    pbmodel.Role           `protobuf:"varint,2,opt,name=role,proto3,enum=model.Role" json:"role,omitempty"`
+	AuthenticationSignature []byte                 `protobuf:"bytes,3,opt,name=authentication_signature,json=authenticationSignature,proto3" json:"authentication_signature,omitempty"`
+	Metadata                string                 `protobuf:"bytes,4,opt,name=metadata,proto3" json:"metadata,omitempty"`
+	BuildVersion            string                 `protobuf:"bytes,5,opt,name=build_version,json=buildVersion,proto3" json:"build_version,omitempty"`
+	unknownFields           protoimpl.UnknownFields
+	sizeCache               protoimpl.SizeCache
 }
 
 func (x *AuthenticateReq) Reset() {
@@ -78,9 +78,9 @@ func (x *AuthenticateReq) GetRole() pbmodel.Role {
 	return pbmodel.Role(0)
 }
 
-func (x *AuthenticateReq) GetAuthentication() []byte {
+func (x *AuthenticateReq) GetAuthenticationSignature() []byte {
 	if x != nil {
-		return x.Authentication
+		return x.AuthenticationSignature
 	}
 	return nil
 }
@@ -147,11 +147,11 @@ var File_client_relay_proto protoreflect.FileDescriptor
 
 const file_client_relay_proto_rawDesc = "" +
 	"\n" +
-	"\x12client_relay.proto\x12\fclient_relay\x1a\verror.proto\x1a\vmodel.proto\"\xc8\x01\n" +
+	"\x12client_relay.proto\x12\fclient_relay\x1a\verror.proto\x1a\vmodel.proto\"\xdb\x01\n" +
 	"\x0fAuthenticateReq\x12+\n" +
 	"\bendpoint\x18\x01 \x01(\v2\x0f.model.EndpointR\bendpoint\x12\x1f\n" +
-	"\x04role\x18\x02 \x01(\x0e2\v.model.RoleR\x04role\x12&\n" +
-	"\x0eauthentication\x18\x03 \x01(\fR\x0eauthentication\x12\x1a\n" +
+	"\x04role\x18\x02 \x01(\x0e2\v.model.RoleR\x04role\x129\n" +
+	"\x18authentication_signature\x18\x03 \x01(\fR\x17authenticationSignature\x12\x1a\n" +
 	"\bmetadata\x18\x04 \x01(\tR\bmetadata\x12#\n" +
 	"\rbuild_version\x18\x05 \x01(\tR\fbuildVersion\"6\n" +
 	"\x10AuthenticateResp\x12\"\n" +

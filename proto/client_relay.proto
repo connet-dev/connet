@@ -9,7 +9,7 @@ option go_package = "github.com/connet-dev/connet/proto/pbclientrelay";
 message AuthenticateReq {
   model.Endpoint endpoint = 1;
   model.Role role = 2;
-  bytes authentication = 3;
+  bytes authentication_signature = 3;
   string metadata = 4;
   string build_version = 5;
 }

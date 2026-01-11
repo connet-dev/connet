@@ -296,11 +296,11 @@ func (ep *endpoint) runRelay(ctx context.Context, conn *quic.Conn) error {
 				return relayPeer{
 					proto: relay,
 					auth: &pbclientrelay.AuthenticateReq{
-						Endpoint:       ep.cfg.endpoint.PB(),
-						Role:           ep.cfg.role.PB(),
-						Authentication: relay.Authentication,
-						Metadata:       ep.client.metadata,
-						BuildVersion:   model.BuildVersion(),
+						Endpoint:                ep.cfg.endpoint.PB(),
+						Role:                    ep.cfg.role.PB(),
+						AuthenticationSignature: relay.AuthenticationSignature,
+						Metadata:                ep.client.metadata,
+						BuildVersion:            model.BuildVersion(),
 					},
 				}
 

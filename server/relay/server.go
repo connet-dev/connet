@@ -7,9 +7,7 @@ import (
 	"fmt"
 	"io"
 	"log/slog"
-	"maps"
 	"net"
-	"slices"
 	"time"
 
 	"github.com/connet-dev/connet/model"
@@ -138,9 +136,14 @@ type Status struct {
 }
 
 type EndpointStatus struct {
-	Endpoint     model.Endpoint `json:"endpoint"`
-	Destinations []string       `json:"destinations"`
-	Sources      []string       `json:"sources"`
+	Endpoint     model.Endpoint                   `json:"endpoint"`
+	Destinations map[model.Key]EndpointPeerStatus `json:"destinations"`
+	Sources      map[model.Key]EndpointPeerStatus `json:"sources"`
+}
+
+type EndpointPeerStatus struct {
+	Key      model.Key `json:"key"`
+	Metadata string    `json:"metadata"`
 }
 
 func (s *Server) Status(ctx context.Context) (Status, error) {
@@ -176,16 +179,43 @@ func (s *Server) getEndpoints() map[string]EndpointStatus {
 
 	endpoints := map[string]EndpointStatus{}
 	for ep, v := range s.clients.endpoints {
-		v.mu.RLock()
-		destinations := slices.Collect(maps.Keys(v.destinations))
-		sources := slices.Collect(maps.Keys(v.sources))
-		v.mu.RUnlock()
-
 		endpoints[ep.String()] = EndpointStatus{
 			Endpoint:     ep,
-			Destinations: iterc.MapSliceStrings(destinations),
-			Sources:      iterc.MapSliceStrings(sources),
+			Destinations: s.getDestinations(v),
+			Sources:      s.getSources(v),
 		}
 	}
 	return endpoints
+}
+
+func (s *Server) getDestinations(cls *endpointClients) map[model.Key]EndpointPeerStatus {
+	result := map[model.Key]EndpointPeerStatus{}
+
+	cls.mu.RLock()
+	defer cls.mu.RUnlock()
+
+	for k, dst := range cls.destinations {
+		result[k] = EndpointPeerStatus{
+			Key:      k,
+			Metadata: dst.auth.metadata,
+		}
+	}
+
+	return result
+}
+
+func (s *Server) getSources(cls *endpointClients) map[model.Key]EndpointPeerStatus {
+	result := map[model.Key]EndpointPeerStatus{}
+
+	cls.mu.RLock()
+	defer cls.mu.RUnlock()
+
+	for k, dst := range cls.sources {
+		result[k] = EndpointPeerStatus{
+			Key:      k,
+			Metadata: dst.auth.metadata,
+		}
+	}
+
+	return result
 }
