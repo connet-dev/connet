@@ -343,7 +343,14 @@ func (c *clientConn) authenticate(ctx context.Context) (*clientAuth, error) {
 
 	auth, err := c.server.direct(req, c.conn.ConnectionState().TLS.PeerCertificates[0])
 	if err != nil {
-		return nil, fmt.Errorf("authentication failed: %w", err)
+		perr := pberror.GetError(err)
+		if perr == nil {
+			perr = pberror.NewError(pberror.Code_AuthenticationFailed, "authentication failed: %v", err)
+		}
+		if err := proto.Write(authStream, &pbclientrelay.AuthenticateResp{Error: perr}); err != nil {
+			return nil, fmt.Errorf("client auth err write: %w", err)
+		}
+		return nil, fmt.Errorf("auth failed: %w", err)
 	}
 
 	if err := proto.Write(authStream, &pbclientrelay.AuthenticateResp{}); err != nil {

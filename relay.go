@@ -133,7 +133,10 @@ func (r *relay) connect(ctx context.Context, hp model.HostPort) (*quic.Conn, err
 		}
 	} else {
 		if err := r.authenticate(ctx, conn, cfg.auth); err != nil {
-			// TODO better error
+			if perr := pberror.GetError(err); perr != nil {
+				cerr := conn.CloseWithError(quic.ApplicationErrorCode(perr.Code), perr.Message)
+				return nil, errors.Join(perr, cerr)
+			}
 			cerr := conn.CloseWithError(quic.ApplicationErrorCode(pberror.Code_ConnectionCheckFailed), "connection check failed")
 			return nil, errors.Join(err, cerr)
 		}
