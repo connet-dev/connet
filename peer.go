@@ -16,6 +16,7 @@ import (
 
 	"github.com/connet-dev/connet/model"
 	"github.com/connet-dev/connet/pkg/certc"
+	"github.com/connet-dev/connet/pkg/iterc"
 	"github.com/connet-dev/connet/pkg/netc"
 	"github.com/connet-dev/connet/pkg/notify"
 	"github.com/connet-dev/connet/pkg/reliable"
@@ -401,6 +402,7 @@ type StatusRelayConnection struct {
 type StatusRemotePeer struct {
 	ID          string                       `json:"id"`
 	Metadata    string                       `json:"metadata"`
+	DirectAddrs []string                     `json:"direct-addresses"`
 	Connections []StatusRemotePeerConnection `json:"connections"`
 }
 
@@ -427,7 +429,13 @@ func (p *peer) status() (StatusPeer, error) {
 
 	if peers, ok := p.peers.Peek(); ok {
 		for _, peer := range peers {
-			stat.Peers[peer.Id] = StatusRemotePeer{ID: peer.Id, Metadata: peer.Metadata}
+			stat.Peers[peer.Id] = StatusRemotePeer{
+				ID:       peer.Id,
+				Metadata: peer.Metadata,
+				DirectAddrs: iterc.MapSlice(peer.Peer.Directs, func(addr *pbmodel.AddrPort) string {
+					return addr.AsNetip().String()
+				}),
+			}
 		}
 	}
 

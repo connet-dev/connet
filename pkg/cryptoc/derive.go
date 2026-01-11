@@ -2,6 +2,7 @@ package cryptoc
 
 import (
 	"crypto/ecdh"
+	"crypto/hkdf"
 	"hash"
 
 	"golang.org/x/crypto/blake2s"
@@ -22,10 +23,16 @@ func DeriveKeys(selfSecret *ecdh.PrivateKey, peerPublic *ecdh.PublicKey, initiat
 	if err != nil {
 		return nil, nil, err
 	}
-	ck = hkdf1(newhash, ck, dh)
+	ck, err = hkdf.Key(newhash, dh, ck, "", 32)
+	if err != nil {
+		return nil, nil, err
+	}
 
-	hk1, hk2 := hkdf2(newhash, ck, hk)
-	return hk1, hk2, nil
+	fk, err := hkdf.Key(newhash, hk, ck, "", 64)
+	if err != nil {
+		return nil, nil, err
+	}
+	return fk[:32], fk[32:], nil
 }
 
 func initck() ([]byte, []byte) {

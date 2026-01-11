@@ -430,6 +430,12 @@ type ClientStatus struct {
 	ServerAddr string `json:"server-address"`
 	// DirectAddr reports local direct connectsions server
 	DirectAddr string `json:"direct-address"`
+	// LocalAddrs reports the set of addresses this peer is reachable at, resolved locally
+	LocalAddrs []string `json:"local-addresses"`
+	// STUNAddrs reports the set of addresses this peer is reachable at, resolved from the control server/stun
+	STUNAddrs []string `json:"stun-addresses"`
+	// NATPMPAddrs reports the set of addresses this peer is reachable at, resolved from natpmp
+	NATPMPAddrs []string `json:"natpmp-addresses"`
 	// Status of each active destination for this client
 	Destinations map[model.Endpoint]DestinationStatus `json:"destinations"`
 	// Status of each active source for this client
@@ -450,11 +456,16 @@ func (c *Client) Status(ctx context.Context) (ClientStatus, error) {
 		return ClientStatus{}, err
 	}
 
+	addrs, _ := c.addrs.Peek()
+
 	return ClientStatus{
 		Status:       stat,
 		Metadata:     c.metadata,
 		ServerAddr:   c.controlAddr.String(),
 		DirectAddr:   c.directAddr.String(),
+		LocalAddrs:   iterc.MapSliceStrings(addrs.Local),
+		STUNAddrs:    iterc.MapSliceStrings(addrs.STUN),
+		NATPMPAddrs:  iterc.MapSliceStrings(addrs.PMP),
 		Destinations: dsts,
 		Sources:      srcs,
 	}, nil
