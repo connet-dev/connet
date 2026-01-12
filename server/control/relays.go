@@ -96,9 +96,9 @@ func newRelayServer(
 	directsCache := map[RelayID]directRelay{}
 	for _, msg := range directsMsgs {
 		directsCache[msg.Key.ID] = directRelay{
-			auth:    msg.Value.Authentication,
-			authKey: msg.Value.AuthenticationKey,
-			proto: &pbclient.DirectRelay{
+			auth:        msg.Value.Authentication,
+			authSealKey: msg.Value.AuthenticationSealKey,
+			template: &pbclient.DirectRelay{
 				Id:                msg.Key.ID.string,
 				Addresses:         model.PBsFromHostPorts(msg.Value.Hostports),
 				ServerCertificate: msg.Value.Certificate.Raw,
@@ -189,9 +189,9 @@ type relayServer struct {
 }
 
 type directRelay struct {
-	auth    RelayAuthentication
-	authKey *[32]byte
-	proto   *pbclient.DirectRelay
+	auth        RelayAuthentication
+	authSealKey *[32]byte
+	template    *pbclient.DirectRelay
 }
 
 func (s *relayServer) getEndpoint(endpoint model.Endpoint) (map[RelayID]relayCacheValue, int64) {
@@ -277,7 +277,7 @@ func (s *relayServer) Directs(ctx context.Context, endpoint model.Endpoint, role
 	if err != nil {
 		return fmt.Errorf("signature data error: %w", err)
 	}
-	authenticate := func(key *[32]byte) []byte {
+	seal := func(key *[32]byte) []byte {
 		var nonce [24]byte
 		if _, err := io.ReadFull(rand.Reader, nonce[:]); err != nil {
 			panic(err)
@@ -292,10 +292,10 @@ func (s *relayServer) Directs(ctx context.Context, endpoint model.Endpoint, role
 			return fmt.Errorf("auth allow error: %w", err)
 		} else if ok {
 			localDirectRelays[id] = &pbclient.DirectRelay{
-				Id:                relay.proto.Id,
-				Addresses:         relay.proto.Addresses,
-				ServerCertificate: relay.proto.ServerCertificate,
-				Authentication:    authenticate(relay.authKey),
+				Id:                relay.template.Id,
+				Addresses:         relay.template.Addresses,
+				ServerCertificate: relay.template.ServerCertificate,
+				Authentication:    seal(relay.authSealKey),
 			}
 		}
 	}
@@ -321,7 +321,7 @@ func (s *relayServer) Directs(ctx context.Context, endpoint model.Endpoint, role
 					Id:                msg.Key.ID.string,
 					Addresses:         model.PBsFromHostPorts(msg.Value.Hostports),
 					ServerCertificate: msg.Value.Certificate.Raw,
-					Authentication:    authenticate(msg.Value.AuthenticationKey),
+					Authentication:    seal(msg.Value.AuthenticationSealKey),
 				}
 				changed = true
 			}
@@ -468,9 +468,9 @@ func (s *relayServer) runDirectsCache(ctx context.Context) error {
 			delete(s.directsCache, msg.Key.ID)
 		} else {
 			s.directsCache[msg.Key.ID] = directRelay{
-				auth:    msg.Value.Authentication,
-				authKey: msg.Value.AuthenticationKey,
-				proto: &pbclient.DirectRelay{
+				auth:        msg.Value.Authentication,
+				authSealKey: msg.Value.AuthenticationSealKey,
+				template: &pbclient.DirectRelay{
 					Id:                msg.Key.ID.string,
 					Addresses:         model.PBsFromHostPorts(msg.Value.Hostports),
 					ServerCertificate: msg.Value.Certificate.Raw,

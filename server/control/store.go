@@ -122,28 +122,28 @@ type RelayConnValue struct {
 }
 
 type RelayDirectValue struct {
-	Authentication    RelayAuthentication `json:"authentication"`
-	Hostports         []model.HostPort    `json:"hostports"`
-	Metadata          string              `json:"metadata"`
-	Certificate       *x509.Certificate   `json:"certificate"`
-	AuthenticationKey *[32]byte           `json:"authentication-key"`
+	Authentication        RelayAuthentication `json:"authentication"`
+	Hostports             []model.HostPort    `json:"hostports"`
+	Metadata              string              `json:"metadata"`
+	Certificate           *x509.Certificate   `json:"certificate"`
+	AuthenticationSealKey *[32]byte           `json:"authentication-seal-key"`
 }
 
 type jsonRelayDirectValue struct {
-	Authentication    RelayAuthentication `json:"authentication"`
-	Hostports         []model.HostPort    `json:"hostports"`
-	Metadata          string              `json:"metadata"`
-	Certificate       []byte              `json:"certificate"`
-	AuthenticationKey []byte              `json:"authentication-key"`
+	Authentication        RelayAuthentication `json:"authentication"`
+	Hostports             []model.HostPort    `json:"hostports"`
+	Metadata              string              `json:"metadata"`
+	Certificate           []byte              `json:"certificate"`
+	AuthenticationSealKey []byte              `json:"authentication-seal-key"`
 }
 
 func (v RelayDirectValue) MarshalJSON() ([]byte, error) {
 	return json.Marshal(jsonRelayDirectValue{
-		Authentication:    v.Authentication,
-		Hostports:         v.Hostports,
-		Metadata:          v.Metadata,
-		Certificate:       v.Certificate.Raw,
-		AuthenticationKey: v.AuthenticationKey[:],
+		Authentication:        v.Authentication,
+		Hostports:             v.Hostports,
+		Metadata:              v.Metadata,
+		Certificate:           v.Certificate.Raw,
+		AuthenticationSealKey: v.AuthenticationSealKey[:],
 	})
 }
 
@@ -159,7 +159,7 @@ func (v *RelayDirectValue) UnmarshalJSON(b []byte) error {
 	}
 
 	var authKey [32]byte
-	copy(authKey[:], s.AuthenticationKey)
+	copy(authKey[:], s.AuthenticationSealKey)
 	*v = RelayDirectValue{s.Authentication, s.Hostports, s.Metadata, cert, &authKey}
 	return nil
 }

@@ -385,14 +385,16 @@ func (p *peer) getECDHPublicKey(cfg *pbconnect.ECDHConfiguration) (*ecdh.PublicK
 
 type StatusPeer struct {
 	// Relays show the status of each relay this peer is connected to
-	Relays map[string]StatusRelayConnection `json:"relays"`
+	Relays map[string]StatusRelay `json:"relays"`
 	// Peers shows the status of each peer this peer is connected to
 	Peers map[string]StatusRemotePeer `json:"peers"`
 }
 
-type StatusRelayConnection struct {
-	ID      string `json:"id"`
-	Address string `json:"address"`
+type StatusRelay struct {
+	ID         string   `json:"id"`
+	Hostports  []string `json:"hostports"`
+	Metadata   string   `json:"metadata"`
+	Connection string   `json:"connection"`
 }
 
 type StatusRemotePeer struct {
@@ -410,15 +412,25 @@ type StatusRemotePeerConnection struct {
 
 func (p *peer) status() (StatusPeer, error) {
 	stat := StatusPeer{
-		Relays: map[string]StatusRelayConnection{},
+		Relays: map[string]StatusRelay{},
 		Peers:  map[string]StatusRemotePeer{},
 	}
 
-	if relays, ok := p.relayConns.Peek(); ok {
-		for id, conn := range relays {
-			stat.Relays[string(id)] = StatusRelayConnection{
-				ID:      string(id),
-				Address: conn.RemoteAddr().String(),
+	if relays, ok := p.relays.Peek(); ok {
+		for _, relay := range relays {
+			stat.Relays[relay.Id] = StatusRelay{
+				ID: relay.Id,
+				// Metadata: relay.Metadata,
+				Hostports: iterc.MapSliceStrings(model.HostPortFromPBs(relay.Addresses)),
+			}
+		}
+	}
+
+	if relayConns, ok := p.relayConns.Peek(); ok {
+		for id, conn := range relayConns {
+			if v, ok := stat.Relays[string(id)]; ok {
+				v.Connection = conn.RemoteAddr().String()
+				stat.Relays[string(id)] = v
 			}
 		}
 	}

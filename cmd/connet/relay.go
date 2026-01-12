@@ -114,6 +114,7 @@ func relayRun(ctx context.Context, cfg RelayConfig, logger *slog.Logger) error {
 	for ix, ingressCfg := range cfg.Ingresses {
 		if ingressCfg.Addr == "" && !usedDefault {
 			ingressCfg.Addr = ":19191"
+			ingressCfg.Hostports = []string{"localhost:19191"}
 			usedDefault = true
 		}
 		if ingress, err := ingressCfg.parse(); err != nil {
