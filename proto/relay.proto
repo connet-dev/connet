@@ -13,13 +13,14 @@ message AuthenticateReq {
   string build_version = 4;
   string metadata = 6;
   bytes server_certificate = 7;
+  bytes relay_authentication_key = 8;
 }
 
 message AuthenticateResp {
   error.Error error = 1;
   string control_id = 2;
   bytes reconnect_token = 3;
-  bytes authentication_verify_key = 4;
+  bytes control_authentication_key = 4;
 }
 
 enum ChangeType {
@@ -65,5 +66,5 @@ message ServersResp {
 message ClientAuthentication {
   model.Endpoint endpoint = 1;
   model.Role role = 2;
-  bytes certificate = 3;
+  string certificate_key = 3;
 }

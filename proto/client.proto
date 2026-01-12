@@ -76,5 +76,5 @@ message DirectRelay {
   string id = 1; // relay id as assigned by the control server
   repeated model.HostPort addresses = 2;
   bytes server_certificate = 3; // generic certificate used by this relay
-  bytes authentication_signature = 4; // endpoint/role specific signature to use at the relay
+  bytes authentication = 4; // endpoint/role specific auth to use at the relay
 }

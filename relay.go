@@ -39,7 +39,7 @@ type relay struct {
 
 type relayConfig struct {
 	tls  *serverTLSConfig
-	auth *pbclientrelay.AuthenticateReq
+	auth []byte
 }
 
 func runRelay(ctx context.Context, local *peer, id relayID, hps []model.HostPort, cfg *relayConfig, logger *slog.Logger) *relay {
@@ -165,7 +165,7 @@ func (r *relay) check(ctx context.Context, conn *quic.Conn) error {
 	return nil
 }
 
-func (r *relay) authenticate(ctx context.Context, conn *quic.Conn, auth *pbclientrelay.AuthenticateReq) error {
+func (r *relay) authenticate(ctx context.Context, conn *quic.Conn, auth []byte) error {
 	stream, err := conn.OpenStreamSync(ctx)
 	if err != nil {
 		return err
@@ -176,7 +176,11 @@ func (r *relay) authenticate(ctx context.Context, conn *quic.Conn, auth *pbclien
 		}
 	}()
 
-	if err := proto.Write(stream, auth); err != nil {
+	if err := proto.Write(stream, &pbclientrelay.AuthenticateReq{
+		Authentication: auth,
+		Metadata:       r.local.metadata,
+		BuildVersion:   model.BuildVersion(),
+	}); err != nil {
 		return fmt.Errorf("cannot write auth request: %w", err)
 	}
 

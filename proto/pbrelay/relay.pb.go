@@ -73,15 +73,16 @@ func (ChangeType) EnumDescriptor() ([]byte, []int) {
 }
 
 type AuthenticateReq struct {
-	state             protoimpl.MessageState `protogen:"open.v1"`
-	Token             string                 `protobuf:"bytes,1,opt,name=token,proto3" json:"token,omitempty"`
-	Addresses         []*pbmodel.HostPort    `protobuf:"bytes,5,rep,name=addresses,proto3" json:"addresses,omitempty"`
-	ReconnectToken    []byte                 `protobuf:"bytes,3,opt,name=reconnect_token,json=reconnectToken,proto3" json:"reconnect_token,omitempty"`
-	BuildVersion      string                 `protobuf:"bytes,4,opt,name=build_version,json=buildVersion,proto3" json:"build_version,omitempty"`
-	Metadata          string                 `protobuf:"bytes,6,opt,name=metadata,proto3" json:"metadata,omitempty"`
-	ServerCertificate []byte                 `protobuf:"bytes,7,opt,name=server_certificate,json=serverCertificate,proto3" json:"server_certificate,omitempty"`
-	unknownFields     protoimpl.UnknownFields
-	sizeCache         protoimpl.SizeCache
+	state                  protoimpl.MessageState `protogen:"open.v1"`
+	Token                  string                 `protobuf:"bytes,1,opt,name=token,proto3" json:"token,omitempty"`
+	Addresses              []*pbmodel.HostPort    `protobuf:"bytes,5,rep,name=addresses,proto3" json:"addresses,omitempty"`
+	ReconnectToken         []byte                 `protobuf:"bytes,3,opt,name=reconnect_token,json=reconnectToken,proto3" json:"reconnect_token,omitempty"`
+	BuildVersion           string                 `protobuf:"bytes,4,opt,name=build_version,json=buildVersion,proto3" json:"build_version,omitempty"`
+	Metadata               string                 `protobuf:"bytes,6,opt,name=metadata,proto3" json:"metadata,omitempty"`
+	ServerCertificate      []byte                 `protobuf:"bytes,7,opt,name=server_certificate,json=serverCertificate,proto3" json:"server_certificate,omitempty"`
+	RelayAuthenticationKey []byte                 `protobuf:"bytes,8,opt,name=relay_authentication_key,json=relayAuthenticationKey,proto3" json:"relay_authentication_key,omitempty"`
+	unknownFields          protoimpl.UnknownFields
+	sizeCache              protoimpl.SizeCache
 }
 
 func (x *AuthenticateReq) Reset() {
@@ -156,14 +157,21 @@ func (x *AuthenticateReq) GetServerCertificate() []byte {
 	return nil
 }
 
+func (x *AuthenticateReq) GetRelayAuthenticationKey() []byte {
+	if x != nil {
+		return x.RelayAuthenticationKey
+	}
+	return nil
+}
+
 type AuthenticateResp struct {
-	state                   protoimpl.MessageState `protogen:"open.v1"`
-	Error                   *pberror.Error         `protobuf:"bytes,1,opt,name=error,proto3" json:"error,omitempty"`
-	ControlId               string                 `protobuf:"bytes,2,opt,name=control_id,json=controlId,proto3" json:"control_id,omitempty"`
-	ReconnectToken          []byte                 `protobuf:"bytes,3,opt,name=reconnect_token,json=reconnectToken,proto3" json:"reconnect_token,omitempty"`
-	AuthenticationVerifyKey []byte                 `protobuf:"bytes,4,opt,name=authentication_verify_key,json=authenticationVerifyKey,proto3" json:"authentication_verify_key,omitempty"`
-	unknownFields           protoimpl.UnknownFields
-	sizeCache               protoimpl.SizeCache
+	state                    protoimpl.MessageState `protogen:"open.v1"`
+	Error                    *pberror.Error         `protobuf:"bytes,1,opt,name=error,proto3" json:"error,omitempty"`
+	ControlId                string                 `protobuf:"bytes,2,opt,name=control_id,json=controlId,proto3" json:"control_id,omitempty"`
+	ReconnectToken           []byte                 `protobuf:"bytes,3,opt,name=reconnect_token,json=reconnectToken,proto3" json:"reconnect_token,omitempty"`
+	ControlAuthenticationKey []byte                 `protobuf:"bytes,4,opt,name=control_authentication_key,json=controlAuthenticationKey,proto3" json:"control_authentication_key,omitempty"`
+	unknownFields            protoimpl.UnknownFields
+	sizeCache                protoimpl.SizeCache
 }
 
 func (x *AuthenticateResp) Reset() {
@@ -217,9 +225,9 @@ func (x *AuthenticateResp) GetReconnectToken() []byte {
 	return nil
 }
 
-func (x *AuthenticateResp) GetAuthenticationVerifyKey() []byte {
+func (x *AuthenticateResp) GetControlAuthenticationKey() []byte {
 	if x != nil {
-		return x.AuthenticationVerifyKey
+		return x.ControlAuthenticationKey
 	}
 	return nil
 }
@@ -433,12 +441,12 @@ func (x *ServersResp) GetRestart() bool {
 }
 
 type ClientAuthentication struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Endpoint      *pbmodel.Endpoint      `protobuf:"bytes,1,opt,name=endpoint,proto3" json:"endpoint,omitempty"`
-	Role          pbmodel.Role           `protobuf:"varint,2,opt,name=role,proto3,enum=model.Role" json:"role,omitempty"`
-	Certificate   []byte                 `protobuf:"bytes,3,opt,name=certificate,proto3" json:"certificate,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	state          protoimpl.MessageState `protogen:"open.v1"`
+	Endpoint       *pbmodel.Endpoint      `protobuf:"bytes,1,opt,name=endpoint,proto3" json:"endpoint,omitempty"`
+	Role           pbmodel.Role           `protobuf:"varint,2,opt,name=role,proto3,enum=model.Role" json:"role,omitempty"`
+	CertificateKey string                 `protobuf:"bytes,3,opt,name=certificate_key,json=certificateKey,proto3" json:"certificate_key,omitempty"`
+	unknownFields  protoimpl.UnknownFields
+	sizeCache      protoimpl.SizeCache
 }
 
 func (x *ClientAuthentication) Reset() {
@@ -485,11 +493,11 @@ func (x *ClientAuthentication) GetRole() pbmodel.Role {
 	return pbmodel.Role(0)
 }
 
-func (x *ClientAuthentication) GetCertificate() []byte {
+func (x *ClientAuthentication) GetCertificateKey() string {
 	if x != nil {
-		return x.Certificate
+		return x.CertificateKey
 	}
-	return nil
+	return ""
 }
 
 type ClientsResp_Change struct {
@@ -632,20 +640,21 @@ var File_relay_proto protoreflect.FileDescriptor
 
 const file_relay_proto_rawDesc = "" +
 	"\n" +
-	"\vrelay.proto\x12\x05relay\x1a\verror.proto\x1a\vmodel.proto\"\xef\x01\n" +
+	"\vrelay.proto\x12\x05relay\x1a\verror.proto\x1a\vmodel.proto\"\xa9\x02\n" +
 	"\x0fAuthenticateReq\x12\x14\n" +
 	"\x05token\x18\x01 \x01(\tR\x05token\x12-\n" +
 	"\taddresses\x18\x05 \x03(\v2\x0f.model.HostPortR\taddresses\x12'\n" +
 	"\x0freconnect_token\x18\x03 \x01(\fR\x0ereconnectToken\x12#\n" +
 	"\rbuild_version\x18\x04 \x01(\tR\fbuildVersion\x12\x1a\n" +
 	"\bmetadata\x18\x06 \x01(\tR\bmetadata\x12-\n" +
-	"\x12server_certificate\x18\a \x01(\fR\x11serverCertificate\"\xba\x01\n" +
+	"\x12server_certificate\x18\a \x01(\fR\x11serverCertificate\x128\n" +
+	"\x18relay_authentication_key\x18\b \x01(\fR\x16relayAuthenticationKey\"\xbc\x01\n" +
 	"\x10AuthenticateResp\x12\"\n" +
 	"\x05error\x18\x01 \x01(\v2\f.error.ErrorR\x05error\x12\x1d\n" +
 	"\n" +
 	"control_id\x18\x02 \x01(\tR\tcontrolId\x12'\n" +
-	"\x0freconnect_token\x18\x03 \x01(\fR\x0ereconnectToken\x12:\n" +
-	"\x19authentication_verify_key\x18\x04 \x01(\fR\x17authenticationVerifyKey\"$\n" +
+	"\x0freconnect_token\x18\x03 \x01(\fR\x0ereconnectToken\x12<\n" +
+	"\x1acontrol_authentication_key\x18\x04 \x01(\fR\x18controlAuthenticationKey\"$\n" +
 	"\n" +
 	"ClientsReq\x12\x16\n" +
 	"\x06offset\x18\x01 \x01(\x03R\x06offset\"\xc3\x02\n" +
@@ -669,11 +678,11 @@ const file_relay_proto_rawDesc = "" +
 	"\x06Change\x12)\n" +
 	"\x06change\x18\x01 \x01(\x0e2\x11.relay.ChangeTypeR\x06change\x12+\n" +
 	"\bendpoint\x18\x02 \x01(\v2\x0f.model.EndpointR\bendpoint\x12-\n" +
-	"\x12server_certificate\x18\x03 \x01(\fR\x11serverCertificate\"\x86\x01\n" +
+	"\x12server_certificate\x18\x03 \x01(\fR\x11serverCertificate\"\x8d\x01\n" +
 	"\x14ClientAuthentication\x12+\n" +
 	"\bendpoint\x18\x01 \x01(\v2\x0f.model.EndpointR\bendpoint\x12\x1f\n" +
-	"\x04role\x18\x02 \x01(\x0e2\v.model.RoleR\x04role\x12 \n" +
-	"\vcertificate\x18\x03 \x01(\fR\vcertificate*=\n" +
+	"\x04role\x18\x02 \x01(\x0e2\v.model.RoleR\x04role\x12'\n" +
+	"\x0fcertificate_key\x18\x03 \x01(\tR\x0ecertificateKey*=\n" +
 	"\n" +
 	"ChangeType\x12\x11\n" +
 	"\rChangeUnknown\x10\x00\x12\r\n" +

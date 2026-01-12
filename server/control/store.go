@@ -1,7 +1,6 @@
 package control
 
 import (
-	"crypto/ed25519"
 	"crypto/x509"
 	"encoding/json"
 	"path/filepath"
@@ -123,28 +122,28 @@ type RelayConnValue struct {
 }
 
 type RelayDirectValue struct {
-	Authentication        RelayAuthentication `json:"authentication"`
-	Hostports             []model.HostPort    `json:"hostports"`
-	Metadata              string              `json:"metadata"`
-	Certificate           *x509.Certificate   `json:"certificate"`
-	AuthenticationSignKey ed25519.PrivateKey  `json:"authentication-sign-key"`
+	Authentication    RelayAuthentication `json:"authentication"`
+	Hostports         []model.HostPort    `json:"hostports"`
+	Metadata          string              `json:"metadata"`
+	Certificate       *x509.Certificate   `json:"certificate"`
+	AuthenticationKey *[32]byte           `json:"authentication-key"`
 }
 
 type jsonRelayDirectValue struct {
-	Authentication        RelayAuthentication `json:"authentication"`
-	Hostports             []model.HostPort    `json:"hostports"`
-	Metadata              string              `json:"metadata"`
-	Certificate           []byte              `json:"certificate"`
-	AuthenticationSignKey []byte              `json:"authentication-sign-key"`
+	Authentication    RelayAuthentication `json:"authentication"`
+	Hostports         []model.HostPort    `json:"hostports"`
+	Metadata          string              `json:"metadata"`
+	Certificate       []byte              `json:"certificate"`
+	AuthenticationKey []byte              `json:"authentication-key"`
 }
 
 func (v RelayDirectValue) MarshalJSON() ([]byte, error) {
 	return json.Marshal(jsonRelayDirectValue{
-		Authentication:        v.Authentication,
-		Hostports:             v.Hostports,
-		Metadata:              v.Metadata,
-		Certificate:           v.Certificate.Raw,
-		AuthenticationSignKey: v.AuthenticationSignKey,
+		Authentication:    v.Authentication,
+		Hostports:         v.Hostports,
+		Metadata:          v.Metadata,
+		Certificate:       v.Certificate.Raw,
+		AuthenticationKey: v.AuthenticationKey[:],
 	})
 }
 
@@ -159,7 +158,9 @@ func (v *RelayDirectValue) UnmarshalJSON(b []byte) error {
 		return err
 	}
 
-	*v = RelayDirectValue{s.Authentication, s.Hostports, s.Metadata, cert, s.AuthenticationSignKey}
+	var authKey [32]byte
+	copy(authKey[:], s.AuthenticationKey)
+	*v = RelayDirectValue{s.Authentication, s.Hostports, s.Metadata, cert, &authKey}
 	return nil
 }
 

@@ -2,16 +2,13 @@ syntax = "proto3";
 package client_relay;
 
 import "error.proto";
-import "model.proto";
 
 option go_package = "github.com/connet-dev/connet/proto/pbclientrelay";
 
 message AuthenticateReq {
-  model.Endpoint endpoint = 1;
-  model.Role role = 2;
-  bytes authentication_signature = 3;
-  string metadata = 4;
-  string build_version = 5;
+  bytes authentication = 1;
+  string metadata = 2;
+  string build_version = 3;
 }
 
 message AuthenticateResp {

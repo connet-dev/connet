@@ -2,7 +2,7 @@ package relay
 
 import (
 	"context"
-	"crypto/ed25519"
+	"crypto/rand"
 	"crypto/tls"
 	"crypto/x509"
 	"errors"
@@ -28,6 +28,7 @@ import (
 	"github.com/connet-dev/connet/proto/pbrelay"
 	"github.com/klev-dev/klevdb"
 	"github.com/quic-go/quic-go"
+	"golang.org/x/crypto/nacl/box"
 	protobuf "google.golang.org/protobuf/proto"
 )
 
@@ -53,8 +54,7 @@ type controlClient struct {
 	clientsStreamOffset int64
 	clientsLogOffset    int64
 
-	directVerifyKey   ed25519.PublicKey
-	directVerifyKeyMu sync.RWMutex
+	directUnsealKey atomic.Pointer[[32]byte]
 
 	connStatus atomic.Value
 	logger     *slog.Logger
@@ -180,27 +180,27 @@ func (s *controlClient) v1Auth(serverName string, certs []*x509.Certificate) *cl
 }
 
 func (s *controlClient) v2Auth(authReq *pbclientrelay.AuthenticateReq, cert *x509.Certificate) (*clientAuth, error) {
-	signatureData, err := protobuf.Marshal(&pbrelay.ClientAuthentication{
-		Endpoint:    authReq.Endpoint,
-		Role:        authReq.Role,
-		Certificate: cert.Raw,
-	})
-	if err != nil {
-		return nil, fmt.Errorf("signature data error: %w", err)
-	}
-
-	s.directVerifyKeyMu.RLock()
-	directVerifyKey := s.directVerifyKey
-	s.directVerifyKeyMu.RUnlock()
-
-	if directVerifyKey == nil {
+	directUnsealKey := s.directUnsealKey.Load()
+	if directUnsealKey == nil {
 		return nil, fmt.Errorf("no control verification key")
 	}
 
-	if !ed25519.Verify(directVerifyKey, signatureData, authReq.AuthenticationSignature) {
-		return nil, pberror.NewError(pberror.Code_AuthenticationFailed, "could not verify authentication")
+	var decryptNonce [24]byte
+	copy(decryptNonce[:], authReq.Authentication[:24])
+	authData, ok := box.OpenAfterPrecomputation(nil, authReq.Authentication[24:], &decryptNonce, directUnsealKey)
+	if !ok {
+		return nil, pberror.NewError(pberror.Code_AuthenticationFailed, "invalid authentication")
 	}
-	return &clientAuth{model.EndpointFromPB(authReq.Endpoint), model.RoleFromPB(authReq.Role), model.NewKey(cert), model.ConnectRelayV02, authReq.Metadata}, nil
+	var auth pbrelay.ClientAuthentication
+	if err := protobuf.Unmarshal(authData, &auth); err != nil {
+		return nil, pberror.NewError(pberror.Code_AuthenticationFailed, "invalid authentication data")
+	}
+	certKey := model.NewKey(cert)
+	if auth.CertificateKey != certKey.String() {
+		return nil, pberror.NewError(pberror.Code_AuthenticationFailed, "invalid certificate")
+	}
+
+	return &clientAuth{model.EndpointFromPB(auth.Endpoint), model.RoleFromPB(auth.Role), certKey, model.ConnectRelayV02, authReq.Metadata}, nil
 }
 
 type TransportsFn func(ctx context.Context) ([]*quic.Transport, error)
@@ -283,18 +283,25 @@ func (s *controlClient) connectSingle(ctx context.Context, transport *quic.Trans
 
 	protocol := model.GetRelayControlNextProto(conn)
 
-	var serverCert []byte
+	var serverCert, relayAuthKey []byte
+	var pk, sk *[32]byte
 	if protocol == model.RelayControlV03 {
 		serverCert = s.direct.Raw()
+		pk, sk, err = box.GenerateKey(rand.Reader)
+		if err != nil {
+			return nil, fmt.Errorf("could not create keys: %w", err)
+		}
+		relayAuthKey = pk[:]
 	}
 
 	if err := proto.Write(authStream, &pbrelay.AuthenticateReq{
-		Token:             s.controlToken,
-		Addresses:         model.PBsFromHostPorts(s.hostports),
-		ReconnectToken:    reconnConfig.Bytes,
-		BuildVersion:      model.BuildVersion(),
-		Metadata:          s.metadata,
-		ServerCertificate: serverCert,
+		Token:                  s.controlToken,
+		Addresses:              model.PBsFromHostPorts(s.hostports),
+		ReconnectToken:         reconnConfig.Bytes,
+		BuildVersion:           model.BuildVersion(),
+		Metadata:               s.metadata,
+		ServerCertificate:      serverCert,
+		RelayAuthenticationKey: relayAuthKey,
 	}); err != nil {
 		return nil, fmt.Errorf("auth write error: %w", err)
 	}
@@ -325,9 +332,14 @@ func (s *controlClient) connectSingle(ctx context.Context, transport *quic.Trans
 	}
 
 	if protocol == model.RelayControlV03 {
-		s.directVerifyKeyMu.Lock()
-		s.directVerifyKey = resp.AuthenticationVerifyKey
-		s.directVerifyKeyMu.Unlock()
+		if len(resp.ControlAuthenticationKey) != 32 {
+			return nil, fmt.Errorf("invalid control auth key length")
+		}
+		var controlPk [32]byte
+		copy(controlPk[:], resp.ControlAuthenticationKey)
+		var sharedKey [32]byte
+		box.Precompute(&sharedKey, &controlPk, sk)
+		s.directUnsealKey.Store(&sharedKey)
 	}
 
 	return conn, nil

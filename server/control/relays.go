@@ -2,7 +2,6 @@ package control
 
 import (
 	"context"
-	"crypto/ed25519"
 	"crypto/rand"
 	"crypto/x509"
 	"errors"
@@ -25,6 +24,7 @@ import (
 	"github.com/connet-dev/connet/proto/pberror"
 	"github.com/connet-dev/connet/proto/pbrelay"
 	"github.com/quic-go/quic-go"
+	"golang.org/x/crypto/nacl/box"
 	protobuf "google.golang.org/protobuf/proto"
 )
 
@@ -97,7 +97,7 @@ func newRelayServer(
 	for _, msg := range directsMsgs {
 		directsCache[msg.Key.ID] = directRelay{
 			auth:    msg.Value.Authentication,
-			signKey: msg.Value.AuthenticationSignKey,
+			authKey: msg.Value.AuthenticationKey,
 			proto: &pbclient.DirectRelay{
 				Id:                msg.Key.ID.string,
 				Addresses:         model.PBsFromHostPorts(msg.Value.Hostports),
@@ -190,7 +190,7 @@ type relayServer struct {
 
 type directRelay struct {
 	auth    RelayAuthentication
-	signKey ed25519.PrivateKey
+	authKey *[32]byte
 	proto   *pbclient.DirectRelay
 }
 
@@ -270,9 +270,9 @@ func (s *relayServer) Directs(ctx context.Context, endpoint model.Endpoint, role
 	notify func(map[RelayID]*pbclient.DirectRelay) error) error {
 
 	signatureData, err := protobuf.Marshal(&pbrelay.ClientAuthentication{
-		Endpoint:    endpoint.PB(),
-		Role:        role.PB(),
-		Certificate: cert.Raw,
+		Endpoint:       endpoint.PB(),
+		Role:           role.PB(),
+		CertificateKey: model.NewKey(cert).String(),
 	})
 	if err != nil {
 		return fmt.Errorf("signature data error: %w", err)
@@ -284,11 +284,16 @@ func (s *relayServer) Directs(ctx context.Context, endpoint model.Endpoint, role
 		if ok, err := s.auth.Allow(relay.auth, auth, endpoint); err != nil {
 			return fmt.Errorf("auth allow error: %w", err)
 		} else if ok {
+			var nonce [24]byte
+			if _, err := io.ReadFull(rand.Reader, nonce[:]); err != nil {
+				panic(err)
+			}
+			auth := box.SealAfterPrecomputation(nonce[:], signatureData, &nonce, relay.authKey)
 			localDirectRelays[id] = &pbclient.DirectRelay{
-				Id:                      relay.proto.Id,
-				Addresses:               relay.proto.Addresses,
-				ServerCertificate:       relay.proto.ServerCertificate,
-				AuthenticationSignature: ed25519.Sign(relay.signKey, signatureData),
+				Id:                relay.proto.Id,
+				Addresses:         relay.proto.Addresses,
+				ServerCertificate: relay.proto.ServerCertificate,
+				Authentication:    auth,
 			}
 		}
 	}
@@ -310,11 +315,16 @@ func (s *relayServer) Directs(ctx context.Context, endpoint model.Endpoint, role
 			} else if ok, err := s.auth.Allow(msg.Value.Authentication, auth, endpoint); err != nil {
 				return fmt.Errorf("auth allow error: %w", err)
 			} else if ok {
+				var nonce [24]byte
+				if _, err := io.ReadFull(rand.Reader, nonce[:]); err != nil {
+					panic(err)
+				}
+				auth := box.SealAfterPrecomputation(nonce[:], signatureData, &nonce, msg.Value.AuthenticationKey)
 				localDirectRelays[msg.Key.ID] = &pbclient.DirectRelay{
-					Id:                      msg.Key.ID.string,
-					Addresses:               model.PBsFromHostPorts(msg.Value.Hostports),
-					ServerCertificate:       msg.Value.Certificate.Raw,
-					AuthenticationSignature: ed25519.Sign(msg.Value.AuthenticationSignKey, signatureData),
+					Id:                msg.Key.ID.string,
+					Addresses:         model.PBsFromHostPorts(msg.Value.Hostports),
+					ServerCertificate: msg.Value.Certificate.Raw,
+					Authentication:    auth,
 				}
 				changed = true
 			}
@@ -462,7 +472,7 @@ func (s *relayServer) runDirectsCache(ctx context.Context) error {
 		} else {
 			s.directsCache[msg.Key.ID] = directRelay{
 				auth:    msg.Value.Authentication,
-				signKey: msg.Value.AuthenticationSignKey,
+				authKey: msg.Value.AuthenticationKey,
 				proto: &pbclient.DirectRelay{
 					Id:                msg.Key.ID.string,
 					Addresses:         model.PBsFromHostPorts(msg.Value.Hostports),
@@ -526,7 +536,7 @@ type relayConnAuth struct {
 	metadata    string
 	protocol    model.RelayControlNextProto
 	certificate *x509.Certificate
-	signKey     ed25519.PrivateKey
+	authKey     *[32]byte
 }
 
 func (c *relayConn) run(ctx context.Context) {
@@ -584,7 +594,7 @@ func (c *relayConn) runErr(ctx context.Context) error {
 
 	if c.protocol == model.RelayControlV03 {
 		key := RelayConnKey{ID: c.id}
-		value := RelayDirectValue{c.auth, c.hostports, c.metadata, c.certificate, c.signKey}
+		value := RelayDirectValue{c.auth, c.hostports, c.metadata, c.certificate, c.authKey}
 		if err := c.server.directs.Put(key, value); err != nil {
 			return err
 		}
@@ -664,13 +674,11 @@ func (c *relayConn) authenticate(ctx context.Context) (*relayConnAuth, error) {
 		id = sid
 	}
 
-	var (
-		pk ed25519.PublicKey
-		sk ed25519.PrivateKey
-	)
+	var controlAuthKey []byte
+	var sharedKey [32]byte
 	if protocol != model.RelayControlV02 {
 		// old relays do not support direct relays, so need to generate keys
-		pk, sk, err = ed25519.GenerateKey(rand.Reader)
+		pk, sk, err := box.GenerateKey(rand.Reader)
 		if err != nil {
 			perr := pberror.NewError(pberror.Code_AuthenticationFailed, "authentication failed: %v", err)
 			if err := proto.Write(authStream, &pbrelay.AuthenticateResp{Error: perr}); err != nil {
@@ -678,6 +686,11 @@ func (c *relayConn) authenticate(ctx context.Context) (*relayConnAuth, error) {
 			}
 			return nil, fmt.Errorf("auth failed: %w", perr)
 		}
+		controlAuthKey = pk[:]
+
+		var relayPk [32]byte
+		copy(relayPk[:], req.RelayAuthenticationKey)
+		box.Precompute(&sharedKey, &relayPk, sk)
 	}
 
 	retoken, err := c.server.reconnect.sealRelayID(id)
@@ -686,16 +699,16 @@ func (c *relayConn) authenticate(ctx context.Context) (*relayConnAuth, error) {
 		retoken = nil
 	}
 	if err := proto.Write(authStream, &pbrelay.AuthenticateResp{
-		ControlId:               c.server.id,
-		ReconnectToken:          retoken,
-		AuthenticationVerifyKey: pk,
+		ControlId:                c.server.id,
+		ReconnectToken:           retoken,
+		ControlAuthenticationKey: controlAuthKey,
 	}); err != nil {
 		return nil, fmt.Errorf("auth write response: %w", err)
 	}
 
 	c.logger.Debug("authentication completed", "local", c.conn.LocalAddr(), "remote", c.conn.RemoteAddr(), "proto", protocol, "build", req.BuildVersion)
 	hostports := model.HostPortFromPBs(req.Addresses)
-	return &relayConnAuth{id, auth, hostports, req.Metadata, protocol, cert, sk}, nil
+	return &relayConnAuth{id, auth, hostports, req.Metadata, protocol, cert, &sharedKey}, nil
 }
 
 func (c *relayConn) runRelayClients(ctx context.Context) error {

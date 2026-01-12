@@ -8,7 +8,6 @@ package pbclientrelay
 
 import (
 	pberror "github.com/connet-dev/connet/proto/pberror"
-	pbmodel "github.com/connet-dev/connet/proto/pbmodel"
 	protoreflect "google.golang.org/protobuf/reflect/protoreflect"
 	protoimpl "google.golang.org/protobuf/runtime/protoimpl"
 	reflect "reflect"
@@ -24,14 +23,12 @@ const (
 )
 
 type AuthenticateReq struct {
-	state                   protoimpl.MessageState `protogen:"open.v1"`
-	Endpoint                *pbmodel.Endpoint      `protobuf:"bytes,1,opt,name=endpoint,proto3" json:"endpoint,omitempty"`
-	Role                    pbmodel.Role           `protobuf:"varint,2,opt,name=role,proto3,enum=model.Role" json:"role,omitempty"`
-	AuthenticationSignature []byte                 `protobuf:"bytes,3,opt,name=authentication_signature,json=authenticationSignature,proto3" json:"authentication_signature,omitempty"`
-	Metadata                string                 `protobuf:"bytes,4,opt,name=metadata,proto3" json:"metadata,omitempty"`
-	BuildVersion            string                 `protobuf:"bytes,5,opt,name=build_version,json=buildVersion,proto3" json:"build_version,omitempty"`
-	unknownFields           protoimpl.UnknownFields
-	sizeCache               protoimpl.SizeCache
+	state          protoimpl.MessageState `protogen:"open.v1"`
+	Authentication []byte                 `protobuf:"bytes,1,opt,name=authentication,proto3" json:"authentication,omitempty"`
+	Metadata       string                 `protobuf:"bytes,2,opt,name=metadata,proto3" json:"metadata,omitempty"`
+	BuildVersion   string                 `protobuf:"bytes,3,opt,name=build_version,json=buildVersion,proto3" json:"build_version,omitempty"`
+	unknownFields  protoimpl.UnknownFields
+	sizeCache      protoimpl.SizeCache
 }
 
 func (x *AuthenticateReq) Reset() {
@@ -64,23 +61,9 @@ func (*AuthenticateReq) Descriptor() ([]byte, []int) {
 	return file_client_relay_proto_rawDescGZIP(), []int{0}
 }
 
-func (x *AuthenticateReq) GetEndpoint() *pbmodel.Endpoint {
+func (x *AuthenticateReq) GetAuthentication() []byte {
 	if x != nil {
-		return x.Endpoint
-	}
-	return nil
-}
-
-func (x *AuthenticateReq) GetRole() pbmodel.Role {
-	if x != nil {
-		return x.Role
-	}
-	return pbmodel.Role(0)
-}
-
-func (x *AuthenticateReq) GetAuthenticationSignature() []byte {
-	if x != nil {
-		return x.AuthenticationSignature
+		return x.Authentication
 	}
 	return nil
 }
@@ -147,13 +130,11 @@ var File_client_relay_proto protoreflect.FileDescriptor
 
 const file_client_relay_proto_rawDesc = "" +
 	"\n" +
-	"\x12client_relay.proto\x12\fclient_relay\x1a\verror.proto\x1a\vmodel.proto\"\xdb\x01\n" +
-	"\x0fAuthenticateReq\x12+\n" +
-	"\bendpoint\x18\x01 \x01(\v2\x0f.model.EndpointR\bendpoint\x12\x1f\n" +
-	"\x04role\x18\x02 \x01(\x0e2\v.model.RoleR\x04role\x129\n" +
-	"\x18authentication_signature\x18\x03 \x01(\fR\x17authenticationSignature\x12\x1a\n" +
-	"\bmetadata\x18\x04 \x01(\tR\bmetadata\x12#\n" +
-	"\rbuild_version\x18\x05 \x01(\tR\fbuildVersion\"6\n" +
+	"\x12client_relay.proto\x12\fclient_relay\x1a\verror.proto\"z\n" +
+	"\x0fAuthenticateReq\x12&\n" +
+	"\x0eauthentication\x18\x01 \x01(\fR\x0eauthentication\x12\x1a\n" +
+	"\bmetadata\x18\x02 \x01(\tR\bmetadata\x12#\n" +
+	"\rbuild_version\x18\x03 \x01(\tR\fbuildVersion\"6\n" +
 	"\x10AuthenticateResp\x12\"\n" +
 	"\x05error\x18\x01 \x01(\v2\f.error.ErrorR\x05errorB2Z0github.com/connet-dev/connet/proto/pbclientrelayb\x06proto3"
 
@@ -173,19 +154,15 @@ var file_client_relay_proto_msgTypes = make([]protoimpl.MessageInfo, 2)
 var file_client_relay_proto_goTypes = []any{
 	(*AuthenticateReq)(nil),  // 0: client_relay.AuthenticateReq
 	(*AuthenticateResp)(nil), // 1: client_relay.AuthenticateResp
-	(*pbmodel.Endpoint)(nil), // 2: model.Endpoint
-	(pbmodel.Role)(0),        // 3: model.Role
-	(*pberror.Error)(nil),    // 4: error.Error
+	(*pberror.Error)(nil),    // 2: error.Error
 }
 var file_client_relay_proto_depIdxs = []int32{
-	2, // 0: client_relay.AuthenticateReq.endpoint:type_name -> model.Endpoint
-	3, // 1: client_relay.AuthenticateReq.role:type_name -> model.Role
-	4, // 2: client_relay.AuthenticateResp.error:type_name -> error.Error
-	3, // [3:3] is the sub-list for method output_type
-	3, // [3:3] is the sub-list for method input_type
-	3, // [3:3] is the sub-list for extension type_name
-	3, // [3:3] is the sub-list for extension extendee
-	0, // [0:3] is the sub-list for field type_name
+	2, // 0: client_relay.AuthenticateResp.error:type_name -> error.Error
+	1, // [1:1] is the sub-list for method output_type
+	1, // [1:1] is the sub-list for method input_type
+	1, // [1:1] is the sub-list for extension type_name
+	1, // [1:1] is the sub-list for extension extendee
+	0, // [0:1] is the sub-list for field type_name
 }
 
 func init() { file_client_relay_proto_init() }
