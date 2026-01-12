@@ -269,13 +269,20 @@ func (s *relayServer) cachedDirects() (map[RelayID]directRelay, int64) {
 func (s *relayServer) Directs(ctx context.Context, endpoint model.Endpoint, role model.Role, cert *x509.Certificate, auth ClientAuthentication,
 	notify func(map[RelayID]*pbclient.DirectRelay) error) error {
 
-	signatureData, err := protobuf.Marshal(&pbrelay.ClientAuthentication{
+	authenticationData, err := protobuf.Marshal(&pbrelay.ClientAuthentication{
 		Endpoint:       endpoint.PB(),
 		Role:           role.PB(),
 		CertificateKey: model.NewKey(cert).String(),
 	})
 	if err != nil {
 		return fmt.Errorf("signature data error: %w", err)
+	}
+	authenticate := func(key *[32]byte) []byte {
+		var nonce [24]byte
+		if _, err := io.ReadFull(rand.Reader, nonce[:]); err != nil {
+			panic(err)
+		}
+		return box.SealAfterPrecomputation(nonce[:], authenticationData, &nonce, key)
 	}
 
 	directRelays, offset := s.cachedDirects()
@@ -284,16 +291,11 @@ func (s *relayServer) Directs(ctx context.Context, endpoint model.Endpoint, role
 		if ok, err := s.auth.Allow(relay.auth, auth, endpoint); err != nil {
 			return fmt.Errorf("auth allow error: %w", err)
 		} else if ok {
-			var nonce [24]byte
-			if _, err := io.ReadFull(rand.Reader, nonce[:]); err != nil {
-				panic(err)
-			}
-			auth := box.SealAfterPrecomputation(nonce[:], signatureData, &nonce, relay.authKey)
 			localDirectRelays[id] = &pbclient.DirectRelay{
 				Id:                relay.proto.Id,
 				Addresses:         relay.proto.Addresses,
 				ServerCertificate: relay.proto.ServerCertificate,
-				Authentication:    auth,
+				Authentication:    authenticate(relay.authKey),
 			}
 		}
 	}
@@ -315,16 +317,11 @@ func (s *relayServer) Directs(ctx context.Context, endpoint model.Endpoint, role
 			} else if ok, err := s.auth.Allow(msg.Value.Authentication, auth, endpoint); err != nil {
 				return fmt.Errorf("auth allow error: %w", err)
 			} else if ok {
-				var nonce [24]byte
-				if _, err := io.ReadFull(rand.Reader, nonce[:]); err != nil {
-					panic(err)
-				}
-				auth := box.SealAfterPrecomputation(nonce[:], signatureData, &nonce, msg.Value.AuthenticationKey)
 				localDirectRelays[msg.Key.ID] = &pbclient.DirectRelay{
 					Id:                msg.Key.ID.string,
 					Addresses:         model.PBsFromHostPorts(msg.Value.Hostports),
 					ServerCertificate: msg.Value.Certificate.Raw,
-					Authentication:    auth,
+					Authentication:    authenticate(msg.Value.AuthenticationKey),
 				}
 				changed = true
 			}
