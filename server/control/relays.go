@@ -2,6 +2,7 @@ package control
 
 import (
 	"context"
+	"crypto/ecdh"
 	"crypto/rand"
 	"crypto/x509"
 	"errors"
@@ -628,13 +629,13 @@ func (c *relayConn) authenticate(ctx context.Context) (*relayConnAuth, error) {
 
 	switch model.GetRelayControlNextProto(c.conn) {
 	case model.RelayControlV02:
-		return c.authenticateV2(ctx, authStream, req)
+		return c.authenticateV2(authStream, req)
 	default:
-		return c.authenticateV3(ctx, authStream, req)
+		return c.authenticateV3(authStream, req)
 	}
 }
 
-func (c *relayConn) authenticateV2(ctx context.Context, authStream *quic.Stream, req *pbrelay.AuthenticateReq) (*relayConnAuth, error) {
+func (c *relayConn) authenticateV2(authStream *quic.Stream, req *pbrelay.AuthenticateReq) (*relayConnAuth, error) {
 	auth, err := c.server.auth.Authenticate(RelayAuthenticateRequest{
 		Proto:        model.RelayControlV02,
 		Token:        req.Token,
@@ -677,7 +678,7 @@ func (c *relayConn) authenticateV2(ctx context.Context, authStream *quic.Stream,
 	return &relayConnAuth{id, auth, hostports, req.Metadata, model.RelayControlV02, nil, nil}, nil
 }
 
-func (c *relayConn) authenticateV3(ctx context.Context, authStream *quic.Stream, req *pbrelay.AuthenticateReq) (*relayConnAuth, error) {
+func (c *relayConn) authenticateV3(authStream *quic.Stream, req *pbrelay.AuthenticateReq) (*relayConnAuth, error) {
 	protocol := model.RelayControlV03
 	cert, err := x509.ParseCertificate(req.ServerCertificate)
 	if err != nil {
