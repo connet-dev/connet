@@ -12,6 +12,7 @@ let
     ../nix
     ../process-compose.yaml
     ../README.md
+    ../VERSION
   ]);
 in
 # lib.fileset.trace sourceFiles
