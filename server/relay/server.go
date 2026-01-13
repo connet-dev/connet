@@ -128,11 +128,12 @@ func (s *Server) Run(ctx context.Context) error {
 }
 
 type Status struct {
-	Status     statusc.Status            `json:"status"`
-	Hostports  []string                  `json:"hostports"`
-	ServerAddr string                    `json:"server-addrress"`
-	ServerID   string                    `json:"server-id"`
-	Endpoints  map[string]EndpointStatus `json:"endpoints"`
+	Status       statusc.Status            `json:"status"`
+	BuildVersion string                    `json:"build-version"`
+	Hostports    []string                  `json:"hostports"`
+	ServerAddr   string                    `json:"server-addrress"`
+	ServerID     string                    `json:"server-id"`
+	Endpoints    map[string]EndpointStatus `json:"endpoints"`
 }
 
 type EndpointStatus struct {
@@ -157,11 +158,12 @@ func (s *Server) Status(ctx context.Context) (Status, error) {
 	eps := s.getEndpoints()
 
 	return Status{
-		Status:     stat,
-		Hostports:  iterc.MapSliceStrings(s.control.hostports),
-		ServerAddr: s.control.controlAddr.String(),
-		ServerID:   controlID,
-		Endpoints:  eps,
+		Status:       stat,
+		BuildVersion: model.BuildVersion(),
+		Hostports:    iterc.MapSliceStrings(s.control.hostports),
+		ServerAddr:   s.control.controlAddr.String(),
+		ServerID:     controlID,
+		Endpoints:    eps,
 	}, nil
 }
 

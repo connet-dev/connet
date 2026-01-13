@@ -426,6 +426,8 @@ type ClientStatus struct {
 	Status statusc.Status `json:"status"`
 	// Metadata is the metadata field send to the control server and other peers
 	Metadata string `json:"metadata"`
+	// BuildVersion shows the build information of the client
+	BuildVersion string `json:"build-version"`
 	// ServerAddr reports which server this client is connected
 	ServerAddr string `json:"server-address"`
 	// DirectAddr reports local direct connectsions server
@@ -460,6 +462,7 @@ func (c *Client) Status(ctx context.Context) (ClientStatus, error) {
 
 	return ClientStatus{
 		Status:       stat,
+		BuildVersion: model.BuildVersion(),
 		Metadata:     c.metadata,
 		ServerAddr:   c.controlAddr.String(),
 		DirectAddr:   c.directAddr.String(),

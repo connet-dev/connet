@@ -80,6 +80,8 @@ func (s *Server) Status(ctx context.Context) (Status, error) {
 	}
 
 	return Status{
+		BuildVersion: model.BuildVersion(),
+
 		ClientIngresses: iterc.MapSlice(s.clients.ingresses, StatusIngressFn),
 		Clients:         clients,
 		Endpoints:       endpoints,
@@ -153,6 +155,8 @@ func (s *Server) getRelays() (map[string]StatusRelay, error) {
 }
 
 type Status struct {
+	BuildVersion string `json:"build-version"`
+
 	ClientIngresses []StatusIngress           `json:"client-ingresses"`
 	Clients         map[string]StatusClient   `json:"clients"`
 	Endpoints       map[string]StatusEndpoint `json:"endpoints"`
