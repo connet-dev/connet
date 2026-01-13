@@ -419,8 +419,8 @@ func (p *peer) status() (StatusPeer, error) {
 	if relays, ok := p.relays.Peek(); ok {
 		for _, relay := range relays {
 			stat.Relays[relay.Id] = StatusRelay{
-				ID: relay.Id,
-				// Metadata: relay.Metadata,
+				ID:        relay.Id,
+				Metadata:  relay.Metadata,
 				Hostports: iterc.MapSliceStrings(model.HostPortFromPBs(relay.Addresses)),
 			}
 		}

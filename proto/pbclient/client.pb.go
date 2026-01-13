@@ -459,6 +459,7 @@ type DirectRelay struct {
 	Addresses         []*pbmodel.HostPort    `protobuf:"bytes,2,rep,name=addresses,proto3" json:"addresses,omitempty"`
 	ServerCertificate []byte                 `protobuf:"bytes,3,opt,name=server_certificate,json=serverCertificate,proto3" json:"server_certificate,omitempty"` // generic certificate used by this relay
 	Authentication    []byte                 `protobuf:"bytes,4,opt,name=authentication,proto3" json:"authentication,omitempty"`                                // endpoint/role specific auth to use at the relay
+	Metadata          string                 `protobuf:"bytes,5,opt,name=metadata,proto3" json:"metadata,omitempty"`
 	unknownFields     protoimpl.UnknownFields
 	sizeCache         protoimpl.SizeCache
 }
@@ -519,6 +520,13 @@ func (x *DirectRelay) GetAuthentication() []byte {
 		return x.Authentication
 	}
 	return nil
+}
+
+func (x *DirectRelay) GetMetadata() string {
+	if x != nil {
+		return x.Metadata
+	}
+	return ""
 }
 
 type Request_Announce struct {
@@ -784,12 +792,13 @@ const file_client_proto_rawDesc = "" +
 	"\x05Relay\x12\x0e\n" +
 	"\x02id\x18\x03 \x01(\tR\x02id\x12-\n" +
 	"\taddresses\x18\x04 \x03(\v2\x0f.model.HostPortR\taddresses\x12-\n" +
-	"\x12server_certificate\x18\x02 \x01(\fR\x11serverCertificate\"\xa3\x01\n" +
+	"\x12server_certificate\x18\x02 \x01(\fR\x11serverCertificate\"\xbf\x01\n" +
 	"\vDirectRelay\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12-\n" +
 	"\taddresses\x18\x02 \x03(\v2\x0f.model.HostPortR\taddresses\x12-\n" +
 	"\x12server_certificate\x18\x03 \x01(\fR\x11serverCertificate\x12&\n" +
-	"\x0eauthentication\x18\x04 \x01(\fR\x0eauthenticationB-Z+github.com/connet-dev/connet/proto/pbclientb\x06proto3"
+	"\x0eauthentication\x18\x04 \x01(\fR\x0eauthentication\x12\x1a\n" +
+	"\bmetadata\x18\x05 \x01(\tR\bmetadataB-Z+github.com/connet-dev/connet/proto/pbclientb\x06proto3"
 
 var (
 	file_client_proto_rawDescOnce sync.Once

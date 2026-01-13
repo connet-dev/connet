@@ -77,4 +77,5 @@ message DirectRelay {
   repeated model.HostPort addresses = 2;
   bytes server_certificate = 3; // generic certificate used by this relay
   bytes authentication = 4; // endpoint/role specific auth to use at the relay
+  string metadata = 5;
 }

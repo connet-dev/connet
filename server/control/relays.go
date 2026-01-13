@@ -294,6 +294,7 @@ func (s *relayServer) Directs(ctx context.Context, endpoint model.Endpoint, role
 				Addresses:         relay.template.Addresses,
 				ServerCertificate: relay.template.ServerCertificate,
 				Authentication:    seal(relay.authSealKey),
+				Metadata:          relay.template.Metadata,
 			}
 		}
 	}
@@ -320,6 +321,7 @@ func (s *relayServer) Directs(ctx context.Context, endpoint model.Endpoint, role
 					Addresses:         model.PBsFromHostPorts(msg.Value.Hostports),
 					ServerCertificate: msg.Value.Certificate.Raw,
 					Authentication:    seal(msg.Value.AuthenticationSealKey),
+					Metadata:          msg.Value.Metadata,
 				}
 				changed = true
 			}
@@ -472,6 +474,7 @@ func (s *relayServer) runDirectsCache(ctx context.Context) error {
 					Id:                msg.Key.ID.string,
 					Addresses:         model.PBsFromHostPorts(msg.Value.Hostports),
 					ServerCertificate: msg.Value.Certificate.Raw,
+					Metadata:          msg.Value.Metadata,
 				},
 			}
 		}
