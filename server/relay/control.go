@@ -54,7 +54,7 @@ type controlClient struct {
 	clientsStreamOffset int64
 	clientsLogOffset    int64
 
-	directUnsealKey atomic.Pointer[[32]byte]
+	authUnsealKey atomic.Pointer[[32]byte]
 
 	connStatus atomic.Value
 	logger     *slog.Logger
@@ -180,14 +180,13 @@ func (s *controlClient) v1Auth(serverName string, certs []*x509.Certificate) *cl
 }
 
 func (s *controlClient) v2Auth(authReq *pbclientrelay.AuthenticateReq, cert *x509.Certificate) (*clientAuth, error) {
-	directUnsealKey := s.directUnsealKey.Load()
-	if directUnsealKey == nil {
+	authUnsealKey := s.authUnsealKey.Load()
+	if authUnsealKey == nil {
 		return nil, fmt.Errorf("no control verification key")
 	}
 
-	var decryptNonce [24]byte
-	copy(decryptNonce[:], authReq.Authentication[:24])
-	authData, ok := box.OpenAfterPrecomputation(nil, authReq.Authentication[24:], &decryptNonce, directUnsealKey)
+	decryptNonce := [24]byte(authReq.Authentication)
+	authData, ok := box.OpenAfterPrecomputation(nil, authReq.Authentication[24:], &decryptNonce, authUnsealKey)
 	if !ok {
 		return nil, pberror.NewError(pberror.Code_AuthenticationFailed, "invalid authentication")
 	}
@@ -281,17 +280,67 @@ func (s *controlClient) connectSingle(ctx context.Context, transport *quic.Trans
 		}
 	}()
 
-	protocol := model.GetRelayControlNextProto(conn)
-
-	var serverCert, relayAuthKey []byte
-	var pk, sk *[32]byte
-	if protocol == model.RelayControlV03 {
-		serverCert = s.direct.Raw()
-		pk, sk, err = box.GenerateKey(rand.Reader)
-		if err != nil {
-			return nil, fmt.Errorf("could not create keys: %w", err)
+	switch model.GetRelayControlNextProto(conn) {
+	case model.RelayControlV02:
+		err = s.authenticateV2(authStream, reconnConfig)
+	default:
+		err = s.authenticate(authStream, reconnConfig)
+	}
+	if err != nil {
+		perr := pberror.GetError(err)
+		if perr == nil {
+			perr = pberror.NewError(pberror.Code_AuthenticationFailed, "authentication failed")
 		}
-		relayAuthKey = pk[:]
+		cerr := conn.CloseWithError(quic.ApplicationErrorCode(perr.Code), perr.Message)
+		return nil, errors.Join(perr, cerr)
+	}
+
+	return conn, nil
+}
+
+func (s *controlClient) authenticateV2(authStream *quic.Stream, reconnConfig ConfigValue) error {
+	if err := proto.Write(authStream, &pbrelay.AuthenticateReq{
+		Token:          s.controlToken,
+		Addresses:      model.PBsFromHostPorts(s.hostports),
+		ReconnectToken: reconnConfig.Bytes,
+		BuildVersion:   model.BuildVersion(),
+		Metadata:       s.metadata,
+	}); err != nil {
+		return fmt.Errorf("auth write error: %w", err)
+	}
+
+	resp := &pbrelay.AuthenticateResp{}
+	if err := proto.Read(authStream, resp); err != nil {
+		return fmt.Errorf("auth read error: %w", err)
+	}
+	if resp.Error != nil {
+		return fmt.Errorf("remote error: %w", resp.Error)
+	}
+
+	controlIDConfig, err := s.config.GetOrDefault(configControlID, ConfigValue{})
+	if err != nil {
+		return fmt.Errorf("server control id get: %w", err)
+	}
+	if controlIDConfig.String != "" && controlIDConfig.String != resp.ControlId {
+		return fmt.Errorf("unexpected server id, has: %s, resp: %s", controlIDConfig.String, resp.ControlId)
+	}
+	controlIDConfig.String = resp.ControlId
+	if err := s.config.Put(configControlID, controlIDConfig); err != nil {
+		return fmt.Errorf("server control id set: %w", err)
+	}
+
+	reconnConfig.Bytes = resp.ReconnectToken
+	if err := s.config.Put(configControlReconnect, reconnConfig); err != nil {
+		return fmt.Errorf("server reconnect set: %w", err)
+	}
+
+	return nil
+}
+
+func (s *controlClient) authenticate(authStream *quic.Stream, reconnConfig ConfigValue) error {
+	relayPk, relaySk, err := box.GenerateKey(rand.Reader)
+	if err != nil {
+		return fmt.Errorf("could not create keys: %w", err)
 	}
 
 	if err := proto.Write(authStream, &pbrelay.AuthenticateReq{
@@ -300,49 +349,47 @@ func (s *controlClient) connectSingle(ctx context.Context, transport *quic.Trans
 		ReconnectToken:         reconnConfig.Bytes,
 		BuildVersion:           model.BuildVersion(),
 		Metadata:               s.metadata,
-		ServerCertificate:      serverCert,
-		RelayAuthenticationKey: relayAuthKey,
+		ServerCertificate:      s.direct.Raw(),
+		RelayAuthenticationKey: relayPk[:],
 	}); err != nil {
-		return nil, fmt.Errorf("auth write error: %w", err)
+		return fmt.Errorf("auth write error: %w", err)
 	}
 
 	resp := &pbrelay.AuthenticateResp{}
 	if err := proto.Read(authStream, resp); err != nil {
-		return nil, fmt.Errorf("auth read error: %w", err)
+		return fmt.Errorf("auth read error: %w", err)
 	}
 	if resp.Error != nil {
-		return nil, fmt.Errorf("remote error: %w", resp.Error)
+		return fmt.Errorf("remote error: %w", resp.Error)
 	}
 
 	controlIDConfig, err := s.config.GetOrDefault(configControlID, ConfigValue{})
 	if err != nil {
-		return nil, fmt.Errorf("server control id get: %w", err)
+		return fmt.Errorf("server control id get: %w", err)
 	}
 	if controlIDConfig.String != "" && controlIDConfig.String != resp.ControlId {
-		return nil, fmt.Errorf("unexpected server id, has: %s, resp: %s", controlIDConfig.String, resp.ControlId)
+		return fmt.Errorf("unexpected server id, has: %s, resp: %s", controlIDConfig.String, resp.ControlId)
 	}
 	controlIDConfig.String = resp.ControlId
 	if err := s.config.Put(configControlID, controlIDConfig); err != nil {
-		return nil, fmt.Errorf("server control id set: %w", err)
+		return fmt.Errorf("server control id set: %w", err)
 	}
 
 	reconnConfig.Bytes = resp.ReconnectToken
 	if err := s.config.Put(configControlReconnect, reconnConfig); err != nil {
-		return nil, fmt.Errorf("server reconnect set: %w", err)
+		return fmt.Errorf("server reconnect set: %w", err)
 	}
 
-	if protocol == model.RelayControlV03 {
-		if len(resp.ControlAuthenticationKey) != 32 {
-			return nil, fmt.Errorf("invalid control auth key length")
-		}
-		var controlPk [32]byte
-		copy(controlPk[:], resp.ControlAuthenticationKey)
-		var sharedKey [32]byte
-		box.Precompute(&sharedKey, &controlPk, sk)
-		s.directUnsealKey.Store(&sharedKey)
+	if len(resp.ControlAuthenticationKey) != 32 {
+		return fmt.Errorf("invalid control auth key length")
 	}
 
-	return conn, nil
+	controlPk := [32]byte(resp.ControlAuthenticationKey)
+	sharedKey := new([32]byte)
+	box.Precompute(sharedKey, &controlPk, relaySk)
+	s.authUnsealKey.Store(sharedKey)
+
+	return nil
 }
 
 func (s *controlClient) reconnect(ctx context.Context, tfn TransportsFn) (*quic.Conn, error) {

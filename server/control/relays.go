@@ -2,7 +2,6 @@ package control
 
 import (
 	"context"
-	"crypto/ecdh"
 	"crypto/rand"
 	"crypto/x509"
 	"errors"
@@ -717,7 +716,7 @@ func (c *relayConn) authenticateV3(authStream *quic.Stream, req *pbrelay.Authent
 		id = sid
 	}
 
-	pk, sk, err := box.GenerateKey(rand.Reader)
+	controlPk, controlSk, err := box.GenerateKey(rand.Reader)
 	if err != nil {
 		perr := pberror.NewError(pberror.Code_AuthenticationFailed, "authentication failed: %v", err)
 		if err := proto.Write(authStream, &pbrelay.AuthenticateResp{Error: perr}); err != nil {
@@ -725,10 +724,13 @@ func (c *relayConn) authenticateV3(authStream *quic.Stream, req *pbrelay.Authent
 		}
 		return nil, fmt.Errorf("auth failed: %w", perr)
 	}
-	var relayPk [32]byte
-	copy(relayPk[:], req.RelayAuthenticationKey)
-	var sharedKey [32]byte
-	box.Precompute(&sharedKey, &relayPk, sk)
+	if len(req.RelayAuthenticationKey) != 32 {
+		perr := pberror.NewError(pberror.Code_AuthenticationFailed, "authentication failed: invalid key")
+		if err := proto.Write(authStream, &pbrelay.AuthenticateResp{Error: perr}); err != nil {
+			return nil, fmt.Errorf("relay auth err write: %w", err)
+		}
+		return nil, fmt.Errorf("auth failed: %w", perr)
+	}
 
 	retoken, err := c.server.reconnect.sealRelayID(id)
 	if err != nil {
@@ -738,14 +740,18 @@ func (c *relayConn) authenticateV3(authStream *quic.Stream, req *pbrelay.Authent
 	if err := proto.Write(authStream, &pbrelay.AuthenticateResp{
 		ControlId:                c.server.id,
 		ReconnectToken:           retoken,
-		ControlAuthenticationKey: pk[:],
+		ControlAuthenticationKey: controlPk[:],
 	}); err != nil {
 		return nil, fmt.Errorf("auth write response: %w", err)
 	}
 
+	var relayPk = [32]byte(req.RelayAuthenticationKey)
+	sharedKey := new([32]byte)
+	box.Precompute(sharedKey, &relayPk, controlSk)
+
 	c.logger.Debug("authentication completed", "local", c.conn.LocalAddr(), "remote", c.conn.RemoteAddr(), "proto", protocol, "build", req.BuildVersion)
 	hostports := model.HostPortFromPBs(req.Addresses)
-	return &relayConnAuth{id, auth, hostports, req.Metadata, protocol, cert, &sharedKey}, nil
+	return &relayConnAuth{id, auth, hostports, req.Metadata, protocol, cert, sharedKey}, nil
 }
 
 func (c *relayConn) runRelayClients(ctx context.Context) error {
