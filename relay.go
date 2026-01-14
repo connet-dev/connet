@@ -17,7 +17,6 @@ import (
 	"github.com/connet-dev/connet/pkg/slogc"
 	"github.com/connet-dev/connet/proto"
 	"github.com/connet-dev/connet/proto/pbclientrelay"
-	"github.com/connet-dev/connet/proto/pbconnect"
 	"github.com/connet-dev/connet/proto/pberror"
 	"github.com/quic-go/quic-go"
 )
@@ -109,60 +108,26 @@ func (r *relay) connect(ctx context.Context, hp model.HostPort) (*quic.Conn, err
 
 	cfg := r.serverConf.Load()
 
-	nextProtos := iterc.MapVarStrings(model.ConnectRelayV02, model.ConnectRelayV01)
-	if cfg.auth == nil {
-		nextProtos = iterc.MapVarStrings(model.ConnectRelayV01)
-	}
-
-	r.logger.Debug("dialing relay", "addr", addr, "server", cfg.tls.name, "cert", cfg.tls.key, "protos", nextProtos)
+	r.logger.Debug("dialing relay", "addr", addr, "server", cfg.tls.name, "cert", cfg.tls.key)
 	conn, err := r.local.direct.transport.Dial(ctx, addr, &tls.Config{
 		Certificates: []tls.Certificate{r.local.clientCert},
 		RootCAs:      cfg.tls.cas,
 		ServerName:   cfg.tls.name,
-		NextProtos:   nextProtos,
+		NextProtos:   iterc.MapVarStrings(model.ConnectRelayV02),
 	}, quicc.ClientConfig(r.local.direct.handshakeIdleTimeout))
 	if err != nil {
 		return nil, err
 	}
 
-	protocol := model.GetConnectRelayNextProto(conn)
-	if protocol == model.ConnectRelayV01 {
-		if err := r.check(ctx, conn); err != nil {
-			cerr := conn.CloseWithError(quic.ApplicationErrorCode(pberror.Code_ConnectionCheckFailed), "connection check failed")
-			return nil, errors.Join(err, cerr)
+	if err := r.authenticate(ctx, conn, cfg.auth); err != nil {
+		if perr := pberror.GetError(err); perr != nil {
+			cerr := conn.CloseWithError(quic.ApplicationErrorCode(perr.Code), perr.Message)
+			return nil, errors.Join(perr, cerr)
 		}
-	} else {
-		if err := r.authenticate(ctx, conn, cfg.auth); err != nil {
-			if perr := pberror.GetError(err); perr != nil {
-				cerr := conn.CloseWithError(quic.ApplicationErrorCode(perr.Code), perr.Message)
-				return nil, errors.Join(perr, cerr)
-			}
-			cerr := conn.CloseWithError(quic.ApplicationErrorCode(pberror.Code_ConnectionCheckFailed), "connection check failed")
-			return nil, errors.Join(err, cerr)
-		}
+		cerr := conn.CloseWithError(quic.ApplicationErrorCode(pberror.Code_ConnectionCheckFailed), "connection check failed")
+		return nil, errors.Join(err, cerr)
 	}
 	return conn, nil
-}
-
-func (r *relay) check(ctx context.Context, conn *quic.Conn) error {
-	stream, err := conn.OpenStreamSync(ctx)
-	if err != nil {
-		return err
-	}
-	defer func() {
-		if err := stream.Close(); err != nil {
-			slogc.Fine(r.logger, "error closing check stream", "err", err)
-		}
-	}()
-
-	if err := proto.Write(stream, &pbconnect.Request{}); err != nil {
-		return err
-	}
-	if _, err := pbconnect.ReadResponse(stream); err != nil {
-		return err
-	}
-
-	return nil
 }
 
 func (r *relay) authenticate(ctx context.Context, conn *quic.Conn, auth []byte) error {

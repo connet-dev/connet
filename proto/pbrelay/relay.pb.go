@@ -23,55 +23,6 @@ const (
 	_ = protoimpl.EnforceVersion(protoimpl.MaxVersion - 20)
 )
 
-type ChangeType int32
-
-const (
-	ChangeType_ChangeUnknown ChangeType = 0
-	ChangeType_ChangePut     ChangeType = 1
-	ChangeType_ChangeDel     ChangeType = 2
-)
-
-// Enum value maps for ChangeType.
-var (
-	ChangeType_name = map[int32]string{
-		0: "ChangeUnknown",
-		1: "ChangePut",
-		2: "ChangeDel",
-	}
-	ChangeType_value = map[string]int32{
-		"ChangeUnknown": 0,
-		"ChangePut":     1,
-		"ChangeDel":     2,
-	}
-)
-
-func (x ChangeType) Enum() *ChangeType {
-	p := new(ChangeType)
-	*p = x
-	return p
-}
-
-func (x ChangeType) String() string {
-	return protoimpl.X.EnumStringOf(x.Descriptor(), protoreflect.EnumNumber(x))
-}
-
-func (ChangeType) Descriptor() protoreflect.EnumDescriptor {
-	return file_relay_proto_enumTypes[0].Descriptor()
-}
-
-func (ChangeType) Type() protoreflect.EnumType {
-	return &file_relay_proto_enumTypes[0]
-}
-
-func (x ChangeType) Number() protoreflect.EnumNumber {
-	return protoreflect.EnumNumber(x)
-}
-
-// Deprecated: Use ChangeType.Descriptor instead.
-func (ChangeType) EnumDescriptor() ([]byte, []int) {
-	return file_relay_proto_rawDescGZIP(), []int{0}
-}
-
 type AuthenticateReq struct {
 	state                  protoimpl.MessageState `protogen:"open.v1"`
 	Token                  string                 `protobuf:"bytes,1,opt,name=token,proto3" json:"token,omitempty"`
@@ -232,214 +183,6 @@ func (x *AuthenticateResp) GetControlAuthenticationKey() []byte {
 	return nil
 }
 
-type ClientsReq struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Offset        int64                  `protobuf:"varint,1,opt,name=offset,proto3" json:"offset,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
-}
-
-func (x *ClientsReq) Reset() {
-	*x = ClientsReq{}
-	mi := &file_relay_proto_msgTypes[2]
-	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-	ms.StoreMessageInfo(mi)
-}
-
-func (x *ClientsReq) String() string {
-	return protoimpl.X.MessageStringOf(x)
-}
-
-func (*ClientsReq) ProtoMessage() {}
-
-func (x *ClientsReq) ProtoReflect() protoreflect.Message {
-	mi := &file_relay_proto_msgTypes[2]
-	if x != nil {
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		if ms.LoadMessageInfo() == nil {
-			ms.StoreMessageInfo(mi)
-		}
-		return ms
-	}
-	return mi.MessageOf(x)
-}
-
-// Deprecated: Use ClientsReq.ProtoReflect.Descriptor instead.
-func (*ClientsReq) Descriptor() ([]byte, []int) {
-	return file_relay_proto_rawDescGZIP(), []int{2}
-}
-
-func (x *ClientsReq) GetOffset() int64 {
-	if x != nil {
-		return x.Offset
-	}
-	return 0
-}
-
-type ClientsResp struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Changes       []*ClientsResp_Change  `protobuf:"bytes,1,rep,name=changes,proto3" json:"changes,omitempty"`
-	Offset        int64                  `protobuf:"varint,2,opt,name=offset,proto3" json:"offset,omitempty"`
-	Restart       bool                   `protobuf:"varint,3,opt,name=restart,proto3" json:"restart,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
-}
-
-func (x *ClientsResp) Reset() {
-	*x = ClientsResp{}
-	mi := &file_relay_proto_msgTypes[3]
-	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-	ms.StoreMessageInfo(mi)
-}
-
-func (x *ClientsResp) String() string {
-	return protoimpl.X.MessageStringOf(x)
-}
-
-func (*ClientsResp) ProtoMessage() {}
-
-func (x *ClientsResp) ProtoReflect() protoreflect.Message {
-	mi := &file_relay_proto_msgTypes[3]
-	if x != nil {
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		if ms.LoadMessageInfo() == nil {
-			ms.StoreMessageInfo(mi)
-		}
-		return ms
-	}
-	return mi.MessageOf(x)
-}
-
-// Deprecated: Use ClientsResp.ProtoReflect.Descriptor instead.
-func (*ClientsResp) Descriptor() ([]byte, []int) {
-	return file_relay_proto_rawDescGZIP(), []int{3}
-}
-
-func (x *ClientsResp) GetChanges() []*ClientsResp_Change {
-	if x != nil {
-		return x.Changes
-	}
-	return nil
-}
-
-func (x *ClientsResp) GetOffset() int64 {
-	if x != nil {
-		return x.Offset
-	}
-	return 0
-}
-
-func (x *ClientsResp) GetRestart() bool {
-	if x != nil {
-		return x.Restart
-	}
-	return false
-}
-
-type ServersReq struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Offset        int64                  `protobuf:"varint,1,opt,name=offset,proto3" json:"offset,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
-}
-
-func (x *ServersReq) Reset() {
-	*x = ServersReq{}
-	mi := &file_relay_proto_msgTypes[4]
-	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-	ms.StoreMessageInfo(mi)
-}
-
-func (x *ServersReq) String() string {
-	return protoimpl.X.MessageStringOf(x)
-}
-
-func (*ServersReq) ProtoMessage() {}
-
-func (x *ServersReq) ProtoReflect() protoreflect.Message {
-	mi := &file_relay_proto_msgTypes[4]
-	if x != nil {
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		if ms.LoadMessageInfo() == nil {
-			ms.StoreMessageInfo(mi)
-		}
-		return ms
-	}
-	return mi.MessageOf(x)
-}
-
-// Deprecated: Use ServersReq.ProtoReflect.Descriptor instead.
-func (*ServersReq) Descriptor() ([]byte, []int) {
-	return file_relay_proto_rawDescGZIP(), []int{4}
-}
-
-func (x *ServersReq) GetOffset() int64 {
-	if x != nil {
-		return x.Offset
-	}
-	return 0
-}
-
-type ServersResp struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Changes       []*ServersResp_Change  `protobuf:"bytes,1,rep,name=changes,proto3" json:"changes,omitempty"`
-	Offset        int64                  `protobuf:"varint,2,opt,name=offset,proto3" json:"offset,omitempty"`
-	Restart       bool                   `protobuf:"varint,3,opt,name=restart,proto3" json:"restart,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
-}
-
-func (x *ServersResp) Reset() {
-	*x = ServersResp{}
-	mi := &file_relay_proto_msgTypes[5]
-	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-	ms.StoreMessageInfo(mi)
-}
-
-func (x *ServersResp) String() string {
-	return protoimpl.X.MessageStringOf(x)
-}
-
-func (*ServersResp) ProtoMessage() {}
-
-func (x *ServersResp) ProtoReflect() protoreflect.Message {
-	mi := &file_relay_proto_msgTypes[5]
-	if x != nil {
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		if ms.LoadMessageInfo() == nil {
-			ms.StoreMessageInfo(mi)
-		}
-		return ms
-	}
-	return mi.MessageOf(x)
-}
-
-// Deprecated: Use ServersResp.ProtoReflect.Descriptor instead.
-func (*ServersResp) Descriptor() ([]byte, []int) {
-	return file_relay_proto_rawDescGZIP(), []int{5}
-}
-
-func (x *ServersResp) GetChanges() []*ServersResp_Change {
-	if x != nil {
-		return x.Changes
-	}
-	return nil
-}
-
-func (x *ServersResp) GetOffset() int64 {
-	if x != nil {
-		return x.Offset
-	}
-	return 0
-}
-
-func (x *ServersResp) GetRestart() bool {
-	if x != nil {
-		return x.Restart
-	}
-	return false
-}
-
 type ClientAuthentication struct {
 	state          protoimpl.MessageState `protogen:"open.v1"`
 	Endpoint       *pbmodel.Endpoint      `protobuf:"bytes,1,opt,name=endpoint,proto3" json:"endpoint,omitempty"`
@@ -451,7 +194,7 @@ type ClientAuthentication struct {
 
 func (x *ClientAuthentication) Reset() {
 	*x = ClientAuthentication{}
-	mi := &file_relay_proto_msgTypes[6]
+	mi := &file_relay_proto_msgTypes[2]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -463,7 +206,7 @@ func (x *ClientAuthentication) String() string {
 func (*ClientAuthentication) ProtoMessage() {}
 
 func (x *ClientAuthentication) ProtoReflect() protoreflect.Message {
-	mi := &file_relay_proto_msgTypes[6]
+	mi := &file_relay_proto_msgTypes[2]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -476,7 +219,7 @@ func (x *ClientAuthentication) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ClientAuthentication.ProtoReflect.Descriptor instead.
 func (*ClientAuthentication) Descriptor() ([]byte, []int) {
-	return file_relay_proto_rawDescGZIP(), []int{6}
+	return file_relay_proto_rawDescGZIP(), []int{2}
 }
 
 func (x *ClientAuthentication) GetEndpoint() *pbmodel.Endpoint {
@@ -500,142 +243,6 @@ func (x *ClientAuthentication) GetCertificateKey() string {
 	return ""
 }
 
-type ClientsResp_Change struct {
-	state          protoimpl.MessageState `protogen:"open.v1"`
-	Change         ChangeType             `protobuf:"varint,1,opt,name=change,proto3,enum=relay.ChangeType" json:"change,omitempty"`
-	Endpoint       *pbmodel.Endpoint      `protobuf:"bytes,2,opt,name=endpoint,proto3" json:"endpoint,omitempty"`
-	Role           pbmodel.Role           `protobuf:"varint,3,opt,name=role,proto3,enum=model.Role" json:"role,omitempty"`
-	CertificateKey string                 `protobuf:"bytes,4,opt,name=certificate_key,json=certificateKey,proto3" json:"certificate_key,omitempty"`
-	Certificate    []byte                 `protobuf:"bytes,5,opt,name=certificate,proto3" json:"certificate,omitempty"`
-	unknownFields  protoimpl.UnknownFields
-	sizeCache      protoimpl.SizeCache
-}
-
-func (x *ClientsResp_Change) Reset() {
-	*x = ClientsResp_Change{}
-	mi := &file_relay_proto_msgTypes[7]
-	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-	ms.StoreMessageInfo(mi)
-}
-
-func (x *ClientsResp_Change) String() string {
-	return protoimpl.X.MessageStringOf(x)
-}
-
-func (*ClientsResp_Change) ProtoMessage() {}
-
-func (x *ClientsResp_Change) ProtoReflect() protoreflect.Message {
-	mi := &file_relay_proto_msgTypes[7]
-	if x != nil {
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		if ms.LoadMessageInfo() == nil {
-			ms.StoreMessageInfo(mi)
-		}
-		return ms
-	}
-	return mi.MessageOf(x)
-}
-
-// Deprecated: Use ClientsResp_Change.ProtoReflect.Descriptor instead.
-func (*ClientsResp_Change) Descriptor() ([]byte, []int) {
-	return file_relay_proto_rawDescGZIP(), []int{3, 0}
-}
-
-func (x *ClientsResp_Change) GetChange() ChangeType {
-	if x != nil {
-		return x.Change
-	}
-	return ChangeType_ChangeUnknown
-}
-
-func (x *ClientsResp_Change) GetEndpoint() *pbmodel.Endpoint {
-	if x != nil {
-		return x.Endpoint
-	}
-	return nil
-}
-
-func (x *ClientsResp_Change) GetRole() pbmodel.Role {
-	if x != nil {
-		return x.Role
-	}
-	return pbmodel.Role(0)
-}
-
-func (x *ClientsResp_Change) GetCertificateKey() string {
-	if x != nil {
-		return x.CertificateKey
-	}
-	return ""
-}
-
-func (x *ClientsResp_Change) GetCertificate() []byte {
-	if x != nil {
-		return x.Certificate
-	}
-	return nil
-}
-
-type ServersResp_Change struct {
-	state             protoimpl.MessageState `protogen:"open.v1"`
-	Change            ChangeType             `protobuf:"varint,1,opt,name=change,proto3,enum=relay.ChangeType" json:"change,omitempty"`
-	Endpoint          *pbmodel.Endpoint      `protobuf:"bytes,2,opt,name=endpoint,proto3" json:"endpoint,omitempty"`
-	ServerCertificate []byte                 `protobuf:"bytes,3,opt,name=server_certificate,json=serverCertificate,proto3" json:"server_certificate,omitempty"`
-	unknownFields     protoimpl.UnknownFields
-	sizeCache         protoimpl.SizeCache
-}
-
-func (x *ServersResp_Change) Reset() {
-	*x = ServersResp_Change{}
-	mi := &file_relay_proto_msgTypes[8]
-	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-	ms.StoreMessageInfo(mi)
-}
-
-func (x *ServersResp_Change) String() string {
-	return protoimpl.X.MessageStringOf(x)
-}
-
-func (*ServersResp_Change) ProtoMessage() {}
-
-func (x *ServersResp_Change) ProtoReflect() protoreflect.Message {
-	mi := &file_relay_proto_msgTypes[8]
-	if x != nil {
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		if ms.LoadMessageInfo() == nil {
-			ms.StoreMessageInfo(mi)
-		}
-		return ms
-	}
-	return mi.MessageOf(x)
-}
-
-// Deprecated: Use ServersResp_Change.ProtoReflect.Descriptor instead.
-func (*ServersResp_Change) Descriptor() ([]byte, []int) {
-	return file_relay_proto_rawDescGZIP(), []int{5, 0}
-}
-
-func (x *ServersResp_Change) GetChange() ChangeType {
-	if x != nil {
-		return x.Change
-	}
-	return ChangeType_ChangeUnknown
-}
-
-func (x *ServersResp_Change) GetEndpoint() *pbmodel.Endpoint {
-	if x != nil {
-		return x.Endpoint
-	}
-	return nil
-}
-
-func (x *ServersResp_Change) GetServerCertificate() []byte {
-	if x != nil {
-		return x.ServerCertificate
-	}
-	return nil
-}
-
 var File_relay_proto protoreflect.FileDescriptor
 
 const file_relay_proto_rawDesc = "" +
@@ -654,40 +261,11 @@ const file_relay_proto_rawDesc = "" +
 	"\n" +
 	"control_id\x18\x02 \x01(\tR\tcontrolId\x12'\n" +
 	"\x0freconnect_token\x18\x03 \x01(\fR\x0ereconnectToken\x12<\n" +
-	"\x1acontrol_authentication_key\x18\x04 \x01(\fR\x18controlAuthenticationKey\"$\n" +
-	"\n" +
-	"ClientsReq\x12\x16\n" +
-	"\x06offset\x18\x01 \x01(\x03R\x06offset\"\xc3\x02\n" +
-	"\vClientsResp\x123\n" +
-	"\achanges\x18\x01 \x03(\v2\x19.relay.ClientsResp.ChangeR\achanges\x12\x16\n" +
-	"\x06offset\x18\x02 \x01(\x03R\x06offset\x12\x18\n" +
-	"\arestart\x18\x03 \x01(\bR\arestart\x1a\xcc\x01\n" +
-	"\x06Change\x12)\n" +
-	"\x06change\x18\x01 \x01(\x0e2\x11.relay.ChangeTypeR\x06change\x12+\n" +
-	"\bendpoint\x18\x02 \x01(\v2\x0f.model.EndpointR\bendpoint\x12\x1f\n" +
-	"\x04role\x18\x03 \x01(\x0e2\v.model.RoleR\x04role\x12'\n" +
-	"\x0fcertificate_key\x18\x04 \x01(\tR\x0ecertificateKey\x12 \n" +
-	"\vcertificate\x18\x05 \x01(\fR\vcertificate\"$\n" +
-	"\n" +
-	"ServersReq\x12\x16\n" +
-	"\x06offset\x18\x01 \x01(\x03R\x06offset\"\x86\x02\n" +
-	"\vServersResp\x123\n" +
-	"\achanges\x18\x01 \x03(\v2\x19.relay.ServersResp.ChangeR\achanges\x12\x16\n" +
-	"\x06offset\x18\x02 \x01(\x03R\x06offset\x12\x18\n" +
-	"\arestart\x18\x03 \x01(\bR\arestart\x1a\x8f\x01\n" +
-	"\x06Change\x12)\n" +
-	"\x06change\x18\x01 \x01(\x0e2\x11.relay.ChangeTypeR\x06change\x12+\n" +
-	"\bendpoint\x18\x02 \x01(\v2\x0f.model.EndpointR\bendpoint\x12-\n" +
-	"\x12server_certificate\x18\x03 \x01(\fR\x11serverCertificate\"\x8d\x01\n" +
+	"\x1acontrol_authentication_key\x18\x04 \x01(\fR\x18controlAuthenticationKey\"\x8d\x01\n" +
 	"\x14ClientAuthentication\x12+\n" +
 	"\bendpoint\x18\x01 \x01(\v2\x0f.model.EndpointR\bendpoint\x12\x1f\n" +
 	"\x04role\x18\x02 \x01(\x0e2\v.model.RoleR\x04role\x12'\n" +
-	"\x0fcertificate_key\x18\x03 \x01(\tR\x0ecertificateKey*=\n" +
-	"\n" +
-	"ChangeType\x12\x11\n" +
-	"\rChangeUnknown\x10\x00\x12\r\n" +
-	"\tChangePut\x10\x01\x12\r\n" +
-	"\tChangeDel\x10\x02B,Z*github.com/connet-dev/connet/proto/pbrelayb\x06proto3"
+	"\x0fcertificate_key\x18\x03 \x01(\tR\x0ecertificateKeyB,Z*github.com/connet-dev/connet/proto/pbrelayb\x06proto3"
 
 var (
 	file_relay_proto_rawDescOnce sync.Once
@@ -701,41 +279,26 @@ func file_relay_proto_rawDescGZIP() []byte {
 	return file_relay_proto_rawDescData
 }
 
-var file_relay_proto_enumTypes = make([]protoimpl.EnumInfo, 1)
-var file_relay_proto_msgTypes = make([]protoimpl.MessageInfo, 9)
+var file_relay_proto_msgTypes = make([]protoimpl.MessageInfo, 3)
 var file_relay_proto_goTypes = []any{
-	(ChangeType)(0),              // 0: relay.ChangeType
-	(*AuthenticateReq)(nil),      // 1: relay.AuthenticateReq
-	(*AuthenticateResp)(nil),     // 2: relay.AuthenticateResp
-	(*ClientsReq)(nil),           // 3: relay.ClientsReq
-	(*ClientsResp)(nil),          // 4: relay.ClientsResp
-	(*ServersReq)(nil),           // 5: relay.ServersReq
-	(*ServersResp)(nil),          // 6: relay.ServersResp
-	(*ClientAuthentication)(nil), // 7: relay.ClientAuthentication
-	(*ClientsResp_Change)(nil),   // 8: relay.ClientsResp.Change
-	(*ServersResp_Change)(nil),   // 9: relay.ServersResp.Change
-	(*pbmodel.HostPort)(nil),     // 10: model.HostPort
-	(*pberror.Error)(nil),        // 11: error.Error
-	(*pbmodel.Endpoint)(nil),     // 12: model.Endpoint
-	(pbmodel.Role)(0),            // 13: model.Role
+	(*AuthenticateReq)(nil),      // 0: relay.AuthenticateReq
+	(*AuthenticateResp)(nil),     // 1: relay.AuthenticateResp
+	(*ClientAuthentication)(nil), // 2: relay.ClientAuthentication
+	(*pbmodel.HostPort)(nil),     // 3: model.HostPort
+	(*pberror.Error)(nil),        // 4: error.Error
+	(*pbmodel.Endpoint)(nil),     // 5: model.Endpoint
+	(pbmodel.Role)(0),            // 6: model.Role
 }
 var file_relay_proto_depIdxs = []int32{
-	10, // 0: relay.AuthenticateReq.addresses:type_name -> model.HostPort
-	11, // 1: relay.AuthenticateResp.error:type_name -> error.Error
-	8,  // 2: relay.ClientsResp.changes:type_name -> relay.ClientsResp.Change
-	9,  // 3: relay.ServersResp.changes:type_name -> relay.ServersResp.Change
-	12, // 4: relay.ClientAuthentication.endpoint:type_name -> model.Endpoint
-	13, // 5: relay.ClientAuthentication.role:type_name -> model.Role
-	0,  // 6: relay.ClientsResp.Change.change:type_name -> relay.ChangeType
-	12, // 7: relay.ClientsResp.Change.endpoint:type_name -> model.Endpoint
-	13, // 8: relay.ClientsResp.Change.role:type_name -> model.Role
-	0,  // 9: relay.ServersResp.Change.change:type_name -> relay.ChangeType
-	12, // 10: relay.ServersResp.Change.endpoint:type_name -> model.Endpoint
-	11, // [11:11] is the sub-list for method output_type
-	11, // [11:11] is the sub-list for method input_type
-	11, // [11:11] is the sub-list for extension type_name
-	11, // [11:11] is the sub-list for extension extendee
-	0,  // [0:11] is the sub-list for field type_name
+	3, // 0: relay.AuthenticateReq.addresses:type_name -> model.HostPort
+	4, // 1: relay.AuthenticateResp.error:type_name -> error.Error
+	5, // 2: relay.ClientAuthentication.endpoint:type_name -> model.Endpoint
+	6, // 3: relay.ClientAuthentication.role:type_name -> model.Role
+	4, // [4:4] is the sub-list for method output_type
+	4, // [4:4] is the sub-list for method input_type
+	4, // [4:4] is the sub-list for extension type_name
+	4, // [4:4] is the sub-list for extension extendee
+	0, // [0:4] is the sub-list for field type_name
 }
 
 func init() { file_relay_proto_init() }
@@ -748,14 +311,13 @@ func file_relay_proto_init() {
 		File: protoimpl.DescBuilder{
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_relay_proto_rawDesc), len(file_relay_proto_rawDesc)),
-			NumEnums:      1,
-			NumMessages:   9,
+			NumEnums:      0,
+			NumMessages:   3,
 			NumExtensions: 0,
 			NumServices:   0,
 		},
 		GoTypes:           file_relay_proto_goTypes,
 		DependencyIndexes: file_relay_proto_depIdxs,
-		EnumInfos:         file_relay_proto_enumTypes,
 		MessageInfos:      file_relay_proto_msgTypes,
 	}.Build()
 	File_relay_proto = out.File

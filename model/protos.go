@@ -48,7 +48,7 @@ func (v ConnectRelayNextProto) String() string {
 
 func GetConnectRelayNextProto(conn *quic.Conn) ConnectRelayNextProto {
 	proto := conn.ConnectionState().TLS.NegotiatedProtocol
-	for _, v := range []ConnectRelayNextProto{ConnectRelayV02, ConnectRelayV01} {
+	for _, v := range []ConnectRelayNextProto{ConnectRelayV02} {
 		if v.string == proto {
 			return v
 		}
@@ -58,7 +58,6 @@ func GetConnectRelayNextProto(conn *quic.Conn) ConnectRelayNextProto {
 
 var (
 	ConnectRelayUnknown = ConnectRelayNextProto{}
-	ConnectRelayV01     = ConnectRelayNextProto{"connet-peer-relay/0.1"} // 0.7.0
 	ConnectRelayV02     = ConnectRelayNextProto{"connet-peer-relay/0.2"} // 0.13.0
 )
 
@@ -71,7 +70,7 @@ func (v RelayControlNextProto) String() string {
 
 func GetRelayControlNextProto(conn *quic.Conn) RelayControlNextProto {
 	proto := conn.ConnectionState().TLS.NegotiatedProtocol
-	for _, v := range []RelayControlNextProto{RelayControlV03, RelayControlV02} {
+	for _, v := range []RelayControlNextProto{RelayControlV03} {
 		if v.string == proto {
 			return v
 		}
@@ -81,7 +80,6 @@ func GetRelayControlNextProto(conn *quic.Conn) RelayControlNextProto {
 
 var (
 	RelayControlUnknown = RelayControlNextProto{}
-	RelayControlV02     = RelayControlNextProto{"connet-relay/0.2"} // 0.8.0
 	RelayControlV03     = RelayControlNextProto{"connet-relay/0.3"} // 0.13.0
 	// Update GetRelayControlNextProto when adding a new one
 )

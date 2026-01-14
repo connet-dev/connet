@@ -6,7 +6,6 @@ import (
 	"path/filepath"
 
 	"github.com/connet-dev/connet/model"
-	"github.com/connet-dev/connet/pkg/certc"
 	"github.com/connet-dev/connet/pkg/logc"
 	"github.com/connet-dev/connet/proto/pbclient"
 )
@@ -17,11 +16,6 @@ type Stores interface {
 	ClientConns() (logc.KV[ClientConnKey, ClientConnValue], error)
 	ClientPeers() (logc.KV[ClientPeerKey, ClientPeerValue], error)
 
-	RelayConns() (logc.KV[RelayConnKey, RelayConnValue], error)
-	RelayClients() (logc.KV[RelayClientKey, RelayClientValue], error)
-	RelayEndpoints(id RelayID) (logc.KV[RelayEndpointKey, RelayEndpointValue], error)
-	RelayServers() (logc.KV[RelayServerKey, RelayServerValue], error)
-	RelayServerOffsets() (logc.KV[RelayConnKey, int64], error)
 	RelayDirects() (logc.KV[RelayConnKey, RelayDirectValue], error)
 }
 
@@ -43,26 +37,6 @@ func (f *fileStores) ClientConns() (logc.KV[ClientConnKey, ClientConnValue], err
 
 func (f *fileStores) ClientPeers() (logc.KV[ClientPeerKey, ClientPeerValue], error) {
 	return logc.NewKV[ClientPeerKey, ClientPeerValue](filepath.Join(f.dir, "client-peers"))
-}
-
-func (f *fileStores) RelayConns() (logc.KV[RelayConnKey, RelayConnValue], error) {
-	return logc.NewKV[RelayConnKey, RelayConnValue](filepath.Join(f.dir, "relay-conns"))
-}
-
-func (f *fileStores) RelayClients() (logc.KV[RelayClientKey, RelayClientValue], error) {
-	return logc.NewKV[RelayClientKey, RelayClientValue](filepath.Join(f.dir, "relay-clients"))
-}
-
-func (f *fileStores) RelayEndpoints(id RelayID) (logc.KV[RelayEndpointKey, RelayEndpointValue], error) {
-	return logc.NewKV[RelayEndpointKey, RelayEndpointValue](filepath.Join(f.dir, "relay-endpoints", id.string))
-}
-
-func (f *fileStores) RelayServers() (logc.KV[RelayServerKey, RelayServerValue], error) {
-	return logc.NewKV[RelayServerKey, RelayServerValue](filepath.Join(f.dir, "relay-servers"))
-}
-
-func (f *fileStores) RelayServerOffsets() (logc.KV[RelayConnKey, int64], error) {
-	return logc.NewKV[RelayConnKey, int64](filepath.Join(f.dir, "relay-server-offsets"))
 }
 
 func (f *fileStores) RelayDirects() (logc.KV[RelayConnKey, RelayDirectValue], error) {
@@ -115,12 +89,6 @@ type RelayConnKey struct {
 	ID RelayID `json:"id"`
 }
 
-type RelayConnValue struct {
-	Authentication RelayAuthentication `json:"authentication"`
-	Hostports      []model.HostPort    `json:"hostports"`
-	Metadata       string              `json:"metadata"`
-}
-
 type RelayDirectValue struct {
 	Authentication        RelayAuthentication `json:"authentication"`
 	Hostports             []model.HostPort    `json:"hostports"`
@@ -162,106 +130,4 @@ func (v *RelayDirectValue) UnmarshalJSON(b []byte) error {
 	copy(authKey[:], s.AuthenticationSealKey)
 	*v = RelayDirectValue{s.Authentication, s.Hostports, s.Metadata, cert, &authKey}
 	return nil
-}
-
-type RelayClientKey struct {
-	Endpoint model.Endpoint `json:"endpoint"`
-	Role     model.Role     `json:"role"`
-	Key      model.Key      `json:"key"`
-}
-
-type RelayClientValue struct {
-	Cert           *x509.Certificate    `json:"cert"`
-	Authentication ClientAuthentication `json:"authentication"`
-}
-
-type jsonRelayClientValue struct {
-	Cert           []byte `json:"cert"`
-	Authentication []byte `json:"authentication"`
-}
-
-func (v RelayClientValue) MarshalJSON() ([]byte, error) {
-	return json.Marshal(jsonRelayClientValue{
-		Cert:           v.Cert.Raw,
-		Authentication: v.Authentication,
-	})
-}
-
-func (v *RelayClientValue) UnmarshalJSON(b []byte) error {
-	s := jsonRelayClientValue{}
-	if err := json.Unmarshal(b, &s); err != nil {
-		return err
-	}
-
-	cert, err := x509.ParseCertificate(s.Cert)
-	if err != nil {
-		return err
-	}
-
-	*v = RelayClientValue{cert, s.Authentication}
-	return nil
-}
-
-type RelayEndpointKey struct {
-	Endpoint model.Endpoint `json:"endpoint"`
-}
-
-type RelayEndpointValue struct {
-	Cert *x509.Certificate `json:"cert"`
-}
-
-func (v RelayEndpointValue) MarshalJSON() ([]byte, error) {
-	return certc.MarshalJSONCert(v.Cert)
-}
-
-func (v *RelayEndpointValue) UnmarshalJSON(b []byte) error {
-	cert, err := certc.UnmarshalJSONCert(b)
-	if err != nil {
-		return err
-	}
-
-	*v = RelayEndpointValue{cert}
-	return nil
-}
-
-type RelayServerKey struct {
-	Endpoint model.Endpoint `json:"endpoint"`
-	RelayID  RelayID        `json:"relay_id"`
-}
-
-type RelayServerValue struct {
-	Hostports []model.HostPort  `json:"hostports"`
-	Cert      *x509.Certificate `json:"cert"`
-}
-
-type jsonRelayServerValue struct {
-	Hostports []model.HostPort `json:"hostports"`
-	Cert      []byte           `json:"cert"`
-}
-
-func (v RelayServerValue) MarshalJSON() ([]byte, error) {
-	return json.Marshal(jsonRelayServerValue{
-		Hostports: v.Hostports,
-		Cert:      v.Cert.Raw,
-	})
-}
-
-func (v *RelayServerValue) UnmarshalJSON(b []byte) error {
-	s := jsonRelayServerValue{}
-	if err := json.Unmarshal(b, &s); err != nil {
-		return err
-	}
-
-	cert, err := x509.ParseCertificate(s.Cert)
-	if err != nil {
-		return err
-	}
-
-	*v = RelayServerValue{Hostports: s.Hostports, Cert: cert}
-	return nil
-}
-
-type relayCacheValue struct {
-	Hostports []model.HostPort
-	Cert      *x509.Certificate
 }

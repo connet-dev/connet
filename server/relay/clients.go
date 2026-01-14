@@ -35,11 +35,9 @@ type clientAuth struct {
 	metadata string
 }
 
-type tlsAuthenticator func(chi *tls.ClientHelloInfo) (*tls.Config, error)
-type clientAuthenticator func(serverName string, certs []*x509.Certificate) *clientAuth
 type directAuthenticator func(req *pbclientrelay.AuthenticateReq, cert *x509.Certificate) (*clientAuth, error)
 
-func newClientsServer(cfg Config, tlsAuth tlsAuthenticator, clAuth clientAuthenticator, directAuth directAuthenticator, directCert *certc.Cert) (*clientsServer, error) {
+func newClientsServer(cfg Config, directAuth directAuthenticator, directCert *certc.Cert) (*clientsServer, error) {
 	directTLS, err := directCert.TLSCert()
 	if err != nil {
 		return nil, fmt.Errorf("direct TLS cert: %w", err)
@@ -52,16 +50,8 @@ func newClientsServer(cfg Config, tlsAuth tlsAuthenticator, clAuth clientAuthent
 	}
 
 	return &clientsServer{
-		tlsConf: &tls.Config{
-			GetConfigForClient: func(chi *tls.ClientHelloInfo) (*tls.Config, error) {
-				if chi.ServerName == directTLSConf.ServerName {
-					return directTLSConf, nil
-				}
-				return tlsAuth(chi)
-			},
-		},
-		auth:   clAuth,
-		direct: directAuth,
+		tlsConf: directTLSConf,
+		direct:  directAuth,
 
 		endpoints: map[model.Endpoint]*endpointClients{},
 
@@ -71,7 +61,6 @@ func newClientsServer(cfg Config, tlsAuth tlsAuthenticator, clAuth clientAuthent
 
 type clientsServer struct {
 	tlsConf *tls.Config
-	auth    clientAuthenticator
 	direct  directAuthenticator
 
 	endpoints   map[model.Endpoint]*endpointClients
@@ -284,34 +273,18 @@ func (c *clientConn) run(ctx context.Context) {
 var errNotRecognizedClient = errors.New("client not recognized as a destination or a source")
 
 func (c *clientConn) runErr(ctx context.Context) error {
-	protocol := model.GetConnectRelayNextProto(c.conn)
-	if protocol == model.ConnectRelayV02 {
-		if auth, err := c.authenticate(ctx); err != nil {
-			if perr := pberror.GetError(err); perr != nil {
-				cerr := c.conn.CloseWithError(quic.ApplicationErrorCode(perr.Code), perr.Message)
-				err = errors.Join(perr, cerr)
-			} else {
-				cerr := c.conn.CloseWithError(quic.ApplicationErrorCode(pberror.Code_AuthenticationFailed), "Error while authenticating")
-				err = errors.Join(err, cerr)
-			}
-			return err
+	if auth, err := c.authenticate(ctx); err != nil {
+		if perr := pberror.GetError(err); perr != nil {
+			cerr := c.conn.CloseWithError(quic.ApplicationErrorCode(perr.Code), perr.Message)
+			err = errors.Join(perr, cerr)
 		} else {
-			c.auth = auth
-			c.logger = c.logger.With("endpoint", auth.endpoint, "role", auth.role, "key", auth.key)
+			cerr := c.conn.CloseWithError(quic.ApplicationErrorCode(pberror.Code_AuthenticationFailed), "Error while authenticating")
+			err = errors.Join(err, cerr)
 		}
+		return err
 	} else {
-		serverName := c.conn.ConnectionState().TLS.ServerName
-		certs := c.conn.ConnectionState().TLS.PeerCertificates
-		if auth := c.server.auth(serverName, certs); auth == nil {
-			return c.conn.CloseWithError(quic.ApplicationErrorCode(pberror.Code_AuthenticationFailed), "authentication missing")
-		} else {
-			c.auth = auth
-			c.logger = c.logger.With("endpoint", auth.endpoint, "role", auth.role, "key", auth.key)
-		}
-
-		if err := c.check(ctx); err != nil {
-			return err
-		}
+		c.auth = auth
+		c.logger = c.logger.With("endpoint", auth.endpoint, "role", auth.role, "key", auth.key)
 	}
 
 	switch c.auth.role {
@@ -359,26 +332,6 @@ func (c *clientConn) authenticate(ctx context.Context) (*clientAuth, error) {
 
 	c.logger.Debug("authentication completed", "remote", c.conn.RemoteAddr(), "endpoint", auth.endpoint, "role", auth.role, "build", req.BuildVersion)
 	return auth, nil
-}
-
-func (c *clientConn) check(ctx context.Context) error {
-	stream, err := c.conn.AcceptStream(ctx)
-	if err != nil {
-		return fmt.Errorf("accept client stream: %w", err)
-	}
-	defer func() {
-		if err := stream.Close(); err != nil {
-			slogc.Fine(c.logger, "error closing check client stream", "err", err)
-		}
-	}()
-
-	if _, err := pbconnect.ReadRequest(stream); err != nil {
-		return fmt.Errorf("read client stream: %w", err)
-	} else if err := proto.Write(stream, &pbconnect.Response{}); err != nil {
-		return fmt.Errorf("write client stream: %w", err)
-	}
-
-	return nil
 }
 
 func (c *clientConn) runDestination(ctx context.Context) error {
