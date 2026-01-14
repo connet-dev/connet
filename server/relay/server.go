@@ -77,7 +77,7 @@ func NewServer(cfg Config) (*Server, error) {
 		return nil, fmt.Errorf("relay control client: %w", err)
 	}
 
-	clients, err := newClientsServer(cfg, control.v2Auth, directCert)
+	clients, err := newClientsServer(cfg, directCert, control)
 	if err != nil {
 		return nil, fmt.Errorf("relay clients server: %w", err)
 	}

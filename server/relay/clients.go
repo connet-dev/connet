@@ -35,10 +35,22 @@ type clientAuth struct {
 	metadata string
 }
 
-type directAuthenticator func(req *pbclientrelay.AuthenticateReq, cert *x509.Certificate) (*clientAuth, error)
+type ClientAuthenticator interface {
+	Authenticate(req *pbclientrelay.AuthenticateReq, cert *x509.Certificate) (*clientAuth, error)
+}
 
-func newClientsServer(cfg Config, directAuth directAuthenticator, directCert *certc.Cert) (*clientsServer, error) {
-	directTLS, err := directCert.TLSCert()
+type clientsServer struct {
+	tlsConf *tls.Config
+	auth    ClientAuthenticator
+
+	endpoints   map[model.Endpoint]*endpointClients
+	endpointsMu sync.RWMutex
+
+	logger *slog.Logger
+}
+
+func newClientsServer(cfg Config, cert *certc.Cert, auth ClientAuthenticator) (*clientsServer, error) {
+	directTLS, err := cert.TLSCert()
 	if err != nil {
 		return nil, fmt.Errorf("direct TLS cert: %w", err)
 	}
@@ -51,22 +63,12 @@ func newClientsServer(cfg Config, directAuth directAuthenticator, directCert *ce
 
 	return &clientsServer{
 		tlsConf: directTLSConf,
-		direct:  directAuth,
+		auth:    auth,
 
 		endpoints: map[model.Endpoint]*endpointClients{},
 
 		logger: cfg.Logger.With("server", "relay-clients"),
 	}, nil
-}
-
-type clientsServer struct {
-	tlsConf *tls.Config
-	direct  directAuthenticator
-
-	endpoints   map[model.Endpoint]*endpointClients
-	endpointsMu sync.RWMutex
-
-	logger *slog.Logger
 }
 
 type endpointClients struct {
@@ -314,7 +316,7 @@ func (c *clientConn) authenticate(ctx context.Context) (*clientAuth, error) {
 		return nil, fmt.Errorf("client auth read: %w", err)
 	}
 
-	auth, err := c.server.direct(req, c.conn.ConnectionState().TLS.PeerCertificates[0])
+	auth, err := c.server.auth.Authenticate(req, c.conn.ConnectionState().TLS.PeerCertificates[0])
 	if err != nil {
 		perr := pberror.GetError(err)
 		if perr == nil {

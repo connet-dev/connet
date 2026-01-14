@@ -74,7 +74,7 @@ func newControlClient(cfg Config, direct *certc.Cert, configStore logc.KV[Config
 	return c, nil
 }
 
-func (s *controlClient) v2Auth(authReq *pbclientrelay.AuthenticateReq, cert *x509.Certificate) (*clientAuth, error) {
+func (s *controlClient) Authenticate(authReq *pbclientrelay.AuthenticateReq, cert *x509.Certificate) (*clientAuth, error) {
 	authUnsealKey := s.authUnsealKey.Load()
 	if authUnsealKey == nil {
 		return nil, fmt.Errorf("no control verification key")

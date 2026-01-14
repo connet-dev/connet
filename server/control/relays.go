@@ -417,10 +417,6 @@ func (c *relayConn) authenticate(ctx context.Context) (*relayConnAuth, error) {
 		return nil, fmt.Errorf("auth read request: %w", err)
 	}
 
-	return c.authenticateV3(authStream, req)
-}
-
-func (c *relayConn) authenticateV3(authStream *quic.Stream, req *pbrelay.AuthenticateReq) (*relayConnAuth, error) {
 	protocol := model.RelayControlV03
 	cert, err := x509.ParseCertificate(req.ServerCertificate)
 	if err != nil {
