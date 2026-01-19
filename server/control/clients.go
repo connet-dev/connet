@@ -17,7 +17,6 @@ import (
 	"github.com/connet-dev/connet/model"
 	"github.com/connet-dev/connet/pkg/iterc"
 	"github.com/connet-dev/connet/pkg/logc"
-	"github.com/connet-dev/connet/pkg/notify"
 	"github.com/connet-dev/connet/pkg/quicc"
 	"github.com/connet-dev/connet/pkg/reliable"
 	"github.com/connet-dev/connet/pkg/slogc"
@@ -43,8 +42,6 @@ type ClientAuthenticator interface {
 type ClientAuthentication []byte
 
 type ClientRelays interface {
-	Client(ctx context.Context, endpoint model.Endpoint, role model.Role, cert *x509.Certificate, auth ClientAuthentication,
-		notify func(map[RelayID]relayCacheValue) error) error
 	Directs(ctx context.Context, endpoint model.Endpoint, role model.Role, cert *x509.Certificate, auth ClientAuthentication,
 		notify func(map[RelayID]*pbclient.DirectRelay) error) error
 }
@@ -712,72 +709,17 @@ func (s *clientStream) relay(ctx context.Context, req *pbclient.Request_Relay) e
 	g := reliable.NewGroup(ctx)
 	g.Go(quicc.CancelStream(s.stream))
 
-	relaysResp := notify.NewEmpty[*pbclient.Response_Relays]()
 	g.Go(func(ctx context.Context) error {
-		defer s.conn.logger.Debug("completed relay write")
-		return relaysResp.Listen(ctx, func(resp *pbclient.Response_Relays) error {
-			directIds := map[string]struct{}{}
-			for _, d := range resp.Directs {
-				directIds[d.Id] = struct{}{}
-			}
-
-			resp = &pbclient.Response_Relays{
-				Relays: iterc.FilterSlice(resp.Relays, func(r *pbclient.Relay) bool {
-					_, ok := directIds[r.Id]
-					return !ok
-				}),
-				Directs: resp.Directs,
-			}
-
-			s.conn.logger.Debug("updated all relay list", "relays", len(resp.Relays), "directs", len(resp.Directs))
-			if err := proto.Write(s.stream, &pbclient.Response{
-				Relay: resp,
-			}); err != nil {
-				return fmt.Errorf("client relay response: %w", err)
-			}
-			return nil
-		})
-	})
-
-	g.Go(func(ctx context.Context) error {
-		defer s.conn.logger.Debug("completed relay notify")
-		return s.conn.server.relays.Client(ctx, endpoint, role, clientCert, s.conn.auth, func(relays map[RelayID]relayCacheValue) error {
-			s.conn.logger.Debug("updated relay list", "relays", len(relays))
-
-			var addrs []*pbclient.Relay
-			for id, value := range relays {
-				addrs = append(addrs, &pbclient.Relay{
-					Id:                id.string,
-					Addresses:         model.PBsFromHostPorts(value.Hostports),
-					ServerCertificate: value.Cert.Raw,
-				})
-			}
-
-			relaysResp.Update(func(resp *pbclient.Response_Relays) *pbclient.Response_Relays {
-				return &pbclient.Response_Relays{
-					Relays:  addrs,
-					Directs: resp.GetDirects(),
-				}
-			})
-			return nil
-		})
-	})
-
-	g.Go(func(ctx context.Context) error {
-		if s.conn.protocol == model.ClientControlV02 {
-			// old clients don't support direct relays
-			return nil
-		}
-
 		defer s.conn.logger.Debug("completed direct relay notify")
 		return s.conn.server.relays.Directs(ctx, endpoint, role, clientCert, s.conn.auth, func(relays map[RelayID]*pbclient.DirectRelay) error {
 			s.conn.logger.Debug("updated direct relay list", "relays", len(relays))
-			relaysResp.Update(func(resp *pbclient.Response_Relays) *pbclient.Response_Relays {
-				return &pbclient.Response_Relays{
-					Relays:  resp.GetRelays(),
+			if err := proto.Write(s.stream, &pbclient.Response{
+				Relay: &pbclient.Response_Relays{
 					Directs: slices.Collect(maps.Values(relays)),
-				}
-			})
+				},
+			}); err != nil {
+				return fmt.Errorf("client relay response: %w", err)
+			}
 			return nil
 		})
 	})
