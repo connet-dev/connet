@@ -283,17 +283,7 @@ func (ep *endpoint) runRelay(ctx context.Context, conn *quic.Conn) error {
 				return fmt.Errorf("relay unexpected response")
 			}
 
-			var relays []*pbclient.DirectRelay
-			relays = append(relays, iterc.MapSlice(resp.Relay.Relays, func(relay *pbclient.Relay) *pbclient.DirectRelay {
-				return &pbclient.DirectRelay{
-					Id:                relay.Id,
-					Addresses:         relay.Addresses,
-					ServerCertificate: relay.ServerCertificate,
-				}
-			})...)
-			relays = append(relays, resp.Relay.Directs...)
-
-			ep.peer.setRelays(relays)
+			ep.peer.setRelays(resp.Relay.Directs)
 		}
 	})
 

@@ -72,12 +72,12 @@ func NewServer(cfg Config) (*Server, error) {
 		return nil, fmt.Errorf("generate direct relay cert: %w", err)
 	}
 
-	control, err := newControlClient(cfg, rootCert, directCert, configStore)
+	control, err := newControlClient(cfg, directCert, configStore)
 	if err != nil {
 		return nil, fmt.Errorf("relay control client: %w", err)
 	}
 
-	clients, err := newClientsServer(cfg, control.tlsAuthenticate, control.v1Auth, control.v2Auth, directCert)
+	clients, err := newClientsServer(cfg, directCert, control)
 	if err != nil {
 		return nil, fmt.Errorf("relay clients server: %w", err)
 	}

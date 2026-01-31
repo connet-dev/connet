@@ -39,11 +39,9 @@ func (f *fileStores) Servers() (logc.KV[ServerKey, ServerValue], error) {
 type ConfigKey string
 
 var (
-	configStatelessReset      ConfigKey = "stateless-reset"
-	configControlID           ConfigKey = "control-id"
-	configControlReconnect    ConfigKey = "control-reconnect"
-	configClientsStreamOffset ConfigKey = "clients-stream-offset"
-	configClientsLogOffset    ConfigKey = "clients-log-offset"
+	configStatelessReset   ConfigKey = "stateless-reset"
+	configControlID        ConfigKey = "control-id"
+	configControlReconnect ConfigKey = "control-reconnect"
 )
 
 type ConfigValue struct {

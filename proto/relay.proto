@@ -23,46 +23,6 @@ message AuthenticateResp {
   bytes control_authentication_key = 4;
 }
 
-enum ChangeType {
-  ChangeUnknown = 0;
-  ChangePut = 1;
-  ChangeDel = 2;
-}
-
-message ClientsReq {
-  int64 offset = 1;
-}
-
-message ClientsResp {
-  repeated Change changes = 1;
-  int64 offset = 2;
-  bool restart = 3;
-
-  message Change {
-    ChangeType change = 1;
-    model.Endpoint endpoint = 2;
-    model.Role role = 3;
-    string certificate_key = 4;
-    bytes certificate = 5;
-  }
-}
-
-message ServersReq {
-  int64 offset = 1;
-}
-
-message ServersResp {
-  repeated Change changes = 1;
-  int64 offset = 2;
-  bool restart = 3;
-
-  message Change {
-    ChangeType change = 1;
-    model.Endpoint endpoint = 2;
-    bytes server_certificate = 3;
-  }
-}
-
 message ClientAuthentication {
   model.Endpoint endpoint = 1;
   model.Role role = 2;
