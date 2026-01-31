@@ -25,7 +25,7 @@ pkgs.buildGoModule
     fileset = sourceFiles;
   };
 
-  vendorHash = "sha256-pNuIzSxAxv9KbpOFE0JYJ/ZO9rdVY+AT2erNBVMcyiI=";
+  vendorHash = "sha256-RVlmeOYAEfwzsjPS3ki1SuXQ8OLGq0R+dGCEPzfQNEs=";
   subPackages = [ "cmd/connet" ];
   ldflags = [ "-X 'github.com/connet-dev/connet/model.Version=${lib.strings.fileContents ../VERSION}'" ];
 
