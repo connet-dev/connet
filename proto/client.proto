@@ -48,7 +48,7 @@ message Response {
     repeated RemotePeer peers = 1;
   }
   message Relays {
-    repeated DirectRelay directs = 2;
+    repeated Relay relays = 2;
   }
 }
 
@@ -65,7 +65,7 @@ message RemotePeer {
   Peer peer = 8;
 }
 
-message DirectRelay {
+message Relay {
   string id = 1; // relay id as assigned by the control server
   repeated model.HostPort addresses = 2;
   bytes server_certificate = 3; // generic certificate used by this relay

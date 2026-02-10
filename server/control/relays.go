@@ -63,7 +63,7 @@ func newRelayServer(
 		directsCache[msg.Key.ID] = directRelay{
 			auth:        msg.Value.Authentication,
 			authSealKey: msg.Value.AuthenticationSealKey,
-			template: &pbclient.DirectRelay{
+			template: &pbclient.Relay{
 				Id:                msg.Key.ID.string,
 				Addresses:         model.PBsFromHostPorts(msg.Value.Hostports),
 				ServerCertificate: msg.Value.Certificate.Raw,
@@ -137,7 +137,7 @@ type relayServer struct {
 type directRelay struct {
 	auth        RelayAuthentication
 	authSealKey *[32]byte
-	template    *pbclient.DirectRelay
+	template    *pbclient.Relay
 }
 
 func (s *relayServer) cachedDirects() (map[RelayID]directRelay, int64) {
@@ -148,7 +148,7 @@ func (s *relayServer) cachedDirects() (map[RelayID]directRelay, int64) {
 }
 
 func (s *relayServer) Directs(ctx context.Context, endpoint model.Endpoint, role model.Role, cert *x509.Certificate, auth ClientAuthentication,
-	notify func(map[RelayID]*pbclient.DirectRelay) error) error {
+	notify func(map[RelayID]*pbclient.Relay) error) error {
 
 	authenticationData, err := protobuf.Marshal(&pbrelay.ClientAuthentication{
 		Endpoint:       endpoint.PB(),
@@ -165,12 +165,12 @@ func (s *relayServer) Directs(ctx context.Context, endpoint model.Endpoint, role
 	}
 
 	directRelays, offset := s.cachedDirects()
-	localDirectRelays := map[RelayID]*pbclient.DirectRelay{}
+	localDirectRelays := map[RelayID]*pbclient.Relay{}
 	for id, relay := range directRelays {
 		if ok, err := s.auth.Allow(relay.auth, auth, endpoint); err != nil {
 			return fmt.Errorf("auth allow error: %w", err)
 		} else if ok {
-			localDirectRelays[id] = &pbclient.DirectRelay{
+			localDirectRelays[id] = &pbclient.Relay{
 				Id:                relay.template.Id,
 				Addresses:         relay.template.Addresses,
 				ServerCertificate: relay.template.ServerCertificate,
@@ -197,7 +197,7 @@ func (s *relayServer) Directs(ctx context.Context, endpoint model.Endpoint, role
 			} else if ok, err := s.auth.Allow(msg.Value.Authentication, auth, endpoint); err != nil {
 				return fmt.Errorf("auth allow error: %w", err)
 			} else if ok {
-				localDirectRelays[msg.Key.ID] = &pbclient.DirectRelay{
+				localDirectRelays[msg.Key.ID] = &pbclient.Relay{
 					Id:                msg.Key.ID.string,
 					Addresses:         model.PBsFromHostPorts(msg.Value.Hostports),
 					ServerCertificate: msg.Value.Certificate.Raw,
@@ -305,7 +305,7 @@ func (s *relayServer) runDirectsCache(ctx context.Context) error {
 			s.directsCache[msg.Key.ID] = directRelay{
 				auth:        msg.Value.Authentication,
 				authSealKey: msg.Value.AuthenticationSealKey,
-				template: &pbclient.DirectRelay{
+				template: &pbclient.Relay{
 					Id:                msg.Key.ID.string,
 					Addresses:         model.PBsFromHostPorts(msg.Value.Hostports),
 					ServerCertificate: msg.Value.Certificate.Raw,
