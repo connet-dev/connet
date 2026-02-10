@@ -307,7 +307,7 @@ func (c *Client) connect(ctx context.Context, transport *quic.Transport, retoken
 	conn, err := transport.Dial(ctx, c.controlAddr, &tls.Config{
 		ServerName: c.controlHost,
 		RootCAs:    c.controlCAs,
-		NextProtos: iterc.MapVarStrings(model.ClientControlV03, model.ClientControlV02),
+		NextProtos: iterc.MapVarStrings(model.ClientControlV03),
 	}, quicc.ClientConfig(c.handshakeIdleTimeout))
 	if err != nil {
 		return nil, fmt.Errorf("dial server %s: %w", c.controlAddr, err)

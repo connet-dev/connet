@@ -13,7 +13,7 @@ func (v ClientControlNextProto) String() string {
 
 func GetClientControlNextProto(conn *quic.Conn) ClientControlNextProto {
 	proto := conn.ConnectionState().TLS.NegotiatedProtocol
-	for _, v := range []ClientControlNextProto{ClientControlV03, ClientControlV02} {
+	for _, v := range []ClientControlNextProto{ClientControlV03} {
 		if v.string == proto {
 			return v
 		}
@@ -23,7 +23,6 @@ func GetClientControlNextProto(conn *quic.Conn) ClientControlNextProto {
 
 var (
 	ClientControlUnknown = ClientControlNextProto{}
-	ClientControlV02     = ClientControlNextProto{"connet-client/0.2"} // 0.8.0
 	ClientControlV03     = ClientControlNextProto{"connet-client/0.3"} // 0.13.0
 	// Update GetClientControlNextProto when adding a new one
 )

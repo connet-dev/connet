@@ -43,7 +43,7 @@ type ClientAuthentication []byte
 
 type ClientRelays interface {
 	Directs(ctx context.Context, endpoint model.Endpoint, role model.Role, cert *x509.Certificate, auth ClientAuthentication,
-		notify func(map[RelayID]*pbclient.DirectRelay) error) error
+		notify func(map[RelayID]*pbclient.Relay) error) error
 }
 
 func newClientServer(
@@ -303,7 +303,7 @@ func (s *clientServer) runListener(ctx context.Context, ingress Ingress) error {
 
 	tlsConf := ingress.TLS.Clone()
 	if len(tlsConf.NextProtos) == 0 {
-		tlsConf.NextProtos = iterc.MapVarStrings(model.ClientControlV03, model.ClientControlV02)
+		tlsConf.NextProtos = iterc.MapVarStrings(model.ClientControlV03)
 	}
 
 	quicConf := quicc.ServerConfig()
@@ -783,11 +783,11 @@ func (s *clientStream) relay(ctx context.Context, req *pbclient.Request_Relay) e
 
 	g.Go(func(ctx context.Context) error {
 		defer s.conn.logger.Debug("completed direct relay notify")
-		return s.conn.server.relays.Directs(ctx, endpoint, role, clientCert, s.conn.auth, func(relays map[RelayID]*pbclient.DirectRelay) error {
+		return s.conn.server.relays.Directs(ctx, endpoint, role, clientCert, s.conn.auth, func(relays map[RelayID]*pbclient.Relay) error {
 			s.conn.logger.Debug("updated direct relay list", "relays", len(relays))
 			if err := proto.Write(s.stream, &pbclient.Response{
 				Relay: &pbclient.Response_Relays{
-					Directs: slices.Collect(maps.Values(relays)),
+					Relays: slices.Collect(maps.Values(relays)),
 				},
 			}); err != nil {
 				return fmt.Errorf("client relay response: %w", err)

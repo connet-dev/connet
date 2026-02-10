@@ -283,7 +283,7 @@ func (ep *endpoint) runRelay(ctx context.Context, conn *quic.Conn) error {
 				return fmt.Errorf("relay unexpected response")
 			}
 
-			ep.peer.setRelays(resp.Relay.Directs)
+			ep.peer.setRelays(resp.Relay.Relays)
 		}
 	})
 

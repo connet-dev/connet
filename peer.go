@@ -29,7 +29,7 @@ import (
 type peer struct {
 	self *notify.V[*pbclient.Peer]
 
-	relays     *notify.V[[]*pbclient.DirectRelay]
+	relays     *notify.V[[]*pbclient.Relay]
 	relayConns *notify.V[map[relayID]*quic.Conn]
 
 	peers     *notify.V[[]*pbclient.RemotePeer]
@@ -119,7 +119,7 @@ func newPeer(direct *directServer, addrs *notify.V[advertiseAddrs], metadata str
 			ClientCertificate: clientTLSCert.Leaf.Raw,
 		}),
 
-		relays:     notify.NewEmpty[[]*pbclient.DirectRelay](),
+		relays:     notify.NewEmpty[[]*pbclient.Relay](),
 		relayConns: notify.NewEmpty[map[relayID]*quic.Conn](),
 
 		peers:     notify.NewEmpty[[]*pbclient.RemotePeer](),
@@ -135,7 +135,7 @@ func newPeer(direct *directServer, addrs *notify.V[advertiseAddrs], metadata str
 	}, nil
 }
 
-func (p *peer) setRelays(relays []*pbclient.DirectRelay) {
+func (p *peer) setRelays(relays []*pbclient.Relay) {
 	p.relays.Set(relays)
 }
 
@@ -172,7 +172,7 @@ func (p *peer) runDirectAddrs(ctx context.Context) error {
 
 func (p *peer) runRelays(ctx context.Context) error {
 	runningRelays := map[relayID]*relay{}
-	return p.relays.Listen(ctx, func(relays []*pbclient.DirectRelay) error {
+	return p.relays.Listen(ctx, func(relays []*pbclient.Relay) error {
 		p.logger.Debug("relays updated", "len", len(relays))
 
 		activeRelays := map[relayID]struct{}{}
