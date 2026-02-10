@@ -30,6 +30,10 @@ func NewServer(cfg Config) (*Server, error) {
 		return nil, fmt.Errorf("config store open: %w", err)
 	}
 
+	if err := cfg.Stores.RemoveDeprecated(); err != nil {
+		cfg.Logger.Warn("could not remove deprecated stores", "err", err)
+	}
+
 	relays, err := newRelayServer(cfg.RelaysIngress, cfg.RelaysAuth, configStore, cfg.Stores, cfg.Logger)
 	if err != nil {
 		return nil, fmt.Errorf("create relay server: %w", err)
