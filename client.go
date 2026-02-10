@@ -391,12 +391,7 @@ func (c *Client) runSession(ctx context.Context, sess *session) error {
 	c.connStatus.Store(statusc.Connected)
 	defer c.connStatus.Store(statusc.Reconnecting)
 
-	select {
-	case <-ctx.Done():
-		return context.Cause(ctx)
-	case <-sess.conn.Context().Done():
-		return context.Cause(sess.conn.Context())
-	}
+	return quicc.WaitLogRTTStats(ctx, sess.conn, c.logger)
 }
 
 func (c *Client) listenNatlocal(ctx context.Context) error {
