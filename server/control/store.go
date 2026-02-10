@@ -3,6 +3,8 @@ package control
 import (
 	"crypto/x509"
 	"encoding/json"
+	"errors"
+	"os"
 	"path/filepath"
 
 	"github.com/connet-dev/connet/model"
@@ -17,6 +19,8 @@ type Stores interface {
 	ClientPeers() (logc.KV[ClientPeerKey, ClientPeerValue], error)
 
 	RelayDirects() (logc.KV[RelayConnKey, RelayDirectValue], error)
+
+	RemoveDeprecated() error
 }
 
 func NewFileStores(dir string) Stores {
@@ -41,6 +45,16 @@ func (f *fileStores) ClientPeers() (logc.KV[ClientPeerKey, ClientPeerValue], err
 
 func (f *fileStores) RelayDirects() (logc.KV[RelayConnKey, RelayDirectValue], error) {
 	return logc.NewKV[RelayConnKey, RelayDirectValue](filepath.Join(f.dir, "relay-directs"))
+}
+
+func (f *fileStores) RemoveDeprecated() error {
+	return errors.Join(
+		os.RemoveAll(filepath.Join(f.dir, "relay-conns")),
+		os.RemoveAll(filepath.Join(f.dir, "relay-clients")),
+		os.RemoveAll(filepath.Join(f.dir, "relay-endpoints")),
+		os.RemoveAll(filepath.Join(f.dir, "relay-servers")),
+		os.RemoveAll(filepath.Join(f.dir, "relay-server-offsets")),
+	)
 }
 
 type ConfigKey string

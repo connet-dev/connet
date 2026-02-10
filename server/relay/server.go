@@ -47,6 +47,10 @@ func NewServer(cfg Config) (*Server, error) {
 		return nil, fmt.Errorf("relay stores: %w", err)
 	}
 
+	if err := cfg.Stores.RemoveDeprecated(); err != nil {
+		cfg.Logger.Warn("could not remove deprecated stores", "err", err)
+	}
+
 	statelessResetVal, err := configStore.GetOrInit(configStatelessReset, func(ck ConfigKey) (ConfigValue, error) {
 		var key quic.StatelessResetKey
 		if _, err := io.ReadFull(rand.Reader, key[:]); err != nil {
