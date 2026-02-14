@@ -17,6 +17,7 @@ import (
 	"github.com/connet-dev/connet/model"
 	"github.com/connet-dev/connet/pkg/iterc"
 	"github.com/connet-dev/connet/pkg/logc"
+	"github.com/connet-dev/connet/pkg/netc"
 	"github.com/connet-dev/connet/pkg/quicc"
 	"github.com/connet-dev/connet/pkg/reliable"
 	"github.com/connet-dev/connet/pkg/slogc"
@@ -69,9 +70,11 @@ func newClientServer(
 		return nil, fmt.Errorf("client snapshot: %w", err)
 	}
 
-	reactivate := map[ClientConnKey][]ClientPeerKey{}
+	reactivate := map[ClientID]reactivateValue{}
 	for _, msg := range connsMsgs {
-		reactivate[msg.Key] = []ClientPeerKey{}
+		v := reactivate[msg.Key.ID]
+		v.conns = append(v.conns, msg.Key)
+		reactivate[msg.Key.ID] = v
 	}
 
 	peersMsgs, peersOffset, err := peers.Snapshot()
@@ -79,16 +82,17 @@ func newClientServer(
 		return nil, fmt.Errorf("client peers snapshot: %w", err)
 	}
 
-	peersCache := map[cacheKey][]*pbclient.RemotePeer{}
+	peersCache := map[cacheKey][]cachePeer{}
 	for _, msg := range peersMsgs {
-		if reactivePeers, ok := reactivate[ClientConnKey{msg.Key.ID}]; ok {
+		if reactivePeers, ok := reactivate[msg.Key.ID]; ok {
 			key := cacheKey{msg.Key.Endpoint, msg.Key.Role}
-			peersCache[key] = append(peersCache[key], &pbclient.RemotePeer{
+			peersCache[key] = append(peersCache[key], cachePeer{msg.Key.ConnID, msg.Offset, &pbclient.RemotePeer{
 				Id:       msg.Key.ID.string,
 				Metadata: msg.Value.Metadata,
 				Peer:     msg.Value.Peer,
-			})
-			reactivate[ClientConnKey{msg.Key.ID}] = append(reactivePeers, msg.Key)
+			}})
+			reactivePeers.peers = append(reactivePeers.peers, msg.Key)
+			reactivate[msg.Key.ID] = reactivePeers
 		} else {
 			logger.Warn("peer without corresponding client, deleting", "endpoint", msg.Key.Endpoint, "role", msg.Key.Role, "id", msg.Key.ID)
 			if err := peers.Del(msg.Key); err != nil {
@@ -154,35 +158,51 @@ type clientServer struct {
 	conns logc.KV[ClientConnKey, ClientConnValue]
 	peers logc.KV[ClientPeerKey, ClientPeerValue]
 
-	peersCache  map[cacheKey][]*pbclient.RemotePeer
+	peersCache  map[cacheKey][]cachePeer
 	peersOffset int64
 	peersMu     sync.RWMutex
 
-	reactivate   map[ClientConnKey][]ClientPeerKey
+	reactivate   map[ClientID]reactivateValue
 	reactivateMu sync.RWMutex
 }
 
-func (s *clientServer) connected(id ClientID, auth ClientAuthentication, remote net.Addr, metadata string) error {
+type cacheKey struct {
+	endpoint model.Endpoint
+	role     model.Role
+}
+
+type cachePeer struct {
+	connID ConnID
+	offset int64
+	peer   *pbclient.RemotePeer
+}
+
+type reactivateValue struct {
+	conns []ClientConnKey
+	peers []ClientPeerKey
+}
+
+func (s *clientServer) connected(id ClientID, connID ConnID, auth ClientAuthentication, remote net.Addr, metadata string) error {
 	s.reactivateMu.Lock()
-	delete(s.reactivate, ClientConnKey{id})
+	delete(s.reactivate, id)
 	s.reactivateMu.Unlock()
 
-	return s.conns.Put(ClientConnKey{id}, ClientConnValue{auth, remote.String(), metadata})
+	return s.conns.Put(ClientConnKey{id, connID}, ClientConnValue{auth, remote.String(), metadata})
 }
 
-func (s *clientServer) disconnected(id ClientID) error {
-	return s.conns.Del(ClientConnKey{id})
+func (s *clientServer) disconnected(id ClientID, connID ConnID) error {
+	return s.conns.Del(ClientConnKey{id, connID})
 }
 
-func (s *clientServer) announce(endpoint model.Endpoint, role model.Role, id ClientID, metadata string, peer *pbclient.Peer) error {
-	return s.peers.Put(ClientPeerKey{endpoint, role, id}, ClientPeerValue{peer, metadata})
+func (s *clientServer) announce(endpoint model.Endpoint, role model.Role, id ClientID, connID ConnID, metadata string, peer *pbclient.Peer) error {
+	return s.peers.Put(ClientPeerKey{endpoint, role, id, connID}, ClientPeerValue{peer, metadata})
 }
 
-func (s *clientServer) revoke(endpoint model.Endpoint, role model.Role, id ClientID) error {
-	return s.peers.Del(ClientPeerKey{endpoint, role, id})
+func (s *clientServer) revoke(endpoint model.Endpoint, role model.Role, id ClientID, connID ConnID) error {
+	return s.peers.Del(ClientPeerKey{endpoint, role, id, connID})
 }
 
-func (s *clientServer) cachedPeers(endpoint model.Endpoint, role model.Role) ([]*pbclient.RemotePeer, int64) {
+func (s *clientServer) cachedPeers(endpoint model.Endpoint, role model.Role) ([]cachePeer, int64) {
 	s.peersMu.RLock()
 	defer s.peersMu.RUnlock()
 
@@ -191,7 +211,15 @@ func (s *clientServer) cachedPeers(endpoint model.Endpoint, role model.Role) ([]
 
 func (s *clientServer) listen(ctx context.Context, endpoint model.Endpoint, role model.Role, notify func(peers []*pbclient.RemotePeer) error) error {
 	peers, offset := s.cachedPeers(endpoint, role)
-	if err := notify(peers); err != nil {
+	doNotify := func() error {
+		uniquePeers := map[string]*pbclient.RemotePeer{}
+		for _, peer := range peers {
+			uniquePeers[peer.peer.Id] = peer.peer
+		}
+
+		return notify(slices.Collect(maps.Values(uniquePeers)))
+	}
+	if err := doNotify(); err != nil {
 		return err
 	}
 
@@ -208,16 +236,18 @@ func (s *clientServer) listen(ctx context.Context, endpoint model.Endpoint, role
 			}
 
 			if msg.Delete {
-				peers = slices.DeleteFunc(peers, func(peer *pbclient.RemotePeer) bool {
-					return peer.Id == msg.Key.ID.string
+				peers = slices.DeleteFunc(peers, func(peer cachePeer) bool {
+					return peer.peer.Id == msg.Key.ID.string && peer.connID == msg.Key.ConnID
 				})
 			} else {
-				npeer := &pbclient.RemotePeer{
+				npeer := cachePeer{msg.Key.ConnID, msg.Offset, &pbclient.RemotePeer{
 					Id:       msg.Key.ID.string,
 					Metadata: msg.Value.Metadata,
 					Peer:     msg.Value.Peer,
-				}
-				idx := slices.IndexFunc(peers, func(peer *pbclient.RemotePeer) bool { return peer.Id == msg.Key.ID.string })
+				}}
+				idx := slices.IndexFunc(peers, func(peer cachePeer) bool {
+					return peer.peer.Id == msg.Key.ID.string && peer.connID == msg.Key.ConnID
+				})
 				if idx >= 0 {
 					peers[idx] = npeer
 				} else {
@@ -230,7 +260,7 @@ func (s *clientServer) listen(ctx context.Context, endpoint model.Endpoint, role
 		offset = nextOffset
 
 		if changed {
-			if err := notify(peers); err != nil {
+			if err := doNotify(); err != nil {
 				return err
 			}
 		}
@@ -323,8 +353,8 @@ func (s *clientServer) runPeerCache(ctx context.Context) error {
 		key := cacheKey{msg.Key.Endpoint, msg.Key.Role}
 		peers := s.peersCache[key]
 		if msg.Delete {
-			peers = slices.DeleteFunc(peers, func(peer *pbclient.RemotePeer) bool {
-				return peer.Id == msg.Key.ID.string
+			peers = slices.DeleteFunc(peers, func(peer cachePeer) bool {
+				return peer.peer.Id == msg.Key.ID.string && peer.connID == msg.Key.ConnID
 			})
 			if len(peers) == 0 {
 				delete(s.peersCache, key)
@@ -332,12 +362,14 @@ func (s *clientServer) runPeerCache(ctx context.Context) error {
 				s.peersCache[key] = peers
 			}
 		} else {
-			npeer := &pbclient.RemotePeer{
+			npeer := cachePeer{msg.Key.ConnID, msg.Offset, &pbclient.RemotePeer{
 				Id:       msg.Key.ID.string,
 				Metadata: msg.Value.Metadata,
 				Peer:     msg.Value.Peer,
-			}
-			idx := slices.IndexFunc(peers, func(peer *pbclient.RemotePeer) bool { return peer.Id == msg.Key.ID.string })
+			}}
+			idx := slices.IndexFunc(peers, func(peer cachePeer) bool {
+				return peer.peer.Id == msg.Key.ID.string && peer.connID == msg.Key.ConnID
+			})
 			if idx >= 0 {
 				peers[idx] = npeer
 			} else {
@@ -384,13 +416,15 @@ func (s *clientServer) runCleaner(ctx context.Context) error {
 	s.reactivateMu.Lock()
 	defer s.reactivateMu.Unlock()
 
-	for key, peers := range s.reactivate {
-		s.logger.Warn("force disconnecting client", "id", key.ID)
-		if err := s.disconnected(key.ID); err != nil {
-			return err
+	for key, value := range s.reactivate {
+		s.logger.Warn("force disconnecting client", "id", key)
+		for _, conn := range value.conns {
+			if err := s.disconnected(conn.ID, conn.ConnID); err != nil {
+				return err
+			}
 		}
-		for _, peer := range peers {
-			if err := s.revoke(peer.Endpoint, peer.Role, peer.ID); err != nil {
+		for _, peer := range value.peers {
+			if err := s.revoke(peer.Endpoint, peer.Role, peer.ID, peer.ConnID); err != nil {
 				return err
 			}
 		}
@@ -423,6 +457,7 @@ type clientConn struct {
 	server *clientServer
 	conn   *quic.Conn
 	logger *slog.Logger
+	connID ConnID
 
 	clientConnAuth
 }
@@ -460,16 +495,17 @@ func (c *clientConn) runErr(ctx context.Context) error {
 	} else {
 		c.clientConnAuth = *auth
 		c.logger = c.logger.With("client-id", c.id)
+		c.connID = ConnID(netc.GenName())
 	}
 
 	c.logger.Info("client connected", "addr", c.conn.RemoteAddr(), "metadata", c.metadata)
 	defer c.logger.Info("client disconnected", "addr", c.conn.RemoteAddr(), "metadata", c.metadata)
 
-	if err := c.server.connected(c.id, c.auth, c.conn.RemoteAddr(), c.metadata); err != nil {
+	if err := c.server.connected(c.id, c.connID, c.auth, c.conn.RemoteAddr(), c.metadata); err != nil {
 		return err
 	}
 	defer func() {
-		if err := c.server.disconnected(c.id); err != nil {
+		if err := c.server.disconnected(c.id, c.connID); err != nil {
 			c.logger.Warn("failed to disconnect client", "id", c.id, "err", err)
 		}
 	}()
@@ -622,11 +658,11 @@ func (s *clientStream) announce(ctx context.Context, req *pbclient.Request_Annou
 		return err
 	}
 
-	if err := s.conn.server.announce(endpoint, role, s.conn.id, s.conn.metadata, req.Peer); err != nil {
+	if err := s.conn.server.announce(endpoint, role, s.conn.id, s.conn.connID, s.conn.metadata, req.Peer); err != nil {
 		return err
 	}
 	defer func() {
-		if err := s.conn.server.revoke(endpoint, role, s.conn.id); err != nil {
+		if err := s.conn.server.revoke(endpoint, role, s.conn.id, s.conn.connID); err != nil {
 			s.conn.logger.Warn("failed to revoke client", "id", s.conn.id, "err", err)
 		}
 	}()
@@ -655,7 +691,7 @@ func (s *clientStream) announce(ctx context.Context, req *pbclient.Request_Annou
 				return err
 			}
 
-			if err := s.conn.server.announce(endpoint, role, s.conn.id, s.conn.metadata, req.Announce.Peer); err != nil {
+			if err := s.conn.server.announce(endpoint, role, s.conn.id, s.conn.connID, s.conn.metadata, req.Announce.Peer); err != nil {
 				return err
 			}
 		}

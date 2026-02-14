@@ -73,8 +73,11 @@ type ConfigValue struct {
 	Bytes  []byte `json:"bytes,omitempty"`
 }
 
+type ConnID string
+
 type ClientConnKey struct {
-	ID ClientID `json:"id"`
+	ID     ClientID `json:"id"`
+	ConnID ConnID   `json:"conn_id"`
 }
 
 type ClientConnValue struct {
@@ -87,16 +90,12 @@ type ClientPeerKey struct {
 	Endpoint model.Endpoint `json:"endpoint"`
 	Role     model.Role     `json:"role"`
 	ID       ClientID       `json:"id"` // TODO consider using the server cert key or peer id
+	ConnID   ConnID         `json:"conn_id"`
 }
 
 type ClientPeerValue struct {
 	Peer     *pbclient.Peer `json:"peer"`
 	Metadata string         `json:"metadata"`
-}
-
-type cacheKey struct {
-	endpoint model.Endpoint
-	role     model.Role
 }
 
 type RelayConnKey struct {
