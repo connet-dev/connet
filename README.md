@@ -604,6 +604,7 @@ by adding account management and it is one of the easiest way to start.
 ### v0.14.0
  - [x] rewrite relay to not depend on control connection
  - [x] complete migration to relay v2
+ - [ ] controlled server shutdown
  - [ ] client reconnecting before old connection being removed 
 
 ### v0.13.0
