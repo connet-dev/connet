@@ -1,17 +1,31 @@
 package control
 
-import "github.com/connet-dev/connet/pkg/netc"
+import (
+	"encoding/binary"
+	"time"
+
+	"github.com/connet-dev/connet/pkg/netc"
+)
 
 type ConnID struct{ string }
 
 var ConnIDNil = ConnID{""}
 
 func NewConnID() ConnID {
-	return ConnID{netc.GenName()}
+	return ConnID{netc.GenTimestampName()}
 }
 
 func (k ConnID) String() string {
 	return k.string
+}
+
+func (k ConnID) Time() time.Time {
+	data, err := netc.DNSSECEncoding.DecodeString(k.string)
+	if err != nil {
+		return time.Time{}
+	}
+	nanos := binary.BigEndian.Uint64(data)
+	return time.Unix(0, int64(nanos))
 }
 
 func (k ConnID) MarshalText() ([]byte, error) {
