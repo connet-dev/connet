@@ -17,7 +17,6 @@ import (
 	"github.com/connet-dev/connet/model"
 	"github.com/connet-dev/connet/pkg/iterc"
 	"github.com/connet-dev/connet/pkg/logc"
-	"github.com/connet-dev/connet/pkg/netc"
 	"github.com/connet-dev/connet/pkg/quicc"
 	"github.com/connet-dev/connet/pkg/reliable"
 	"github.com/connet-dev/connet/pkg/slogc"
@@ -494,7 +493,7 @@ func (c *clientConn) runErr(ctx context.Context) error {
 	} else {
 		c.clientConnAuth = *auth
 		c.logger = c.logger.With("client-id", c.id)
-		c.connID = ConnID(netc.GenName())
+		c.connID = NewConnID()
 	}
 
 	c.logger.Info("client connected", "addr", c.conn.RemoteAddr(), "metadata", c.metadata)

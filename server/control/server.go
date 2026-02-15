@@ -106,6 +106,7 @@ func (s *Server) getClients() (map[string]StatusClient, error) {
 	for _, msg := range clientMsgs {
 		clients[msg.Key.ID.string] = StatusClient{
 			ID:       msg.Key.ID,
+			ConnID:   msg.Key.ConnID,
 			Address:  msg.Value.Addr,
 			Metadata: msg.Value.Metadata,
 		}
@@ -177,6 +178,7 @@ type StatusIngress struct {
 
 type StatusClient struct {
 	ID       ClientID `json:"id"`
+	ConnID   ConnID   `json:"conn_id"`
 	Address  string   `json:"address"`
 	Metadata string   `json:"metadata"`
 }

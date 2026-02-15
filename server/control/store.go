@@ -73,8 +73,6 @@ type ConfigValue struct {
 	Bytes  []byte `json:"bytes,omitempty"`
 }
 
-type ConnID string
-
 type ClientConnKey struct {
 	ID     ClientID `json:"id"`
 	ConnID ConnID   `json:"conn_id"`
