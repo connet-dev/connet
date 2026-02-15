@@ -50,20 +50,19 @@ type clientsServer struct {
 }
 
 func newClientsServer(cfg Config, cert *certc.Cert, auth ClientAuthenticator) (*clientsServer, error) {
-	directTLS, err := cert.TLSCert()
+	tlsCert, err := cert.TLSCert()
 	if err != nil {
 		return nil, fmt.Errorf("direct TLS cert: %w", err)
 	}
-	directTLSConf := &tls.Config{
-		ServerName:   directTLS.Leaf.DNSNames[0],
-		Certificates: []tls.Certificate{directTLS},
-		ClientAuth:   tls.RequireAnyClientCert,
-		NextProtos:   iterc.MapVarStrings(model.ConnectRelayV02),
-	}
 
 	return &clientsServer{
-		tlsConf: directTLSConf,
-		auth:    auth,
+		tlsConf: &tls.Config{
+			ServerName:   tlsCert.Leaf.DNSNames[0],
+			Certificates: []tls.Certificate{tlsCert},
+			ClientAuth:   tls.RequireAnyClientCert,
+			NextProtos:   iterc.MapVarStrings(model.ConnectRelayV02),
+		},
+		auth: auth,
 
 		endpoints: map[model.Endpoint]*endpointClients{},
 

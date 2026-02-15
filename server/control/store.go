@@ -18,7 +18,7 @@ type Stores interface {
 	ClientConns() (logc.KV[ClientConnKey, ClientConnValue], error)
 	ClientPeers() (logc.KV[ClientPeerKey, ClientPeerValue], error)
 
-	RelayDirects() (logc.KV[RelayConnKey, RelayDirectValue], error)
+	RelayConns() (logc.KV[RelayConnKey, RelayConnValue], error)
 
 	RemoveDeprecated() error
 }
@@ -43,8 +43,8 @@ func (f *fileStores) ClientPeers() (logc.KV[ClientPeerKey, ClientPeerValue], err
 	return logc.NewKV[ClientPeerKey, ClientPeerValue](filepath.Join(f.dir, "client-peers"))
 }
 
-func (f *fileStores) RelayDirects() (logc.KV[RelayConnKey, RelayDirectValue], error) {
-	return logc.NewKV[RelayConnKey, RelayDirectValue](filepath.Join(f.dir, "relay-directs"))
+func (f *fileStores) RelayConns() (logc.KV[RelayConnKey, RelayConnValue], error) {
+	return logc.NewKV[RelayConnKey, RelayConnValue](filepath.Join(f.dir, "relay-directs")) // TODO rename in v0.15
 }
 
 func (f *fileStores) RemoveDeprecated() error {
@@ -100,7 +100,7 @@ type RelayConnKey struct {
 	ID RelayID `json:"id"`
 }
 
-type RelayDirectValue struct {
+type RelayConnValue struct {
 	Authentication        RelayAuthentication `json:"authentication"`
 	Hostports             []model.HostPort    `json:"hostports"`
 	Metadata              string              `json:"metadata"`
@@ -108,7 +108,7 @@ type RelayDirectValue struct {
 	AuthenticationSealKey *[32]byte           `json:"authentication-seal-key"`
 }
 
-type jsonRelayDirectValue struct {
+type jsonRelayConnValue struct {
 	Authentication        RelayAuthentication `json:"authentication"`
 	Hostports             []model.HostPort    `json:"hostports"`
 	Metadata              string              `json:"metadata"`
@@ -116,8 +116,8 @@ type jsonRelayDirectValue struct {
 	AuthenticationSealKey []byte              `json:"authentication-seal-key"`
 }
 
-func (v RelayDirectValue) MarshalJSON() ([]byte, error) {
-	return json.Marshal(jsonRelayDirectValue{
+func (v RelayConnValue) MarshalJSON() ([]byte, error) {
+	return json.Marshal(jsonRelayConnValue{
 		Authentication:        v.Authentication,
 		Hostports:             v.Hostports,
 		Metadata:              v.Metadata,
@@ -126,8 +126,8 @@ func (v RelayDirectValue) MarshalJSON() ([]byte, error) {
 	})
 }
 
-func (v *RelayDirectValue) UnmarshalJSON(b []byte) error {
-	s := jsonRelayDirectValue{}
+func (v *RelayConnValue) UnmarshalJSON(b []byte) error {
+	s := jsonRelayConnValue{}
 	if err := json.Unmarshal(b, &s); err != nil {
 		return err
 	}
@@ -139,6 +139,6 @@ func (v *RelayDirectValue) UnmarshalJSON(b []byte) error {
 
 	var authKey [32]byte
 	copy(authKey[:], s.AuthenticationSealKey)
-	*v = RelayDirectValue{s.Authentication, s.Hostports, s.Metadata, cert, &authKey}
+	*v = RelayConnValue{s.Authentication, s.Hostports, s.Metadata, cert, &authKey}
 	return nil
 }

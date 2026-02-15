@@ -30,9 +30,9 @@ import (
 )
 
 type controlClient struct {
-	hostports []model.HostPort
-	direct    *certc.Cert
-	metadata  string
+	hostports   []model.HostPort
+	clientsCert *certc.Cert
+	metadata    string
 
 	controlAddr          *net.UDPAddr
 	controlToken         string
@@ -47,15 +47,15 @@ type controlClient struct {
 	logger     *slog.Logger
 }
 
-func newControlClient(cfg Config, direct *certc.Cert, configStore logc.KV[ConfigKey, ConfigValue]) (*controlClient, error) {
+func newControlClient(cfg Config, clientsCert *certc.Cert, configStore logc.KV[ConfigKey, ConfigValue]) (*controlClient, error) {
 	hostports := iterc.FlattenSlice(iterc.MapSlice(cfg.Ingress, func(in Ingress) []model.HostPort {
 		return in.Hostports
 	}))
 
 	c := &controlClient{
-		hostports: hostports,
-		direct:    direct,
-		metadata:  cfg.Metadata,
+		hostports:   hostports,
+		clientsCert: clientsCert,
+		metadata:    cfg.Metadata,
 
 		controlAddr:  cfg.ControlAddr,
 		controlToken: cfg.ControlToken,
@@ -197,7 +197,7 @@ func (s *controlClient) authenticate(authStream *quic.Stream, reconnConfig Confi
 		ReconnectToken:         reconnConfig.Bytes,
 		BuildVersion:           model.BuildVersion(),
 		Metadata:               s.metadata,
-		ServerCertificate:      s.direct.Raw(),
+		ServerCertificate:      s.clientsCert.Raw(),
 		RelayAuthenticationKey: relayPk[:],
 	}); err != nil {
 		return fmt.Errorf("auth write error: %w", err)

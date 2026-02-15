@@ -142,7 +142,7 @@ func (s *Server) getEndpoints() (map[string]StatusEndpoint, error) {
 }
 
 func (s *Server) getRelays() (map[string]StatusRelay, error) {
-	msgs, _, err := s.relays.directs.Snapshot()
+	msgs, _, err := s.relays.conns.Snapshot()
 	if err != nil {
 		return nil, err
 	}

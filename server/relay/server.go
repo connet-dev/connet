@@ -69,19 +69,19 @@ func NewServer(cfg Config) (*Server, error) {
 		return nil, fmt.Errorf("generate relay cert: %w", err)
 	}
 
-	directCert, err := rootCert.NewServer(certc.CertOpts{
+	clientsCert, err := rootCert.NewServer(certc.CertOpts{
 		Domains: []string{netc.GenDomainName("reserve.relay")},
 	})
 	if err != nil {
-		return nil, fmt.Errorf("generate direct relay cert: %w", err)
+		return nil, fmt.Errorf("generate client relay cert: %w", err)
 	}
 
-	control, err := newControlClient(cfg, directCert, configStore)
+	control, err := newControlClient(cfg, clientsCert, configStore)
 	if err != nil {
 		return nil, fmt.Errorf("relay control client: %w", err)
 	}
 
-	clients, err := newClientsServer(cfg, directCert, control)
+	clients, err := newClientsServer(cfg, clientsCert, control)
 	if err != nil {
 		return nil, fmt.Errorf("relay clients server: %w", err)
 	}

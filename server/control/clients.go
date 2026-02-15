@@ -42,7 +42,7 @@ type ClientAuthenticator interface {
 type ClientAuthentication []byte
 
 type ClientRelays interface {
-	Directs(ctx context.Context, endpoint model.Endpoint, role model.Role, cert *x509.Certificate, auth ClientAuthentication,
+	Relays(ctx context.Context, endpoint model.Endpoint, role model.Role, cert *x509.Certificate, auth ClientAuthentication,
 		notify func(map[RelayID]*pbclient.Relay) error) error
 }
 
@@ -744,9 +744,9 @@ func (s *clientStream) relay(ctx context.Context, req *pbclient.Request_Relay) e
 	g.Go(quicc.CancelStream(s.stream))
 
 	g.Go(func(ctx context.Context) error {
-		defer s.conn.logger.Debug("completed direct relay notify")
-		return s.conn.server.relays.Directs(ctx, endpoint, role, clientCert, s.conn.auth, func(relays map[RelayID]*pbclient.Relay) error {
-			s.conn.logger.Debug("updated direct relay list", "relays", len(relays))
+		defer s.conn.logger.Debug("completed relay notify")
+		return s.conn.server.relays.Relays(ctx, endpoint, role, clientCert, s.conn.auth, func(relays map[RelayID]*pbclient.Relay) error {
+			s.conn.logger.Debug("updated relay list", "relays", len(relays))
 			if err := proto.Write(s.stream, &pbclient.Response{
 				Relay: &pbclient.Response_Relays{
 					Relays: slices.Collect(maps.Values(relays)),
