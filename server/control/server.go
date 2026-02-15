@@ -128,9 +128,9 @@ func (s *Server) getEndpoints() (map[string]StatusEndpoint, error) {
 
 		switch msg.Key.Role {
 		case model.Destination:
-			ep.Destinations = append(ep.Destinations, msg.Key.ID)
+			ep.Destinations = append(ep.Destinations, StatusEndpointRemote{msg.Key.ID, msg.Key.ConnID})
 		case model.Source:
-			ep.Sources = append(ep.Sources, msg.Key.ID)
+			ep.Sources = append(ep.Sources, StatusEndpointRemote{msg.Key.ID, msg.Key.ConnID})
 		default:
 			return nil, fmt.Errorf("unknown role: %s", msg.Key.Role)
 		}
@@ -184,9 +184,14 @@ type StatusClient struct {
 }
 
 type StatusEndpoint struct {
-	Endpoint     model.Endpoint `json:"endpoint"`
-	Destinations []ClientID     `json:"destinations"`
-	Sources      []ClientID     `json:"sources"`
+	Endpoint     model.Endpoint         `json:"endpoint"`
+	Destinations []StatusEndpointRemote `json:"destinations"`
+	Sources      []StatusEndpointRemote `json:"sources"`
+}
+
+type StatusEndpointRemote struct {
+	ID     ClientID `json:"id"`
+	ConnID ConnID   `json:"conn_id"`
 }
 
 type StatusRelay struct {
