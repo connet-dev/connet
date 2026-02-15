@@ -86,7 +86,7 @@ func newClientServer(
 	for _, msg := range peersMsgs {
 		if reactivePeers, ok := reactivate[msg.Key.ID]; ok {
 			key := cacheKey{msg.Key.Endpoint, msg.Key.Role}
-			peersCache[key] = append(peersCache[key], cachePeer{msg.Key.ConnID, msg.Offset, &pbclient.RemotePeer{
+			peersCache[key] = append(peersCache[key], cachePeer{msg.Key.ConnID, &pbclient.RemotePeer{
 				Id:       msg.Key.ID.string,
 				Metadata: msg.Value.Metadata,
 				Peer:     msg.Value.Peer,
@@ -173,7 +173,6 @@ type cacheKey struct {
 
 type cachePeer struct {
 	connID ConnID
-	offset int64
 	peer   *pbclient.RemotePeer
 }
 
@@ -240,7 +239,7 @@ func (s *clientServer) listen(ctx context.Context, endpoint model.Endpoint, role
 					return peer.peer.Id == msg.Key.ID.string && peer.connID == msg.Key.ConnID
 				})
 			} else {
-				npeer := cachePeer{msg.Key.ConnID, msg.Offset, &pbclient.RemotePeer{
+				npeer := cachePeer{msg.Key.ConnID, &pbclient.RemotePeer{
 					Id:       msg.Key.ID.string,
 					Metadata: msg.Value.Metadata,
 					Peer:     msg.Value.Peer,
@@ -362,7 +361,7 @@ func (s *clientServer) runPeerCache(ctx context.Context) error {
 				s.peersCache[key] = peers
 			}
 		} else {
-			npeer := cachePeer{msg.Key.ConnID, msg.Offset, &pbclient.RemotePeer{
+			npeer := cachePeer{msg.Key.ConnID, &pbclient.RemotePeer{
 				Id:       msg.Key.ID.string,
 				Metadata: msg.Value.Metadata,
 				Peer:     msg.Value.Peer,
