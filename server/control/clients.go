@@ -81,11 +81,11 @@ func newClientServer(
 		return nil, fmt.Errorf("client peers snapshot: %w", err)
 	}
 
-	peersCache := map[cacheKey][]cachePeer{}
+	peersCache := map[peerKey][]peerValue{}
 	for _, msg := range peersMsgs {
 		if reactivePeers, ok := reactivate[msg.Key.ID]; ok {
-			key := cacheKey{msg.Key.Endpoint, msg.Key.Role}
-			peersCache[key] = append(peersCache[key], cachePeer{msg.Key.ConnID, &pbclient.RemotePeer{
+			key := peerKey{msg.Key.Endpoint, msg.Key.Role}
+			peersCache[key] = append(peersCache[key], peerValue{msg.Key.ConnID, &pbclient.RemotePeer{
 				Id:       msg.Key.ID.string,
 				Metadata: msg.Value.Metadata,
 				Peer:     msg.Value.Peer,
@@ -157,7 +157,7 @@ type clientServer struct {
 	conns logc.KV[ClientConnKey, ClientConnValue]
 	peers logc.KV[ClientPeerKey, ClientPeerValue]
 
-	peersCache  map[cacheKey][]cachePeer
+	peersCache  map[peerKey][]peerValue
 	peersOffset int64
 	peersMu     sync.RWMutex
 
@@ -165,12 +165,12 @@ type clientServer struct {
 	reactivateMu sync.RWMutex
 }
 
-type cacheKey struct {
+type peerKey struct {
 	endpoint model.Endpoint
 	role     model.Role
 }
 
-type cachePeer struct {
+type peerValue struct {
 	connID ConnID
 	peer   *pbclient.RemotePeer
 }
@@ -200,11 +200,11 @@ func (s *clientServer) revoke(endpoint model.Endpoint, role model.Role, id Clien
 	return s.peers.Del(ClientPeerKey{endpoint, role, id, connID})
 }
 
-func (s *clientServer) cachedPeers(endpoint model.Endpoint, role model.Role) ([]cachePeer, int64) {
+func (s *clientServer) cachedPeers(endpoint model.Endpoint, role model.Role) ([]peerValue, int64) {
 	s.peersMu.RLock()
 	defer s.peersMu.RUnlock()
 
-	return slices.Clone(s.peersCache[cacheKey{endpoint, role}]), s.peersOffset
+	return slices.Clone(s.peersCache[peerKey{endpoint, role}]), s.peersOffset
 }
 
 func (s *clientServer) listen(ctx context.Context, endpoint model.Endpoint, role model.Role, notify func(peers []*pbclient.RemotePeer) error) error {
@@ -234,16 +234,16 @@ func (s *clientServer) listen(ctx context.Context, endpoint model.Endpoint, role
 			}
 
 			if msg.Delete {
-				peers = slices.DeleteFunc(peers, func(peer cachePeer) bool {
+				peers = slices.DeleteFunc(peers, func(peer peerValue) bool {
 					return peer.peer.Id == msg.Key.ID.string && peer.connID == msg.Key.ConnID
 				})
 			} else {
-				npeer := cachePeer{msg.Key.ConnID, &pbclient.RemotePeer{
+				npeer := peerValue{msg.Key.ConnID, &pbclient.RemotePeer{
 					Id:       msg.Key.ID.string,
 					Metadata: msg.Value.Metadata,
 					Peer:     msg.Value.Peer,
 				}}
-				idx := slices.IndexFunc(peers, func(peer cachePeer) bool {
+				idx := slices.IndexFunc(peers, func(peer peerValue) bool {
 					return peer.peer.Id == msg.Key.ID.string && peer.connID == msg.Key.ConnID
 				})
 				if idx >= 0 {
@@ -348,10 +348,10 @@ func (s *clientServer) runPeerCache(ctx context.Context) error {
 		s.peersMu.Lock()
 		defer s.peersMu.Unlock()
 
-		key := cacheKey{msg.Key.Endpoint, msg.Key.Role}
+		key := peerKey{msg.Key.Endpoint, msg.Key.Role}
 		peers := s.peersCache[key]
 		if msg.Delete {
-			peers = slices.DeleteFunc(peers, func(peer cachePeer) bool {
+			peers = slices.DeleteFunc(peers, func(peer peerValue) bool {
 				return peer.peer.Id == msg.Key.ID.string && peer.connID == msg.Key.ConnID
 			})
 			if len(peers) == 0 {
@@ -360,12 +360,12 @@ func (s *clientServer) runPeerCache(ctx context.Context) error {
 				s.peersCache[key] = peers
 			}
 		} else {
-			npeer := cachePeer{msg.Key.ConnID, &pbclient.RemotePeer{
+			npeer := peerValue{msg.Key.ConnID, &pbclient.RemotePeer{
 				Id:       msg.Key.ID.string,
 				Metadata: msg.Value.Metadata,
 				Peer:     msg.Value.Peer,
 			}}
-			idx := slices.IndexFunc(peers, func(peer cachePeer) bool {
+			idx := slices.IndexFunc(peers, func(peer peerValue) bool {
 				return peer.peer.Id == msg.Key.ID.string && peer.connID == msg.Key.ConnID
 			})
 			if idx >= 0 {
