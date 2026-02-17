@@ -107,6 +107,11 @@ func (s *Server) Run(ctx context.Context) error {
 	return g.Wait()
 }
 
+func (s *Server) WaitDrainConns(ctx context.Context) {
+	s.control.WaitDrainConns(ctx)
+	s.relay.WaitDrainConns(ctx)
+}
+
 func (s *Server) Status(ctx context.Context) (ServerStatus, error) {
 	control, err := s.control.Status(ctx)
 	if err != nil {

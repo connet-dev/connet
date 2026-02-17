@@ -42,13 +42,13 @@ func NewServer(cfg Config) (*Server, error) {
 		return nil, fmt.Errorf("relay server is missing ingresses")
 	}
 
+	if err := cfg.Stores.RemoveDeprecated(); err != nil {
+		cfg.Logger.Warn("could not remove deprecated stores", "err", err)
+	}
+
 	configStore, err := cfg.Stores.Config()
 	if err != nil {
 		return nil, fmt.Errorf("relay stores: %w", err)
-	}
-
-	if err := cfg.Stores.RemoveDeprecated(); err != nil {
-		cfg.Logger.Warn("could not remove deprecated stores", "err", err)
 	}
 
 	statelessResetVal, err := configStore.GetOrInit(configStatelessReset, func(ck ConfigKey) (ConfigValue, error) {
@@ -112,6 +112,7 @@ func (s *Server) Run(ctx context.Context) error {
 
 	g := reliable.NewGroup(ctx)
 
+	s.clients.connsWg.Add(len(s.ingress))
 	for _, ingress := range s.ingress {
 		cfg := clientsServerCfg{
 			ingress:           ingress,
@@ -129,6 +130,10 @@ func (s *Server) Run(ctx context.Context) error {
 	g.Go(reliable.Bind(waitForTransport, s.control.run))
 
 	return g.Wait()
+}
+
+func (s *Server) WaitDrainConns(ctx context.Context) {
+	s.clients.connsWg.Wait()
 }
 
 type Status struct {

@@ -185,7 +185,9 @@ func relayRun(ctx context.Context, cfg RelayConfig, logger *slog.Logger) error {
 	if err != nil {
 		return fmt.Errorf("create relay server: %w", err)
 	}
-	return runWithStatus(ctx, srv, statusAddr, logger)
+	err = runWithStatus(ctx, srv, statusAddr, logger)
+	srv.WaitDrainConns(ctx)
+	return err
 }
 
 func (cfg RelayIngress) parse() (relay.Ingress, error) {

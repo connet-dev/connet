@@ -163,6 +163,8 @@ type clientServer struct {
 
 	reactivate   map[ClientID]reactivateValue
 	reactivateMu sync.RWMutex
+
+	connsWg sync.WaitGroup
 }
 
 type peerKey struct {
@@ -268,6 +270,7 @@ func (s *clientServer) listen(ctx context.Context, endpoint model.Endpoint, role
 func (s *clientServer) run(ctx context.Context) error {
 	g := reliable.NewGroup(ctx)
 
+	s.connsWg.Add(len(s.ingresses))
 	for _, ingress := range s.ingresses {
 		g.Go(reliable.Bind(ingress, s.runListener))
 	}
@@ -281,6 +284,8 @@ func (s *clientServer) run(ctx context.Context) error {
 }
 
 func (s *clientServer) runListener(ctx context.Context, ingress Ingress) error {
+	defer s.connsWg.Done()
+
 	s.logger.Debug("start udp listener", "addr", ingress.Addr)
 	udpConn, err := net.ListenUDP("udp", ingress.Addr)
 	if err != nil {
@@ -339,7 +344,10 @@ func (s *clientServer) runListener(ctx context.Context, ingress Ingress) error {
 			conn:   conn,
 			logger: s.logger,
 		}
-		go cc.run(ctx)
+		s.connsWg.Go(func() {
+			cc.run(ctx)
+		})
+		// go cc.run(ctx)
 	}
 }
 
@@ -518,7 +526,10 @@ func (c *clientConn) runErr(ctx context.Context) error {
 			conn:   c,
 			stream: stream,
 		}
-		go cs.run(ctx)
+		c.server.connsWg.Go(func() {
+			cs.run(ctx)
+		})
+		// go cs.run(ctx)
 	}
 }
 
