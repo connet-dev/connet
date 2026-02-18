@@ -580,6 +580,8 @@ by adding account management and it is one of the easiest way to start.
 ## Planlog
 
 ### Next
+ - [ ] do not discard client/peer/endpoint info immediately 
+ - [ ] controlled server shutdown
  - [ ] peer identity and support for options in p2p
  - [ ] raw endpoint protocols
  - [ ] UPnP/IDG and PCP for hole-punching
@@ -598,14 +600,10 @@ by adding account management and it is one of the easiest way to start.
 
 ## Changelog
 
-### v0.15.0
- - [ ] do not discard client/peer/endpoint info immediately 
-
 ### v0.14.0
  - [x] rewrite relay to not depend on control connection
  - [x] complete migration to relay v2
  - [x] client reconnecting before old connection being removed 
- - [ ] controlled server shutdown
 
 ### v0.13.0
  - [x] stateless/direct relay v2
