@@ -118,13 +118,6 @@ server-cas-file = "cert.pem"
 url = "tcp://:8000"
 ```
 
-## CLI Commands
-
-In addition to the main client and server modes, `connet` provides the following utility commands:
- - `connet check <config-file>` - validates a configuration file
- - `connet gen-key` - generates an ed25519 private/public key pair
- - `connet version` - prints version information
-
 ## Configuration
 
 You can use both a toml config file as well as command line when running `connet`. If you use both a config file and 
@@ -436,6 +429,13 @@ the cache dir (using one of `$CONNET_CACHE_DIR`, `$CACHE_DIRECTORY`, `$XDG_CACHE
 #### Server
 
 The server is generating its stateless reset key internally as part of its state kept in `store-dir`.
+
+## Other Commands
+
+In addition to the main client and server modes, `connet` provides the following utility commands:
+ - `connet check <config-file>` - validates a configuration file
+ - `connet gen-key` - generates an ed25519 private/public key pair
+ - `connet version` - prints version information
 
 ## Installation
 
