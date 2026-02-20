@@ -135,7 +135,7 @@ type Status struct {
 	Status       statusc.Status            `json:"status"`
 	BuildVersion string                    `json:"build-version"`
 	Hostports    []string                  `json:"hostports"`
-	ServerAddr   string                    `json:"server-addrress"`
+	ServerAddr   string                    `json:"server-address"`
 	ServerID     string                    `json:"server-id"`
 	Endpoints    map[string]EndpointStatus `json:"endpoints"`
 }

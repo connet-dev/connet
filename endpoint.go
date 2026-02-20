@@ -48,7 +48,7 @@ type endpoint struct {
 }
 
 // a client endpoint could close when:
-//   - the user cancels the incomming context. This could happen while setting up the endpoint too.
+//   - the user cancels the incoming context. This could happen while setting up the endpoint too.
 //   - the user calls Close explicitly.
 //   - the parent client is closing, so it calls close on the endpoint too. Session might be closing at the same time.
 //   - an error happens in runPeer

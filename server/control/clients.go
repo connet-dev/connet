@@ -721,7 +721,7 @@ func (s *clientStream) relay(ctx context.Context, req *pbclient.Request_Relay) e
 	if newEp, err := s.conn.server.auth.Validate(s.conn.auth, endpoint, role); err != nil {
 		perr := pberror.GetError(err)
 		if perr == nil {
-			perr = pberror.NewError(pberror.Code_RelayValidationFailed, "failed to validate desination '%s': %v", endpoint, err)
+			perr = pberror.NewError(pberror.Code_RelayValidationFailed, "failed to validate destination '%s': %v", endpoint, err)
 		}
 		if err := proto.Write(s.stream, &pbclient.Response{Error: perr}); err != nil {
 			return fmt.Errorf("client relay auth err response: %w", err)
