@@ -313,6 +313,13 @@ func (c *Client) connect(ctx context.Context, transport *quic.Transport, retoken
 		return nil, fmt.Errorf("dial server %s: %w", c.controlAddr, err)
 	}
 
+	var success bool
+	defer func() {
+		if !success {
+			conn.CloseWithError(0, "connect failed")
+		}
+	}()
+
 	c.logger.Debug("authenticating", "addr", c.controlAddr)
 
 	authStream, err := conn.OpenStreamSync(ctx)
@@ -349,6 +356,7 @@ func (c *Client) connect(ctx context.Context, transport *quic.Transport, retoken
 	})
 
 	c.logger.Info("authenticated to server", "addr", c.controlAddr, "direct", resp.Public.AsNetip())
+	success = true
 	return &session{conn, resp.ReconnectToken}, nil
 }
 

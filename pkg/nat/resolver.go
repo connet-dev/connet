@@ -28,6 +28,7 @@ func LocalIPDialResolver(addr string) LocalIPResolver {
 		if err != nil {
 			return net.IPv4zero, err
 		}
+		defer conn.Close()
 		addr, err := netc.IPFromNet(conn.LocalAddr())
 		if err != nil {
 			return net.IPv4zero, err

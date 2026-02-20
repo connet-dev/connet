@@ -168,6 +168,7 @@ func (s *controlClient) connectSingle(ctx context.Context, transport *quic.Trans
 
 	authStream, err := conn.OpenStreamSync(ctx)
 	if err != nil {
+		conn.CloseWithError(0, "open stream failed")
 		return nil, fmt.Errorf("open stream: %w", err)
 	}
 	defer func() {
