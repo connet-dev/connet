@@ -178,7 +178,7 @@ func loadConfigFrom(file string) (Config, error) {
 	if err != nil {
 		return cfg, err
 	}
-	defer f.Close()
+	defer f.Close() //nolint:errcheck
 
 	dec := toml.NewDecoder(f)
 	dec = dec.DisallowUnknownFields()
@@ -209,7 +209,7 @@ func loadTokens(tokensFile string) ([]string, error) {
 	if err != nil {
 		return nil, fmt.Errorf("open tokens file: %w", err)
 	}
-	defer f.Close()
+	defer f.Close() //nolint:errcheck
 
 	var tokens []string
 	scanner := bufio.NewScanner(f)

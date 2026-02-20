@@ -420,11 +420,9 @@ func (c *clientConn) connectDestination(ctx context.Context, srcStream *quic.Str
 	if err != nil {
 		return fmt.Errorf("destination open stream: %w", err)
 	}
-	var joined bool
 	defer func() {
-		if !joined {
-			dstStream.CancelRead(0)
-			dstStream.Close()
+		if err := dstStream.Close(); err != nil { // TODO
+			slogc.Fine(c.logger, "error closing dst stream", "err", err)
 		}
 	}()
 
@@ -442,7 +440,6 @@ func (c *clientConn) connectDestination(ctx context.Context, srcStream *quic.Str
 	}
 
 	c.logger.Debug("joining conns")
-	joined = true
 	err = netc.Join(srcStream, dstStream)
 	c.logger.Debug("disconnected conns", "err", err)
 	return nil
