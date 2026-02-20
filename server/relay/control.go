@@ -80,6 +80,9 @@ func (s *controlClient) Authenticate(authReq *pbclientrelay.AuthenticateReq, cer
 		return nil, fmt.Errorf("no control verification key")
 	}
 
+	if len(authReq.Authentication) < 24 {
+		return nil, pberror.NewError(pberror.Code_AuthenticationFailed, "authentication data too short")
+	}
 	decryptNonce := [24]byte(authReq.Authentication)
 	authData, ok := box.OpenAfterPrecomputation(nil, authReq.Authentication[24:], &decryptNonce, authUnsealKey)
 	if !ok {

@@ -143,6 +143,7 @@ func (v *V[T]) UpdateOpt(f func(t T) (T, bool)) bool {
 			next.value = value
 			next.version = current.version + 1
 		} else {
+			v.barrier <- next
 			return false
 		}
 	} else {
@@ -151,6 +152,7 @@ func (v *V[T]) UpdateOpt(f func(t T) (T, bool)) bool {
 			next.value = value
 			next.version = 0
 		} else {
+			v.barrier <- next
 			return false
 		}
 	}

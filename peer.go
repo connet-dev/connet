@@ -325,7 +325,7 @@ func (p *peer) newECDHConfig() (*ecdh.PrivateKey, *pbconnect.ECDHConfiguration, 
 
 	var keyTime []byte
 	keyTime = append(keyTime, sk.PublicKey().Bytes()...)
-	keyTime = binary.BigEndian.AppendUint64(keyTime, uint64(time.Now().Nanosecond()))
+	keyTime = binary.BigEndian.AppendUint64(keyTime, uint64(time.Now().UnixNano()))
 
 	certSK := p.serverCert.PrivateKey.(ed25519.PrivateKey)
 	signature, err := certSK.Sign(rand.Reader, keyTime, &ed25519.Options{})
@@ -372,7 +372,7 @@ func (p *peer) getECDHPublicKey(cfg *pbconnect.ECDHConfiguration) (*ecdh.PublicK
 
 	keyBytes, timeBytes := cfg.KeyTime[0:len(cfg.KeyTime)-8], cfg.KeyTime[len(cfg.KeyTime)-8:]
 	t := time.Unix(0, int64(binary.BigEndian.Uint64(timeBytes)))
-	if time.Since(t) < 5*time.Minute {
+	if time.Since(t) > 5*time.Minute {
 		return nil, fmt.Errorf("time verification failed")
 	}
 

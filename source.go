@@ -205,7 +205,7 @@ func rttCompare(l, r sourceConn) int {
 		return -1
 	}
 
-	ld := r.conn.ConnectionStats().SmoothedRTT
+	ld := l.conn.ConnectionStats().SmoothedRTT
 	rd := r.conn.ConnectionStats().SmoothedRTT
 
 	return cmp.Compare(ld, rd)
