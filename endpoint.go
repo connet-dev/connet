@@ -74,7 +74,7 @@ func newEndpoint(ctx context.Context, cl *Client, cfg endpointConfig, logger *sl
 	ep.connStatus.Store(statusc.NotConnected)
 	context.AfterFunc(ctx, ep.cleanup)
 
-	errCh := make(chan error)
+	errCh := make(chan error, 1)
 	var reportOnce sync.Once
 	ep.onlineReport = func(err error) {
 		if err == nil {
