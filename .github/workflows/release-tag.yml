@@ -3,8 +3,6 @@ on:
     workflows: [ci]
     types: [completed]
     branches: [main]
-  push:
-    branches: [main]
 
 concurrency:
   group: ${{ github.workflow }}-tag
@@ -13,6 +11,7 @@ concurrency:
 jobs:
   changes:
     name: Detect version change
+    if: ${{ github.event.workflow_run.conclusion == 'success' }}
     runs-on: ubuntu-latest
     permissions:
       contents: read
