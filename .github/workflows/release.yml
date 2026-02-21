@@ -1,4 +1,8 @@
 on:
+  workflow_run:
+    workflows: [ci]
+    types: [completed]
+    branches: [main]
   workflow_dispatch:
     inputs:
       version:
@@ -6,7 +10,6 @@ on:
         required: true
       upload:
         description: "Upload final artifacts to github"
-        type: boolean
         default: false
   workflow_call:
     inputs:
@@ -32,22 +35,23 @@ jobs:
     runs-on: ubuntu-latest
     outputs:
       version: ${{ steps.extract_version.outputs.version }}
-      publish: ${{ github.event_name != 'workflow_dispatch' || github.event.inputs.upload == 'true' }}
+      publish: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.upload == 'true' || github.event_name == 'push' }}
     steps:
-      - name: Extract the Version
+      - name: Exract the Version
         id: extract_version
-        env:
-          INPUT_VERSION: ${{ inputs.version }}
         run: |
-          if [[ -n "$INPUT_VERSION" ]]; then
-            VERSION="${INPUT_VERSION}"
+          if [[ "${{ github.event_name }}" == "push" ]]; then
+            IN_VERSION=${{ inputs.version }}
+            # Remove the leading 'v' from the tag
+            GIT_VERSION=${GITHUB_REF#refs/tags/v}
+            VERSION=${IN_VERSION:-$GIT_VERSION}
+            echo "version=$VERSION" >> $GITHUB_OUTPUT
+          elif [[ "${{ github.event_name }}" == "workflow_dispatch" ]]; then
+            VERSION=${{ github.event.inputs.version }}
             VERSION=${VERSION#v}
             echo "version=$VERSION" >> $GITHUB_OUTPUT
-          elif [[ "${{ github.event_name }}" == "push" ]]; then
-            VERSION=${GITHUB_REF#refs/tags/v}
-            echo "version=$VERSION" >> $GITHUB_OUTPUT
           else
-            echo "Error: Could not determine version."
+            echo "Error: Unsupported event type."
             exit 1
           fi
 
