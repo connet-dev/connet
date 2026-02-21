@@ -226,7 +226,7 @@ func NewWSSource(src *Source, srcURL *url.URL, cfg *tls.Config, logger *slog.Log
 func (s *WSSource) handle(w http.ResponseWriter, r *http.Request) {
 	hconn, err := s.upgrader.Upgrade(w, r, nil)
 	if err != nil {
-		s.logger.Debug("could upgrade connection", "err", err)
+		s.logger.Debug("could not upgrade connection", "err", err)
 		return
 	}
 	defer func() {

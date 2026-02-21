@@ -429,7 +429,7 @@ func (s *PMP) readResponse(ctx context.Context, expectedSize int, expectedOpcode
 			return nil, fmt.Errorf("unexpected response tcp address: %s", t.IP)
 		}
 	default:
-		return nil, fmt.Errorf("unexpected response address type: %t", t)
+		return nil, fmt.Errorf("unexpected response address type: %T", t)
 	}
 
 	resp = resp[0:m]

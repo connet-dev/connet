@@ -366,7 +366,7 @@ func (c *relayConn) run(ctx context.Context) {
 	c.logger.Debug("new relay connection", "proto", c.conn.ConnectionState().TLS.NegotiatedProtocol, "remote", c.conn.RemoteAddr())
 
 	if err := c.runErr(ctx); err != nil {
-		c.logger.Debug("error while running zzz", "err", err)
+		c.logger.Debug("error while running relay conn", "err", err)
 	}
 }
 

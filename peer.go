@@ -360,7 +360,7 @@ func (p *peer) getECDHPublicKey(cfg *pbconnect.ECDHConfiguration) (*ecdh.PublicK
 	case 0:
 		return nil, fmt.Errorf("peer not found")
 	case 1:
-		// return candidates[0], nil
+		// we expect exactly one candidate, continue
 	default:
 		return nil, fmt.Errorf("multiple peers found")
 	}

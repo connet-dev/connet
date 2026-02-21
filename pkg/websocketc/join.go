@@ -21,7 +21,7 @@ func Join(nc net.Conn, wc *websocket.Conn) error {
 		for {
 			_, data, err := wc.ReadMessage()
 			if err != nil {
-				return fmt.Errorf("websocked connection read: %w", err)
+				return fmt.Errorf("websocket connection read: %w", err)
 			}
 			if _, err := nc.Write(data); err != nil {
 				return fmt.Errorf("source connection write: %w", err)

@@ -82,7 +82,7 @@ func (b *IngressBuilder) WithHostportFrom(hostport string) *IngressBuilder {
 				b.err = fmt.Errorf("cannot parse hostport, missing port")
 				return b
 			}
-			port, err := strconv.ParseInt(portStr, 10, 16)
+			port, err := strconv.ParseUint(portStr, 10, 16)
 			if err != nil {
 				b.err = fmt.Errorf("cannot parse port: %w", err)
 				return b
@@ -95,7 +95,7 @@ func (b *IngressBuilder) WithHostportFrom(hostport string) *IngressBuilder {
 			b.err = fmt.Errorf("cannot parse hostport, missing port")
 			return b
 		}
-		port, err := strconv.ParseInt(portStr, 10, 16)
+		port, err := strconv.ParseUint(portStr, 10, 16)
 		if err != nil {
 			b.err = fmt.Errorf("cannot parse port: %w", err)
 			return b

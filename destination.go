@@ -209,7 +209,7 @@ func (d *destinationConn) runErr(ctx context.Context) error {
 			d.logger.Debug("accept failed", "err", err)
 			return err
 		}
-		d.logger.Debug("accepted stream new stream")
+		d.logger.Debug("accepted new stream")
 		go d.runDestination(ctx, stream)
 	}
 }
