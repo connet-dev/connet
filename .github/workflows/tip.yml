@@ -1,6 +1,6 @@
 on:
   workflow_run:
-    workflows: [ci]
+    workflows: [Build and test]
     types: [completed]
     branches: [main]
 

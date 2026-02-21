@@ -68,7 +68,7 @@ jobs:
         run: nix develop --command make release
       - name: Upload release
         uses: softprops/action-gh-release@v2
-        if: ${{ needs.setup.outputs.publish }}
+        if: ${{ needs.setup.outputs.publish == 'true' }}
         with:
           tag_name: v${{ env.CONNET_VERSION }}
           files: |
@@ -97,7 +97,7 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
       - name: Docker push
-        if: ${{ needs.setup.outputs.publish }}
+        if: ${{ needs.setup.outputs.publish == 'true' }}
         run: nix develop --command skopeo copy "docker-archive:result" "docker://ghcr.io/connet-dev/connet:${CONNET_VERSION}-amd64"
 
   docker-arm:
@@ -124,7 +124,7 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
       - name: Docker push
-        if: ${{ needs.setup.outputs.publish }}
+        if: ${{ needs.setup.outputs.publish == 'true' }}
         run: nix develop --command skopeo copy "docker-archive:result" "docker://ghcr.io/connet-dev/connet:${CONNET_VERSION}-arm64"
 
   docker-multiarch:
@@ -147,5 +147,5 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
       - name: Docker tag
-        if: ${{ needs.setup.outputs.publish }}
+        if: ${{ needs.setup.outputs.publish == 'true' }}
         run: nix develop --command manifest-tool push from-args --platforms linux/amd64,linux/arm64 --template ghcr.io/connet-dev/connet:${CONNET_VERSION}-ARCHVARIANT --target ghcr.io/connet-dev/connet:${CONNET_VERSION}
