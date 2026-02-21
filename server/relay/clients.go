@@ -421,7 +421,7 @@ func (c *clientConn) connectDestination(ctx context.Context, srcStream *quic.Str
 		return fmt.Errorf("destination open stream: %w", err)
 	}
 	defer func() {
-		if err := dstStream.Close(); err != nil { // TODO
+		if err := dstStream.Close(); err != nil {
 			slogc.Fine(c.logger, "error closing dst stream", "err", err)
 		}
 	}()
