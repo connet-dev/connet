@@ -188,7 +188,7 @@ func (p *remotePeerIncoming) connect(ctx context.Context) (*quic.Conn, error) {
 	case <-ctx.Done():
 		cancel()
 		return nil, ctx.Err()
-	case conn := <-ch: // TODO panic on closing channel?
+	case conn := <-ch:
 		if err := p.check(ctx, conn); err != nil {
 			cerr := conn.CloseWithError(quic.ApplicationErrorCode(pberror.Code_ConnectionCheckFailed), "connection check failed")
 			return nil, fmt.Errorf("connection check failed: %w", errors.Join(err, cerr))

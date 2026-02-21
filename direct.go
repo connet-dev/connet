@@ -47,11 +47,6 @@ type vServer struct {
 	mu         sync.RWMutex
 }
 
-type vClient struct {
-	cert *x509.Certificate
-	ch   chan *quic.Conn
-}
-
 func (s *vServer) dequeue(key model.Key, cert *x509.Certificate) *vClient {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -73,6 +68,25 @@ func (s *vServer) updateClientCA() {
 		clientCA.AddCert(exp.cert)
 	}
 	s.clientCA.Store(clientCA)
+}
+
+type vClient struct {
+	cert   *x509.Certificate
+	ch     chan *quic.Conn
+	chOnce sync.Once
+}
+
+func (c *vClient) notify(conn *quic.Conn) {
+	c.chOnce.Do(func() {
+		c.ch <- conn
+		close(c.ch)
+	})
+}
+
+func (c *vClient) close() {
+	c.chOnce.Do(func() {
+		close(c.ch)
+	})
 }
 
 func (s *directServer) addServerCert(cert tls.Certificate) {
@@ -109,7 +123,7 @@ func (s *directServer) expect(serverCert tls.Certificate, cert *x509.Certificate
 	cl := &vClient{cert: cert, ch: make(chan *quic.Conn)}
 	srv.clients[key] = cl
 	return cl.ch, func() {
-		close(cl.ch)
+		cl.close()
 
 		srv.mu.Lock()
 		defer srv.mu.Unlock()
@@ -180,8 +194,7 @@ func (s *directServer) runConn(conn *quic.Conn) {
 	}
 
 	s.logger.Debug("accept client", "server", srv.serverName, "cert", key)
-	exp.ch <- conn
-	close(exp.ch)
+	exp.notify(conn)
 
 	srv.updateClientCA()
 }
