@@ -13,7 +13,7 @@ func Write(w io.Writer, msg proto.Message) error {
 	if err != nil {
 		return err
 	}
-	szBytes := make([]byte, 0, 8)
+	szBytes := make([]byte, 0, 8) // TODO use int32 instead
 	szBytes = binary.BigEndian.AppendUint64(szBytes, uint64(len(msgBytes)))
 	if _, err := w.Write(szBytes); err != nil {
 		if aperr := pberror.GetAppError(err); aperr != nil {

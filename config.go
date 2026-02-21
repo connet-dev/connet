@@ -198,8 +198,8 @@ func DirectStatelessResetKeyFile(path string) Option {
 		if err != nil {
 			return fmt.Errorf("read stateless reset key: %w", err)
 		}
-		if len(keyBytes) < 32 {
-			return fmt.Errorf("stateless reset key len %d", len(keyBytes))
+		if len(keyBytes) != 32 {
+			return fmt.Errorf("invalid stateless reset key len %d", len(keyBytes))
 		}
 
 		key := quic.StatelessResetKey(keyBytes)

@@ -397,8 +397,11 @@ func (s *Source) dialStream(ctx context.Context, dest sourceConn, stream *quic.S
 
 	var encStream = quicc.StreamConn(stream, dest.conn)
 	if dest.peer.style.isRelay() {
-		destinationEncryption := model.EncryptionFromPB(resp.Connect.DestinationEncryption)
-		if !slices.Contains(s.cfg.RelayEncryptions, destinationEncryption) {
+		destinationEncryption, err := model.EncryptionFromPB(resp.Connect.DestinationEncryption)
+		switch {
+		case err != nil:
+			return nil, fmt.Errorf("source failed to negotiate encryption scheme: %w", err)
+		case !slices.Contains(s.cfg.RelayEncryptions, destinationEncryption):
 			return nil, fmt.Errorf("source failed to negotiate encryption scheme: %s", destinationEncryption)
 		}
 

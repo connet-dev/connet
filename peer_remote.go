@@ -88,17 +88,19 @@ func (p *remotePeer) runErr(ctx context.Context) error {
 				p.incoming = runRemotePeerIncoming(ctx, p, remoteClientCert)
 			}
 
+			addrs := map[netip.AddrPort]struct{}{}
+			for _, addr := range remote.Peer.Directs {
+				addrs[addr.AsNetip()] = struct{}{}
+			}
 			if p.outgoing == nil {
 				remoteServerConf, err := newServerTLSConfig(remote.Peer.ServerCertificate)
 				if err != nil {
 					return fmt.Errorf("parse server certificate: %w", err)
 				}
 
-				addrs := map[netip.AddrPort]struct{}{}
-				for _, addr := range remote.Peer.Directs {
-					addrs[addr.AsNetip()] = struct{}{}
-				}
 				p.outgoing = runRemotePeerOutgoing(ctx, p, remoteServerConf, addrs)
+			} else {
+				p.outgoing.addrs.Set(addrs)
 			}
 		} else {
 			if p.incoming != nil {
@@ -186,7 +188,7 @@ func (p *remotePeerIncoming) connect(ctx context.Context) (*quic.Conn, error) {
 	case <-ctx.Done():
 		cancel()
 		return nil, ctx.Err()
-	case conn := <-ch: // TODO panic on closing channel?
+	case conn := <-ch:
 		if err := p.check(ctx, conn); err != nil {
 			cerr := conn.CloseWithError(quic.ApplicationErrorCode(pberror.Code_ConnectionCheckFailed), "connection check failed")
 			return nil, fmt.Errorf("connection check failed: %w", errors.Join(err, cerr))
@@ -232,7 +234,7 @@ func (p *remotePeerIncoming) keepalive(ctx context.Context, conn *quic.Conn) err
 type remotePeerOutgoing struct {
 	parent     *remotePeer
 	serverConf *serverTLSConfig
-	addrs      map[netip.AddrPort]struct{}
+	addrs      *notify.V[map[netip.AddrPort]struct{}]
 	cancel     context.CancelCauseFunc
 	logger     *slog.Logger
 }
@@ -242,7 +244,7 @@ func runRemotePeerOutgoing(ctx context.Context, parent *remotePeer, serverConfg 
 	p := &remotePeerOutgoing{
 		parent:     parent,
 		serverConf: serverConfg,
-		addrs:      addrs,
+		addrs:      notify.New(addrs),
 		cancel:     cancel,
 		logger:     parent.logger.With("style", "outgoing"),
 	}
@@ -280,8 +282,9 @@ func (p *remotePeerOutgoing) run(ctx context.Context) {
 }
 
 func (p *remotePeerOutgoing) connect(ctx context.Context) (*quic.Conn, error) {
+	addrs, _ := p.addrs.Peek()
 	var errs []error
-	for paddr := range p.addrs {
+	for paddr := range addrs {
 		addr := net.UDPAddrFromAddrPort(paddr)
 
 		p.logger.Debug("dialing direct", "addr", addr, "server", p.serverConf.name, "cert", p.serverConf.key)

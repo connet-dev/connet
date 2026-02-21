@@ -246,8 +246,11 @@ func (d *destinationConn) runConnect(ctx context.Context, stream *quic.Stream, r
 	}
 
 	if d.peer.style.isRelay() {
-		srcEncryptions := model.EncryptionsFromPB(req.Connect.SourceEncryption)
-		if len(srcEncryptions) == 0 {
+		srcEncryptions, err := model.EncryptionsFromPB(req.Connect.SourceEncryption)
+		switch {
+		case err != nil:
+			return pbconnect.WriteError(stream, pberror.Code_DestinationRelayEncryptionError, "failed to negotiate encryption: %v", err)
+		case len(srcEncryptions) == 0:
 			// source doesn't include encryption logic, none is the only possible choice
 			srcEncryptions = []model.EncryptionScheme{model.NoEncryption}
 		}

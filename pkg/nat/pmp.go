@@ -9,6 +9,7 @@ import (
 	"net"
 	"net/netip"
 	"os"
+	"sync"
 	"time"
 
 	"github.com/connet-dev/connet/pkg/notify"
@@ -148,7 +149,7 @@ func (s *PMP) runGeneration(ctx context.Context) error {
 	s.externalAddr.Set(&resp.externalAddr)
 	defer s.externalAddr.Set(nil)
 
-	s.epoch = &epochTracker{epochAt: time.Now(), epochSeconds: resp.epochSeconds, logger: s.logger}
+	s.epoch = &epochTracker{at: time.Now(), seconds: resp.epochSeconds, logger: s.logger}
 	defer func() {
 		s.epoch = nil
 	}()
@@ -476,23 +477,27 @@ func checkResponseHeader(resp []byte, opcode byte) error {
 var errEpochReset = errors.New("router epoch reset")
 
 type epochTracker struct {
-	epochAt      time.Time
-	epochSeconds uint32
-	logger       *slog.Logger
+	at      time.Time
+	seconds uint32
+	mu      sync.Mutex
+	logger  *slog.Logger
 }
 
-func (t *epochTracker) Update(nextEpochSeconds uint32) error {
-	nextAt := time.Now()
-	elapsedSeconds := uint32(nextAt.Sub(t.epochAt).Seconds())
-	expectedEpochSeconds := elapsedSeconds + t.epochSeconds
-	slogc.Fine(t.logger, "updating epoch", "next-epoch", nextEpochSeconds, "expected-epoch", expectedEpochSeconds)
+func (t *epochTracker) Update(nextSeconds uint32) error {
+	t.mu.Lock()
+	defer t.mu.Unlock()
 
-	sssoe := (expectedEpochSeconds * 7 / 8) - 2
-	if nextEpochSeconds < sssoe {
+	nextAt := time.Now()
+	elapsedSeconds := uint32(nextAt.Sub(t.at).Seconds())
+	expectedSeconds := elapsedSeconds + t.seconds
+	slogc.Fine(t.logger, "updating epoch", "next-epoch", nextSeconds, "expected-epoch", expectedSeconds)
+
+	sssoe := (expectedSeconds * 7 / 8) - 2
+	if nextSeconds < sssoe {
 		return errEpochReset
 	}
 
-	t.epochAt = nextAt
-	t.epochSeconds = nextEpochSeconds
+	t.at = nextAt
+	t.seconds = nextSeconds
 	return nil
 }
