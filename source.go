@@ -162,6 +162,22 @@ func (s *Source) runActiveErr(ctx context.Context) error {
 			conns = append(conns, sourceConn{peer, conn})
 		}
 		s.conns.Store(&conns)
+
+		if s.connsTracking != nil {
+			activePeers := map[peerID]struct{}{}
+			for peer := range active {
+				activePeers[peer.id] = struct{}{}
+			}
+
+			s.connsTrackingMu.Lock()
+			for id := range s.connsTracking {
+				if _, ok := activePeers[id]; !ok {
+					delete(s.connsTracking, id)
+				}
+			}
+			s.connsTrackingMu.Unlock()
+		}
+
 		return nil
 	})
 }
