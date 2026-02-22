@@ -40,7 +40,7 @@ type Source struct {
 	conns           atomic.Pointer[[]sourceConn]
 	connsTracking   map[peerID]*atomic.Int32
 	connsTrackingMu sync.RWMutex
-	roundRobinIndex atomic.Int32
+	roundRobinIndex atomic.Uint32
 
 	logger *slog.Logger
 }
@@ -301,7 +301,7 @@ func (s *Source) roundRobinSorted(conns []peerSourceConn) []peerSourceConn {
 		return strings.Compare(string(l.id), string(r.id))
 	})
 
-	startFrom := int(s.roundRobinIndex.Add(1)) % len(conns)
+	startFrom := int(s.roundRobinIndex.Add(1) % uint32(len(conns)))
 	return append(conns[startFrom:], conns[:startFrom]...)
 }
 
