@@ -306,7 +306,10 @@ type serverTLSConfig struct {
 func newServerTLSConfig(serverCert []byte) (*serverTLSConfig, error) {
 	cert, err := x509.ParseCertificate(serverCert)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("server certificate parse: %w", err)
+	}
+	if len(cert.DNSNames) == 0 {
+		return nil, fmt.Errorf("server certificate has no DNS names")
 	}
 	cas := x509.NewCertPool()
 	cas.AddCert(cert)
@@ -349,7 +352,10 @@ func (p *peer) getECDHPublicKey(cfg *pbconnect.ECDHConfiguration) (*ecdh.PublicK
 	for _, remote := range remotes {
 		cert, err := x509.ParseCertificate(remote.Peer.ServerCertificate)
 		if err != nil {
-			return nil, err
+			return nil, fmt.Errorf("peer certificate parse: %w", err)
+		}
+		if len(cert.DNSNames) == 0 {
+			return nil, fmt.Errorf("peer certificate has no DNS names")
 		}
 		if cert.DNSNames[0] == cfg.ClientName {
 			candidates = append(candidates, cert)
@@ -365,7 +371,10 @@ func (p *peer) getECDHPublicKey(cfg *pbconnect.ECDHConfiguration) (*ecdh.PublicK
 		return nil, fmt.Errorf("multiple peers found")
 	}
 
-	certPublic := candidates[0].PublicKey.(ed25519.PublicKey)
+	certPublic, ok := candidates[0].PublicKey.(ed25519.PublicKey)
+	if !ok {
+		return nil, fmt.Errorf("peer certificate has unexpected public key type %T", candidates[0].PublicKey)
+	}
 	if !ed25519.Verify(certPublic, cfg.KeyTime, cfg.Signature) {
 		return nil, fmt.Errorf("signature verification failed")
 	}
