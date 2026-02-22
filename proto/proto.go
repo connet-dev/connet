@@ -2,11 +2,15 @@ package proto
 
 import (
 	"encoding/binary"
+	"fmt"
 	"io"
 
 	"github.com/connet-dev/connet/proto/pberror"
 	"google.golang.org/protobuf/proto"
 )
+
+// maxMessageSize is the maximum allowed protobuf message size (16 MB).
+const maxMessageSize = 16 * 1024 * 1024
 
 func Write(w io.Writer, msg proto.Message) error {
 	msgBytes, err := proto.Marshal(msg)
@@ -50,6 +54,9 @@ func Read(r io.Reader, msg proto.Message) error {
 		return err
 	}
 	sz := binary.BigEndian.Uint64(szBytes)
+	if sz > maxMessageSize {
+		return fmt.Errorf("message size %d exceeds maximum %d", sz, maxMessageSize)
+	}
 
 	msgBytes := make([]byte, sz)
 	_, err = io.ReadFull(r, msgBytes)
