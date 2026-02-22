@@ -10,6 +10,7 @@ import (
 	"net/http"
 	"net/http/httputil"
 	"net/url"
+	"time"
 
 	"github.com/connet-dev/connet/model"
 	"github.com/connet-dev/connet/pkg/netc"
@@ -166,8 +167,10 @@ func (s *HTTPSource) Run(ctx context.Context) error {
 	targetURL.Host = endpoint
 
 	srv := &http.Server{
-		Addr:      s.srcURL.Host,
-		TLSConfig: s.cfg,
+		Addr:              s.srcURL.Host,
+		TLSConfig:         s.cfg,
+		ReadHeaderTimeout: 10 * time.Second,
+		IdleTimeout:       120 * time.Second,
 		Handler: &httputil.ReverseProxy{
 			Rewrite: func(pr *httputil.ProxyRequest) {
 				pr.SetURL(&targetURL)
@@ -259,9 +262,11 @@ func (s *WSSource) Run(ctx context.Context) error {
 	mux.HandleFunc(path, s.handle)
 
 	srv := &http.Server{
-		Addr:      s.srcURL.Host,
-		TLSConfig: s.cfg,
-		Handler:   mux,
+		Addr:              s.srcURL.Host,
+		TLSConfig:         s.cfg,
+		ReadHeaderTimeout: 10 * time.Second,
+		IdleTimeout:       120 * time.Second,
+		Handler:           mux,
 	}
 
 	go func() {
