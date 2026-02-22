@@ -372,7 +372,7 @@ func (p *peer) getECDHPublicKey(cfg *pbconnect.ECDHConfiguration) (*ecdh.PublicK
 
 	keyBytes, timeBytes := cfg.KeyTime[0:len(cfg.KeyTime)-8], cfg.KeyTime[len(cfg.KeyTime)-8:]
 	t := time.Unix(0, int64(binary.BigEndian.Uint64(timeBytes)))
-	if time.Since(t) > 5*time.Minute {
+	if time.Since(t).Abs() > 5*time.Minute {
 		return nil, fmt.Errorf("time verification failed")
 	}
 
