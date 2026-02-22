@@ -5,7 +5,7 @@ import (
 	"io"
 
 	"github.com/connet-dev/connet/proto"
-	pberror "github.com/connet-dev/connet/proto/pberror"
+	"github.com/connet-dev/connet/proto/pberror"
 )
 
 func ReadRequest(r io.Reader) (*Request, error) {
@@ -28,9 +28,9 @@ func ReadResponse(r io.Reader) (*Response, error) {
 }
 
 func WriteError(w io.Writer, code pberror.Code, msg string, args ...any) error {
-	err := pberror.NewError(code, msg, args...)
-	if err := proto.Write(w, &Response{Error: err}); err != nil {
-		return fmt.Errorf("write err response: %w", err)
+	pbErr := pberror.NewError(code, msg, args...)
+	if err := proto.Write(w, &Response{Error: pbErr}); err != nil {
+		return fmt.Errorf("write err response '%w': %w", pbErr, err)
 	}
-	return err
+	return pbErr
 }
