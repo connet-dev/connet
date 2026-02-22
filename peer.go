@@ -379,7 +379,7 @@ func (p *peer) getECDHPublicKey(cfg *pbconnect.ECDHConfiguration) (*ecdh.PublicK
 	if !ok {
 		return nil, fmt.Errorf("peer certificate has unexpected public key type %T", candidates[0].PublicKey)
 	}
-	if len(cfg.KeyTime) != 40 {
+	if len(cfg.KeyTime) != 40 { // expected size is 32 (ECDG public key) + 8 (timestamp)
 		return nil, fmt.Errorf("keytime length check failed: %d", len(cfg.KeyTime))
 	}
 	if !ed25519.Verify(certPublic, cfg.KeyTime, cfg.Signature) {
