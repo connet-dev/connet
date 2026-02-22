@@ -26,11 +26,16 @@ type Cert struct {
 func NewRoot() (*Cert, error) {
 	_, sk, err := ed25519.GenerateKey(rand.Reader)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("root cert generate key failed: %w", err)
+	}
+
+	serial, err := generateSerialNumber()
+	if err != nil {
+		return nil, fmt.Errorf("root cert generate serial failed: %w", err)
 	}
 
 	template := &x509.Certificate{
-		SerialNumber: big.NewInt(time.Now().UnixMicro()),
+		SerialNumber: serial,
 
 		NotBefore: time.Now(),
 		NotAfter:  time.Now().AddDate(100, 0, 0),
@@ -46,7 +51,7 @@ func NewRoot() (*Cert, error) {
 
 	der, err := x509.CreateCertificate(rand.Reader, template, template, sk.Public(), sk)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("root cert create failed: %w", err)
 	}
 	return &Cert{der, sk}, nil
 }
@@ -69,21 +74,26 @@ func (opts CertOpts) subject() (pkix.Name, error) {
 func (c *Cert) NewServer(opts CertOpts) (*Cert, error) {
 	parent, err := x509.ParseCertificate(c.der)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("server cert parse parent: %w", err)
 	}
 
 	pk, sk, err := ed25519.GenerateKey(rand.Reader)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("server cert generate key failed: %w", err)
 	}
 
 	subject, err := opts.subject()
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("server cert generate subject: %w", err)
+	}
+
+	serial, err := generateSerialNumber()
+	if err != nil {
+		return nil, fmt.Errorf("server cert generate serial failed: %w", err)
 	}
 
 	certTemplate := &x509.Certificate{
-		SerialNumber: big.NewInt(time.Now().UnixMicro()),
+		SerialNumber: serial,
 
 		NotBefore: time.Now(),
 		NotAfter:  time.Now().AddDate(2, 0, 0),
@@ -103,7 +113,7 @@ func (c *Cert) NewServer(opts CertOpts) (*Cert, error) {
 
 	der, err := x509.CreateCertificate(rand.Reader, certTemplate, parent, pk, c.sk)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("server cert create failed: %w", err)
 	}
 
 	return &Cert{der, sk}, nil
@@ -112,16 +122,21 @@ func (c *Cert) NewServer(opts CertOpts) (*Cert, error) {
 func (c *Cert) NewClient() (*Cert, error) {
 	parent, err := x509.ParseCertificate(c.der)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("client cert parse parent: %w", err)
 	}
 
 	pk, sk, err := ed25519.GenerateKey(rand.Reader)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("client cert generate key failed: %w", err)
+	}
+
+	serial, err := generateSerialNumber()
+	if err != nil {
+		return nil, fmt.Errorf("client cert generate serial failed: %w", err)
 	}
 
 	certTemplate := &x509.Certificate{
-		SerialNumber: big.NewInt(time.Now().UnixMicro()),
+		SerialNumber: serial,
 
 		NotBefore: time.Now(),
 		NotAfter:  time.Now().AddDate(2, 0, 0),
@@ -138,7 +153,7 @@ func (c *Cert) NewClient() (*Cert, error) {
 
 	der, err := x509.CreateCertificate(rand.Reader, certTemplate, parent, pk, c.sk)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("client cert create failed: %w", err)
 	}
 
 	return &Cert{der, sk}, nil
@@ -215,4 +230,8 @@ func DecodeFromMemory(cert, key []byte) (*Cert, error) {
 	}
 
 	return &Cert{der: certDER.Bytes, sk: keyValue}, nil
+}
+
+func generateSerialNumber() (*big.Int, error) {
+	return rand.Int(rand.Reader, new(big.Int).Lsh(big.NewInt(1), 128))
 }
