@@ -260,7 +260,7 @@ func (d *destinationConn) runConnect(ctx context.Context, stream *quic.Stream, r
 		case err != nil:
 			return pbconnect.WriteError(stream, pberror.Code_DestinationRelayEncryptionError, "select encryption scheme: %v", err)
 		case encryption == model.TLSEncryption:
-			scfg, err := d.dst.getSourceTLS(req.Connect.SourceTls.ClientName)
+			scfg, err := d.dst.getSourceTLS(req.Connect.SourceTls.GetClientName())
 			if err != nil {
 				return pbconnect.WriteError(stream, pberror.Code_DestinationRelayEncryptionError, "destination tls: %v", err)
 			}

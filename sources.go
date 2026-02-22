@@ -191,7 +191,8 @@ func (s *HTTPSource) Run(ctx context.Context) error {
 						slogc.FineDefault("error writing proxy server error", "err", err)
 					}
 				default:
-					if _, err := fmt.Fprintf(w, "[source %s] %v", endpoint, err); err != nil {
+					slog.Log(context.Background(), slog.LevelInfo, "source dial failed", "err", err)
+					if _, err := fmt.Fprintf(w, "[source %s] failed to dial destination (check logs)", endpoint); err != nil {
 						slogc.FineDefault("error writing proxy server error", "err", err)
 					}
 				}
