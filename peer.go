@@ -441,7 +441,11 @@ func (p *peer) status() (StatusPeer, error) {
 				ID:       peer.Id,
 				Metadata: peer.Metadata,
 				DirectAddrs: iterc.MapSlice(peer.Peer.Directs, func(addr *pbmodel.AddrPort) string {
-					return addr.AsNetip().String()
+					naddr, err := addr.AsNetip()
+					if err != nil {
+						return fmt.Sprintf("invalid address: %v", err)
+					}
+					return naddr.String()
 				}),
 			}
 		}

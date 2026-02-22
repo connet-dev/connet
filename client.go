@@ -351,13 +351,18 @@ func (c *Client) authenticate(ctx context.Context, conn *quic.Conn, retoken []by
 		return nil, fmt.Errorf("authentication failed: %w", resp.Error)
 	}
 
+	publicAddr, err := resp.Public.AsNetip()
+	if err != nil {
+		return nil, fmt.Errorf("authentication convert public address failed: %w", err)
+	}
+
 	c.addrs.Update(func(t advertiseAddrs) advertiseAddrs {
-		c.logger.Debug("updating nat stun", "addr", resp.Public.AsNetip())
-		t.STUN = []netip.AddrPort{resp.Public.AsNetip()}
+		c.logger.Debug("updating nat stun", "addr", publicAddr)
+		t.STUN = []netip.AddrPort{publicAddr}
 		return t
 	})
 
-	c.logger.Info("authenticated to server", "addr", c.controlAddr, "direct", resp.Public.AsNetip())
+	c.logger.Info("authenticated to server", "addr", c.controlAddr, "direct", publicAddr)
 	return &session{conn, resp.ReconnectToken}, nil
 }
 

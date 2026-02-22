@@ -90,7 +90,11 @@ func (p *remotePeer) runErr(ctx context.Context) error {
 
 			addrs := map[netip.AddrPort]struct{}{}
 			for _, addr := range remote.Peer.Directs {
-				addrs[addr.AsNetip()] = struct{}{}
+				if a, err := addr.AsNetip(); err != nil {
+					p.logger.Warn("skipping invalid direct address", "err", err)
+				} else {
+					addrs[a] = struct{}{}
+				}
 			}
 			if p.outgoing == nil {
 				remoteServerConf, err := newServerTLSConfig(remote.Peer.ServerCertificate)
