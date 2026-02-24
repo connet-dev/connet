@@ -6,6 +6,7 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
+	"time"
 
 	"github.com/connet-dev/connet/model"
 	"github.com/connet-dev/connet/pkg/logc"
@@ -92,8 +93,9 @@ type ClientPeerKey struct {
 }
 
 type ClientPeerValue struct {
-	Peer     *pbclient.Peer `json:"peer"`
-	Metadata string         `json:"metadata"`
+	Peer      *pbclient.Peer `json:"peer"`
+	Metadata  string         `json:"metadata"`
+	ExpiredAt *time.Time     `json:"expired_at,omitempty"`
 }
 
 type RelayConnKey struct {

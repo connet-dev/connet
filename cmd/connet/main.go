@@ -307,3 +307,13 @@ func (d *durationValue) String() string { return (*time.Duration)(d).String() }
 func (d *durationValue) get() time.Duration {
 	return time.Duration(*d)
 }
+
+func resolveEndpointExpiry(disabled bool, timeout durationValue) time.Duration {
+	if disabled {
+		return 0
+	}
+	if d := timeout.get(); d > 0 {
+		return d
+	}
+	return 30 * time.Second
+}

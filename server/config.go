@@ -5,6 +5,7 @@ import (
 	"log/slog"
 	"net"
 	"os"
+	"time"
 
 	"github.com/connet-dev/connet/model"
 	"github.com/connet-dev/connet/server/control"
@@ -13,8 +14,9 @@ import (
 )
 
 type serverConfig struct {
-	clientsIngresses []control.Ingress
-	clientsAuth      control.ClientAuthenticator
+	clientsIngresses      []control.Ingress
+	clientsAuth           control.ClientAuthenticator
+	clientsEndpointExpiry time.Duration
 
 	relayIngresses []relay.Ingress
 
@@ -24,7 +26,8 @@ type serverConfig struct {
 
 func newServerConfig(opts []Option) (*serverConfig, error) {
 	cfg := &serverConfig{
-		logger: slog.Default(),
+		clientsEndpointExpiry: 30 * time.Second,
+		logger:                slog.Default(),
 	}
 	for _, opt := range opts {
 		if err := opt(cfg); err != nil {
@@ -96,6 +99,13 @@ func ClientsAuthenticator(clientsAuth control.ClientAuthenticator) Option {
 	return func(cfg *serverConfig) error {
 		cfg.clientsAuth = clientsAuth
 
+		return nil
+	}
+}
+
+func ClientsEndpointExpiry(d time.Duration) Option {
+	return func(cfg *serverConfig) error {
+		cfg.clientsEndpointExpiry = d
 		return nil
 	}
 }

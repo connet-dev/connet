@@ -52,6 +52,7 @@ func newClientServer(
 	relays ClientRelays,
 	config logc.KV[ConfigKey, ConfigValue],
 	stores Stores,
+	endpointExpiry time.Duration,
 	logger *slog.Logger,
 ) (*clientServer, error) {
 	conns, err := stores.ClientConns()
@@ -69,11 +70,11 @@ func newClientServer(
 		return nil, fmt.Errorf("client snapshot: %w", err)
 	}
 
-	reactivate := map[ClientID]reactivateValue{}
+	// delete stale conn entries
 	for _, msg := range connsMsgs {
-		v := reactivate[msg.Key.ID]
-		v.conns = append(v.conns, msg.Key)
-		reactivate[msg.Key.ID] = v
+		if err := conns.Del(msg.Key); err != nil {
+			return nil, fmt.Errorf("delete stale conn: %w", err)
+		}
 	}
 
 	peersMsgs, peersOffset, err := peers.Snapshot()
@@ -83,19 +84,20 @@ func newClientServer(
 
 	peersCache := map[peerKey][]peerValue{}
 	for _, msg := range peersMsgs {
-		if reactivePeers, ok := reactivate[msg.Key.ID]; ok {
-			key := peerKey{msg.Key.Endpoint, msg.Key.Role}
-			peersCache[key] = append(peersCache[key], peerValue{msg.Key.ConnID, &pbclient.RemotePeer{
-				Id:       msg.Key.ID.string,
-				Metadata: msg.Value.Metadata,
-				Peer:     msg.Value.Peer,
-			}})
-			reactivePeers.peers = append(reactivePeers.peers, msg.Key)
-			reactivate[msg.Key.ID] = reactivePeers
-		} else {
-			logger.Warn("peer without corresponding client, deleting", "endpoint", msg.Key.Endpoint, "role", msg.Key.Role, "id", msg.Key.ID)
-			if err := peers.Del(msg.Key); err != nil {
-				return nil, fmt.Errorf("delete unowned peer: %w", err)
+		// Add ALL peers to cache (they remain visible during grace period)
+		key := peerKey{msg.Key.Endpoint, msg.Key.Role}
+		peersCache[key] = append(peersCache[key], peerValue{msg.Key.ConnID, &pbclient.RemotePeer{
+			Id:       msg.Key.ID.string,
+			Metadata: msg.Value.Metadata,
+			Peer:     msg.Value.Peer,
+		}})
+
+		// Mark as expired if not already
+		if msg.Value.ExpiredAt == nil {
+			now := time.Now()
+			msg.Value.ExpiredAt = &now
+			if err := peers.Put(msg.Key, msg.Value); err != nil {
+				return nil, fmt.Errorf("expire stale peer: %w", err)
 			}
 		}
 	}
@@ -140,7 +142,7 @@ func newClientServer(
 		peersCache:  peersCache,
 		peersOffset: peersOffset,
 
-		reactivate: reactivate,
+		endpointExpiry: endpointExpiry,
 	}, nil
 }
 
@@ -161,8 +163,7 @@ type clientServer struct {
 	peersOffset int64
 	peersMu     sync.RWMutex
 
-	reactivate   map[ClientID]reactivateValue
-	reactivateMu sync.RWMutex
+	endpointExpiry time.Duration
 }
 
 type peerKey struct {
@@ -175,16 +176,7 @@ type peerValue struct {
 	peer   *pbclient.RemotePeer
 }
 
-type reactivateValue struct {
-	conns []ClientConnKey
-	peers []ClientPeerKey
-}
-
 func (s *clientServer) connected(id ClientID, connID ConnID, auth ClientAuthentication, remote net.Addr, metadata string) error {
-	s.reactivateMu.Lock()
-	delete(s.reactivate, id)
-	s.reactivateMu.Unlock()
-
 	return s.conns.Put(ClientConnKey{id, connID}, ClientConnValue{auth, remote.String(), metadata})
 }
 
@@ -193,7 +185,12 @@ func (s *clientServer) disconnected(id ClientID, connID ConnID) error {
 }
 
 func (s *clientServer) announce(endpoint model.Endpoint, role model.Role, id ClientID, connID ConnID, metadata string, peer *pbclient.Peer) error {
-	return s.peers.Put(ClientPeerKey{endpoint, role, id, connID}, ClientPeerValue{peer, metadata})
+	return s.peers.Put(ClientPeerKey{endpoint, role, id, connID}, ClientPeerValue{Peer: peer, Metadata: metadata})
+}
+
+func (s *clientServer) expire(endpoint model.Endpoint, role model.Role, id ClientID, connID ConnID, metadata string, peer *pbclient.Peer) error {
+	now := time.Now()
+	return s.peers.Put(ClientPeerKey{endpoint, role, id, connID}, ClientPeerValue{Peer: peer, Metadata: metadata, ExpiredAt: &now})
 }
 
 func (s *clientServer) revoke(endpoint model.Endpoint, role model.Role, id ClientID, connID ConnID) error {
@@ -272,7 +269,9 @@ func (s *clientServer) run(ctx context.Context) error {
 		g.Go(reliable.Bind(ingress, s.runListener))
 	}
 	g.Go(s.runPeerCache)
-	g.Go(s.runCleaner)
+	if s.endpointExpiry > 0 {
+		g.Go(s.runPeerExpiry)
+	}
 
 	g.Go(logc.ScheduleCompact(s.conns))
 	g.Go(logc.ScheduleCompact(s.peers))
@@ -402,53 +401,49 @@ func (s *clientServer) runPeerCache(ctx context.Context) error {
 	}
 }
 
-func (s *clientServer) runCleaner(ctx context.Context) error {
-	switch inactive, err := s.waitToReactivate(ctx); {
-	case err != nil:
-		return err
-	case inactive == 0:
-		s.logger.Debug("all clients reactivated")
-		return nil
+func (s *clientServer) runPeerExpiry(ctx context.Context) error {
+	// Process existing expired entries from the snapshot
+	msgs, offset, err := s.peers.Snapshot()
+	if err != nil {
+		return fmt.Errorf("expiry snapshot: %w", err)
 	}
-
-	s.reactivateMu.Lock()
-	defer s.reactivateMu.Unlock()
-
-	for key, value := range s.reactivate {
-		s.logger.Warn("force disconnecting client", "id", key)
-		for _, conn := range value.conns {
-			if err := s.disconnected(conn.ID, conn.ConnID); err != nil {
-				return err
-			}
-		}
-		for _, peer := range value.peers {
-			if err := s.revoke(peer.Endpoint, peer.Role, peer.ID, peer.ConnID); err != nil {
-				return err
+	for _, msg := range msgs {
+		if expiredAt := msg.Value.ExpiredAt; expiredAt != nil {
+			if err := s.waitAndRevoke(ctx, msg.Key, *expiredAt); err != nil {
+				return fmt.Errorf("expiry wait and revoke: %w", err)
 			}
 		}
 	}
 
-	return nil
+	// Watch for new expired entries
+	for {
+		msgs, nextOffset, err := s.peers.Consume(ctx, offset)
+		if err != nil {
+			return fmt.Errorf("expiry consume: %w", err)
+		}
+		for _, msg := range msgs {
+			if expiredAt := msg.Value.ExpiredAt; !msg.Delete && expiredAt != nil {
+				if err := s.waitAndRevoke(ctx, msg.Key, *expiredAt); err != nil {
+					return fmt.Errorf("expiry wait and revoke: %w", err)
+				}
+			}
+		}
+		offset = nextOffset
+	}
 }
 
-func (s *clientServer) waitToReactivate(ctx context.Context) (int, error) {
-	s.reactivateMu.RLock()
-	waitToReactivate := len(s.reactivate)
-	s.reactivateMu.RUnlock()
-
-	if waitToReactivate == 0 {
-		return 0, nil
+func (s *clientServer) waitAndRevoke(ctx context.Context, key ClientPeerKey, expiredAt time.Time) error {
+	remaining := s.endpointExpiry - time.Since(expiredAt)
+	if remaining > 0 {
+		s.logger.Debug("waiting to expire endpoint", "endpoint", key.Endpoint, "role", key.Role, "wait", remaining)
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		case <-time.After(remaining):
+		}
 	}
 
-	s.logger.Debug("waiting for clients to reactivate", "count", waitToReactivate)
-	select {
-	case <-ctx.Done():
-		return 0, ctx.Err()
-	case <-time.After(time.Minute):
-		s.reactivateMu.RLock()
-		defer s.reactivateMu.RUnlock()
-		return len(s.reactivate), nil
-	}
+	return s.revoke(key.Endpoint, key.Role, key.ID, key.ConnID)
 }
 
 type clientConn struct {
@@ -660,6 +655,14 @@ func (s *clientStream) announce(ctx context.Context, req *pbclient.Request_Annou
 		return err
 	}
 	defer func() {
+		if s.conn.server.endpointExpiry > 0 && s.conn.conn.Context().Err() != nil {
+			// Connection dead — mark as expired, consumer will delete after timeout
+			if err := s.conn.server.expire(endpoint, role, s.conn.id, s.conn.connID, s.conn.metadata, req.Peer); err != nil {
+				s.conn.logger.Warn("failed to expire peer", "id", s.conn.id, "err", err)
+			}
+			return
+		}
+		// Connection alive or feature disabled — revoke immediately
 		if err := s.conn.server.revoke(endpoint, role, s.conn.id, s.conn.connID); err != nil {
 			s.conn.logger.Warn("failed to revoke client", "id", s.conn.id, "err", err)
 		}
