@@ -84,6 +84,14 @@ func newClientServer(
 
 	peersCache := map[peerKey][]peerValue{}
 	for _, msg := range peersMsgs {
+		if endpointExpiry == 0 {
+			// Expiry disabled — delete stale peers immediately
+			if err := peers.Del(msg.Key); err != nil {
+				return nil, fmt.Errorf("delete stale peer: %w", err)
+			}
+			continue
+		}
+
 		// Add ALL peers to cache (they remain visible during grace period)
 		key := peerKey{msg.Key.Endpoint, msg.Key.Role}
 		peersCache[key] = append(peersCache[key], peerValue{msg.Key.ConnID, &pbclient.RemotePeer{
@@ -188,9 +196,15 @@ func (s *clientServer) announce(endpoint model.Endpoint, role model.Role, id Cli
 	return s.peers.Put(ClientPeerKey{endpoint, role, id, connID}, ClientPeerValue{Peer: peer, Metadata: metadata})
 }
 
-func (s *clientServer) expire(endpoint model.Endpoint, role model.Role, id ClientID, connID ConnID, metadata string, peer *pbclient.Peer) error {
+func (s *clientServer) expire(endpoint model.Endpoint, role model.Role, id ClientID, connID ConnID) error {
+	key := ClientPeerKey{endpoint, role, id, connID}
+	val, err := s.peers.Get(key)
+	if err != nil {
+		return fmt.Errorf("get peer for expire: %w", err)
+	}
 	now := time.Now()
-	return s.peers.Put(ClientPeerKey{endpoint, role, id, connID}, ClientPeerValue{Peer: peer, Metadata: metadata, ExpiredAt: &now})
+	val.ExpiredAt = &now
+	return s.peers.Put(key, val)
 }
 
 func (s *clientServer) revoke(endpoint model.Endpoint, role model.Role, id ClientID, connID ConnID) error {
@@ -657,7 +671,7 @@ func (s *clientStream) announce(ctx context.Context, req *pbclient.Request_Annou
 	defer func() {
 		if s.conn.server.endpointExpiry > 0 && s.conn.conn.Context().Err() != nil {
 			// Connection dead — mark as expired, consumer will delete after timeout
-			if err := s.conn.server.expire(endpoint, role, s.conn.id, s.conn.connID, s.conn.metadata, req.Peer); err != nil {
+			if err := s.conn.server.expire(endpoint, role, s.conn.id, s.conn.connID); err != nil {
 				s.conn.logger.Warn("failed to expire peer", "id", s.conn.id, "err", err)
 			}
 			return
