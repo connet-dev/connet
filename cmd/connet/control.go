@@ -124,8 +124,7 @@ func controlRun(ctx context.Context, cfg ControlConfig, logger *slog.Logger) err
 	var err error
 
 	controlCfg := control.Config{
-		ClientsEndpointExpiry: resolveEndpointExpiry(cfg.EndpointExpiryDisable, cfg.EndpointExpiryTimeout),
-		Logger:                logger,
+		Logger: logger,
 	}
 
 	var usedClientsDefault bool
@@ -152,6 +151,8 @@ func controlRun(ctx context.Context, cfg ControlConfig, logger *slog.Logger) err
 	if err != nil {
 		return err
 	}
+
+	controlCfg.ClientsEndpointExpiry = resolveEndpointExpiry(cfg.EndpointExpiryDisable, cfg.EndpointExpiryTimeout)
 
 	var usedRelaysDefault bool
 	for ix, ingressCfg := range cfg.RelaysIngresses {

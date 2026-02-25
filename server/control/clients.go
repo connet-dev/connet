@@ -678,7 +678,7 @@ func (s *clientStream) announce(ctx context.Context, req *pbclient.Request_Annou
 		}
 		// Connection alive or feature disabled — revoke immediately
 		if err := s.conn.server.revoke(endpoint, role, s.conn.id, s.conn.connID); err != nil {
-			s.conn.logger.Warn("failed to revoke client", "id", s.conn.id, "err", err)
+			s.conn.logger.Warn("failed to revoke peer", "id", s.conn.id, "err", err)
 		}
 	}()
 
