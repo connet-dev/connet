@@ -213,6 +213,9 @@ tokens-file = "path/to/client/tokens" # file that contains a list of client auth
 tokens = ["client-token-1", "client-token-n"] # set of recognized client auth tokens
 # one of tokens or tokens-file is required
 
+endpoint-expiry-disable = false # disable keeping endpoint registrations alive after client disconnect (default false)
+endpoint-expiry-timeout = "30s" # how long to keep endpoint registrations after client disconnect (default '30s')
+
 status-addr = "127.0.0.1:19180" # address to listen for incoming status connections (TCP/HTTP, [host]:port) (disabled by default)
 store-dir = "path/to/server-store" # directory for this server to persist runtime information, see Storage section for more info
 
@@ -246,6 +249,9 @@ Here is the full control server `control.toml` configuration specification:
 clients-tokens-file = "path/to/client/tokens" # file containing a list of client auth tokens, one token per line
 clients-tokens = ["client-token-1", "client-token-n"] # list of recognized client auth tokens
 # one of client-tokens-file or client-tokens is required
+
+endpoint-expiry-disable = false # disable keeping endpoint registrations alive after client disconnect (default false)
+endpoint-expiry-timeout = "30s" # how long to keep endpoint registrations after client disconnect (default '30s')
 
 relays-tokens-file = "path/to/relay/token" # file containing a list of relay auth tokens, one token per line
 relays-tokens = ["relay-token-1", "relay-token-n"] # list of recognized relay auth tokens
@@ -587,7 +593,6 @@ by adding account management and it is one of the easiest ways to start.
 ## Planlog
 
 ### Next
- - [ ] do not discard client/peer/endpoint info immediately 
  - [ ] controlled server shutdown
  - [ ] peer identity and support for options in p2p
  - [ ] raw endpoint protocols
@@ -606,6 +611,9 @@ by adding account management and it is one of the easiest ways to start.
  - [ ] relay-to-relay forwarding
 
 ## Changelog
+
+### v0.15.0
+ - [x] endpoint expiry: keep endpoint registrations alive for a grace period after client disconnect to smooth out reconnects
 
 ### v0.14.0
  - [x] rewrite relay to not depend on control connection
