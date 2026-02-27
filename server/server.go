@@ -102,10 +102,12 @@ func New(opts ...Option) (*Server, error) {
 }
 
 func (s *Server) Run(ctx context.Context) error {
-	g := reliable.NewGroup(ctx)
-	g.Go(s.control.Run)
-	g.Go(s.relay.Run)
-	return g.Wait()
+	return reliable.RunGroup(ctx, s.control.Run, s.relay.Run)
+}
+
+func (s *Server) WaitDrainConns(ctx context.Context) {
+	s.control.WaitDrainConns(ctx)
+	s.relay.WaitDrainConns(ctx)
 }
 
 func (s *Server) Status(ctx context.Context) (ServerStatus, error) {

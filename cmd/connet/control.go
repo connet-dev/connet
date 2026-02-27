@@ -202,7 +202,9 @@ func controlRun(ctx context.Context, cfg ControlConfig, logger *slog.Logger) err
 	if err != nil {
 		return fmt.Errorf("create control server: %w", err)
 	}
-	return runWithStatus(ctx, srv, statusAddr, logger)
+	err = runWithStatus(ctx, srv, statusAddr, logger)
+	srv.WaitDrainConns(ctx)
+	return err
 }
 
 func (cfg ControlIngress) parse() (control.Ingress, error) {

@@ -27,13 +27,13 @@ type Config struct {
 }
 
 func NewServer(cfg Config) (*Server, error) {
+	if err := cfg.Stores.RemoveDeprecated(); err != nil {
+		cfg.Logger.Warn("could not remove deprecated stores", "err", err)
+	}
+
 	configStore, err := cfg.Stores.Config()
 	if err != nil {
 		return nil, fmt.Errorf("config store open: %w", err)
-	}
-
-	if err := cfg.Stores.RemoveDeprecated(); err != nil {
-		cfg.Logger.Warn("could not remove deprecated stores", "err", err)
 	}
 
 	relays, err := newRelayServer(cfg.RelaysIngress, cfg.RelaysAuth, configStore, cfg.Stores, cfg.Logger)
@@ -67,6 +67,11 @@ func (s *Server) Run(ctx context.Context) error {
 		s.clients.run,
 		logc.ScheduleCompact(s.config),
 	)
+}
+
+func (s *Server) WaitDrainConns(ctx context.Context) {
+	s.relays.connsWg.Wait()
+	s.clients.connsWg.Wait()
 }
 
 func (s *Server) Status(ctx context.Context) (Status, error) {

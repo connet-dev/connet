@@ -132,6 +132,8 @@ type relayServer struct {
 	connsCache  map[RelayID]cachedRelay
 	connsOffset int64
 	connsMu     sync.RWMutex
+
+	connsWg sync.WaitGroup
 }
 
 type cachedRelay struct {
@@ -223,6 +225,7 @@ func (s *relayServer) Relays(ctx context.Context, endpoint model.Endpoint, role 
 func (s *relayServer) run(ctx context.Context) error {
 	g := reliable.NewGroup(ctx)
 
+	s.connsWg.Add(len(s.ingresses))
 	for _, ingress := range s.ingresses {
 		g.Go(reliable.Bind(ingress, s.runListener))
 	}
@@ -234,6 +237,8 @@ func (s *relayServer) run(ctx context.Context) error {
 }
 
 func (s *relayServer) runListener(ctx context.Context, ingress Ingress) error {
+	defer s.connsWg.Done()
+
 	s.logger.Debug("start udp listener", "addr", ingress.Addr)
 	udpConn, err := net.ListenUDP("udp", ingress.Addr)
 	if err != nil {
@@ -292,7 +297,10 @@ func (s *relayServer) runListener(ctx context.Context, ingress Ingress) error {
 			conn:   conn,
 			logger: s.logger,
 		}
-		go rc.run(ctx)
+		s.connsWg.Go(func() {
+			rc.run(ctx)
+		})
+		// go rc.run(ctx)
 	}
 }
 

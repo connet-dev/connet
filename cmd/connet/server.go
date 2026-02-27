@@ -159,7 +159,12 @@ func serverRun(ctx context.Context, cfg ServerConfig, logger *slog.Logger) error
 	if err != nil {
 		return fmt.Errorf("create server: %w", err)
 	}
-	return runWithStatus(ctx, srv, statusAddr, logger)
+
+	err = runWithStatus(ctx, srv, statusAddr, logger)
+	logger.Info("server stopped, draining conns")
+	srv.WaitDrainConns(ctx)
+	logger.Info("server stopped, completed conns")
+	return err
 }
 
 func (c *ServerConfig) merge(o ServerConfig) {

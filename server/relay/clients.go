@@ -46,7 +46,8 @@ type clientsServer struct {
 	endpoints   map[model.Endpoint]*endpointClients
 	endpointsMu sync.RWMutex
 
-	logger *slog.Logger
+	connsWg sync.WaitGroup
+	logger  *slog.Logger
 }
 
 func newClientsServer(cfg Config, cert *certc.Cert, auth ClientAuthenticator) (*clientsServer, error) {
@@ -190,6 +191,8 @@ type clientsServerCfg struct {
 }
 
 func (s *clientsServer) run(ctx context.Context, cfg clientsServerCfg) error {
+	defer s.connsWg.Done()
+
 	s.logger.Debug("start udp listener", "addr", cfg.ingress.Addr)
 	udpConn, err := net.ListenUDP("udp", cfg.ingress.Addr)
 	if err != nil {
@@ -246,7 +249,10 @@ func (s *clientsServer) run(ctx context.Context, cfg clientsServerCfg) error {
 			conn:   conn,
 			logger: s.logger,
 		}
-		go rc.run(ctx)
+		s.connsWg.Go(func() {
+			rc.run(ctx)
+		})
+		// go rc.run(ctx)
 	}
 }
 
