@@ -40,7 +40,7 @@ type Source struct {
 	conns           atomic.Pointer[[]sourceConn]
 	connsTracking   map[peerID]*atomic.Int32
 	connsTrackingMu sync.RWMutex
-	roundRobinIndex atomic.Int32
+	roundRobinIndex atomic.Uint32
 
 	logger *slog.Logger
 }
@@ -162,6 +162,22 @@ func (s *Source) runActiveErr(ctx context.Context) error {
 			conns = append(conns, sourceConn{peer, conn})
 		}
 		s.conns.Store(&conns)
+
+		if s.connsTracking != nil {
+			activePeers := map[peerID]struct{}{}
+			for peer := range active {
+				activePeers[peer.id] = struct{}{}
+			}
+
+			s.connsTrackingMu.Lock()
+			for id := range s.connsTracking {
+				if _, ok := activePeers[id]; !ok {
+					delete(s.connsTracking, id)
+				}
+			}
+			s.connsTrackingMu.Unlock()
+		}
+
 		return nil
 	})
 }
@@ -205,7 +221,7 @@ func rttCompare(l, r sourceConn) int {
 		return -1
 	}
 
-	ld := r.conn.ConnectionStats().SmoothedRTT
+	ld := l.conn.ConnectionStats().SmoothedRTT
 	rd := r.conn.ConnectionStats().SmoothedRTT
 
 	return cmp.Compare(ld, rd)
@@ -285,7 +301,7 @@ func (s *Source) roundRobinSorted(conns []peerSourceConn) []peerSourceConn {
 		return strings.Compare(string(l.id), string(r.id))
 	})
 
-	startFrom := int(s.roundRobinIndex.Add(1)) % len(conns)
+	startFrom := int(s.roundRobinIndex.Add(1) % uint32(len(conns)))
 	return append(conns[startFrom:], conns[:startFrom]...)
 }
 
@@ -397,8 +413,11 @@ func (s *Source) dialStream(ctx context.Context, dest sourceConn, stream *quic.S
 
 	var encStream = quicc.StreamConn(stream, dest.conn)
 	if dest.peer.style.isRelay() {
-		destinationEncryption := model.EncryptionFromPB(resp.Connect.DestinationEncryption)
-		if !slices.Contains(s.cfg.RelayEncryptions, destinationEncryption) {
+		destinationEncryption, err := model.EncryptionFromPB(resp.Connect.DestinationEncryption)
+		switch {
+		case err != nil:
+			return nil, fmt.Errorf("source failed to negotiate encryption scheme: %w", err)
+		case !slices.Contains(s.cfg.RelayEncryptions, destinationEncryption):
 			return nil, fmt.Errorf("source failed to negotiate encryption scheme: %s", destinationEncryption)
 		}
 

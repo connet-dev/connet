@@ -21,7 +21,7 @@ func (k ConnID) String() string {
 
 func (k ConnID) Time() time.Time {
 	data, err := netc.DNSSECEncoding.DecodeString(k.string)
-	if err != nil {
+	if err != nil || len(data) < 8 {
 		return time.Time{}
 	}
 	nanos := binary.BigEndian.Uint64(data)

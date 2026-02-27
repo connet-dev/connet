@@ -143,6 +143,7 @@ func (v *V[T]) UpdateOpt(f func(t T) (T, bool)) bool {
 			next.value = value
 			next.version = current.version + 1
 		} else {
+			v.barrier <- next
 			return false
 		}
 	} else {
@@ -151,6 +152,7 @@ func (v *V[T]) UpdateOpt(f func(t T) (T, bool)) bool {
 			next.value = value
 			next.version = 0
 		} else {
+			v.barrier <- next
 			return false
 		}
 	}
@@ -243,17 +245,24 @@ func MapDeleteFunc[M ~map[K]T, K comparable, T any](m *V[M], del func(K, T) bool
 func ListenMulti[L any, R any](ctx context.Context, nl *V[L], nr *V[R], fn func(context.Context, L, R) error) error {
 	var l L
 	var r R
+	var ok bool
 
 	cl := nl.Notify(ctx)
 	cr := nr.Notify(ctx)
 
 	for {
 		select {
-		case l = <-cl:
+		case l, ok = <-cl:
+			if !ok {
+				return errNotifyClosed
+			}
 			if err := fn(ctx, l, r); err != nil {
 				return err
 			}
-		case r = <-cr:
+		case r, ok = <-cr:
+			if !ok {
+				return errNotifyClosed
+			}
 			if err := fn(ctx, l, r); err != nil {
 				return err
 			}

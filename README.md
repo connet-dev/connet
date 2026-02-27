@@ -21,7 +21,7 @@ is only used for sharing configuration. In many cases clients can communicate di
 performance.
  - **Relay support** There are cases when clients are unable to find a path to communicate directly. In such cases, they
 can use a relay server to maintain connectivity. 
- - **Security** Everything is private, encrypted with TLS. Public server and client certificates are exchanges between peers
+ - **Security** Everything is private, encrypted with TLS. Public server and client certificates are exchanged between peers
 and are required and verified to establish connectivity. Clients and relays need to present a mandatory token when communicating
 with the control server, allowing tight control over who can use `connet`.
  - **Embeddable** In case you want `connet` running as part of another (golang) program (as opposed to a separate executable), 
@@ -49,7 +49,7 @@ flowchart LR
     R -->|Relay Connection| D
 ```
 
-For all communication `connet` uses the QUIC protocol, which is build on top of UDP. 
+For all communication `connet` uses the QUIC protocol, which is built on top of UDP. 
 
 ## Quickstart
 
@@ -213,6 +213,9 @@ tokens-file = "path/to/client/tokens" # file that contains a list of client auth
 tokens = ["client-token-1", "client-token-n"] # set of recognized client auth tokens
 # one of tokens or tokens-file is required
 
+endpoint-expiry-disable = false # disable keeping endpoint registrations alive after client disconnect (default false)
+endpoint-expiry-timeout = "30s" # how long to keep endpoint registrations after client disconnect (default '30s')
+
 status-addr = "127.0.0.1:19180" # address to listen for incoming status connections (TCP/HTTP, [host]:port) (disabled by default)
 store-dir = "path/to/server-store" # directory for this server to persist runtime information, see Storage section for more info
 
@@ -246,6 +249,9 @@ Here is the full control server `control.toml` configuration specification:
 clients-tokens-file = "path/to/client/tokens" # file containing a list of client auth tokens, one token per line
 clients-tokens = ["client-token-1", "client-token-n"] # list of recognized client auth tokens
 # one of client-tokens-file or client-tokens is required
+
+endpoint-expiry-disable = false # disable keeping endpoint registrations alive after client disconnect (default false)
+endpoint-expiry-timeout = "30s" # how long to keep endpoint registrations after client disconnect (default '30s')
 
 relays-tokens-file = "path/to/relay/token" # file containing a list of relay auth tokens, one token per line
 relays-tokens = ["relay-token-1", "relay-token-n"] # list of recognized relay auth tokens
@@ -399,7 +405,7 @@ to establish multiple connections within the allotted time.
  - then check if `STATE_DIRECTORY` environment variable is not empty, and use that location
  - finally, try to create a new sub-directory in the current's system temporary directory (`TMPDIR`)
 
-When using a temporary sub-directory, every time the server restarts it will loose any state and identity. To prevent this,
+When using a temporary sub-directory, every time the server restarts it will lose any state and identity. To prevent this,
 you can specify an explicit `store-dir` location, which can be reused between runs.
 
 ### Logging
@@ -424,11 +430,18 @@ In which case, we recommend visiting the [wiki page](https://github.com/quic-go/
 #### Client
 
 If neither `direct-stateless-reset-key` nor `direct-stateless-reset-key-file` has been set, a new key file will be created under
-the cache dir (using one of `$CONNET_CACHE_DIR`, `$CACHE_DIRECTORY`, `$XDG_CACHE_DIR` or `$HOME/.cache` on linux), suffixed with the direct address of this client.
+the cache dir (using one of `$CONNET_CACHE_DIR`, `$CACHE_DIRECTORY`, `$XDG_CACHE_HOME` or `$HOME/.cache` on linux), suffixed with the direct address of this client.
 
 #### Server
 
-The server is generating its stateless reset key internally as part of its state kept in `state-dir`.
+The server is generating its stateless reset key internally as part of its state kept in `store-dir`.
+
+## Other Commands
+
+In addition to the main client and server modes, `connet` provides the following utility commands:
+ - `connet check <config-file>` - validates a configuration file
+ - `connet gen-key` - generates an ed25519 private/public key pair
+ - `connet version` - prints version information
 
 ## Installation
 
@@ -535,7 +548,7 @@ to the control server. Any error that happens while connecting will be reported 
 reconnecting until the client is `Close`ed. Here is a minimal example of creating new client:
 
 ```go
-cl, err := connect.Connect(ctx, connet.ClientToken("CLIENT_TOKEN"), connet.ClientControlAddress("connet.dev:19190"))
+cl, err := connet.Connect(ctx, connet.Token("CLIENT_TOKEN"), connet.ServerAddress("connet.dev:19190"))
 if err != nil {
   return err
 }
@@ -557,7 +570,7 @@ src, err := cl.Source(ctx, connet.NewSourceConfig("example"))
 if err != nil {
   return err
 }
-defer dst.Close()
+defer src.Close()
 ```
 
 Once you have a destination or a source, you can use `Destination.Accept` to handle new remote connections for this destination
@@ -575,11 +588,12 @@ TBD
 
 If you want to use `connet`, but you don't want to run the server yourself, we have also built a hosted service 
 at [connet.dev](https://connet.dev). It is free when clients connect directly, builds upon the open source components 
-by adding account management and it is one of the easiest way to start. 
+by adding account management and it is one of the easiest ways to start. 
 
 ## Planlog
 
 ### Next
+ - [ ] controlled server shutdown
  - [ ] peer identity and support for options in p2p
  - [ ] raw endpoint protocols
  - [ ] UPnP/IDG and PCP for hole-punching
@@ -599,13 +613,12 @@ by adding account management and it is one of the easiest way to start.
 ## Changelog
 
 ### v0.15.0
- - [ ] do not discard client/peer/endpoint info immediately 
+ - [x] endpoint expiry: keep endpoint registrations alive for a grace period after client disconnect to smooth out reconnects
 
 ### v0.14.0
  - [x] rewrite relay to not depend on control connection
  - [x] complete migration to relay v2
  - [x] client reconnecting before old connection being removed 
- - [ ] controlled server shutdown
 
 ### v0.13.0
  - [x] stateless/direct relay v2
@@ -622,8 +635,8 @@ by adding account management and it is one of the easiest way to start.
 
 ### v0.10.0
  - [x] package refactor/rename - move all clients in main connet package
- - [x] fix issue with disconnecting from relay when peer dissapears
- - [x] fix issue with not closing relay connection when relay dissapears
+ - [x] fix issue with disconnecting from relay when peer disappears
+ - [x] fix issue with not closing relay connection when relay disappears
 
 ### v0.9.12
  - [x] auto-tag release

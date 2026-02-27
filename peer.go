@@ -306,7 +306,10 @@ type serverTLSConfig struct {
 func newServerTLSConfig(serverCert []byte) (*serverTLSConfig, error) {
 	cert, err := x509.ParseCertificate(serverCert)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("server certificate parse: %w", err)
+	}
+	if len(cert.DNSNames) == 0 {
+		return nil, fmt.Errorf("server certificate has no DNS names")
 	}
 	cas := x509.NewCertPool()
 	cas.AddCert(cert)
@@ -325,7 +328,7 @@ func (p *peer) newECDHConfig() (*ecdh.PrivateKey, *pbconnect.ECDHConfiguration, 
 
 	var keyTime []byte
 	keyTime = append(keyTime, sk.PublicKey().Bytes()...)
-	keyTime = binary.BigEndian.AppendUint64(keyTime, uint64(time.Now().Nanosecond()))
+	keyTime = binary.BigEndian.AppendUint64(keyTime, uint64(time.Now().UnixNano()))
 
 	certSK := p.serverCert.PrivateKey.(ed25519.PrivateKey)
 	signature, err := certSK.Sign(rand.Reader, keyTime, &ed25519.Options{})
@@ -341,6 +344,10 @@ func (p *peer) newECDHConfig() (*ecdh.PrivateKey, *pbconnect.ECDHConfiguration, 
 }
 
 func (p *peer) getECDHPublicKey(cfg *pbconnect.ECDHConfiguration) (*ecdh.PublicKey, error) {
+	if cfg == nil {
+		return nil, fmt.Errorf("missing ecdh configuration")
+	}
+
 	remotes, ok := p.peers.Peek()
 	if !ok {
 		return nil, fmt.Errorf("no peers found")
@@ -349,7 +356,10 @@ func (p *peer) getECDHPublicKey(cfg *pbconnect.ECDHConfiguration) (*ecdh.PublicK
 	for _, remote := range remotes {
 		cert, err := x509.ParseCertificate(remote.Peer.ServerCertificate)
 		if err != nil {
-			return nil, err
+			return nil, fmt.Errorf("peer certificate parse: %w", err)
+		}
+		if len(cert.DNSNames) == 0 {
+			return nil, fmt.Errorf("peer certificate has no DNS names")
 		}
 		if cert.DNSNames[0] == cfg.ClientName {
 			candidates = append(candidates, cert)
@@ -360,19 +370,25 @@ func (p *peer) getECDHPublicKey(cfg *pbconnect.ECDHConfiguration) (*ecdh.PublicK
 	case 0:
 		return nil, fmt.Errorf("peer not found")
 	case 1:
-		// return candidates[0], nil
+		// we expect exactly one candidate, continue
 	default:
 		return nil, fmt.Errorf("multiple peers found")
 	}
 
-	certPublic := candidates[0].PublicKey.(ed25519.PublicKey)
+	certPublic, ok := candidates[0].PublicKey.(ed25519.PublicKey)
+	if !ok {
+		return nil, fmt.Errorf("peer certificate has unexpected public key type %T", candidates[0].PublicKey)
+	}
+	if len(cfg.KeyTime) != 40 { // expected size is 32 (ECDG public key) + 8 (timestamp)
+		return nil, fmt.Errorf("keytime length check failed: %d", len(cfg.KeyTime))
+	}
 	if !ed25519.Verify(certPublic, cfg.KeyTime, cfg.Signature) {
 		return nil, fmt.Errorf("signature verification failed")
 	}
 
 	keyBytes, timeBytes := cfg.KeyTime[0:len(cfg.KeyTime)-8], cfg.KeyTime[len(cfg.KeyTime)-8:]
 	t := time.Unix(0, int64(binary.BigEndian.Uint64(timeBytes)))
-	if time.Since(t) < 5*time.Minute {
+	if time.Since(t).Abs() > 5*time.Minute {
 		return nil, fmt.Errorf("time verification failed")
 	}
 
@@ -441,7 +457,11 @@ func (p *peer) status() (StatusPeer, error) {
 				ID:       peer.Id,
 				Metadata: peer.Metadata,
 				DirectAddrs: iterc.MapSlice(peer.Peer.Directs, func(addr *pbmodel.AddrPort) string {
-					return addr.AsNetip().String()
+					naddr, err := addr.AsNetip()
+					if err != nil {
+						return fmt.Sprintf("invalid address: %v", err)
+					}
+					return naddr.String()
 				}),
 			}
 		}

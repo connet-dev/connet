@@ -30,7 +30,7 @@ func (s *Status) UnmarshalText(b []byte) error {
 	case Disconnected.string:
 		*s = Disconnected
 	default:
-		return fmt.Errorf("invalid status '%s'", s)
+		return fmt.Errorf("invalid status '%s'", str)
 	}
 	return nil
 }

@@ -209,7 +209,7 @@ func (d *destinationConn) runErr(ctx context.Context) error {
 			d.logger.Debug("accept failed", "err", err)
 			return err
 		}
-		d.logger.Debug("accepted stream new stream")
+		d.logger.Debug("accepted new stream")
 		go d.runDestination(ctx, stream)
 	}
 }
@@ -246,8 +246,11 @@ func (d *destinationConn) runConnect(ctx context.Context, stream *quic.Stream, r
 	}
 
 	if d.peer.style.isRelay() {
-		srcEncryptions := model.EncryptionsFromPB(req.Connect.SourceEncryption)
-		if len(srcEncryptions) == 0 {
+		srcEncryptions, err := model.EncryptionsFromPB(req.Connect.SourceEncryption)
+		switch {
+		case err != nil:
+			return pbconnect.WriteError(stream, pberror.Code_DestinationRelayEncryptionError, "failed to negotiate encryption: %v", err)
+		case len(srcEncryptions) == 0:
 			// source doesn't include encryption logic, none is the only possible choice
 			srcEncryptions = []model.EncryptionScheme{model.NoEncryption}
 		}
@@ -257,7 +260,7 @@ func (d *destinationConn) runConnect(ctx context.Context, stream *quic.Stream, r
 		case err != nil:
 			return pbconnect.WriteError(stream, pberror.Code_DestinationRelayEncryptionError, "select encryption scheme: %v", err)
 		case encryption == model.TLSEncryption:
-			scfg, err := d.dst.getSourceTLS(req.Connect.SourceTls.ClientName)
+			scfg, err := d.dst.getSourceTLS(req.Connect.SourceTls.GetClientName())
 			if err != nil {
 				return pbconnect.WriteError(stream, pberror.Code_DestinationRelayEncryptionError, "destination tls: %v", err)
 			}

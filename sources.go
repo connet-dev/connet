@@ -10,6 +10,7 @@ import (
 	"net/http"
 	"net/http/httputil"
 	"net/url"
+	"time"
 
 	"github.com/connet-dev/connet/model"
 	"github.com/connet-dev/connet/pkg/netc"
@@ -166,8 +167,10 @@ func (s *HTTPSource) Run(ctx context.Context) error {
 	targetURL.Host = endpoint
 
 	srv := &http.Server{
-		Addr:      s.srcURL.Host,
-		TLSConfig: s.cfg,
+		Addr:              s.srcURL.Host,
+		TLSConfig:         s.cfg,
+		ReadHeaderTimeout: 10 * time.Second,
+		IdleTimeout:       120 * time.Second,
 		Handler: &httputil.ReverseProxy{
 			Rewrite: func(pr *httputil.ProxyRequest) {
 				pr.SetURL(&targetURL)
@@ -188,7 +191,8 @@ func (s *HTTPSource) Run(ctx context.Context) error {
 						slogc.FineDefault("error writing proxy server error", "err", err)
 					}
 				default:
-					if _, err := fmt.Fprintf(w, "[source %s] %v", endpoint, err); err != nil {
+					slog.Log(context.Background(), slog.LevelInfo, "source dial failed", "err", err)
+					if _, err := fmt.Fprintf(w, "[source %s] failed to dial destination (check logs)", endpoint); err != nil {
 						slogc.FineDefault("error writing proxy server error", "err", err)
 					}
 				}
@@ -226,7 +230,7 @@ func NewWSSource(src *Source, srcURL *url.URL, cfg *tls.Config, logger *slog.Log
 func (s *WSSource) handle(w http.ResponseWriter, r *http.Request) {
 	hconn, err := s.upgrader.Upgrade(w, r, nil)
 	if err != nil {
-		s.logger.Debug("could upgrade connection", "err", err)
+		s.logger.Debug("could not upgrade connection", "err", err)
 		return
 	}
 	defer func() {
@@ -259,9 +263,11 @@ func (s *WSSource) Run(ctx context.Context) error {
 	mux.HandleFunc(path, s.handle)
 
 	srv := &http.Server{
-		Addr:      s.srcURL.Host,
-		TLSConfig: s.cfg,
-		Handler:   mux,
+		Addr:              s.srcURL.Host,
+		TLSConfig:         s.cfg,
+		ReadHeaderTimeout: 10 * time.Second,
+		IdleTimeout:       120 * time.Second,
+		Handler:           mux,
 	}
 
 	go func() {

@@ -171,7 +171,9 @@ func NewHTTPProxyDestination(dst *Destination, dstURL *url.URL, cfg *tls.Config,
 
 func (d *HTTPDestination) Run(ctx context.Context) error {
 	srv := &http.Server{
-		Handler: d.handler,
+		Handler:           d.handler,
+		ReadHeaderTimeout: 30 * time.Second,
+		IdleTimeout:       120 * time.Second,
 	}
 
 	go func() {

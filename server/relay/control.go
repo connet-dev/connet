@@ -80,6 +80,9 @@ func (s *controlClient) Authenticate(authReq *pbclientrelay.AuthenticateReq, cer
 		return nil, fmt.Errorf("no control verification key")
 	}
 
+	if len(authReq.Authentication) < 24 {
+		return nil, pberror.NewError(pberror.Code_AuthenticationFailed, "authentication data too short")
+	}
 	decryptNonce := [24]byte(authReq.Authentication)
 	authData, ok := box.OpenAfterPrecomputation(nil, authReq.Authentication[24:], &decryptNonce, authUnsealKey)
 	if !ok {
@@ -163,17 +166,7 @@ func (s *controlClient) connectSingle(ctx context.Context, transport *quic.Trans
 		return nil, fmt.Errorf("cannot dial: %w", err)
 	}
 
-	authStream, err := conn.OpenStreamSync(ctx)
-	if err != nil {
-		return nil, fmt.Errorf("open stream: %w", err)
-	}
-	defer func() {
-		if err := authStream.Close(); err != nil {
-			slogc.Fine(s.logger, "relay control server: close stream error", "localAddr", transport.Conn.LocalAddr(), "err", err)
-		}
-	}()
-
-	if err := s.authenticate(authStream, reconnConfig); err != nil {
+	if err := s.authenticate(ctx, conn, reconnConfig); err != nil {
 		perr := pberror.GetError(err)
 		if perr == nil {
 			perr = pberror.NewError(pberror.Code_AuthenticationFailed, "authentication failed")
@@ -185,7 +178,17 @@ func (s *controlClient) connectSingle(ctx context.Context, transport *quic.Trans
 	return conn, nil
 }
 
-func (s *controlClient) authenticate(authStream *quic.Stream, reconnConfig ConfigValue) error {
+func (s *controlClient) authenticate(ctx context.Context, conn *quic.Conn, reconnConfig ConfigValue) error {
+	authStream, err := conn.OpenStreamSync(ctx)
+	if err != nil {
+		return fmt.Errorf("open stream: %w", err)
+	}
+	defer func() {
+		if err := authStream.Close(); err != nil {
+			slogc.Fine(s.logger, "relay control server: close stream error", "localAddr", conn.LocalAddr(), "err", err)
+		}
+	}()
+
 	relayPk, relaySk, err := box.GenerateKey(rand.Reader)
 	if err != nil {
 		return fmt.Errorf("could not create keys: %w", err)

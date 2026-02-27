@@ -19,6 +19,9 @@ type ControlConfig struct {
 	ClientsTokens            []string           `toml:"clients-tokens"`
 	ClientsTokenRestrictions []TokenRestriction `toml:"clients-token-restriction"`
 
+	EndpointExpiryDisable bool          `toml:"endpoint-expiry-disable"`
+	EndpointExpiryTimeout durationValue `toml:"endpoint-expiry-timeout"`
+
 	RelaysIngresses         []ControlIngress `toml:"relays-ingress"`
 	RelaysTokensFile        string           `toml:"relays-tokens-file"`
 	RelaysTokens            []string         `toml:"relays-tokens"`
@@ -71,6 +74,9 @@ func controlCmd() *cobra.Command {
 	cmd.Flags().StringVar(&clientIngress.Key, "clients-key-file", "", "clients server TLS certificate key file (pem format) (defaults to 'key-file' if unspecified)")
 	cmd.Flags().StringArrayVar(&clientIngress.AllowCIDRs, "clients-allow-cidr", nil, "list of allowed networks for client connections (CIDR format)")
 	cmd.Flags().StringArrayVar(&clientIngress.DenyCIDRs, "clients-deny-cidr", nil, "list of denied networks for client connections (CIDR format)")
+
+	cmd.Flags().BoolVar(&flagsConfig.Control.EndpointExpiryDisable, "endpoint-expiry-disable", false, "disable keeping endpoint registrations alive after client disconnect (default false)")
+	cmd.Flags().Var(&flagsConfig.Control.EndpointExpiryTimeout, "endpoint-expiry-timeout", "how long to keep endpoint registrations after client disconnect (default '30s')")
 
 	cmd.Flags().StringVar(&flagsConfig.Control.RelaysTokensFile, "relays-tokens-file", "", "file containing a list of relay auth tokens (token per line)")
 	cmd.Flags().StringArrayVar(&flagsConfig.Control.RelaysTokens, "relays-tokens", nil, "list of relay auth tokens (fallback when 'relay-tokens-file' is not specified)")
@@ -145,6 +151,8 @@ func controlRun(ctx context.Context, cfg ControlConfig, logger *slog.Logger) err
 	if err != nil {
 		return err
 	}
+
+	controlCfg.ClientsEndpointExpiry = resolveEndpointExpiry(cfg.EndpointExpiryDisable, cfg.EndpointExpiryTimeout)
 
 	var usedRelaysDefault bool
 	for ix, ingressCfg := range cfg.RelaysIngresses {
@@ -269,6 +277,9 @@ func (c *ControlConfig) merge(o ControlConfig) {
 		c.ClientsTokensFile = o.ClientsTokensFile
 	}
 	c.ClientsTokenRestrictions = mergeSlices(c.ClientsTokenRestrictions, o.ClientsTokenRestrictions)
+
+	c.EndpointExpiryDisable = c.EndpointExpiryDisable || o.EndpointExpiryDisable
+	c.EndpointExpiryTimeout = override(c.EndpointExpiryTimeout, o.EndpointExpiryTimeout)
 
 	c.RelaysIngresses = mergeSlices(c.RelaysIngresses, o.RelaysIngresses)
 	if len(o.RelaysTokens) > 0 || o.RelaysTokensFile != "" { // new config completely overrides tokens

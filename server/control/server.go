@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
+	"time"
 
 	"github.com/connet-dev/connet/model"
 	"github.com/connet-dev/connet/pkg/iterc"
@@ -13,8 +14,9 @@ import (
 )
 
 type Config struct {
-	ClientsIngress []Ingress
-	ClientsAuth    ClientAuthenticator
+	ClientsIngress        []Ingress
+	ClientsAuth           ClientAuthenticator
+	ClientsEndpointExpiry time.Duration
 
 	RelaysIngress []Ingress
 	RelaysAuth    RelayAuthenticator
@@ -39,7 +41,7 @@ func NewServer(cfg Config) (*Server, error) {
 		return nil, fmt.Errorf("create relay server: %w", err)
 	}
 
-	clients, err := newClientServer(cfg.ClientsIngress, cfg.ClientsAuth, relays, configStore, cfg.Stores, cfg.Logger)
+	clients, err := newClientServer(cfg.ClientsIngress, cfg.ClientsAuth, relays, configStore, cfg.Stores, cfg.ClientsEndpointExpiry, cfg.Logger)
 	if err != nil {
 		return nil, fmt.Errorf("create client server: %w", err)
 	}

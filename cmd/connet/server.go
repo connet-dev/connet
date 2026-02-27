@@ -17,6 +17,9 @@ type ServerConfig struct {
 	Tokens            []string           `toml:"tokens"`
 	TokenRestrictions []TokenRestriction `toml:"token-restriction"`
 
+	EndpointExpiryDisable bool          `toml:"endpoint-expiry-disable"`
+	EndpointExpiryTimeout durationValue `toml:"endpoint-expiry-timeout"`
+
 	RelayIngresses []RelayIngress `toml:"relay-ingress"`
 
 	StatusAddr string `toml:"status-addr"`
@@ -45,6 +48,9 @@ func serverCmd() *cobra.Command {
 	cmd.Flags().StringArrayVar(&clientIngress.AllowCIDRs, "allow-cidr", nil, "list of allowed networks for client connections (CIDR format)")
 	cmd.Flags().StringArrayVar(&clientIngress.DenyCIDRs, "deny-cidr", nil, "list of denied networks for client connections (CIDR format)")
 
+	cmd.Flags().BoolVar(&flagsConfig.Server.EndpointExpiryDisable, "endpoint-expiry-disable", false, "disable keeping endpoint registrations alive after client disconnect (default false)")
+	cmd.Flags().Var(&flagsConfig.Server.EndpointExpiryTimeout, "endpoint-expiry-timeout", "how long to keep endpoint registrations after client disconnect (default '30s')")
+
 	var relayIngress RelayIngress
 	cmd.Flags().StringVar(&relayIngress.Addr, "relay-addr", "", "relay clients server address (UDP/QUIC, [host]:port) (defaults to ':19191')")
 	cmd.Flags().StringArrayVar(&relayIngress.Hostports, "relay-hostport", nil, `list of host[:port]s advertised by the control server for clients to connect to this relay
@@ -64,9 +70,11 @@ func serverCmd() *cobra.Command {
 		if !clientIngress.isZero() {
 			flagsConfig.Server.Ingresses = append(flagsConfig.Server.Ingresses, clientIngress)
 		}
+
 		if !relayIngress.isZero() {
 			flagsConfig.Server.RelayIngresses = append(flagsConfig.Server.RelayIngresses, relayIngress)
 		}
+
 		cfg.merge(flagsConfig)
 
 		logger, err := logger(cfg)
@@ -116,6 +124,9 @@ func serverRun(ctx context.Context, cfg ServerConfig, logger *slog.Logger) error
 	}
 	opts = append(opts, server.ClientsAuthenticator(clientAuth))
 
+	endpointExpiry := resolveEndpointExpiry(cfg.EndpointExpiryDisable, cfg.EndpointExpiryTimeout)
+	opts = append(opts, server.ClientsEndpointExpiry(endpointExpiry))
+
 	var usedRelayDefault bool
 	for ix, ingressCfg := range cfg.RelayIngresses {
 		if ingressCfg.Addr == "" && !usedRelayDefault {
@@ -163,6 +174,9 @@ func (c *ServerConfig) merge(o ServerConfig) {
 		c.TokensFile = o.TokensFile
 	}
 	c.TokenRestrictions = mergeSlices(c.TokenRestrictions, o.TokenRestrictions)
+
+	c.EndpointExpiryDisable = c.EndpointExpiryDisable || o.EndpointExpiryDisable
+	c.EndpointExpiryTimeout = override(c.EndpointExpiryTimeout, o.EndpointExpiryTimeout)
 
 	c.RelayIngresses = mergeSlices(c.RelayIngresses, o.RelayIngresses)
 

@@ -35,8 +35,7 @@ func LocalAddrs() ([]netip.Addr, error) {
 			}
 			if ip4 := ip.To4(); ip4 != nil {
 				localAddrs = append(localAddrs, netip.AddrFrom4([4]byte(ip4)))
-			}
-			if ip6 := ip.To16(); ip6 != nil {
+			} else if ip6 := ip.To16(); ip6 != nil {
 				localAddrs = append(localAddrs, netip.AddrFrom16([16]byte(ip6)))
 			}
 		}

@@ -15,16 +15,16 @@ var (
 	DHXCPEncryption = EncryptionScheme{"dhxcp"}
 )
 
-func EncryptionFromPB(pb pbconnect.RelayEncryptionScheme) EncryptionScheme {
+func EncryptionFromPB(pb pbconnect.RelayEncryptionScheme) (EncryptionScheme, error) {
 	switch pb {
 	case pbconnect.RelayEncryptionScheme_EncryptionNone:
-		return NoEncryption
+		return NoEncryption, nil
 	case pbconnect.RelayEncryptionScheme_TLS:
-		return TLSEncryption
+		return TLSEncryption, nil
 	case pbconnect.RelayEncryptionScheme_DHX25519_CHACHAPOLY:
-		return DHXCPEncryption
+		return DHXCPEncryption, nil
 	default:
-		panic(fmt.Sprintf("invalid encryption scheme: %d", pb))
+		return EncryptionScheme{}, fmt.Errorf("invalid encryption scheme: %d", pb)
 	}
 }
 
@@ -62,12 +62,16 @@ func PBFromEncryptions(schemes []EncryptionScheme) []pbconnect.RelayEncryptionSc
 	return pbs
 }
 
-func EncryptionsFromPB(pbs []pbconnect.RelayEncryptionScheme) []EncryptionScheme {
+func EncryptionsFromPB(pbs []pbconnect.RelayEncryptionScheme) ([]EncryptionScheme, error) {
 	schemes := make([]EncryptionScheme, len(pbs))
+	var err error
 	for i, s := range pbs {
-		schemes[i] = EncryptionFromPB(s)
+		schemes[i], err = EncryptionFromPB(s)
+		if err != nil {
+			return nil, err
+		}
 	}
-	return schemes
+	return schemes, nil
 }
 
 func SelectEncryptionScheme(dst []EncryptionScheme, src []EncryptionScheme) (EncryptionScheme, error) {

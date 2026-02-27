@@ -178,6 +178,7 @@ func loadConfigFrom(file string) (Config, error) {
 	if err != nil {
 		return cfg, err
 	}
+	defer f.Close() //nolint:errcheck
 
 	dec := toml.NewDecoder(f)
 	dec = dec.DisallowUnknownFields()
@@ -208,6 +209,7 @@ func loadTokens(tokensFile string) ([]string, error) {
 	if err != nil {
 		return nil, fmt.Errorf("open tokens file: %w", err)
 	}
+	defer f.Close() //nolint:errcheck
 
 	var tokens []string
 	scanner := bufio.NewScanner(f)
@@ -304,4 +306,14 @@ func (d *durationValue) String() string { return (*time.Duration)(d).String() }
 
 func (d *durationValue) get() time.Duration {
 	return time.Duration(*d)
+}
+
+func resolveEndpointExpiry(disabled bool, timeout durationValue) time.Duration {
+	if disabled {
+		return 0
+	}
+	if d := timeout.get(); d > 0 {
+		return d
+	}
+	return 30 * time.Second
 }

@@ -57,8 +57,9 @@ func New(opts ...Option) (*Server, error) {
 	}
 
 	control, err := control.NewServer(control.Config{
-		ClientsIngress: cfg.clientsIngresses,
-		ClientsAuth:    cfg.clientsAuth,
+		ClientsIngress:        cfg.clientsIngresses,
+		ClientsAuth:           cfg.clientsAuth,
+		ClientsEndpointExpiry: cfg.clientsEndpointExpiry,
 
 		RelaysIngress: []control.Ingress{{
 			Addr: relaysAddr,
