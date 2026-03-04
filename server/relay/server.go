@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/rand"
 	"crypto/x509"
+	"errors"
 	"fmt"
 	"io"
 	"log/slog"
@@ -92,6 +93,8 @@ func NewServer(cfg Config) (*Server, error) {
 
 		control: control,
 		clients: clients,
+
+		done: make(chan struct{}),
 	}, nil
 }
 
@@ -101,9 +104,48 @@ type Server struct {
 
 	control *controlClient
 	clients *clientsServer
+
+	cancel  context.CancelCauseFunc
+	done    chan struct{}
+	stopErr error
 }
 
-func (s *Server) Run(ctx context.Context) error {
+func (s *Server) Start() error {
+	ctx, cancel := context.WithCancelCause(context.Background())
+	s.cancel = cancel
+	s.done = make(chan struct{})
+
+	ready := make(chan error, 1)
+	go func() {
+		defer close(s.done)
+		s.stopErr = s.run(ctx, ready)
+	}()
+	return <-ready
+}
+
+func (s *Server) Done() <-chan struct{} {
+	return s.done
+}
+
+func (s *Server) Stop(ctx context.Context) error {
+	if s.cancel == nil {
+		return nil
+	}
+	s.cancel(reliable.ErrServerStopped)
+	select {
+	case <-s.done:
+		if s.stopErr != nil &&
+			!errors.Is(s.stopErr, context.Canceled) &&
+			!errors.Is(s.stopErr, reliable.ErrServerStopped) {
+			return s.stopErr
+		}
+		return nil
+	case <-ctx.Done():
+		return ctx.Err()
+	}
+}
+
+func (s *Server) run(ctx context.Context, ready chan<- error) error {
 	transports := notify.NewEmpty[[]*quic.Transport]()
 	var waitForTransport TransportsFn = func(ctx context.Context) ([]*quic.Transport, error) {
 		t, _, err := transports.GetAny(ctx)
@@ -111,6 +153,8 @@ func (s *Server) Run(ctx context.Context) error {
 	}
 
 	g := reliable.NewGroup(ctx)
+
+	notifyReady := reliable.NewReadyNotifier(len(s.ingress), ready)
 
 	for _, ingress := range s.ingress {
 		cfg := clientsServerCfg{
@@ -122,6 +166,7 @@ func (s *Server) Run(ctx context.Context) error {
 			removeTransport: func(t *quic.Transport) {
 				notify.SliceRemove(transports, t)
 			},
+			notifyReady: notifyReady,
 		}
 		g.Go(reliable.Bind(cfg, s.clients.run))
 	}

@@ -187,12 +187,14 @@ type clientsServerCfg struct {
 	statelessResetKey *quic.StatelessResetKey
 	addedTransport    func(*quic.Transport)
 	removeTransport   func(*quic.Transport)
+	notifyReady       func(error)
 }
 
 func (s *clientsServer) run(ctx context.Context, cfg clientsServerCfg) error {
 	s.logger.Debug("start udp listener", "addr", cfg.ingress.Addr)
 	udpConn, err := net.ListenUDP("udp", cfg.ingress.Addr)
 	if err != nil {
+		cfg.notifyReady(fmt.Errorf("relay server listen: %w", err))
 		return fmt.Errorf("relay server listen: %w", err)
 	}
 	defer func() {
@@ -225,13 +227,16 @@ func (s *clientsServer) run(ctx context.Context, cfg clientsServerCfg) error {
 
 	l, err := transport.Listen(s.tlsConf, quicConf)
 	if err != nil {
-		return fmt.Errorf("client server udp listen: %w", err)
+		cfg.notifyReady(fmt.Errorf("relay client quic listen: %w", err))
+		return fmt.Errorf("relay client quic listen: %w", err)
 	}
 	defer func() {
 		if err := l.Close(); err != nil {
 			slogc.Fine(s.logger, "error closing clients listener", "err", err)
 		}
 	}()
+
+	cfg.notifyReady(nil)
 
 	s.logger.Info("accepting client connections", "addr", transport.Conn.LocalAddr())
 	for {

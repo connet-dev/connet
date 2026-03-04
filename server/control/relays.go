@@ -220,11 +220,15 @@ func (s *relayServer) Relays(ctx context.Context, endpoint model.Endpoint, role 
 	}
 }
 
-func (s *relayServer) run(ctx context.Context) error {
+func (s *relayServer) run(ctx context.Context, ready chan<- error) error {
+	notifyReady := reliable.NewReadyNotifier(len(s.ingresses), ready)
+
 	g := reliable.NewGroup(ctx)
 
 	for _, ingress := range s.ingresses {
-		g.Go(reliable.Bind(ingress, s.runListener))
+		g.Go(func(ctx context.Context) error {
+			return s.runListener(ctx, ingress, notifyReady)
+		})
 	}
 	g.Go(s.runConnsCache)
 
@@ -233,10 +237,11 @@ func (s *relayServer) run(ctx context.Context) error {
 	return g.Wait()
 }
 
-func (s *relayServer) runListener(ctx context.Context, ingress Ingress) error {
+func (s *relayServer) runListener(ctx context.Context, ingress Ingress, notifyReady func(error)) error {
 	s.logger.Debug("start udp listener", "addr", ingress.Addr)
 	udpConn, err := net.ListenUDP("udp", ingress.Addr)
 	if err != nil {
+		notifyReady(fmt.Errorf("relay server udp listen: %w", err))
 		return fmt.Errorf("relay server udp listen: %w", err)
 	}
 	defer func() {
@@ -271,6 +276,7 @@ func (s *relayServer) runListener(ctx context.Context, ingress Ingress) error {
 
 	l, err := transport.Listen(tlsConf, quicConf)
 	if err != nil {
+		notifyReady(fmt.Errorf("relay server quic listen: %w", err))
 		return fmt.Errorf("relay server quic listen: %w", err)
 	}
 	defer func() {
@@ -278,6 +284,8 @@ func (s *relayServer) runListener(ctx context.Context, ingress Ingress) error {
 			slogc.Fine(s.logger, "error closing relays listener", "err", err)
 		}
 	}()
+
+	notifyReady(nil)
 
 	s.logger.Info("accepting relay connections", "addr", transport.Conn.LocalAddr())
 	for {

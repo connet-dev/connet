@@ -263,22 +263,42 @@ func addStatusAddrFlag(cmd *cobra.Command, ref *string) {
 }
 
 type withStatus[T any] interface {
-	Run(context.Context) error
+	Start() error
+	Done() <-chan struct{}
+	Stop(context.Context) error
 	Status(context.Context) (T, error)
 }
 
 func runWithStatus[T any](ctx context.Context, srv withStatus[T], statusAddr *net.TCPAddr, logger *slog.Logger) error {
-	if statusAddr == nil {
-		return srv.Run(ctx)
+	if err := srv.Start(); err != nil {
+		return err
 	}
 
-	g := reliable.NewGroup(ctx)
-	g.Go(srv.Run)
-	g.Go(func(ctx context.Context) error {
-		logger.Debug("running status server", "addr", statusAddr)
-		return statusc.Run(ctx, statusAddr, srv.Status)
-	})
-	return g.Wait()
+	var statusErrCh <-chan error
+	if statusAddr != nil {
+		ch := make(chan error, 1)
+		statusErrCh = ch
+		go func() {
+			logger.Debug("running status server", "addr", statusAddr)
+			if err := statusc.Run(ctx, statusAddr, srv.Status); err != nil {
+				select {
+				case ch <- err:
+				default:
+				}
+			}
+		}()
+	}
+
+	var runErr error
+	select {
+	case <-ctx.Done():
+	case <-srv.Done():
+	case runErr = <-statusErrCh:
+	}
+
+	stopCtx, stopCancel := context.WithTimeout(context.Background(), reliable.DefaultStopTimeout)
+	defer stopCancel()
+	return errors.Join(runErr, srv.Stop(stopCtx))
 }
 
 type durationValue time.Duration

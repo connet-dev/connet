@@ -276,11 +276,15 @@ func (s *clientServer) listen(ctx context.Context, endpoint model.Endpoint, role
 	}
 }
 
-func (s *clientServer) run(ctx context.Context) error {
+func (s *clientServer) run(ctx context.Context, ready chan<- error) error {
+	notifyReady := reliable.NewReadyNotifier(len(s.ingresses), ready)
+
 	g := reliable.NewGroup(ctx)
 
 	for _, ingress := range s.ingresses {
-		g.Go(reliable.Bind(ingress, s.runListener))
+		g.Go(func(ctx context.Context) error {
+			return s.runListener(ctx, ingress, notifyReady)
+		})
 	}
 	g.Go(s.runPeerCache)
 	if s.endpointExpiry > 0 {
@@ -293,10 +297,11 @@ func (s *clientServer) run(ctx context.Context) error {
 	return g.Wait()
 }
 
-func (s *clientServer) runListener(ctx context.Context, ingress Ingress) error {
+func (s *clientServer) runListener(ctx context.Context, ingress Ingress, notifyReady func(error)) error {
 	s.logger.Debug("start udp listener", "addr", ingress.Addr)
 	udpConn, err := net.ListenUDP("udp", ingress.Addr)
 	if err != nil {
+		notifyReady(fmt.Errorf("client server udp listen: %w", err))
 		return fmt.Errorf("client server udp listen: %w", err)
 	}
 	defer func() {
@@ -331,6 +336,7 @@ func (s *clientServer) runListener(ctx context.Context, ingress Ingress) error {
 
 	l, err := transport.Listen(tlsConf, quicConf)
 	if err != nil {
+		notifyReady(fmt.Errorf("client server quic listen: %w", err))
 		return fmt.Errorf("client server quic listen: %w", err)
 	}
 	defer func() {
@@ -338,6 +344,8 @@ func (s *clientServer) runListener(ctx context.Context, ingress Ingress) error {
 			slogc.Fine(s.logger, "error closing clients listener", "err", err)
 		}
 	}()
+
+	notifyReady(nil)
 
 	s.logger.Info("accepting client connections", "addr", transport.Conn.LocalAddr())
 	for {

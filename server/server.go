@@ -3,6 +3,7 @@ package server
 import (
 	"context"
 	"crypto/tls"
+	"errors"
 	"fmt"
 	"net"
 	"path/filepath"
@@ -20,6 +21,8 @@ type Server struct {
 
 	control *control.Server
 	relay   *relay.Server
+
+	done chan struct{}
 }
 
 func New(opts ...Option) (*Server, error) {
@@ -98,14 +101,47 @@ func New(opts ...Option) (*Server, error) {
 
 		control: control,
 		relay:   relay,
+
+		done: make(chan struct{}),
 	}, nil
 }
 
-func (s *Server) Run(ctx context.Context) error {
-	g := reliable.NewGroup(ctx)
-	g.Go(s.control.Run)
-	g.Go(s.relay.Run)
-	return g.Wait()
+func (s *Server) Start() error {
+	controlReady := make(chan error, 1)
+	go func() { controlReady <- s.control.Start() }()
+	relayReady := make(chan error, 1)
+	go func() { relayReady <- s.relay.Start() }()
+
+	controlErr := <-controlReady
+	relayErr := <-relayReady
+	if err := errors.Join(controlErr, relayErr); err != nil {
+		stopCtx, stopCancel := context.WithTimeout(context.Background(), reliable.DefaultStopTimeout)
+		defer stopCancel()
+		_ = s.Stop(stopCtx)
+		return err
+	}
+
+	s.done = make(chan struct{})
+	go func() {
+		select {
+		case <-s.control.Done():
+		case <-s.relay.Done():
+		}
+		close(s.done)
+	}()
+	return nil
+}
+
+func (s *Server) Done() <-chan struct{} {
+	return s.done
+}
+
+func (s *Server) Stop(ctx context.Context) error {
+	controlErr := make(chan error, 1)
+	relayErr := make(chan error, 1)
+	go func() { controlErr <- s.control.Stop(ctx) }()
+	go func() { relayErr <- s.relay.Stop(ctx) }()
+	return errors.Join(<-controlErr, <-relayErr)
 }
 
 func (s *Server) Status(ctx context.Context) (ServerStatus, error) {

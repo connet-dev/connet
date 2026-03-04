@@ -2,6 +2,7 @@ package control
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log/slog"
 	"time"
@@ -51,6 +52,8 @@ func NewServer(cfg Config) (*Server, error) {
 		relays:  relays,
 
 		config: configStore,
+
+		done: make(chan struct{}),
 	}, nil
 }
 
@@ -59,14 +62,62 @@ type Server struct {
 	relays  *relayServer
 
 	config logc.KV[ConfigKey, ConfigValue]
+
+	cancel  context.CancelCauseFunc
+	done    chan struct{}
+	stopErr error
 }
 
-func (s *Server) Run(ctx context.Context) error {
-	return reliable.RunGroup(ctx,
-		s.relays.run,
-		s.clients.run,
-		logc.ScheduleCompact(s.config),
-	)
+func (s *Server) Start() error {
+	ctx, cancel := context.WithCancelCause(context.Background())
+	s.cancel = cancel
+	s.done = make(chan struct{})
+
+	ready := make(chan error, 1)
+	go func() {
+		defer close(s.done)
+		s.stopErr = s.run(ctx, ready)
+	}()
+	return <-ready
+}
+
+func (s *Server) Done() <-chan struct{} {
+	return s.done
+}
+
+func (s *Server) Stop(ctx context.Context) error {
+	if s.cancel == nil {
+		return nil
+	}
+	s.cancel(reliable.ErrServerStopped)
+	select {
+	case <-s.done:
+		if s.stopErr != nil &&
+			!errors.Is(s.stopErr, context.Canceled) &&
+			!errors.Is(s.stopErr, reliable.ErrServerStopped) {
+			return s.stopErr
+		}
+		return nil
+	case <-ctx.Done():
+		return ctx.Err()
+	}
+}
+
+func (s *Server) run(ctx context.Context, ready chan<- error) error {
+	notifyReady := reliable.NewReadyNotifier(2, ready)
+
+	relayReady := make(chan error, 1)
+	clientReady := make(chan error, 1)
+
+	g := reliable.NewGroup(ctx)
+	g.Go(func(ctx context.Context) error { return s.relays.run(ctx, relayReady) })
+	g.Go(func(ctx context.Context) error { return s.clients.run(ctx, clientReady) })
+	g.Go(logc.ScheduleCompact(s.config))
+
+	go func() { notifyReady(<-relayReady) }()
+	go func() { notifyReady(<-clientReady) }()
+
+	return g.Wait()
 }
 
 func (s *Server) Status(ctx context.Context) (Status, error) {

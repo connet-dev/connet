@@ -216,7 +216,8 @@ func TestE2E(t *testing.T) {
 	g := reliable.NewGroup(ctx)
 	g.Go(reliable.Bind(ppListen, proxyProtoServer))
 	g.Go(reliable.Bind(echoListen, echoServer))
-	g.Go(srv.Run)
+
+	require.NoError(t, srv.Start())
 
 	for {
 		time.Sleep(time.Microsecond)
@@ -623,6 +624,10 @@ func TestE2E(t *testing.T) {
 	})
 
 	cancel()
+
+	stopCtx, stopCancel := context.WithTimeout(context.Background(), reliable.DefaultStopTimeout)
+	defer stopCancel()
+	require.NoError(t, srv.Stop(stopCtx))
 
 	// make sure everything shuts down on context cancel
 	_ = g.Wait()
