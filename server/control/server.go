@@ -2,7 +2,6 @@ package control
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"log/slog"
 	"time"
@@ -52,8 +51,6 @@ func NewServer(cfg Config) (*Server, error) {
 		relays:  relays,
 
 		config: configStore,
-
-		done: make(chan struct{}),
 	}, nil
 }
 
@@ -63,45 +60,10 @@ type Server struct {
 
 	config logc.KV[ConfigKey, ConfigValue]
 
-	cancel  context.CancelCauseFunc
-	done    chan struct{}
-	stopErr error
+	reliable.ServerLifecycle
 }
 
-func (s *Server) Start() error {
-	ctx, cancel := context.WithCancelCause(context.Background())
-	s.cancel = cancel
-	s.done = make(chan struct{})
-
-	ready := make(chan error, 1)
-	go func() {
-		defer close(s.done)
-		s.stopErr = s.run(ctx, ready)
-	}()
-	return <-ready
-}
-
-func (s *Server) Done() <-chan struct{} {
-	return s.done
-}
-
-func (s *Server) Stop(ctx context.Context) error {
-	if s.cancel == nil {
-		return nil
-	}
-	s.cancel(reliable.ErrServerStopped)
-	select {
-	case <-s.done:
-		if s.stopErr != nil &&
-			!errors.Is(s.stopErr, context.Canceled) &&
-			!errors.Is(s.stopErr, reliable.ErrServerStopped) {
-			return s.stopErr
-		}
-		return nil
-	case <-ctx.Done():
-		return ctx.Err()
-	}
-}
+func (s *Server) Start() error { return s.ServerLifecycle.Start(s.run) }
 
 func (s *Server) run(ctx context.Context, ready chan<- error) error {
 	notifyReady := reliable.NewReadyNotifier(2, ready)
