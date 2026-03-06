@@ -36,6 +36,7 @@ type ClientConfig struct {
 
 	StatusAddr           string        `toml:"status-addr"`
 	NatPMP               string        `toml:"nat-pmp"`
+	NatPCP               string        `toml:"nat-pcp"`
 	HandshakeIdleTimeout durationValue `toml:"handshake-idle-timeout"`
 
 	RelayEncryptions []string                     `toml:"relay-encryptions"`
@@ -100,6 +101,7 @@ func clientCmd() *cobra.Command {
 
 	addStatusAddrFlag(cmd, &flagsConfig.Client.StatusAddr)
 	cmd.Flags().StringVar(&flagsConfig.Client.NatPMP, "nat-pmp", "", "nat-pmp behavior, one of [system, dial, disabled] (defaults to 'system')")
+	cmd.Flags().StringVar(&flagsConfig.Client.NatPCP, "nat-pcp", "", "nat-pcp behavior, one of [system, dial, disabled] (defaults to 'system')")
 
 	var dstName string
 	var dstCfg DestinationConfig
@@ -217,6 +219,21 @@ func clientRun(ctx context.Context, cfg ClientConfig, logger *slog.Logger) error
 		return fmt.Errorf("invalid Nat-PMP config option: %s", cfg.NatPMP)
 	}
 	opts = append(opts, connet.NatPMPConfig(pmpCfg))
+
+	var pcpCfg nat.PCPConfig
+	switch cfg.NatPCP {
+	case "", "system":
+		pcpCfg.LocalResolver = nat.LocalIPSystemResolver()
+		pcpCfg.GatewayResolver = nat.GatewayIPSystemResolver()
+	case "disabled":
+		pcpCfg.Disabled = true
+	case "dial":
+		pcpCfg.LocalResolver = nat.LocalIPDialResolver(cfg.ServerAddr)
+		pcpCfg.GatewayResolver = nat.GatewayIPNet24Resolver()
+	default:
+		return fmt.Errorf("invalid Nat-PCP config option: %s", cfg.NatPCP)
+	}
+	opts = append(opts, connet.NatPCPConfig(pcpCfg))
 
 	if cfg.HandshakeIdleTimeout > 0 {
 		opts = append(opts, connet.HandshakeIdleTimeout(cfg.HandshakeIdleTimeout.get()))
@@ -566,6 +583,7 @@ func (c *ClientConfig) merge(o ClientConfig) {
 
 	c.StatusAddr = override(c.StatusAddr, o.StatusAddr)
 	c.NatPMP = override(c.NatPMP, o.NatPMP)
+	c.NatPCP = override(c.NatPCP, o.NatPCP)
 	c.HandshakeIdleTimeout = override(c.HandshakeIdleTimeout, o.HandshakeIdleTimeout)
 
 	c.RelayEncryptions = overrides(c.RelayEncryptions, o.RelayEncryptions)

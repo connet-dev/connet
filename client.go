@@ -47,18 +47,21 @@ type Client struct {
 	addrs    *notify.V[advertiseAddrs]
 	natlocal *nat.Local
 	natpmp   *nat.PMP
+	natpcp   *nat.PCP
 }
 
 type advertiseAddrs struct {
 	STUN  []netip.AddrPort
 	PMP   []netip.AddrPort
+	PCP   []netip.AddrPort
 	Local []netip.AddrPort
 }
 
 func (d advertiseAddrs) all() []netip.AddrPort {
-	addrs := make([]netip.AddrPort, 0, len(d.STUN)+len(d.PMP)+len(d.Local))
+	addrs := make([]netip.AddrPort, 0, len(d.STUN)+len(d.PMP)+len(d.PCP)+len(d.Local))
 	addrs = append(addrs, d.STUN...)
 	addrs = append(addrs, d.PMP...)
+	addrs = append(addrs, d.PCP...)
 	addrs = append(addrs, d.Local...)
 	return addrs
 }
@@ -134,13 +137,16 @@ func (c *Client) runClient(ctx context.Context, errCh chan error) {
 
 	c.natlocal = nat.NewLocal(uint16(c.directAddr.Port), c.logger)
 	c.natpmp = nat.NewPMP(c.natPMP, transport, uint16(c.directAddr.Port), c.logger)
+	c.natpcp = nat.NewPCP(c.natPCP, transport, uint16(c.directAddr.Port), c.logger)
 
 	g := reliable.NewGroup(ctx)
 
 	g.Go(ds.Run)
 	g.Go(c.natpmp.Run)
+	g.Go(c.natpcp.Run)
 	g.Go(c.listenNatlocal)
 	g.Go(c.listenNatpmp)
+	g.Go(c.listenNatpcp)
 	g.Go(func(ctx context.Context) error { return c.run(ctx, transport, errCh) })
 
 	if err := g.Wait(); err != nil {
@@ -430,6 +436,17 @@ func (c *Client) listenNatpmp(ctx context.Context) error {
 	})
 }
 
+func (c *Client) listenNatpcp(ctx context.Context) error {
+	return c.natpcp.Listen(ctx, func(ap []netip.AddrPort) error {
+		c.logger.Debug("updating nat pcp", "addrs", ap)
+		c.addrs.Update(func(d advertiseAddrs) advertiseAddrs {
+			d.PCP = ap
+			return d
+		})
+		return nil
+	})
+}
+
 type ClientStatus struct {
 	// Overall status of this client
 	Status statusc.Status `json:"status"`
@@ -447,6 +464,8 @@ type ClientStatus struct {
 	STUNAddrs []string `json:"stun-addresses"`
 	// NATPMPAddrs reports the set of addresses this peer is reachable at, resolved from natpmp
 	NATPMPAddrs []string `json:"natpmp-addresses"`
+	// NATPCPAddrs reports the set of addresses this peer is reachable at, resolved from natpcp
+	NATPCPAddrs []string `json:"natpcp-addresses"`
 	// Status of each active destination for this client
 	Destinations map[model.Endpoint]DestinationStatus `json:"destinations"`
 	// Status of each active source for this client
@@ -478,6 +497,7 @@ func (c *Client) Status(ctx context.Context) (ClientStatus, error) {
 		LocalAddrs:   iterc.MapSliceStrings(addrs.Local),
 		STUNAddrs:    iterc.MapSliceStrings(addrs.STUN),
 		NATPMPAddrs:  iterc.MapSliceStrings(addrs.PMP),
+		NATPCPAddrs:  iterc.MapSliceStrings(addrs.PCP),
 		Destinations: dsts,
 		Sources:      srcs,
 	}, nil

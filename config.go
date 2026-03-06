@@ -29,6 +29,7 @@ type config struct {
 	directResetKey *quic.StatelessResetKey
 
 	natPMP               nat.PMPConfig
+	natPCP               nat.PCPConfig
 	handshakeIdleTimeout time.Duration
 
 	logger *slog.Logger
@@ -37,6 +38,10 @@ type config struct {
 func newConfig(opts []Option) (*config, error) {
 	cfg := &config{
 		natPMP: nat.PMPConfig{
+			LocalResolver:   nat.LocalIPSystemResolver(),
+			GatewayResolver: nat.GatewayIPSystemResolver(),
+		},
+		natPCP: nat.PCPConfig{
 			LocalResolver:   nat.LocalIPSystemResolver(),
 			GatewayResolver: nat.GatewayIPSystemResolver(),
 		},
@@ -283,6 +288,14 @@ func DirectStatelessResetKeyFromEnv() Option {
 func NatPMPConfig(pmp nat.PMPConfig) Option {
 	return func(cfg *config) error {
 		cfg.natPMP = pmp
+		return nil
+	}
+}
+
+// NatPCPConfig configures NAT-PCP behavior
+func NatPCPConfig(pcp nat.PCPConfig) Option {
+	return func(cfg *config) error {
+		cfg.natPCP = pcp
 		return nil
 	}
 }
