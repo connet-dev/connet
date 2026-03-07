@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"net"
 	"path/filepath"
+	"sync"
 
 	"github.com/connet-dev/connet/pkg/certc"
 	"github.com/connet-dev/connet/pkg/netc"
@@ -22,6 +23,7 @@ type Server struct {
 	control *control.Server
 	relay   *relay.Server
 
+	once sync.Once
 	done chan struct{}
 }
 
@@ -101,35 +103,37 @@ func New(opts ...Option) (*Server, error) {
 
 		control: control,
 		relay:   relay,
-
-		done: make(chan struct{}),
 	}, nil
 }
 
 func (s *Server) Start() error {
-	controlReady := make(chan error, 1)
-	go func() { controlReady <- s.control.Start() }()
-	relayReady := make(chan error, 1)
-	go func() { relayReady <- s.relay.Start() }()
+	var startErr error
+	s.once.Do(func() {
+		controlReady := make(chan error, 1)
+		go func() { controlReady <- s.control.Start() }()
+		relayReady := make(chan error, 1)
+		go func() { relayReady <- s.relay.Start() }()
 
-	controlErr := <-controlReady
-	relayErr := <-relayReady
-	if err := errors.Join(controlErr, relayErr); err != nil {
-		stopCtx, stopCancel := context.WithTimeout(context.Background(), reliable.DefaultStopTimeout)
-		defer stopCancel()
-		_ = s.Stop(stopCtx)
-		return err
-	}
-
-	s.done = make(chan struct{})
-	go func() {
-		select {
-		case <-s.control.Done():
-		case <-s.relay.Done():
+		controlErr := <-controlReady
+		relayErr := <-relayReady
+		if err := errors.Join(controlErr, relayErr); err != nil {
+			stopCtx, stopCancel := context.WithTimeout(context.Background(), reliable.DefaultStopTimeout)
+			defer stopCancel()
+			_ = s.Stop(stopCtx)
+			startErr = err
+			return
 		}
-		close(s.done)
-	}()
-	return nil
+
+		s.done = make(chan struct{})
+		go func() {
+			select {
+			case <-s.control.Done():
+			case <-s.relay.Done():
+			}
+			close(s.done)
+		}()
+	})
+	return startErr
 }
 
 func (s *Server) Done() <-chan struct{} {

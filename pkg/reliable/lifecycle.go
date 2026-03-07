@@ -36,6 +36,8 @@ func (l *ServerLifecycle) Start(run func(context.Context, chan<- error) error) e
 }
 
 // Done returns a channel that is closed when the server has fully stopped.
+// Must be called after Start(); before Start() is called, Done() returns nil,
+// and selecting on a nil channel blocks forever.
 func (l *ServerLifecycle) Done() <-chan struct{} {
 	return l.done
 }
