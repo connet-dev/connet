@@ -172,6 +172,7 @@ type clientServer struct {
 	peersMu     sync.RWMutex
 
 	endpointExpiry time.Duration
+	connsWg        sync.WaitGroup
 }
 
 type peerKey struct {
@@ -339,10 +340,28 @@ func (s *clientServer) runListener(ctx context.Context, ingress Ingress) error {
 		}
 	}()
 
+	defer func() {
+		done := make(chan struct{})
+		go func() {
+			s.connsWg.Wait()
+			close(done)
+		}()
+		drainCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+		select {
+		case <-done:
+		case <-drainCtx.Done():
+			s.logger.Debug("connection drain timeout")
+		}
+	}()
+
 	s.logger.Info("accepting client connections", "addr", transport.Conn.LocalAddr())
 	for {
 		conn, err := l.Accept(ctx)
 		if err != nil {
+			if ctx.Err() != nil {
+				return ctx.Err()
+			}
 			slogc.Fine(s.logger, "accept error", "err", err)
 			return fmt.Errorf("client server quic accept: %w", err)
 		}
@@ -352,7 +371,9 @@ func (s *clientServer) runListener(ctx context.Context, ingress Ingress) error {
 			conn:   conn,
 			logger: s.logger,
 		}
-		go cc.run(ctx)
+		s.connsWg.Go(func() {
+			cc.run(ctx)
+		})
 	}
 }
 
@@ -527,7 +548,9 @@ func (c *clientConn) runErr(ctx context.Context) error {
 			conn:   c,
 			stream: stream,
 		}
-		go cs.run(ctx)
+		c.server.connsWg.Go(func() {
+			cs.run(ctx)
+		})
 	}
 }
 

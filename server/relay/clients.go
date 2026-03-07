@@ -12,6 +12,7 @@ import (
 	"net"
 	"slices"
 	"sync"
+	"time"
 
 	"github.com/connet-dev/connet/model"
 	"github.com/connet-dev/connet/pkg/certc"
@@ -233,10 +234,29 @@ func (s *clientsServer) run(ctx context.Context, cfg clientsServerCfg) error {
 		}
 	}()
 
+	var wg sync.WaitGroup
+	defer func() {
+		done := make(chan struct{})
+		go func() {
+			wg.Wait()
+			close(done)
+		}()
+		drainCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+		select {
+		case <-done:
+		case <-drainCtx.Done():
+			s.logger.Debug("connection drain timeout")
+		}
+	}()
+
 	s.logger.Info("accepting client connections", "addr", transport.Conn.LocalAddr())
 	for {
 		conn, err := l.Accept(ctx)
 		if err != nil {
+			if ctx.Err() != nil {
+				return ctx.Err()
+			}
 			slogc.Fine(s.logger, "accept error", "err", err)
 			return fmt.Errorf("client server quic accept: %w", err)
 		}
@@ -246,7 +266,11 @@ func (s *clientsServer) run(ctx context.Context, cfg clientsServerCfg) error {
 			conn:   conn,
 			logger: s.logger,
 		}
-		go rc.run(ctx)
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			rc.run(ctx)
+		}()
 	}
 }
 
