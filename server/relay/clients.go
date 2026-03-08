@@ -12,6 +12,7 @@ import (
 	"net"
 	"slices"
 	"sync"
+	"time"
 
 	"github.com/connet-dev/connet/model"
 	"github.com/connet-dev/connet/pkg/certc"
@@ -233,10 +234,18 @@ func (s *clientsServer) run(ctx context.Context, cfg clientsServerCfg) error {
 		}
 	}()
 
+	drain := reliable.NewDrain(ctx)
+	defer func() {
+		if err := drain.Wait(10 * time.Second); err != nil {
+			s.logger.Warn("clients drain", "err", err)
+		}
+	}()
+
 	s.logger.Info("accepting client connections", "addr", transport.Conn.LocalAddr())
 	for {
 		conn, err := l.Accept(ctx)
 		if err != nil {
+			// TODO return no error on context cancel?
 			slogc.Fine(s.logger, "accept error", "err", err)
 			return fmt.Errorf("client server quic accept: %w", err)
 		}
@@ -246,7 +255,7 @@ func (s *clientsServer) run(ctx context.Context, cfg clientsServerCfg) error {
 			conn:   conn,
 			logger: s.logger,
 		}
-		go rc.run(ctx)
+		drain.Go(rc.run)
 	}
 }
 
@@ -261,6 +270,7 @@ type clientConn struct {
 func (c *clientConn) run(ctx context.Context) {
 	c.logger.Debug("new client connection", "proto", c.conn.ConnectionState().TLS.NegotiatedProtocol, "remote", c.conn.RemoteAddr())
 	defer func() {
+		// TODO richer errors
 		if err := c.conn.CloseWithError(quic.ApplicationErrorCode(pberror.Code_Unknown), "connection closed"); err != nil {
 			slogc.Fine(c.logger, "error closing connection", "err", err)
 		}
@@ -353,6 +363,7 @@ func (c *clientConn) runSource(ctx context.Context) error {
 	})
 
 	g.Go(func(ctx context.Context) error {
+		// TODO do we need graceful shutdown of these streams?
 		for {
 			stream, err := c.conn.AcceptStream(ctx)
 			if err != nil {
@@ -367,6 +378,7 @@ func (c *clientConn) runSource(ctx context.Context) error {
 
 func (c *clientConn) runSourceStream(ctx context.Context, stream *quic.Stream, fcs *endpointClients) {
 	defer func() {
+		// TODO richer errors
 		if err := stream.Close(); err != nil {
 			slogc.Fine(c.logger, "error closing source stream", "err", err)
 		}

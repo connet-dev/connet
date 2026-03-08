@@ -339,10 +339,18 @@ func (s *clientServer) runListener(ctx context.Context, ingress Ingress) error {
 		}
 	}()
 
+	drain := reliable.NewDrain(ctx)
+	defer func() {
+		if err := drain.Wait(10 * time.Second); err != nil {
+			s.logger.Warn("clients drain", "err", err)
+		}
+	}()
+
 	s.logger.Info("accepting client connections", "addr", transport.Conn.LocalAddr())
 	for {
 		conn, err := l.Accept(ctx)
 		if err != nil {
+			// TODO return no error on context cancel?
 			slogc.Fine(s.logger, "accept error", "err", err)
 			return fmt.Errorf("client server quic accept: %w", err)
 		}
@@ -352,7 +360,7 @@ func (s *clientServer) runListener(ctx context.Context, ingress Ingress) error {
 			conn:   conn,
 			logger: s.logger,
 		}
-		go cc.run(ctx)
+		drain.Go(cc.run)
 	}
 }
 
@@ -479,6 +487,7 @@ type clientConnAuth struct {
 func (c *clientConn) run(ctx context.Context) {
 	c.logger.Debug("new client connection", "proto", c.conn.ConnectionState().TLS.NegotiatedProtocol, "remote", c.conn.RemoteAddr())
 	defer func() {
+		// TODO richer errors
 		if err := c.conn.CloseWithError(quic.ApplicationErrorCode(pberror.Code_Unknown), "connection closed"); err != nil {
 			slogc.Fine(c.logger, "error closing connection", "err", err)
 		}
@@ -517,6 +526,13 @@ func (c *clientConn) runErr(ctx context.Context) error {
 		}
 	}()
 
+	drain := reliable.NewDrain(ctx)
+	defer func() {
+		if err := drain.Wait(5 * time.Second); err != nil {
+			c.logger.Warn("client streams drain", "err", err)
+		}
+	}()
+
 	for {
 		stream, err := c.conn.AcceptStream(ctx)
 		if err != nil {
@@ -527,7 +543,7 @@ func (c *clientConn) runErr(ctx context.Context) error {
 			conn:   c,
 			stream: stream,
 		}
-		go cs.run(ctx)
+		drain.Go(cs.run)
 	}
 }
 
@@ -606,6 +622,7 @@ type clientStream struct {
 
 func (s *clientStream) run(ctx context.Context) {
 	defer func() {
+		// TODO richer errors
 		if err := s.stream.Close(); err != nil {
 			slogc.Fine(s.conn.logger, "error closing client stream", "err", err)
 		}
