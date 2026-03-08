@@ -15,11 +15,15 @@ import (
 	"github.com/connet-dev/connet/server/selfhosted"
 )
 
+
 type Server struct {
 	serverConfig
 
 	control *control.Server
 	relay   *relay.Server
+
+	readyCh chan error
+	doneCh  chan error
 }
 
 func New(opts ...Option) (*Server, error) {
@@ -71,6 +75,8 @@ func New(opts ...Option) (*Server, error) {
 
 		Stores: control.NewFileStores(filepath.Join(cfg.dir, "control")),
 		Logger: cfg.logger,
+
+		DrainTimeout: cfg.drainTimeout,
 	})
 	if err != nil {
 		return nil, fmt.Errorf("create control server: %w", err)
@@ -88,6 +94,8 @@ func New(opts ...Option) (*Server, error) {
 
 		Stores: relay.NewFileStores(filepath.Join(cfg.dir, "relay")),
 		Logger: cfg.logger,
+
+		DrainTimeout: cfg.drainTimeout,
 	})
 	if err != nil {
 		return nil, fmt.Errorf("create relay server: %w", err)
@@ -98,14 +106,39 @@ func New(opts ...Option) (*Server, error) {
 
 		control: control,
 		relay:   relay,
+
+		readyCh: make(chan error, 1),
+		doneCh:  make(chan error, 1),
 	}, nil
 }
 
+// Ready returns a channel that receives nil when the server is ready to accept traffic,
+// or a non-nil error if startup failed. The channel is then closed.
+func (s *Server) Ready() <-chan error {
+	return s.readyCh
+}
+
+// Done returns a channel that receives nil on clean shutdown, or an error on unclean shutdown.
+// The channel is then closed. Sent after all connections and streams have drained.
+func (s *Server) Done() <-chan error {
+	return s.doneCh
+}
+
 func (s *Server) Run(ctx context.Context) error {
+	notifyReady := reliable.ReadyNotifier(2, s.readyCh)
+	for _, ch := range []<-chan error{s.control.Ready(), s.relay.Ready()} {
+		ch := ch
+		go func() { notifyReady(<-ch) }()
+	}
+
 	g := reliable.NewGroup(ctx)
 	g.Go(s.control.Run)
 	g.Go(s.relay.Run)
-	return g.Wait()
+	err := g.Wait()
+
+	s.doneCh <- err
+	close(s.doneCh)
+	return err
 }
 
 func (s *Server) Status(ctx context.Context) (ServerStatus, error) {

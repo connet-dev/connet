@@ -132,6 +132,8 @@ type relayServer struct {
 	connsCache  map[RelayID]cachedRelay
 	connsOffset int64
 	connsMu     sync.RWMutex
+
+	connsWg sync.WaitGroup
 }
 
 type cachedRelay struct {
@@ -220,11 +222,12 @@ func (s *relayServer) Relays(ctx context.Context, endpoint model.Endpoint, role 
 	}
 }
 
-func (s *relayServer) run(ctx context.Context) error {
+func (s *relayServer) run(ctx context.Context, notifyReady func(error)) error {
 	g := reliable.NewGroup(ctx)
 
 	for _, ingress := range s.ingresses {
-		g.Go(reliable.Bind(ingress, s.runListener))
+		ingress := ingress
+		g.Go(func(ctx context.Context) error { return s.runListener(ctx, ingress, notifyReady) })
 	}
 	g.Go(s.runConnsCache)
 
@@ -233,7 +236,16 @@ func (s *relayServer) run(ctx context.Context) error {
 	return g.Wait()
 }
 
-func (s *relayServer) runListener(ctx context.Context, ingress Ingress) error {
+func (s *relayServer) waitDrain(ctx context.Context) {
+	done := make(chan struct{})
+	go func() { s.connsWg.Wait(); close(done) }()
+	select {
+	case <-done:
+	case <-ctx.Done():
+	}
+}
+
+func (s *relayServer) runListener(ctx context.Context, ingress Ingress, notifyReady func(error)) error {
 	s.logger.Debug("start udp listener", "addr", ingress.Addr)
 	udpConn, err := net.ListenUDP("udp", ingress.Addr)
 	if err != nil {
@@ -271,6 +283,7 @@ func (s *relayServer) runListener(ctx context.Context, ingress Ingress) error {
 
 	l, err := transport.Listen(tlsConf, quicConf)
 	if err != nil {
+		notifyReady(fmt.Errorf("relay server quic listen: %w", err))
 		return fmt.Errorf("relay server quic listen: %w", err)
 	}
 	defer func() {
@@ -280,6 +293,7 @@ func (s *relayServer) runListener(ctx context.Context, ingress Ingress) error {
 	}()
 
 	s.logger.Info("accepting relay connections", "addr", transport.Conn.LocalAddr())
+	notifyReady(nil)
 	for {
 		conn, err := l.Accept(ctx)
 		if err != nil {
@@ -292,7 +306,8 @@ func (s *relayServer) runListener(ctx context.Context, ingress Ingress) error {
 			conn:   conn,
 			logger: s.logger,
 		}
-		go rc.run(ctx)
+		s.connsWg.Add(1)
+		go func() { defer s.connsWg.Done(); rc.run(ctx) }()
 	}
 }
 
@@ -358,15 +373,14 @@ type relayConnAuth struct {
 }
 
 func (c *relayConn) run(ctx context.Context) {
-	defer func() {
-		if err := c.conn.CloseWithError(quic.ApplicationErrorCode(pberror.Code_Unknown), "connection closed"); err != nil {
-			slogc.Fine(c.logger, "error closing connection", "err", err)
-		}
-	}()
 	c.logger.Debug("new relay connection", "proto", c.conn.ConnectionState().TLS.NegotiatedProtocol, "remote", c.conn.RemoteAddr())
 
 	if err := c.runErr(ctx); err != nil {
 		c.logger.Debug("error while running relay conn", "err", err)
+	}
+
+	if err := c.conn.CloseWithError(quic.ApplicationErrorCode(pberror.Code_Unknown), "connection closed"); err != nil {
+		slogc.Fine(c.logger, "error closing connection", "err", err)
 	}
 }
 

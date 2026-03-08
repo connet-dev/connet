@@ -47,6 +47,8 @@ type clientsServer struct {
 	endpointsMu sync.RWMutex
 
 	logger *slog.Logger
+
+	connsWg sync.WaitGroup
 }
 
 func newClientsServer(cfg Config, cert *certc.Cert, auth ClientAuthenticator) (*clientsServer, error) {
@@ -189,7 +191,7 @@ type clientsServerCfg struct {
 	removeTransport   func(*quic.Transport)
 }
 
-func (s *clientsServer) run(ctx context.Context, cfg clientsServerCfg) error {
+func (s *clientsServer) run(ctx context.Context, cfg clientsServerCfg, notifyReady func(error)) error {
 	s.logger.Debug("start udp listener", "addr", cfg.ingress.Addr)
 	udpConn, err := net.ListenUDP("udp", cfg.ingress.Addr)
 	if err != nil {
@@ -225,6 +227,7 @@ func (s *clientsServer) run(ctx context.Context, cfg clientsServerCfg) error {
 
 	l, err := transport.Listen(s.tlsConf, quicConf)
 	if err != nil {
+		notifyReady(fmt.Errorf("client server udp listen: %w", err))
 		return fmt.Errorf("client server udp listen: %w", err)
 	}
 	defer func() {
@@ -234,6 +237,7 @@ func (s *clientsServer) run(ctx context.Context, cfg clientsServerCfg) error {
 	}()
 
 	s.logger.Info("accepting client connections", "addr", transport.Conn.LocalAddr())
+	notifyReady(nil)
 	for {
 		conn, err := l.Accept(ctx)
 		if err != nil {
@@ -246,7 +250,17 @@ func (s *clientsServer) run(ctx context.Context, cfg clientsServerCfg) error {
 			conn:   conn,
 			logger: s.logger,
 		}
-		go rc.run(ctx)
+		s.connsWg.Add(1)
+		go func() { defer s.connsWg.Done(); rc.run(ctx) }()
+	}
+}
+
+func (s *clientsServer) waitDrain(ctx context.Context) {
+	done := make(chan struct{})
+	go func() { s.connsWg.Wait(); close(done) }()
+	select {
+	case <-done:
+	case <-ctx.Done():
 	}
 }
 
@@ -256,19 +270,21 @@ type clientConn struct {
 	logger *slog.Logger
 
 	auth *clientAuth
+
+	streamsWg sync.WaitGroup
 }
 
 func (c *clientConn) run(ctx context.Context) {
 	c.logger.Debug("new client connection", "proto", c.conn.ConnectionState().TLS.NegotiatedProtocol, "remote", c.conn.RemoteAddr())
-	defer func() {
-		if err := c.conn.CloseWithError(quic.ApplicationErrorCode(pberror.Code_Unknown), "connection closed"); err != nil {
-			slogc.Fine(c.logger, "error closing connection", "err", err)
-		}
-	}()
 
 	if err := c.runErr(ctx); err != nil {
 		c.logger.Debug("error while running client conn", "err", err)
 	}
+
+	if err := c.conn.CloseWithError(quic.ApplicationErrorCode(pberror.Code_Unknown), "connection closed"); err != nil {
+		slogc.Fine(c.logger, "error closing connection", "err", err)
+	}
+	c.streamsWg.Wait()
 }
 
 var errNotRecognizedClient = errors.New("client not recognized as a destination or a source")
@@ -358,7 +374,8 @@ func (c *clientConn) runSource(ctx context.Context) error {
 			if err != nil {
 				return fmt.Errorf("accept source stream: %w", err)
 			}
-			go c.runSourceStream(ctx, stream, fcs)
+			c.streamsWg.Add(1)
+			go func() { defer c.streamsWg.Done(); c.runSourceStream(ctx, stream, fcs) }()
 		}
 	})
 

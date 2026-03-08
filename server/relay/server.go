@@ -20,6 +20,14 @@ import (
 	"github.com/quic-go/quic-go"
 )
 
+func newDrainCtx(ctx context.Context, fn func(context.Context) time.Duration) (context.Context, context.CancelFunc) {
+	d := 30 * time.Second
+	if fn != nil {
+		d = fn(ctx)
+	}
+	return context.WithTimeout(context.Background(), d)
+}
+
 type Config struct {
 	Metadata string
 
@@ -35,6 +43,8 @@ type Config struct {
 	Stores Stores
 
 	Logger *slog.Logger
+
+	DrainTimeout func(ctx context.Context) time.Duration
 }
 
 func NewServer(cfg Config) (*Server, error) {
@@ -92,6 +102,10 @@ func NewServer(cfg Config) (*Server, error) {
 
 		control: control,
 		clients: clients,
+
+		drainTimeout: cfg.DrainTimeout,
+		readyCh:      make(chan error, 1),
+		doneCh:       make(chan error, 1),
 	}, nil
 }
 
@@ -101,9 +115,40 @@ type Server struct {
 
 	control *controlClient
 	clients *clientsServer
+
+	drainTimeout func(ctx context.Context) time.Duration
+	readyCh      chan error
+	doneCh       chan error
+}
+
+// Ready returns a channel that receives nil when the server is ready to accept traffic,
+// or a non-nil error if startup failed. The channel is then closed.
+func (s *Server) Ready() <-chan error {
+	return s.readyCh
+}
+
+// Done returns a channel that receives nil on clean shutdown, or an error on unclean shutdown.
+// The channel is then closed. Sent after all connections and streams have drained.
+func (s *Server) Done() <-chan error {
+	return s.doneCh
 }
 
 func (s *Server) Run(ctx context.Context) error {
+	n := len(s.ingress)
+	notifyReady := reliable.ReadyNotifier(n, s.readyCh)
+
+	err := s.run(ctx, notifyReady)
+
+	drainCtx, cancel := newDrainCtx(ctx, s.drainTimeout)
+	defer cancel()
+	s.clients.waitDrain(drainCtx)
+
+	s.doneCh <- err
+	close(s.doneCh)
+	return err
+}
+
+func (s *Server) run(ctx context.Context, notifyReady func(error)) error {
 	transports := notify.NewEmpty[[]*quic.Transport]()
 	var waitForTransport TransportsFn = func(ctx context.Context) ([]*quic.Transport, error) {
 		t, _, err := transports.GetAny(ctx)
@@ -123,7 +168,7 @@ func (s *Server) Run(ctx context.Context) error {
 				notify.SliceRemove(transports, t)
 			},
 		}
-		g.Go(reliable.Bind(cfg, s.clients.run))
+		g.Go(func(ctx context.Context) error { return s.clients.run(ctx, cfg, notifyReady) })
 	}
 
 	g.Go(reliable.Bind(waitForTransport, s.control.run))

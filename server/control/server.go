@@ -13,6 +13,14 @@ import (
 	"github.com/connet-dev/connet/pkg/restr"
 )
 
+func newDrainCtx(ctx context.Context, fn func(context.Context) time.Duration) (context.Context, context.CancelFunc) {
+	d := 30 * time.Second
+	if fn != nil {
+		d = fn(ctx)
+	}
+	return context.WithTimeout(context.Background(), d)
+}
+
 type Config struct {
 	ClientsIngress        []Ingress
 	ClientsAuth           ClientAuthenticator
@@ -24,6 +32,8 @@ type Config struct {
 	Stores Stores
 
 	Logger *slog.Logger
+
+	DrainTimeout func(ctx context.Context) time.Duration
 }
 
 func NewServer(cfg Config) (*Server, error) {
@@ -51,6 +61,10 @@ func NewServer(cfg Config) (*Server, error) {
 		relays:  relays,
 
 		config: configStore,
+
+		drainTimeout: cfg.DrainTimeout,
+		readyCh:      make(chan error, 1),
+		doneCh:       make(chan error, 1),
 	}, nil
 }
 
@@ -59,14 +73,42 @@ type Server struct {
 	relays  *relayServer
 
 	config logc.KV[ConfigKey, ConfigValue]
+
+	drainTimeout func(ctx context.Context) time.Duration
+	readyCh      chan error
+	doneCh       chan error
+}
+
+// Ready returns a channel that receives nil when the server is ready to accept traffic,
+// or a non-nil error if startup failed. The channel is then closed.
+func (s *Server) Ready() <-chan error {
+	return s.readyCh
+}
+
+// Done returns a channel that receives nil on clean shutdown, or an error on unclean shutdown.
+// The channel is then closed. Sent after all connections and streams have drained.
+func (s *Server) Done() <-chan error {
+	return s.doneCh
 }
 
 func (s *Server) Run(ctx context.Context) error {
-	return reliable.RunGroup(ctx,
-		s.relays.run,
-		s.clients.run,
+	n := len(s.clients.ingresses) + len(s.relays.ingresses)
+	notifyReady := reliable.ReadyNotifier(n, s.readyCh)
+
+	err := reliable.RunGroup(ctx,
+		func(ctx context.Context) error { return s.relays.run(ctx, notifyReady) },
+		func(ctx context.Context) error { return s.clients.run(ctx, notifyReady) },
 		logc.ScheduleCompact(s.config),
 	)
+
+	drainCtx, cancel := newDrainCtx(ctx, s.drainTimeout)
+	defer cancel()
+	s.clients.waitDrain(drainCtx)
+	s.relays.waitDrain(drainCtx)
+
+	s.doneCh <- err
+	close(s.doneCh)
+	return err
 }
 
 func (s *Server) Status(ctx context.Context) (Status, error) {

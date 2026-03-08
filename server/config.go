@@ -1,6 +1,7 @@
 package server
 
 import (
+	"context"
 	"fmt"
 	"log/slog"
 	"net"
@@ -19,6 +20,8 @@ type serverConfig struct {
 	clientsEndpointExpiry time.Duration
 
 	relayIngresses []relay.Ingress
+
+	drainTimeout func(ctx context.Context) time.Duration
 
 	dir    string
 	logger *slog.Logger
@@ -139,6 +142,13 @@ func StoreDirFromEnv() Option {
 func Logger(logger *slog.Logger) Option {
 	return func(cfg *serverConfig) error {
 		cfg.logger = logger
+		return nil
+	}
+}
+
+func ServerDrainTimeout(fn func(ctx context.Context) time.Duration) Option {
+	return func(cfg *serverConfig) error {
+		cfg.drainTimeout = fn
 		return nil
 	}
 }

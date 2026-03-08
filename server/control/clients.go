@@ -172,6 +172,8 @@ type clientServer struct {
 	peersMu     sync.RWMutex
 
 	endpointExpiry time.Duration
+
+	connsWg sync.WaitGroup
 }
 
 type peerKey struct {
@@ -276,11 +278,12 @@ func (s *clientServer) listen(ctx context.Context, endpoint model.Endpoint, role
 	}
 }
 
-func (s *clientServer) run(ctx context.Context) error {
+func (s *clientServer) run(ctx context.Context, notifyReady func(error)) error {
 	g := reliable.NewGroup(ctx)
 
 	for _, ingress := range s.ingresses {
-		g.Go(reliable.Bind(ingress, s.runListener))
+		ingress := ingress
+		g.Go(func(ctx context.Context) error { return s.runListener(ctx, ingress, notifyReady) })
 	}
 	g.Go(s.runPeerCache)
 	if s.endpointExpiry > 0 {
@@ -293,7 +296,16 @@ func (s *clientServer) run(ctx context.Context) error {
 	return g.Wait()
 }
 
-func (s *clientServer) runListener(ctx context.Context, ingress Ingress) error {
+func (s *clientServer) waitDrain(ctx context.Context) {
+	done := make(chan struct{})
+	go func() { s.connsWg.Wait(); close(done) }()
+	select {
+	case <-done:
+	case <-ctx.Done():
+	}
+}
+
+func (s *clientServer) runListener(ctx context.Context, ingress Ingress, notifyReady func(error)) error {
 	s.logger.Debug("start udp listener", "addr", ingress.Addr)
 	udpConn, err := net.ListenUDP("udp", ingress.Addr)
 	if err != nil {
@@ -331,6 +343,7 @@ func (s *clientServer) runListener(ctx context.Context, ingress Ingress) error {
 
 	l, err := transport.Listen(tlsConf, quicConf)
 	if err != nil {
+		notifyReady(fmt.Errorf("client server quic listen: %w", err))
 		return fmt.Errorf("client server quic listen: %w", err)
 	}
 	defer func() {
@@ -340,6 +353,7 @@ func (s *clientServer) runListener(ctx context.Context, ingress Ingress) error {
 	}()
 
 	s.logger.Info("accepting client connections", "addr", transport.Conn.LocalAddr())
+	notifyReady(nil)
 	for {
 		conn, err := l.Accept(ctx)
 		if err != nil {
@@ -352,7 +366,8 @@ func (s *clientServer) runListener(ctx context.Context, ingress Ingress) error {
 			conn:   conn,
 			logger: s.logger,
 		}
-		go cc.run(ctx)
+		s.connsWg.Add(1)
+		go func() { defer s.connsWg.Done(); cc.run(ctx) }()
 	}
 }
 
@@ -467,6 +482,8 @@ type clientConn struct {
 	connID ConnID
 
 	clientConnAuth
+
+	streamsWg sync.WaitGroup
 }
 
 type clientConnAuth struct {
@@ -478,15 +495,15 @@ type clientConnAuth struct {
 
 func (c *clientConn) run(ctx context.Context) {
 	c.logger.Debug("new client connection", "proto", c.conn.ConnectionState().TLS.NegotiatedProtocol, "remote", c.conn.RemoteAddr())
-	defer func() {
-		if err := c.conn.CloseWithError(quic.ApplicationErrorCode(pberror.Code_Unknown), "connection closed"); err != nil {
-			slogc.Fine(c.logger, "error closing connection", "err", err)
-		}
-	}()
 
 	if err := c.runErr(ctx); err != nil {
 		c.logger.Debug("error while running client conn", "err", err)
 	}
+
+	if err := c.conn.CloseWithError(quic.ApplicationErrorCode(pberror.Code_Unknown), "connection closed"); err != nil {
+		slogc.Fine(c.logger, "error closing connection", "err", err)
+	}
+	c.streamsWg.Wait()
 }
 
 func (c *clientConn) runErr(ctx context.Context) error {
@@ -527,7 +544,8 @@ func (c *clientConn) runErr(ctx context.Context) error {
 			conn:   c,
 			stream: stream,
 		}
-		go cs.run(ctx)
+		c.streamsWg.Add(1)
+		go func() { defer c.streamsWg.Done(); cs.run(ctx) }()
 	}
 }
 

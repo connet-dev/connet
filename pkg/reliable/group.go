@@ -2,12 +2,34 @@ package reliable
 
 import (
 	"context"
+	"sync"
+	"sync/atomic"
 	"time"
 
 	"golang.org/x/sync/errgroup"
 )
 
 type RunFn func(context.Context) error
+
+// ReadyNotifier returns a func that waits for n nil calls before sending nil to ch.
+// Any non-nil error immediately sends to ch. After sending, ch is closed.
+func ReadyNotifier(n int, ch chan<- error) func(error) {
+	var once sync.Once
+	var remaining atomic.Int32
+	remaining.Store(int32(n))
+	send := func(err error) {
+		once.Do(func() { ch <- err; close(ch) })
+	}
+	return func(err error) {
+		if err != nil {
+			send(err)
+			return
+		}
+		if remaining.Add(-1) == 0 {
+			send(nil)
+		}
+	}
+}
 
 func Bind[T any](t T, fn func(context.Context, T) error) RunFn {
 	return func(ctx context.Context) error {
