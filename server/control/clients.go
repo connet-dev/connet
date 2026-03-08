@@ -686,8 +686,8 @@ func (s *clientStream) announce(ctx context.Context, req *pbclient.Request_Annou
 		return err
 	}
 	defer func() {
-		if s.conn.server.endpointExpiry > 0 && s.conn.conn.Context().Err() != nil {
-			// Connection dead — mark as expired, consumer will delete after timeout
+		if s.conn.server.endpointExpiry > 0 && (ctx.Err() != nil || s.conn.conn.Context().Err() != nil) {
+			// Server shutting down or connection dead — mark as expired, consumer will delete after timeout
 			if err := s.conn.server.expire(endpoint, role, s.conn.id, s.conn.connID); err != nil {
 				s.conn.logger.Warn("failed to expire peer", "id", s.conn.id, "err", err)
 			}
