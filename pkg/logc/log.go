@@ -11,7 +11,6 @@ import (
 
 	"github.com/connet-dev/connet/pkg/reliable"
 	"github.com/klev-dev/klevdb"
-	"github.com/klev-dev/klevdb/compact"
 )
 
 const (
@@ -169,15 +168,7 @@ func (l *kv[K, V]) Snapshot() ([]Message[K, V], int64, error) {
 }
 
 func (l *kv[K, V]) Compact(ctx context.Context) error {
-	updatesBefore := time.Now().Add(-6 * time.Hour)
-	if _, _, err := compact.UpdatesMulti(ctx, l.log.Raw(), updatesBefore, compactBackoff); err != nil {
-		return err
-	}
-	deletesBefore := time.Now().Add(-12 * time.Hour)
-	if _, _, err := compact.DeletesMulti(ctx, l.log.Raw(), deletesBefore, compactBackoff); err != nil {
-		return err
-	}
-	return l.log.GC(0)
+	return klevdb.Compact(ctx, l.log.Raw(), 6*time.Hour, compactBackoff)
 }
 
 func (l *kv[K, V]) Close() error {

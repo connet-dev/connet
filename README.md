@@ -703,3 +703,10 @@ by adding account management and it is one of the easiest ways to start.
  - [x] Role restrictions for clients
  - [x] proxy proto support
  - [x] update nix modules with new config options
+
+## Resources
+
+https://tailscale.com/blog/how-nat-traversal-works
+
+https://bford.info/pub/net/p2pnat/
+
