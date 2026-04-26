@@ -395,8 +395,9 @@ func (x *RemotePeer) GetPeer() *Peer {
 
 type Relay struct {
 	state             protoimpl.MessageState `protogen:"open.v1"`
-	Id                string                 `protobuf:"bytes,1,opt,name=id,proto3" json:"id,omitempty"` // relay id as assigned by the control server
-	Addresses         []*pbmodel.HostPort    `protobuf:"bytes,2,rep,name=addresses,proto3" json:"addresses,omitempty"`
+	Id                string                 `protobuf:"bytes,1,opt,name=id,proto3" json:"id,omitempty"`                                         // relay id as assigned by the control server
+	AddressesHps      []*pbmodel.HostPort    `protobuf:"bytes,2,rep,name=addresses_hps,json=addressesHps,proto3" json:"addresses_hps,omitempty"` // deprecated
+	Addresses         []string               `protobuf:"bytes,6,rep,name=addresses,proto3" json:"addresses,omitempty"`
 	ServerCertificate []byte                 `protobuf:"bytes,3,opt,name=server_certificate,json=serverCertificate,proto3" json:"server_certificate,omitempty"` // generic certificate used by this relay
 	Authentication    []byte                 `protobuf:"bytes,4,opt,name=authentication,proto3" json:"authentication,omitempty"`                                // endpoint/role specific auth to use at the relay
 	Metadata          string                 `protobuf:"bytes,5,opt,name=metadata,proto3" json:"metadata,omitempty"`
@@ -441,7 +442,14 @@ func (x *Relay) GetId() string {
 	return ""
 }
 
-func (x *Relay) GetAddresses() []*pbmodel.HostPort {
+func (x *Relay) GetAddressesHps() []*pbmodel.HostPort {
+	if x != nil {
+		return x.AddressesHps
+	}
+	return nil
+}
+
+func (x *Relay) GetAddresses() []string {
 	if x != nil {
 		return x.Addresses
 	}
@@ -719,10 +727,11 @@ const file_client_proto_rawDesc = "" +
 	"RemotePeer\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12\x1a\n" +
 	"\bmetadata\x18\t \x01(\tR\bmetadata\x12 \n" +
-	"\x04peer\x18\b \x01(\v2\f.client.PeerR\x04peer\"\xb9\x01\n" +
+	"\x04peer\x18\b \x01(\v2\f.client.PeerR\x04peer\"\xde\x01\n" +
 	"\x05Relay\x12\x0e\n" +
-	"\x02id\x18\x01 \x01(\tR\x02id\x12-\n" +
-	"\taddresses\x18\x02 \x03(\v2\x0f.model.HostPortR\taddresses\x12-\n" +
+	"\x02id\x18\x01 \x01(\tR\x02id\x124\n" +
+	"\raddresses_hps\x18\x02 \x03(\v2\x0f.model.HostPortR\faddressesHps\x12\x1c\n" +
+	"\taddresses\x18\x06 \x03(\tR\taddresses\x12-\n" +
 	"\x12server_certificate\x18\x03 \x01(\fR\x11serverCertificate\x12&\n" +
 	"\x0eauthentication\x18\x04 \x01(\fR\x0eauthentication\x12\x1a\n" +
 	"\bmetadata\x18\x05 \x01(\tR\bmetadataB1Z/github.com/connet-dev/connet/pkg/proto/pbclientb\x06proto3"
@@ -768,7 +777,7 @@ var file_client_proto_depIdxs = []int32{
 	10, // 6: client.Response.relay:type_name -> client.Response.Relays
 	12, // 7: client.Peer.directs:type_name -> model.AddrPort
 	4,  // 8: client.RemotePeer.peer:type_name -> client.Peer
-	13, // 9: client.Relay.addresses:type_name -> model.HostPort
+	13, // 9: client.Relay.addresses_hps:type_name -> model.HostPort
 	14, // 10: client.Request.Announce.endpoint:type_name -> model.Endpoint
 	15, // 11: client.Request.Announce.role:type_name -> model.Role
 	4,  // 12: client.Request.Announce.peer:type_name -> client.Peer

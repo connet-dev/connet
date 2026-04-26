@@ -26,7 +26,8 @@ const (
 type AuthenticateReq struct {
 	state                  protoimpl.MessageState `protogen:"open.v1"`
 	Token                  string                 `protobuf:"bytes,1,opt,name=token,proto3" json:"token,omitempty"`
-	Addresses              []*pbmodel.HostPort    `protobuf:"bytes,5,rep,name=addresses,proto3" json:"addresses,omitempty"`
+	AddressesHps           []*pbmodel.HostPort    `protobuf:"bytes,5,rep,name=addresses_hps,json=addressesHps,proto3" json:"addresses_hps,omitempty"` // deprecated
+	Addresses              []string               `protobuf:"bytes,9,rep,name=addresses,proto3" json:"addresses,omitempty"`
 	ReconnectToken         []byte                 `protobuf:"bytes,3,opt,name=reconnect_token,json=reconnectToken,proto3" json:"reconnect_token,omitempty"`
 	BuildVersion           string                 `protobuf:"bytes,4,opt,name=build_version,json=buildVersion,proto3" json:"build_version,omitempty"`
 	Metadata               string                 `protobuf:"bytes,6,opt,name=metadata,proto3" json:"metadata,omitempty"`
@@ -73,7 +74,14 @@ func (x *AuthenticateReq) GetToken() string {
 	return ""
 }
 
-func (x *AuthenticateReq) GetAddresses() []*pbmodel.HostPort {
+func (x *AuthenticateReq) GetAddressesHps() []*pbmodel.HostPort {
+	if x != nil {
+		return x.AddressesHps
+	}
+	return nil
+}
+
+func (x *AuthenticateReq) GetAddresses() []string {
 	if x != nil {
 		return x.Addresses
 	}
@@ -247,10 +255,11 @@ var File_relay_proto protoreflect.FileDescriptor
 
 const file_relay_proto_rawDesc = "" +
 	"\n" +
-	"\vrelay.proto\x12\x05relay\x1a\verror.proto\x1a\vmodel.proto\"\xa9\x02\n" +
+	"\vrelay.proto\x12\x05relay\x1a\verror.proto\x1a\vmodel.proto\"\xce\x02\n" +
 	"\x0fAuthenticateReq\x12\x14\n" +
-	"\x05token\x18\x01 \x01(\tR\x05token\x12-\n" +
-	"\taddresses\x18\x05 \x03(\v2\x0f.model.HostPortR\taddresses\x12'\n" +
+	"\x05token\x18\x01 \x01(\tR\x05token\x124\n" +
+	"\raddresses_hps\x18\x05 \x03(\v2\x0f.model.HostPortR\faddressesHps\x12\x1c\n" +
+	"\taddresses\x18\t \x03(\tR\taddresses\x12'\n" +
 	"\x0freconnect_token\x18\x03 \x01(\fR\x0ereconnectToken\x12#\n" +
 	"\rbuild_version\x18\x04 \x01(\tR\fbuildVersion\x12\x1a\n" +
 	"\bmetadata\x18\x06 \x01(\tR\bmetadata\x12-\n" +
@@ -290,7 +299,7 @@ var file_relay_proto_goTypes = []any{
 	(pbmodel.Role)(0),            // 6: model.Role
 }
 var file_relay_proto_depIdxs = []int32{
-	3, // 0: relay.AuthenticateReq.addresses:type_name -> model.HostPort
+	3, // 0: relay.AuthenticateReq.addresses_hps:type_name -> model.HostPort
 	4, // 1: relay.AuthenticateResp.error:type_name -> error.Error
 	5, // 2: relay.ClientAuthentication.endpoint:type_name -> model.Endpoint
 	6, // 3: relay.ClientAuthentication.role:type_name -> model.Role

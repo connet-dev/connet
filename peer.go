@@ -178,7 +178,11 @@ func (p *peer) runRelays(ctx context.Context) error {
 		activeRelays := map[relayID]struct{}{}
 		for _, relay := range relays {
 			id := relayID(relay.Id)
-			addrs := pbmodel.AddressesFromPBs(relay.Addresses)
+
+			addrs := relay.Addresses
+			if len(addrs) == 0 {
+				addrs = pbmodel.AddressesFromPBs(relay.AddressesHps)
+			}
 
 			activeRelays[id] = struct{}{}
 
@@ -408,7 +412,7 @@ type StatusPeer struct {
 
 type StatusRelay struct {
 	ID         string   `json:"id"`
-	Hostports  []string `json:"hostports"`
+	Addresses  []string `json:"addresses"`
 	Metadata   string   `json:"metadata"`
 	Connection string   `json:"connection"`
 }
@@ -434,10 +438,14 @@ func (p *peer) status() (StatusPeer, error) {
 
 	if relays, ok := p.relays.Peek(); ok {
 		for _, relay := range relays {
+			addrs := relay.Addresses
+			if len(addrs) == 0 {
+				addrs = pbmodel.AddressesFromPBs(relay.AddressesHps)
+			}
 			stat.Relays[relay.Id] = StatusRelay{
 				ID:        relay.Id,
 				Metadata:  relay.Metadata,
-				Hostports: pbmodel.AddressesFromPBs(relay.Addresses),
+				Addresses: addrs,
 			}
 		}
 	}

@@ -34,6 +34,7 @@ import (
 
 type controlClient struct {
 	hostports   []*pbmodel.HostPort
+	addresses   []string
 	clientsCert *certc.Cert
 	metadata    string
 
@@ -52,6 +53,7 @@ type controlClient struct {
 
 func newControlClient(cfg Config, clientsCert *certc.Cert, configStore logc.KV[ConfigKey, ConfigValue]) (*controlClient, error) {
 	var hostports []*pbmodel.HostPort
+	var addresses []string
 	for _, ing := range cfg.Ingress {
 		for _, addr := range ing.AdvertiseAddresses {
 			if hp, err := pbmodel.ParseHostPort(addr); err != nil {
@@ -59,11 +61,13 @@ func newControlClient(cfg Config, clientsCert *certc.Cert, configStore logc.KV[C
 			} else {
 				hostports = append(hostports, hp)
 			}
+			addresses = append(addresses, addr) // TODO flatmap
 		}
 	}
 
 	c := &controlClient{
 		hostports:   hostports,
+		addresses:   addresses,
 		clientsCert: clientsCert,
 		metadata:    cfg.Metadata,
 
@@ -206,7 +210,8 @@ func (s *controlClient) authenticate(ctx context.Context, conn *quic.Conn, recon
 
 	if err := proto.Write(authStream, &pbrelay.AuthenticateReq{
 		Token:                  s.controlToken,
-		Addresses:              s.hostports,
+		Addresses:              s.addresses,
+		AddressesHps:           s.hostports,
 		ReconnectToken:         reconnConfig.Bytes,
 		BuildVersion:           build.GetVersion(),
 		Metadata:               s.metadata,
@@ -286,5 +291,5 @@ func (s *controlClient) runConnection(ctx context.Context, conn *quic.Conn) erro
 	s.connStatus.Store(statusc.Connected)
 	defer s.connStatus.Store(statusc.Reconnecting)
 
-	return quicc.WaitLogRTTStats(ctx, conn, s.logger) // TODO v0.14.0 exchange auth
+	return quicc.WaitLogRTTStats(ctx, conn, s.logger) // TODO v0.15.0 exchange auth
 }

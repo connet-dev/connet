@@ -10,7 +10,6 @@ import (
 	"github.com/connet-dev/connet/pkg/build"
 	"github.com/connet-dev/connet/pkg/iterc"
 	"github.com/connet-dev/connet/pkg/logc"
-	"github.com/connet-dev/connet/pkg/proto/pbmodel"
 	"github.com/connet-dev/connet/pkg/reliable"
 	"github.com/connet-dev/connet/pkg/restr"
 )
@@ -155,7 +154,7 @@ func (s *Server) getRelays() (map[string]StatusRelay, error) {
 	for _, msg := range msgs {
 		relays[msg.Key.ID.string] = StatusRelay{
 			ID:        msg.Key.ID,
-			Hostports: pbmodel.AddressesFromPBs(pbsFromHostPorts(msg.Value.Hostports)),
+			Addresses: msg.Value.Addresses,
 			Metadata:  msg.Value.Metadata,
 		}
 	}
@@ -200,7 +199,7 @@ type StatusEndpointRemote struct {
 
 type StatusRelay struct {
 	ID        RelayID  `json:"id"`
-	Hostports []string `json:"hostport"`
+	Addresses []string `json:"addresses"`
 	Metadata  string   `json:"metadata"`
 }
 

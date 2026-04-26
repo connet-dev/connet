@@ -8,7 +8,8 @@ option go_package = "github.com/connet-dev/connet/pkg/proto/pbrelay";
 
 message AuthenticateReq {
   string token = 1;
-  repeated model.HostPort addresses = 5;
+  repeated model.HostPort addresses_hps = 5; // TODO remove in 0.16.0 deprecated
+  repeated string addresses = 9;
   bytes reconnect_token = 3;
   string build_version = 4;
   string metadata = 6;

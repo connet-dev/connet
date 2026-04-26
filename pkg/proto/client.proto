@@ -67,7 +67,8 @@ message RemotePeer {
 
 message Relay {
   string id = 1; // relay id as assigned by the control server
-  repeated model.HostPort addresses = 2;
+  repeated model.HostPort addresses_hps = 2; // TODO remove in 0.16.0
+  repeated string addresses = 6;
   bytes server_certificate = 3; // generic certificate used by this relay
   bytes authentication = 4; // endpoint/role specific auth to use at the relay
   string metadata = 5;

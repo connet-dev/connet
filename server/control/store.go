@@ -106,13 +106,14 @@ type RelayConnKey struct {
 
 type RelayConnValue struct {
 	Authentication        RelayAuthentication `json:"authentication"`
+	Addresses             []string            `json:"addresses"`
 	Hostports             []RelayHostPort     `json:"hostports"`
 	Metadata              string              `json:"metadata"`
 	Certificate           *x509.Certificate   `json:"certificate"`
 	AuthenticationSealKey *[32]byte           `json:"authentication-seal-key"`
 }
 
-// TODO remove
+// TODO 0.16.0 remove
 type RelayHostPort struct {
 	Host string `json:"host"`
 	Port uint16 `json:"port"`
@@ -142,6 +143,7 @@ func (h RelayHostPort) pb() *pbmodel.HostPort {
 
 type jsonRelayConnValue struct {
 	Authentication        RelayAuthentication `json:"authentication"`
+	Addresses             []string            `json:"addresses"`
 	Hostports             []RelayHostPort     `json:"hostports"`
 	Metadata              string              `json:"metadata"`
 	Certificate           []byte              `json:"certificate"`
@@ -151,6 +153,7 @@ type jsonRelayConnValue struct {
 func (v RelayConnValue) MarshalJSON() ([]byte, error) {
 	return json.Marshal(jsonRelayConnValue{
 		Authentication:        v.Authentication,
+		Addresses:             v.Addresses,
 		Hostports:             v.Hostports,
 		Metadata:              v.Metadata,
 		Certificate:           v.Certificate.Raw,
@@ -171,6 +174,6 @@ func (v *RelayConnValue) UnmarshalJSON(b []byte) error {
 
 	var authKey [32]byte
 	copy(authKey[:], s.AuthenticationSealKey)
-	*v = RelayConnValue{s.Authentication, s.Hostports, s.Metadata, cert, &authKey}
+	*v = RelayConnValue{s.Authentication, s.Addresses, s.Hostports, s.Metadata, cert, &authKey}
 	return nil
 }

@@ -13,7 +13,7 @@ message AddrPort {
   uint32 port = 2; // really uint16, but not a thing in protobuf
 }
 
-message HostPort {
+message HostPort { // TODO remove in 0.16.0
   string host = 1;
   uint32 port = 2;
 }
