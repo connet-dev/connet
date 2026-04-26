@@ -8,8 +8,8 @@ import (
 
 // DestinationConfig structure represents destination configuration.
 type DestinationConfig struct {
-	Endpoint         model.Endpoint
-	Route            model.RouteOption
+	Endpoint         Endpoint
+	Route            RouteOption
 	Proxy            model.ProxyVersion
 	RelayEncryptions []model.EncryptionScheme
 	DialTimeout      time.Duration
@@ -18,15 +18,15 @@ type DestinationConfig struct {
 // NewDestinationConfig creates a destination config for a given name
 func NewDestinationConfig(name string) DestinationConfig {
 	return DestinationConfig{
-		Endpoint:         model.NewEndpoint(name),
-		Route:            model.RouteAny,
+		Endpoint:         NewEndpoint(name),
+		Route:            RouteAny,
 		Proxy:            model.ProxyNone,
 		RelayEncryptions: []model.EncryptionScheme{model.NoEncryption},
 	}
 }
 
 // WithRoute sets the route option for this configuration.
-func (cfg DestinationConfig) WithRoute(route model.RouteOption) DestinationConfig {
+func (cfg DestinationConfig) WithRoute(route RouteOption) DestinationConfig {
 	cfg.Route = route
 	return cfg
 }
@@ -52,7 +52,7 @@ func (cfg DestinationConfig) WithDialTimeout(timeout time.Duration) DestinationC
 func (cfg DestinationConfig) endpointConfig() endpointConfig {
 	return endpointConfig{
 		endpoint: cfg.Endpoint,
-		role:     model.Destination,
+		role:     RoleDestination,
 		route:    cfg.Route,
 	}
 }

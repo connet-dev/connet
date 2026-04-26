@@ -16,6 +16,7 @@ import (
 
 	"github.com/quic-go/quic-go"
 
+	"github.com/connet-dev/connet"
 	"github.com/connet-dev/connet/model"
 	"github.com/connet-dev/connet/pkg/iterc"
 	"github.com/connet-dev/connet/pkg/logc"
@@ -37,13 +38,13 @@ type ClientAuthenticateRequest struct {
 
 type ClientAuthenticator interface {
 	Authenticate(req ClientAuthenticateRequest) (ClientAuthentication, error)
-	Validate(auth ClientAuthentication, endpoint model.Endpoint, role model.Role) (model.Endpoint, error)
+	Validate(auth ClientAuthentication, endpoint connet.Endpoint, role connet.Role) (connet.Endpoint, error)
 }
 
 type ClientAuthentication []byte
 
 type ClientRelays interface {
-	Relays(ctx context.Context, endpoint model.Endpoint, role model.Role, cert *x509.Certificate, auth ClientAuthentication,
+	Relays(ctx context.Context, endpoint connet.Endpoint, role connet.Role, cert *x509.Certificate, auth ClientAuthentication,
 		notify func(map[RelayID]*pbclient.Relay) error) error
 }
 
@@ -176,8 +177,8 @@ type clientServer struct {
 }
 
 type peerKey struct {
-	endpoint model.Endpoint
-	role     model.Role
+	endpoint connet.Endpoint
+	role     connet.Role
 }
 
 type peerValue struct {
@@ -193,11 +194,11 @@ func (s *clientServer) disconnected(id ClientID, connID ConnID) error {
 	return s.conns.Del(ClientConnKey{id, connID})
 }
 
-func (s *clientServer) announce(endpoint model.Endpoint, role model.Role, id ClientID, connID ConnID, metadata string, peer *pbclient.Peer) error {
+func (s *clientServer) announce(endpoint connet.Endpoint, role connet.Role, id ClientID, connID ConnID, metadata string, peer *pbclient.Peer) error {
 	return s.peers.Put(ClientPeerKey{endpoint, role, id, connID}, ClientPeerValue{Peer: peer, Metadata: metadata})
 }
 
-func (s *clientServer) expire(endpoint model.Endpoint, role model.Role, id ClientID, connID ConnID) error {
+func (s *clientServer) expire(endpoint connet.Endpoint, role connet.Role, id ClientID, connID ConnID) error {
 	key := ClientPeerKey{endpoint, role, id, connID}
 	val, err := s.peers.Get(key)
 	if err != nil {
@@ -208,18 +209,18 @@ func (s *clientServer) expire(endpoint model.Endpoint, role model.Role, id Clien
 	return s.peers.Put(key, val)
 }
 
-func (s *clientServer) revoke(endpoint model.Endpoint, role model.Role, id ClientID, connID ConnID) error {
+func (s *clientServer) revoke(endpoint connet.Endpoint, role connet.Role, id ClientID, connID ConnID) error {
 	return s.peers.Del(ClientPeerKey{endpoint, role, id, connID})
 }
 
-func (s *clientServer) cachedPeers(endpoint model.Endpoint, role model.Role) ([]peerValue, int64) {
+func (s *clientServer) cachedPeers(endpoint connet.Endpoint, role connet.Role) ([]peerValue, int64) {
 	s.peersMu.RLock()
 	defer s.peersMu.RUnlock()
 
 	return slices.Clone(s.peersCache[peerKey{endpoint, role}]), s.peersOffset
 }
 
-func (s *clientServer) listen(ctx context.Context, endpoint model.Endpoint, role model.Role, notify func(peers []*pbclient.RemotePeer) error) error {
+func (s *clientServer) listen(ctx context.Context, endpoint connet.Endpoint, role connet.Role, notify func(peers []*pbclient.RemotePeer) error) error {
 	peers, offset := s.cachedPeers(endpoint, role)
 	doNotify := func() error {
 		uniquePeers := map[string]*pbclient.RemotePeer{}
@@ -633,7 +634,7 @@ func (s *clientStream) runErr(ctx context.Context) error {
 	}
 }
 
-func validatePeerCert(endpoint model.Endpoint, peer *pbclient.Peer) *pberror.Error {
+func validatePeerCert(endpoint connet.Endpoint, peer *pbclient.Peer) *pberror.Error {
 	if _, err := x509.ParseCertificate(peer.ClientCertificate); err != nil {
 		return pberror.NewError(pberror.Code_AnnounceInvalidClientCertificate, "'%s' client cert is invalid", endpoint)
 	}
@@ -644,8 +645,8 @@ func validatePeerCert(endpoint model.Endpoint, peer *pbclient.Peer) *pberror.Err
 }
 
 func (s *clientStream) announce(ctx context.Context, req *pbclient.Request_Announce) error {
-	endpoint := model.EndpointFromPB(req.Endpoint)
-	role := model.RoleFromPB(req.Role)
+	endpoint := connet.EndpointFromPB(req.Endpoint)
+	role := connet.RoleFromPB(req.Role)
 	if newEp, err := s.conn.server.auth.Validate(s.conn.auth, endpoint, role); err != nil {
 		perr := pberror.GetError(err)
 		if perr == nil {
@@ -734,8 +735,8 @@ func (s *clientStream) announce(ctx context.Context, req *pbclient.Request_Annou
 }
 
 func (s *clientStream) relay(ctx context.Context, req *pbclient.Request_Relay) error {
-	endpoint := model.EndpointFromPB(req.Endpoint)
-	role := model.RoleFromPB(req.Role)
+	endpoint := connet.EndpointFromPB(req.Endpoint)
+	role := connet.RoleFromPB(req.Role)
 	if newEp, err := s.conn.server.auth.Validate(s.conn.auth, endpoint, role); err != nil {
 		perr := pberror.GetError(err)
 		if perr == nil {

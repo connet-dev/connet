@@ -8,8 +8,8 @@ import (
 
 // SourceConfig structure represents source configuration.
 type SourceConfig struct {
-	Endpoint         model.Endpoint
-	Route            model.RouteOption
+	Endpoint         Endpoint
+	Route            RouteOption
 	RelayEncryptions []model.EncryptionScheme
 	DialTimeout      time.Duration
 
@@ -21,8 +21,8 @@ type SourceConfig struct {
 // NewSourceConfig creates a source config for a given name.
 func NewSourceConfig(name string) SourceConfig {
 	return SourceConfig{
-		Endpoint:          model.NewEndpoint(name),
-		Route:             model.RouteAny,
+		Endpoint:          NewEndpoint(name),
+		Route:             RouteAny,
 		RelayEncryptions:  []model.EncryptionScheme{model.NoEncryption},
 		DestinationPolicy: model.NoPolicy,
 		DestinationRetry:  model.NeverRetry,
@@ -30,7 +30,7 @@ func NewSourceConfig(name string) SourceConfig {
 }
 
 // WithRoute sets the route option for this configuration.
-func (cfg SourceConfig) WithRoute(route model.RouteOption) SourceConfig {
+func (cfg SourceConfig) WithRoute(route RouteOption) SourceConfig {
 	cfg.Route = route
 	return cfg
 }
@@ -66,7 +66,7 @@ func (cfg SourceConfig) WithLoadBalance(policy model.LoadBalancePolicy, retry mo
 func (cfg SourceConfig) endpointConfig() endpointConfig {
 	return endpointConfig{
 		endpoint: cfg.Endpoint,
-		role:     model.Source,
+		role:     RoleSource,
 		route:    cfg.Route,
 	}
 }

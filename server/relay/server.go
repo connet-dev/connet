@@ -12,6 +12,7 @@ import (
 
 	"github.com/quic-go/quic-go"
 
+	"github.com/connet-dev/connet"
 	"github.com/connet-dev/connet/model"
 	"github.com/connet-dev/connet/pkg/certc"
 	"github.com/connet-dev/connet/pkg/iterc"
@@ -142,7 +143,7 @@ type Status struct {
 }
 
 type EndpointStatus struct {
-	Endpoint     model.Endpoint                   `json:"endpoint"`
+	Endpoint     connet.Endpoint                  `json:"endpoint"`
 	Destinations map[model.Key]EndpointPeerStatus `json:"destinations"`
 	Sources      map[model.Key]EndpointPeerStatus `json:"sources"`
 }

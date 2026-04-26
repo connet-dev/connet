@@ -10,7 +10,6 @@ import (
 
 	"github.com/quic-go/quic-go"
 
-	"github.com/connet-dev/connet/model"
 	"github.com/connet-dev/connet/pkg/iterc"
 	"github.com/connet-dev/connet/pkg/proto"
 	"github.com/connet-dev/connet/pkg/proto/pbclient"
@@ -25,12 +24,6 @@ var errEndpointClosed = fmt.Errorf("endpoint closed")
 type endpointStatus struct {
 	Status statusc.Status
 	StatusPeer
-}
-
-type endpointConfig struct {
-	endpoint model.Endpoint
-	role     model.Role
-	route    model.RouteOption
 }
 
 type endpoint struct {
@@ -296,9 +289,9 @@ func (ep *endpoint) cleanup() {
 	defer ep.connStatus.Store(statusc.Disconnected)
 
 	switch ep.cfg.role {
-	case model.Destination:
+	case RoleDestination:
 		ep.client.removeDestination(ep.cfg.endpoint)
-	case model.Source:
+	case RoleSource:
 		ep.client.removeSource(ep.cfg.endpoint)
 	}
 }

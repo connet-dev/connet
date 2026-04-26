@@ -6,6 +6,7 @@ import (
 	"log/slog"
 	"time"
 
+	"github.com/connet-dev/connet"
 	"github.com/connet-dev/connet/model"
 	"github.com/connet-dev/connet/pkg/iterc"
 	"github.com/connet-dev/connet/pkg/logc"
@@ -129,9 +130,9 @@ func (s *Server) getEndpoints() (map[string]StatusEndpoint, error) {
 		ep.Endpoint = msg.Key.Endpoint
 
 		switch msg.Key.Role {
-		case model.Destination:
+		case connet.RoleDestination:
 			ep.Destinations = append(ep.Destinations, StatusEndpointRemote{msg.Key.ID, msg.Key.ConnID})
-		case model.Source:
+		case connet.RoleSource:
 			ep.Sources = append(ep.Sources, StatusEndpointRemote{msg.Key.ID, msg.Key.ConnID})
 		default:
 			return nil, fmt.Errorf("unknown role: %s", msg.Key.Role)
@@ -186,7 +187,7 @@ type StatusClient struct {
 }
 
 type StatusEndpoint struct {
-	Endpoint     model.Endpoint         `json:"endpoint"`
+	Endpoint     connet.Endpoint        `json:"endpoint"`
 	Destinations []StatusEndpointRemote `json:"destinations"`
 	Sources      []StatusEndpointRemote `json:"sources"`
 }

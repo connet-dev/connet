@@ -1,7 +1,7 @@
 package selfhosted
 
 import (
-	"github.com/connet-dev/connet/model"
+	"github.com/connet-dev/connet"
 	"github.com/connet-dev/connet/pkg/proto/pberror"
 	"github.com/connet-dev/connet/pkg/restr"
 	"github.com/connet-dev/connet/server/control"
@@ -35,6 +35,6 @@ func (s *relayAuthenticator) Authenticate(req control.RelayAuthenticateRequest) 
 	return []byte(r.Token), nil
 }
 
-func (s *relayAuthenticator) Allow(_ control.RelayAuthentication, _ control.ClientAuthentication, _ model.Endpoint) (bool, error) {
+func (s *relayAuthenticator) Allow(_ control.RelayAuthentication, _ control.ClientAuthentication, _ connet.Endpoint) (bool, error) {
 	return true, nil
 }

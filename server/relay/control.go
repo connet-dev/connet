@@ -16,6 +16,7 @@ import (
 	"golang.org/x/crypto/nacl/box"
 	protobuf "google.golang.org/protobuf/proto"
 
+	"github.com/connet-dev/connet"
 	"github.com/connet-dev/connet/model"
 	"github.com/connet-dev/connet/pkg/certc"
 	"github.com/connet-dev/connet/pkg/iterc"
@@ -98,7 +99,7 @@ func (s *controlClient) Authenticate(authReq *pbclientrelay.AuthenticateReq, cer
 		return nil, pberror.NewError(pberror.Code_AuthenticationFailed, "invalid certificate")
 	}
 
-	return &clientAuth{model.EndpointFromPB(auth.Endpoint), model.RoleFromPB(auth.Role), certKey, model.ConnectRelayV02, authReq.Metadata}, nil
+	return &clientAuth{connet.EndpointFromPB(auth.Endpoint), connet.RoleFromPB(auth.Role), certKey, model.ConnectRelayV02, authReq.Metadata}, nil
 }
 
 type TransportsFn func(ctx context.Context) ([]*quic.Transport, error)

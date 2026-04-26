@@ -8,6 +8,7 @@ import (
 	"path/filepath"
 	"time"
 
+	"github.com/connet-dev/connet"
 	"github.com/connet-dev/connet/model"
 	"github.com/connet-dev/connet/pkg/logc"
 	"github.com/connet-dev/connet/pkg/proto/pbclient"
@@ -86,10 +87,10 @@ type ClientConnValue struct {
 }
 
 type ClientPeerKey struct {
-	Endpoint model.Endpoint `json:"endpoint"`
-	Role     model.Role     `json:"role"`
-	ID       ClientID       `json:"id"` // TODO consider using the server cert key or peer id
-	ConnID   ConnID         `json:"conn_id"`
+	Endpoint connet.Endpoint `json:"endpoint"`
+	Role     connet.Role     `json:"role"`
+	ID       ClientID        `json:"id"` // TODO consider using the server cert key or peer id
+	ConnID   ConnID          `json:"conn_id"`
 }
 
 type ClientPeerValue struct {

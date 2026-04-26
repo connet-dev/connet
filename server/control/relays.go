@@ -16,6 +16,7 @@ import (
 	"golang.org/x/crypto/nacl/box"
 	protobuf "google.golang.org/protobuf/proto"
 
+	"github.com/connet-dev/connet"
 	"github.com/connet-dev/connet/model"
 	"github.com/connet-dev/connet/pkg/iterc"
 	"github.com/connet-dev/connet/pkg/logc"
@@ -38,7 +39,7 @@ type RelayAuthenticateRequest struct {
 
 type RelayAuthenticator interface {
 	Authenticate(req RelayAuthenticateRequest) (RelayAuthentication, error)
-	Allow(reAuth RelayAuthentication, clAuth ClientAuthentication, endpoint model.Endpoint) (bool, error)
+	Allow(reAuth RelayAuthentication, clAuth ClientAuthentication, endpoint connet.Endpoint) (bool, error)
 }
 
 type RelayAuthentication []byte
@@ -148,7 +149,7 @@ func (s *relayServer) cachedRelays() (map[RelayID]cachedRelay, int64) {
 	return maps.Clone(s.connsCache), s.connsOffset
 }
 
-func (s *relayServer) Relays(ctx context.Context, endpoint model.Endpoint, role model.Role, cert *x509.Certificate, auth ClientAuthentication,
+func (s *relayServer) Relays(ctx context.Context, endpoint connet.Endpoint, role connet.Role, cert *x509.Certificate, auth ClientAuthentication,
 	notify func(map[RelayID]*pbclient.Relay) error,
 ) error {
 	authenticationData, err := protobuf.Marshal(&pbrelay.ClientAuthentication{

@@ -1,7 +1,7 @@
 package selfhosted
 
 import (
-	"github.com/connet-dev/connet/model"
+	"github.com/connet-dev/connet"
 	"github.com/connet-dev/connet/pkg/proto/pberror"
 	"github.com/connet-dev/connet/pkg/restr"
 	"github.com/connet-dev/connet/server/control"
@@ -11,7 +11,7 @@ type ClientAuthentication struct {
 	Token string
 	IPs   restr.IP
 	Names restr.Name
-	Role  model.Role
+	Role  connet.Role
 }
 
 func NewClientAuthenticator(auths ...ClientAuthentication) control.ClientAuthenticator {
@@ -37,16 +37,16 @@ func (s *clientsAuthenticator) Authenticate(req control.ClientAuthenticateReques
 	return []byte(req.Token), nil
 }
 
-func (s *clientsAuthenticator) Validate(auth control.ClientAuthentication, endpoint model.Endpoint, role model.Role) (model.Endpoint, error) {
+func (s *clientsAuthenticator) Validate(auth control.ClientAuthentication, endpoint connet.Endpoint, role connet.Role) (connet.Endpoint, error) {
 	r, ok := s.tokens[string(auth)]
 	if !ok {
-		return model.Endpoint{}, pberror.NewError(pberror.Code_AuthenticationFailed, "token not found")
+		return connet.Endpoint{}, pberror.NewError(pberror.Code_AuthenticationFailed, "token not found")
 	}
 	if !r.Names.IsAllowed(endpoint.String()) {
-		return model.Endpoint{}, pberror.NewError(pberror.Code_EndpointNotAllowed, "endpoint not allowed: %s", endpoint)
+		return connet.Endpoint{}, pberror.NewError(pberror.Code_EndpointNotAllowed, "endpoint not allowed: %s", endpoint)
 	}
-	if r.Role != model.UnknownRole && r.Role != role {
-		return model.Endpoint{}, pberror.NewError(pberror.Code_RoleNotAllowed, "role not allowed: %s", role)
+	if r.Role != connet.RoleUnknown && r.Role != role {
+		return connet.Endpoint{}, pberror.NewError(pberror.Code_RoleNotAllowed, "role not allowed: %s", role)
 	}
 	return endpoint, nil
 }

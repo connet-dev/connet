@@ -35,9 +35,9 @@ type Client struct {
 
 	directServer *directServer
 
-	destinations   map[model.Endpoint]*Destination
+	destinations   map[Endpoint]*Destination
 	destinationsMu sync.RWMutex
-	sources        map[model.Endpoint]*Source
+	sources        map[Endpoint]*Source
 	sourcesMu      sync.RWMutex
 
 	connStatus     atomic.Value
@@ -77,8 +77,8 @@ func Connect(ctx context.Context, opts ...Option) (*Client, error) {
 	c := &Client{
 		config: *cfg,
 
-		destinations: map[model.Endpoint]*Destination{},
-		sources:      map[model.Endpoint]*Source{},
+		destinations: map[Endpoint]*Destination{},
+		sources:      map[Endpoint]*Source{},
 
 		currentSession: notify.New[*session](nil),
 		closer:         make(chan struct{}),
@@ -154,7 +154,7 @@ func (c *Client) Destinations() []string {
 	c.destinationsMu.RLock()
 	defer c.destinationsMu.RUnlock()
 
-	return model.EndpointNames(slices.Collect(maps.Keys(c.destinations)))
+	return EndpointNames(slices.Collect(maps.Keys(c.destinations)))
 }
 
 // GetDestination returns a destination by its name. Returns an error if the destination was not found.
@@ -162,7 +162,7 @@ func (c *Client) GetDestination(name string) (*Destination, error) {
 	c.destinationsMu.RLock()
 	defer c.destinationsMu.RUnlock()
 
-	dst, ok := c.destinations[model.NewEndpoint(name)]
+	dst, ok := c.destinations[NewEndpoint(name)]
 	if !ok {
 		return nil, fmt.Errorf("destination %s: not found", name)
 	}
@@ -190,7 +190,7 @@ func (c *Client) Destination(ctx context.Context, cfg DestinationConfig) (*Desti
 	return clDst, nil
 }
 
-func (c *Client) removeDestination(endpoint model.Endpoint) {
+func (c *Client) removeDestination(endpoint Endpoint) {
 	c.destinationsMu.Lock()
 	defer c.destinationsMu.Unlock()
 
@@ -203,7 +203,7 @@ func (c *Client) Sources() []string {
 	c.sourcesMu.RLock()
 	defer c.sourcesMu.RUnlock()
 
-	return model.EndpointNames(slices.Collect(maps.Keys(c.sources)))
+	return EndpointNames(slices.Collect(maps.Keys(c.sources)))
 }
 
 // GetSource returns a source by its name. Returns an error if the source was not found.
@@ -211,7 +211,7 @@ func (c *Client) GetSource(name string) (*Source, error) {
 	c.sourcesMu.RLock()
 	defer c.sourcesMu.RUnlock()
 
-	src, ok := c.sources[model.NewEndpoint(name)]
+	src, ok := c.sources[NewEndpoint(name)]
 	if !ok {
 		return nil, fmt.Errorf("source %s: not found", name)
 	}
@@ -239,7 +239,7 @@ func (c *Client) Source(ctx context.Context, cfg SourceConfig) (*Source, error) 
 	return clSrc, nil
 }
 
-func (c *Client) removeSource(endpoint model.Endpoint) {
+func (c *Client) removeSource(endpoint Endpoint) {
 	c.sourcesMu.Lock()
 	defer c.sourcesMu.Unlock()
 
@@ -449,9 +449,9 @@ type ClientStatus struct {
 	// NATPMPAddrs reports the set of addresses this peer is reachable at, resolved from natpmp
 	NATPMPAddrs []string `json:"natpmp-addresses"`
 	// Status of each active destination for this client
-	Destinations map[model.Endpoint]DestinationStatus `json:"destinations"`
+	Destinations map[Endpoint]DestinationStatus `json:"destinations"`
 	// Status of each active source for this client
-	Sources map[model.Endpoint]SourceStatus `json:"sources"`
+	Sources map[Endpoint]SourceStatus `json:"sources"`
 }
 
 // Status returns status of the client and all active endpoints
@@ -484,9 +484,9 @@ func (c *Client) Status(ctx context.Context) (ClientStatus, error) {
 	}, nil
 }
 
-func (c *Client) destinationsStatus() (map[model.Endpoint]DestinationStatus, error) {
+func (c *Client) destinationsStatus() (map[Endpoint]DestinationStatus, error) {
 	var err error
-	statuses := map[model.Endpoint]DestinationStatus{}
+	statuses := map[Endpoint]DestinationStatus{}
 
 	c.destinationsMu.RLock()
 	defer c.destinationsMu.RUnlock()
@@ -501,9 +501,9 @@ func (c *Client) destinationsStatus() (map[model.Endpoint]DestinationStatus, err
 	return statuses, nil
 }
 
-func (c *Client) sourcesStatus() (map[model.Endpoint]SourceStatus, error) {
+func (c *Client) sourcesStatus() (map[Endpoint]SourceStatus, error) {
 	var err error
-	statuses := map[model.Endpoint]SourceStatus{}
+	statuses := map[Endpoint]SourceStatus{}
 
 	c.sourcesMu.RLock()
 	defer c.sourcesMu.RUnlock()

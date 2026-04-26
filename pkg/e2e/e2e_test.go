@@ -1,4 +1,4 @@
-package connet
+package e2e
 
 import (
 	"bufio"
@@ -24,6 +24,7 @@ import (
 	"github.com/pires/go-proxyproto"
 	"github.com/stretchr/testify/require"
 
+	"github.com/connet-dev/connet"
 	"github.com/connet-dev/connet/model"
 	"github.com/connet-dev/connet/pkg/certc"
 	"github.com/connet-dev/connet/pkg/netc"
@@ -37,8 +38,8 @@ import (
 )
 
 type connectedTestCase struct {
-	d     DestinationConfig
-	s     SourceConfig
+	d     connet.DestinationConfig
+	s     connet.SourceConfig
 	sport int
 }
 
@@ -65,92 +66,92 @@ func (tc connectedTestCase) isFail() bool {
 var connectedTests = map[string]connectedTestCase{
 	// 100xx are successful tests
 	"direct": {
-		NewDestinationConfig("direct").WithRoute(model.RouteDirect),
-		NewSourceConfig("direct").WithRoute(model.RouteDirect),
+		connet.NewDestinationConfig("direct").WithRoute(connet.RouteDirect),
+		connet.NewSourceConfig("direct").WithRoute(connet.RouteDirect),
 		10000,
 	},
 	"relay": {
-		NewDestinationConfig("relay").WithRoute(model.RouteRelay),
-		NewSourceConfig("relay").WithRoute(model.RouteRelay),
+		connet.NewDestinationConfig("relay").WithRoute(connet.RouteRelay),
+		connet.NewSourceConfig("relay").WithRoute(connet.RouteRelay),
 		10001,
 	},
 	"dst-any-direct-src": {
-		NewDestinationConfig("dst-any-direct-src"),
-		NewSourceConfig("dst-any-direct-src").WithRoute(model.RouteDirect),
+		connet.NewDestinationConfig("dst-any-direct-src"),
+		connet.NewSourceConfig("dst-any-direct-src").WithRoute(connet.RouteDirect),
 		10002,
 	},
 	"dst-any-relay-src": {
-		NewDestinationConfig("dst-any-relay-src"),
-		NewSourceConfig("dst-any-relay-src").WithRoute(model.RouteRelay),
+		connet.NewDestinationConfig("dst-any-relay-src"),
+		connet.NewSourceConfig("dst-any-relay-src").WithRoute(connet.RouteRelay),
 		10003,
 	},
 	"dst-direct-any-src": {
-		NewDestinationConfig("dst-direct-any-src").WithRoute(model.RouteDirect),
-		NewSourceConfig("dst-direct-any-src").WithRoute(model.RouteAny),
+		connet.NewDestinationConfig("dst-direct-any-src").WithRoute(connet.RouteDirect),
+		connet.NewSourceConfig("dst-direct-any-src").WithRoute(connet.RouteAny),
 		10004,
 	},
 	"dst-relay-any-src": {
-		NewDestinationConfig("dst-relay-any-src").WithRoute(model.RouteRelay),
-		NewSourceConfig("dst-relay-any-src").WithRoute(model.RouteAny),
+		connet.NewDestinationConfig("dst-relay-any-src").WithRoute(connet.RouteRelay),
+		connet.NewSourceConfig("dst-relay-any-src").WithRoute(connet.RouteAny),
 		10005,
 	},
 	"relay-tls-encrypted": {
-		NewDestinationConfig("relay-tls-encrypted").WithRoute(model.RouteRelay).WithRelayEncryptions(model.TLSEncryption),
-		NewSourceConfig("relay-tls-encrypted").WithRoute(model.RouteRelay).WithRelayEncryptions(model.TLSEncryption),
+		connet.NewDestinationConfig("relay-tls-encrypted").WithRoute(connet.RouteRelay).WithRelayEncryptions(model.TLSEncryption),
+		connet.NewSourceConfig("relay-tls-encrypted").WithRoute(connet.RouteRelay).WithRelayEncryptions(model.TLSEncryption),
 		10006,
 	},
 	"relay-dhxcp-encrypted": {
-		NewDestinationConfig("relay-dhxcp-encrypted").WithRoute(model.RouteRelay).WithRelayEncryptions(model.DHXCPEncryption),
-		NewSourceConfig("relay-dhxcp-encrypted").WithRoute(model.RouteRelay).WithRelayEncryptions(model.DHXCPEncryption),
+		connet.NewDestinationConfig("relay-dhxcp-encrypted").WithRoute(connet.RouteRelay).WithRelayEncryptions(model.DHXCPEncryption),
+		connet.NewSourceConfig("relay-dhxcp-encrypted").WithRoute(connet.RouteRelay).WithRelayEncryptions(model.DHXCPEncryption),
 		10007,
 	},
 	// 101xx expose proxy proto server
 	"dst-direct-proxy-proto": {
-		NewDestinationConfig("dst-direct-proxy-proto").WithRoute(model.RouteDirect).WithProxy(model.ProxyV1),
-		NewSourceConfig("dst-direct-proxy-proto").WithRoute(model.RouteAny),
+		connet.NewDestinationConfig("dst-direct-proxy-proto").WithRoute(connet.RouteDirect).WithProxy(model.ProxyV1),
+		connet.NewSourceConfig("dst-direct-proxy-proto").WithRoute(connet.RouteAny),
 		10100,
 	},
 	"dst-relay-proxy-proto": {
-		NewDestinationConfig("dst-relay-proxy-proto").WithRoute(model.RouteRelay).WithProxy(model.ProxyV2),
-		NewSourceConfig("dst-relay-proxy-proto").WithRoute(model.RouteAny),
+		connet.NewDestinationConfig("dst-relay-proxy-proto").WithRoute(connet.RouteRelay).WithProxy(model.ProxyV2),
+		connet.NewSourceConfig("dst-relay-proxy-proto").WithRoute(connet.RouteAny),
 		10101,
 	},
 	// 102xx expose HTTPS server
 	"direct-tls": {
-		NewDestinationConfig("direct-tls").WithRoute(model.RouteDirect),
-		NewSourceConfig("direct-tls").WithRoute(model.RouteDirect),
+		connet.NewDestinationConfig("direct-tls").WithRoute(connet.RouteDirect),
+		connet.NewSourceConfig("direct-tls").WithRoute(connet.RouteDirect),
 		10200,
 	},
 	"relay-tls": {
-		NewDestinationConfig("relay-tls").WithRoute(model.RouteRelay),
-		NewSourceConfig("relay-tls").WithRoute(model.RouteRelay),
+		connet.NewDestinationConfig("relay-tls").WithRoute(connet.RouteRelay),
+		connet.NewSourceConfig("relay-tls").WithRoute(connet.RouteRelay),
 		10201,
 	},
 	// 103xx expose echo server for websockets
 	"echo-ws": {
-		NewDestinationConfig("echo-ws"),
-		NewSourceConfig("echo-ws"),
+		connet.NewDestinationConfig("echo-ws"),
+		connet.NewSourceConfig("echo-ws"),
 		10300,
 	},
 	// 110xx fail to dial
 	"dst-direct-relay-src": {
-		NewDestinationConfig("dst-direct-relay-src").WithRoute(model.RouteDirect),
-		NewSourceConfig("dst-direct-relay-src").WithRoute(model.RouteRelay),
+		connet.NewDestinationConfig("dst-direct-relay-src").WithRoute(connet.RouteDirect),
+		connet.NewSourceConfig("dst-direct-relay-src").WithRoute(connet.RouteRelay),
 		11000,
 	},
 	"dst-relay-direct-src": {
-		NewDestinationConfig("dst-relay-direct-src").WithRoute(model.RouteRelay),
-		NewSourceConfig("dst-relay-direct-src").WithRoute(model.RouteDirect),
+		connet.NewDestinationConfig("dst-relay-direct-src").WithRoute(connet.RouteRelay),
+		connet.NewSourceConfig("dst-relay-direct-src").WithRoute(connet.RouteDirect),
 		11001,
 	},
 	"relay-dst-none-tls-src": {
-		NewDestinationConfig("relay-dst-none-tls-src").WithRoute(model.RouteRelay).WithRelayEncryptions(model.NoEncryption),
-		NewSourceConfig("relay-dst-none-tls-src").WithRoute(model.RouteRelay).WithRelayEncryptions(model.TLSEncryption),
+		connet.NewDestinationConfig("relay-dst-none-tls-src").WithRoute(connet.RouteRelay).WithRelayEncryptions(model.NoEncryption),
+		connet.NewSourceConfig("relay-dst-none-tls-src").WithRoute(connet.RouteRelay).WithRelayEncryptions(model.TLSEncryption),
 		11002,
 	},
 	"relay-dst-tls-none-src": {
-		NewDestinationConfig("relay-dst-tls-none-src").WithRoute(model.RouteRelay).WithRelayEncryptions(model.TLSEncryption),
-		NewSourceConfig("relay-dst-tls-none-src").WithRoute(model.RouteRelay).WithRelayEncryptions(model.NoEncryption),
+		connet.NewDestinationConfig("relay-dst-tls-none-src").WithRoute(connet.RouteRelay).WithRelayEncryptions(model.TLSEncryption),
+		connet.NewSourceConfig("relay-dst-tls-none-src").WithRoute(connet.RouteRelay).WithRelayEncryptions(model.NoEncryption),
 		11003,
 	},
 }
@@ -197,7 +198,7 @@ func TestE2E(t *testing.T) {
 		selfhosted.ClientAuthentication{Token: "test-token-src"},
 		selfhosted.ClientAuthentication{Token: "test-token-deny-ip", IPs: localRestr},
 		selfhosted.ClientAuthentication{Token: "test-token-deny-name", Names: tetRestr},
-		selfhosted.ClientAuthentication{Token: "test-token-deny-role", Role: model.Source},
+		selfhosted.ClientAuthentication{Token: "test-token-deny-role", Role: connet.RoleSource},
 	)
 
 	clientsIngress, err := control.NewIngressBuilder().
@@ -229,62 +230,62 @@ func TestE2E(t *testing.T) {
 	}
 
 	t.Run("deny-ip", func(t *testing.T) {
-		clIPDeny, err := Connect(ctx,
-			Token("test-token-deny-ip"),
-			ServerAddress("localhost:20000"),
-			ServerCAs(cas),
-			DirectAddress(":20002"),
-			Logger(logger.With("test", "cl-ip-deny")),
+		clIPDeny, err := connet.Connect(ctx,
+			connet.Token("test-token-deny-ip"),
+			connet.ServerAddress("localhost:20000"),
+			connet.ServerCAs(cas),
+			connet.DirectAddress(":20002"),
+			connet.Logger(logger.With("test", "cl-ip-deny")),
 		)
 		require.ErrorContains(t, err, "address not allowed")
 		require.Nil(t, clIPDeny)
 	})
 	t.Run("deny-name", func(t *testing.T) {
-		clNameDeny, err := Connect(ctx,
-			Token("test-token-deny-name"),
-			ServerAddress("localhost:20000"),
-			ServerCAs(cas),
-			DirectAddress(":20002"),
-			Logger(logger.With("test", "cl-name-deny")),
+		clNameDeny, err := connet.Connect(ctx,
+			connet.Token("test-token-deny-name"),
+			connet.ServerAddress("localhost:20000"),
+			connet.ServerCAs(cas),
+			connet.DirectAddress(":20002"),
+			connet.Logger(logger.With("test", "cl-name-deny")),
 		)
 		require.NoError(t, err)
 		defer clNameDeny.Close()
 
-		dst, err := clNameDeny.Destination(ctx, NewDestinationConfig("direct"))
+		dst, err := clNameDeny.Destination(ctx, connet.NewDestinationConfig("direct"))
 		require.ErrorContains(t, err, "endpoint not allowed")
 		require.Nil(t, dst)
 	})
 	t.Run("deny-role", func(t *testing.T) {
-		clRoleDeny, err := Connect(ctx,
-			Token("test-token-deny-role"),
-			ServerAddress("localhost:20000"),
-			ServerCAs(cas),
-			DirectAddress(":20003"),
-			Logger(logger.With("test", "cl-role-deny")),
+		clRoleDeny, err := connet.Connect(ctx,
+			connet.Token("test-token-deny-role"),
+			connet.ServerAddress("localhost:20000"),
+			connet.ServerCAs(cas),
+			connet.DirectAddress(":20003"),
+			connet.Logger(logger.With("test", "cl-role-deny")),
 		)
 		require.NoError(t, err)
 		defer clRoleDeny.Close()
 
-		dst, err := clRoleDeny.Destination(ctx, NewDestinationConfig("direct"))
+		dst, err := clRoleDeny.Destination(ctx, connet.NewDestinationConfig("direct"))
 		require.ErrorContains(t, err, "role not allowed")
 		require.Nil(t, dst)
 	})
 	t.Run("close-client", func(t *testing.T) {
-		cl, err := Connect(ctx,
-			Token("test-token-any"),
-			ServerAddress("localhost:20000"),
-			ServerCAs(cas),
-			DirectAddress(":20002"),
-			Logger(logger.With("test", "cl-dst")),
+		cl, err := connet.Connect(ctx,
+			connet.Token("test-token-any"),
+			connet.ServerAddress("localhost:20000"),
+			connet.ServerCAs(cas),
+			connet.DirectAddress(":20002"),
+			connet.Logger(logger.With("test", "cl-dst")),
 		)
 		require.NoError(t, err)
 		require.NotNil(t, cl)
 
-		dst, err := cl.Destination(ctx, NewDestinationConfig("closing"))
+		dst, err := cl.Destination(ctx, connet.NewDestinationConfig("closing"))
 		require.NoError(t, err)
 		defer dst.Close()
 
-		src, err := cl.Source(ctx, NewSourceConfig("closing"))
+		src, err := cl.Source(ctx, connet.NewSourceConfig("closing"))
 		require.NoError(t, err)
 		defer src.Close()
 
@@ -308,27 +309,27 @@ func TestE2E(t *testing.T) {
 		<-dialCh
 
 		require.ErrorIs(t, acceptErr, net.ErrClosed)
-		require.ErrorIs(t, dialErr, ErrSourceNoActiveDestinations)
+		require.ErrorIs(t, dialErr, connet.ErrSourceNoActiveDestinations)
 		require.Nil(t, acceptConn)
 		require.Nil(t, dialConn)
 	})
 	t.Run("cancel-client", func(t *testing.T) {
 		clCtx, clCancel := context.WithCancel(ctx)
-		cl, err := Connect(clCtx,
-			Token("test-token-any"),
-			ServerAddress("localhost:20000"),
-			ServerCAs(cas),
-			DirectAddress(":20002"),
-			Logger(logger.With("test", "cl-dst")),
+		cl, err := connet.Connect(clCtx,
+			connet.Token("test-token-any"),
+			connet.ServerAddress("localhost:20000"),
+			connet.ServerCAs(cas),
+			connet.DirectAddress(":20002"),
+			connet.Logger(logger.With("test", "cl-dst")),
 		)
 		require.NoError(t, err)
 		require.NotNil(t, cl)
 
-		dst, err := cl.Destination(ctx, NewDestinationConfig("closing"))
+		dst, err := cl.Destination(ctx, connet.NewDestinationConfig("closing"))
 		require.NoError(t, err)
 		defer dst.Close()
 
-		src, err := cl.Source(ctx, NewSourceConfig("closing"))
+		src, err := cl.Source(ctx, connet.NewSourceConfig("closing"))
 		require.NoError(t, err)
 		defer src.Close()
 
@@ -360,40 +361,40 @@ func TestE2E(t *testing.T) {
 		<-dialCh
 
 		require.ErrorIs(t, acceptErr, net.ErrClosed)
-		require.ErrorIs(t, dialErr, ErrSourceNoActiveDestinations)
+		require.ErrorIs(t, dialErr, connet.ErrSourceNoActiveDestinations)
 		require.Nil(t, acceptConn)
 		require.Nil(t, dialConn)
 	})
 	t.Run("close-dst", func(t *testing.T) {
-		cl, err := Connect(ctx,
-			Token("test-token-any"),
-			ServerAddress("localhost:20000"),
-			ServerCAs(cas),
-			DirectAddress(":20002"),
-			Logger(logger.With("test", "cl-dst")),
+		cl, err := connet.Connect(ctx,
+			connet.Token("test-token-any"),
+			connet.ServerAddress("localhost:20000"),
+			connet.ServerCAs(cas),
+			connet.DirectAddress(":20002"),
+			connet.Logger(logger.With("test", "cl-dst")),
 		)
 		require.NoError(t, err)
 		defer cl.Close()
 
-		dst, err := cl.Destination(ctx, NewDestinationConfig("closing"))
+		dst, err := cl.Destination(ctx, connet.NewDestinationConfig("closing"))
 		require.NoError(t, err)
 		require.NoError(t, dst.Close())
 
 		require.Empty(t, cl.Destinations())
 	})
 	t.Run("cancel-dst", func(t *testing.T) {
-		cl, err := Connect(ctx,
-			Token("test-token-any"),
-			ServerAddress("localhost:20000"),
-			ServerCAs(cas),
-			DirectAddress(":20002"),
-			Logger(logger.With("test", "cl-dst")),
+		cl, err := connet.Connect(ctx,
+			connet.Token("test-token-any"),
+			connet.ServerAddress("localhost:20000"),
+			connet.ServerCAs(cas),
+			connet.DirectAddress(":20002"),
+			connet.Logger(logger.With("test", "cl-dst")),
 		)
 		require.NoError(t, err)
 		defer cl.Close()
 
 		dstCtx, dstCancel := context.WithCancel(ctx)
-		dst, err := cl.Destination(dstCtx, NewDestinationConfig("closing"))
+		dst, err := cl.Destination(dstCtx, connet.NewDestinationConfig("closing"))
 		require.NoError(t, err)
 		dstCancel()
 
@@ -408,12 +409,12 @@ func TestE2E(t *testing.T) {
 		require.Empty(t, cl.Destinations())
 	})
 	t.Run("addrs", func(t *testing.T) {
-		cl, err := Connect(ctx,
-			Token("test-token-any"),
-			ServerAddress("localhost:20000"),
-			ServerCAs(cas),
-			DirectAddress(":20002"),
-			Logger(logger.With("test", "cl-dst")),
+		cl, err := connet.Connect(ctx,
+			connet.Token("test-token-any"),
+			connet.ServerAddress("localhost:20000"),
+			connet.ServerCAs(cas),
+			connet.DirectAddress(":20002"),
+			connet.Logger(logger.With("test", "cl-dst")),
 		)
 		require.NoError(t, err)
 		defer cl.Close()
@@ -425,23 +426,23 @@ func TestE2E(t *testing.T) {
 		require.NotEmpty(t, stat.STUNAddrs)
 	})
 
-	clDst, err := Connect(ctx,
-		Token("test-token-dst"),
-		ServerAddress("localhost:20000"),
-		ServerCAs(cas),
-		DirectAddress(":20002"),
-		Logger(logger.With("test", "cl-dst")),
-		Metadata("destinations"),
+	clDst, err := connet.Connect(ctx,
+		connet.Token("test-token-dst"),
+		connet.ServerAddress("localhost:20000"),
+		connet.ServerCAs(cas),
+		connet.DirectAddress(":20002"),
+		connet.Logger(logger.With("test", "cl-dst")),
+		connet.Metadata("destinations"),
 	)
 	require.NoError(t, err)
 
-	clSrc, err := Connect(ctx,
-		Token("test-token-src"),
-		ServerAddress("localhost:20000"),
-		ServerCAs(cas),
-		DirectAddress(":20003"),
-		Logger(logger.With("test", "cl-src")),
-		Metadata("sources"),
+	clSrc, err := connet.Connect(ctx,
+		connet.Token("test-token-src"),
+		connet.ServerAddress("localhost:20000"),
+		connet.ServerCAs(cas),
+		connet.DirectAddress(":20003"),
+		connet.Logger(logger.With("test", "cl-src")),
+		connet.Metadata("sources"),
 	)
 	require.NoError(t, err)
 
@@ -454,17 +455,17 @@ func TestE2E(t *testing.T) {
 
 		switch {
 		case tc.isSuccessProxyProto():
-			dstSrv := NewTCPDestination(dst, ppAddr, 0, logger)
+			dstSrv := connet.NewTCPDestination(dst, ppAddr, 0, logger)
 			g.Go(dstSrv.Run)
 		case tc.isSuccessTLS():
 			clientTransport := htsServer.Client().Transport.(*http.Transport)
-			dstSrv := NewTLSDestination(dst, htsAddr, clientTransport.TLSClientConfig, 0, logger)
+			dstSrv := connet.NewTLSDestination(dst, htsAddr, clientTransport.TLSClientConfig, 0, logger)
 			g.Go(dstSrv.Run)
 		case tc.isSuccessWS():
-			dstSrv := NewTCPDestination(dst, echoAddr, 0, logger)
+			dstSrv := connet.NewTCPDestination(dst, echoAddr, 0, logger)
 			g.Go(dstSrv.Run)
 		default:
-			dstSrv := NewTCPDestination(dst, htAddr, 0, logger)
+			dstSrv := connet.NewTCPDestination(dst, htAddr, 0, logger)
 			g.Go(dstSrv.Run)
 		}
 
@@ -473,20 +474,20 @@ func TestE2E(t *testing.T) {
 
 		switch {
 		case tc.isSuccessTLS():
-			srcSrv := NewTLSSource(src, fmt.Sprintf(":%d", tc.sport), htsServer.TLS, logger)
+			srcSrv := connet.NewTLSSource(src, fmt.Sprintf(":%d", tc.sport), htsServer.TLS, logger)
 			g.Go(srcSrv.Run)
 		case tc.isSuccessWS():
 			srcURL, err := url.Parse(fmt.Sprintf("ws://:%d", tc.sport))
 			require.NoError(t, err)
-			srcSrv := NewWSSource(src, srcURL, nil, logger)
+			srcSrv := connet.NewWSSource(src, srcURL, nil, logger)
 			g.Go(srcSrv.Run)
 		case tc.isFail():
 			srcURL, err := url.Parse(fmt.Sprintf("http://:%d", tc.sport))
 			require.NoError(t, err)
-			srcSrv := NewHTTPSource(src, srcURL, nil)
+			srcSrv := connet.NewHTTPSource(src, srcURL, nil)
 			g.Go(srcSrv.Run)
 		default:
-			srcSrv := NewTCPSource(src, fmt.Sprintf(":%d", tc.sport), logger)
+			srcSrv := connet.NewTCPSource(src, fmt.Sprintf(":%d", tc.sport), logger)
 			g.Go(srcSrv.Run)
 		}
 	}

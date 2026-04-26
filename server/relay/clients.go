@@ -15,6 +15,7 @@ import (
 
 	"github.com/quic-go/quic-go"
 
+	"github.com/connet-dev/connet"
 	"github.com/connet-dev/connet/model"
 	"github.com/connet-dev/connet/pkg/certc"
 	"github.com/connet-dev/connet/pkg/iterc"
@@ -29,8 +30,8 @@ import (
 )
 
 type clientAuth struct {
-	endpoint model.Endpoint
-	role     model.Role
+	endpoint connet.Endpoint
+	role     connet.Role
 	key      model.Key
 	protocol model.ConnectRelayNextProto
 	metadata string
@@ -44,7 +45,7 @@ type clientsServer struct {
 	tlsConf *tls.Config
 	auth    ClientAuthenticator
 
-	endpoints   map[model.Endpoint]*endpointClients
+	endpoints   map[connet.Endpoint]*endpointClients
 	endpointsMu sync.RWMutex
 
 	logger *slog.Logger
@@ -65,14 +66,14 @@ func newClientsServer(cfg Config, cert *certc.Cert, auth ClientAuthenticator) (*
 		},
 		auth: auth,
 
-		endpoints: map[model.Endpoint]*endpointClients{},
+		endpoints: map[connet.Endpoint]*endpointClients{},
 
 		logger: cfg.Logger.With("server", "relay-clients"),
 	}, nil
 }
 
 type endpointClients struct {
-	endpoint     model.Endpoint
+	endpoint     connet.Endpoint
 	destinations map[model.Key]*clientConn
 	sources      map[model.Key]*clientConn
 	mu           sync.RWMutex
@@ -112,7 +113,7 @@ func (d *endpointClients) empty() bool {
 	return (len(d.destinations) + len(d.sources)) == 0
 }
 
-func (s *clientsServer) getByEndpoint(endpoint model.Endpoint) *endpointClients {
+func (s *clientsServer) getByEndpoint(endpoint connet.Endpoint) *endpointClients {
 	s.endpointsMu.RLock()
 	dst := s.endpoints[endpoint]
 	s.endpointsMu.RUnlock()
@@ -290,9 +291,9 @@ func (c *clientConn) runErr(ctx context.Context) error {
 	}
 
 	switch c.auth.role {
-	case model.Destination:
+	case connet.RoleDestination:
 		return c.runDestination(ctx)
-	case model.Source:
+	case connet.RoleSource:
 		return c.runSource(ctx)
 	default:
 		return errNotRecognizedClient

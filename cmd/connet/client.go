@@ -515,11 +515,11 @@ func (fc SourceConfig) parse(name string, defaultRelayEncryptions []model.Encryp
 	return cfg, handler, nil
 }
 
-func parseRouteOption(s string) (model.RouteOption, error) {
+func parseRouteOption(s string) (connet.RouteOption, error) {
 	if s == "" {
-		return model.RouteAny, nil
+		return connet.RouteAny, nil
 	}
-	return model.ParseRouteOption(s)
+	return connet.ParseRouteOption(s)
 }
 
 func parseProxyVersion(s string) (model.ProxyVersion, error) {
@@ -529,11 +529,11 @@ func parseProxyVersion(s string) (model.ProxyVersion, error) {
 	return model.ParseProxyVersion(s)
 }
 
-func parseRole(s string) (model.Role, error) {
+func parseRole(s string) (connet.Role, error) {
 	if s == "" {
-		return model.UnknownRole, nil
+		return connet.RoleUnknown, nil
 	}
-	return model.ParseRole(s)
+	return connet.ParseRole(s)
 }
 
 func parseEncryptionSchemes(s []string) ([]model.EncryptionScheme, error) {
