@@ -63,7 +63,7 @@ func New(opts ...Option) (*Server, error) {
 
 		RelaysIngress: []control.Ingress{{
 			ListenAddress: relaysAddr,
-			TLS: &tls.Config{
+			ListenTLS: &tls.Config{
 				Certificates: []tls.Certificate{relaysTLSCert},
 			},
 		}},

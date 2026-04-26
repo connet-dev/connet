@@ -208,7 +208,7 @@ func controlRun(ctx context.Context, cfg ControlConfig, logger *slog.Logger) err
 func (cfg ControlIngress) parse() (control.Ingress, error) {
 	return control.NewIngressBuilder().
 		WithListenAddress(cfg.Addr).
-		WithTLSCertFrom(cfg.Cert, cfg.Key).
+		WithListenTLSCertFrom(cfg.Cert, cfg.Key).
 		WithRestrFrom(cfg.AllowCIDRs, cfg.DenyCIDRs).
 		Ingress()
 }

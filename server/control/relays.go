@@ -256,7 +256,7 @@ func (s *relayServer) runListener(ctx context.Context, ingress Ingress) error {
 		}
 	}()
 
-	tlsConf := ingress.TLS.Clone()
+	tlsConf := ingress.ListenTLS.Clone()
 	if len(tlsConf.NextProtos) == 0 {
 		tlsConf.NextProtos = iterc.MapVarStrings(proto.RelayControlV03)
 	}

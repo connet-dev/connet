@@ -10,7 +10,7 @@ import (
 
 type Ingress struct {
 	ListenAddress *net.UDPAddr
-	TLS           *tls.Config
+	ListenTLS     *tls.Config
 	Restr         restr.IP
 }
 
@@ -42,24 +42,24 @@ func (b *IngressBuilder) WithListenAddressResolved(addr *net.UDPAddr) *IngressBu
 	return b
 }
 
-func (b *IngressBuilder) WithTLS(cfg *tls.Config) *IngressBuilder {
+func (b *IngressBuilder) WithListenTLS(cfg *tls.Config) *IngressBuilder {
 	if b.err != nil {
 		return b
 	}
 
-	b.ingress.TLS = cfg
+	b.ingress.ListenTLS = cfg
 	return b
 }
 
-func (b *IngressBuilder) WithTLSCert(cert tls.Certificate) *IngressBuilder {
+func (b *IngressBuilder) WithListenTLSCert(cert tls.Certificate) *IngressBuilder {
 	if b.err != nil {
 		return b
 	}
 
-	return b.WithTLS(&tls.Config{Certificates: []tls.Certificate{cert}})
+	return b.WithListenTLS(&tls.Config{Certificates: []tls.Certificate{cert}})
 }
 
-func (b *IngressBuilder) WithTLSCertFrom(certFile, keyFile string) *IngressBuilder {
+func (b *IngressBuilder) WithListenTLSCertFrom(certFile, keyFile string) *IngressBuilder {
 	if b.err != nil {
 		return b
 	}
@@ -70,7 +70,7 @@ func (b *IngressBuilder) WithTLSCertFrom(certFile, keyFile string) *IngressBuild
 		return b
 	}
 
-	return b.WithTLSCert(cert)
+	return b.WithListenTLSCert(cert)
 }
 
 func (b *IngressBuilder) WithRestr(iprestr restr.IP) *IngressBuilder {

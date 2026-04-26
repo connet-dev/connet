@@ -45,7 +45,7 @@ func newServerConfig(opts []Option) (*serverConfig, error) {
 	}
 
 	for i, ingress := range cfg.clientsIngresses {
-		if ingress.TLS == nil {
+		if ingress.ListenTLS == nil {
 			return nil, fmt.Errorf("ingress at %d is missing tls config", i)
 		}
 	}
