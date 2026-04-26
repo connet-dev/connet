@@ -17,7 +17,6 @@ import (
 	"github.com/quic-go/quic-go"
 
 	"github.com/connet-dev/connet"
-	"github.com/connet-dev/connet/model"
 	"github.com/connet-dev/connet/pkg/iterc"
 	"github.com/connet-dev/connet/pkg/logc"
 	"github.com/connet-dev/connet/pkg/proto"
@@ -30,7 +29,7 @@ import (
 )
 
 type ClientAuthenticateRequest struct {
-	Proto        model.ClientControlNextProto
+	Proto        proto.ClientControlNextProto
 	Token        string
 	Addr         net.Addr
 	BuildVersion string
@@ -317,7 +316,7 @@ func (s *clientServer) runListener(ctx context.Context, ingress Ingress) error {
 
 	tlsConf := ingress.TLS.Clone()
 	if len(tlsConf.NextProtos) == 0 {
-		tlsConf.NextProtos = iterc.MapVarStrings(model.ClientControlV03)
+		tlsConf.NextProtos = iterc.MapVarStrings(proto.ClientControlV03)
 	}
 
 	quicConf := quicc.ServerConfig()
@@ -474,7 +473,7 @@ type clientConn struct {
 type clientConnAuth struct {
 	id       ClientID
 	auth     ClientAuthentication
-	protocol model.ClientControlNextProto
+	protocol proto.ClientControlNextProto
 	metadata string
 }
 
@@ -550,7 +549,7 @@ func (c *clientConn) authenticate(ctx context.Context) (*clientConnAuth, error) 
 		return nil, fmt.Errorf("client auth read: %w", err)
 	}
 
-	protocol := model.GetClientControlNextProto(c.conn)
+	protocol := proto.GetClientControlNextProto(c.conn)
 	auth, err := c.server.auth.Authenticate(ClientAuthenticateRequest{
 		Proto:        protocol,
 		Token:        req.Token,

@@ -114,7 +114,7 @@ func (r *relay) connect(ctx context.Context, hp model.HostPort) (*quic.Conn, err
 		Certificates: []tls.Certificate{r.local.clientCert},
 		RootCAs:      cfg.tls.cas,
 		ServerName:   cfg.tls.name,
-		NextProtos:   iterc.MapVarStrings(model.ConnectRelayV02),
+		NextProtos:   iterc.MapVarStrings(proto.ConnectRelayV02),
 	}, quicc.ClientConfig(r.local.direct.handshakeIdleTimeout))
 	if err != nil {
 		return nil, err

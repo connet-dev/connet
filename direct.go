@@ -14,6 +14,7 @@ import (
 
 	"github.com/connet-dev/connet/model"
 	"github.com/connet-dev/connet/pkg/iterc"
+	"github.com/connet-dev/connet/pkg/proto"
 	"github.com/connet-dev/connet/pkg/proto/pberror"
 	"github.com/connet-dev/connet/pkg/quicc"
 	"github.com/connet-dev/connet/pkg/slogc"
@@ -139,7 +140,7 @@ func (s *directServer) expect(serverCert tls.Certificate, cert *x509.Certificate
 func (s *directServer) Run(ctx context.Context) error {
 	tlsConf := &tls.Config{
 		ClientAuth: tls.RequireAndVerifyClientCert,
-		NextProtos: iterc.MapVarStrings(model.ConnectClientV01),
+		NextProtos: iterc.MapVarStrings(proto.ConnectClientV01),
 	}
 	tlsConf.GetConfigForClient = func(chi *tls.ClientHelloInfo) (*tls.Config, error) {
 		srv := s.getServer(chi.ServerName)

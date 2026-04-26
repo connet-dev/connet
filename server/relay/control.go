@@ -64,7 +64,7 @@ func newControlClient(cfg Config, clientsCert *certc.Cert, configStore logc.KV[C
 		controlTLSConf: &tls.Config{
 			ServerName: cfg.ControlHost,
 			RootCAs:    cfg.ControlCAs,
-			NextProtos: iterc.MapVarStrings(model.RelayControlV03),
+			NextProtos: iterc.MapVarStrings(proto.RelayControlV03),
 		},
 		handshakeIdleTimeout: cfg.HandshakeIdleTimeout,
 
@@ -99,7 +99,7 @@ func (s *controlClient) Authenticate(authReq *pbclientrelay.AuthenticateReq, cer
 		return nil, pberror.NewError(pberror.Code_AuthenticationFailed, "invalid certificate")
 	}
 
-	return &clientAuth{connet.EndpointFromPB(auth.Endpoint), connet.RoleFromPB(auth.Role), certKey, model.ConnectRelayV02, authReq.Metadata}, nil
+	return &clientAuth{connet.EndpointFromPB(auth.Endpoint), connet.RoleFromPB(auth.Role), certKey, proto.ConnectRelayV02, authReq.Metadata}, nil
 }
 
 type TransportsFn func(ctx context.Context) ([]*quic.Transport, error)

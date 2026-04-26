@@ -1,4 +1,4 @@
-package model
+package proto
 
 import (
 	"github.com/quic-go/quic-go"

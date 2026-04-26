@@ -33,7 +33,7 @@ type clientAuth struct {
 	endpoint connet.Endpoint
 	role     connet.Role
 	key      model.Key
-	protocol model.ConnectRelayNextProto
+	protocol proto.ConnectRelayNextProto
 	metadata string
 }
 
@@ -62,7 +62,7 @@ func newClientsServer(cfg Config, cert *certc.Cert, auth ClientAuthenticator) (*
 			ServerName:   tlsCert.Leaf.DNSNames[0],
 			Certificates: []tls.Certificate{tlsCert},
 			ClientAuth:   tls.RequireAnyClientCert,
-			NextProtos:   iterc.MapVarStrings(model.ConnectRelayV02),
+			NextProtos:   iterc.MapVarStrings(proto.ConnectRelayV02),
 		},
 		auth: auth,
 
