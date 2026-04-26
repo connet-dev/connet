@@ -203,6 +203,7 @@ func (d *destinationConn) run(ctx context.Context) {
 }
 
 func (d *destinationConn) runErr(ctx context.Context) error {
+	// TODO do we need graceful shutdown of these streams?
 	for {
 		stream, err := d.conn.AcceptStream(ctx)
 		if err != nil {

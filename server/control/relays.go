@@ -11,6 +11,7 @@ import (
 	"maps"
 	"net"
 	"sync"
+	"time"
 
 	"github.com/connet-dev/connet/model"
 	"github.com/connet-dev/connet/pkg/iterc"
@@ -279,10 +280,18 @@ func (s *relayServer) runListener(ctx context.Context, ingress Ingress) error {
 		}
 	}()
 
+	drain := reliable.NewDrain(ctx)
+	defer func() {
+		if err := drain.Wait(10 * time.Second); err != nil {
+			s.logger.Warn("relays drain", "err", err)
+		}
+	}()
+
 	s.logger.Info("accepting relay connections", "addr", transport.Conn.LocalAddr())
 	for {
 		conn, err := l.Accept(ctx)
 		if err != nil {
+			// TODO return no error on context cancel?
 			slogc.Fine(s.logger, "accept error", "err", err)
 			return fmt.Errorf("relay server quic accept: %w", err)
 		}
@@ -292,7 +301,7 @@ func (s *relayServer) runListener(ctx context.Context, ingress Ingress) error {
 			conn:   conn,
 			logger: s.logger,
 		}
-		go rc.run(ctx)
+		drain.Go(rc.run)
 	}
 }
 
