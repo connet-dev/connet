@@ -4,7 +4,7 @@ package relay;
 import "error.proto";
 import "model.proto";
 
-option go_package = "github.com/connet-dev/connet/proto/pbrelay";
+option go_package = "github.com/connet-dev/connet/pkg/proto/pbrelay";
 
 message AuthenticateReq {
   string token = 1;

@@ -6,8 +6,9 @@ import (
 	"fmt"
 	"net"
 
-	"github.com/connet-dev/connet/pkg/netc"
 	"github.com/jackpal/gateway"
+
+	"github.com/connet-dev/connet/pkg/netc"
 )
 
 var errDiscoverInterface = errors.New("pmp discover interface")

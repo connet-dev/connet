@@ -4,8 +4,8 @@ import (
 	"fmt"
 	"io"
 
-	"github.com/connet-dev/connet/proto"
-	"github.com/connet-dev/connet/proto/pberror"
+	"github.com/connet-dev/connet/pkg/proto"
+	"github.com/connet-dev/connet/pkg/proto/pberror"
 )
 
 func ReadRequest(r io.Reader) (*Request, error) {

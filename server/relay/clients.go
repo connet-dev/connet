@@ -13,18 +13,19 @@ import (
 	"slices"
 	"sync"
 
+	"github.com/quic-go/quic-go"
+
 	"github.com/connet-dev/connet/model"
 	"github.com/connet-dev/connet/pkg/certc"
 	"github.com/connet-dev/connet/pkg/iterc"
 	"github.com/connet-dev/connet/pkg/netc"
+	"github.com/connet-dev/connet/pkg/proto"
+	"github.com/connet-dev/connet/pkg/proto/pbclientrelay"
+	"github.com/connet-dev/connet/pkg/proto/pbconnect"
+	"github.com/connet-dev/connet/pkg/proto/pberror"
 	"github.com/connet-dev/connet/pkg/quicc"
 	"github.com/connet-dev/connet/pkg/reliable"
 	"github.com/connet-dev/connet/pkg/slogc"
-	"github.com/connet-dev/connet/proto"
-	"github.com/connet-dev/connet/proto/pbclientrelay"
-	"github.com/connet-dev/connet/proto/pbconnect"
-	"github.com/connet-dev/connet/proto/pberror"
-	"github.com/quic-go/quic-go"
 )
 
 type clientAuth struct {

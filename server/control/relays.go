@@ -12,20 +12,21 @@ import (
 	"net"
 	"sync"
 
+	"github.com/quic-go/quic-go"
+	"golang.org/x/crypto/nacl/box"
+	protobuf "google.golang.org/protobuf/proto"
+
 	"github.com/connet-dev/connet/model"
 	"github.com/connet-dev/connet/pkg/iterc"
 	"github.com/connet-dev/connet/pkg/logc"
 	"github.com/connet-dev/connet/pkg/netc"
+	"github.com/connet-dev/connet/pkg/proto"
+	"github.com/connet-dev/connet/pkg/proto/pbclient"
+	"github.com/connet-dev/connet/pkg/proto/pberror"
+	"github.com/connet-dev/connet/pkg/proto/pbrelay"
 	"github.com/connet-dev/connet/pkg/quicc"
 	"github.com/connet-dev/connet/pkg/reliable"
 	"github.com/connet-dev/connet/pkg/slogc"
-	"github.com/connet-dev/connet/proto"
-	"github.com/connet-dev/connet/proto/pbclient"
-	"github.com/connet-dev/connet/proto/pberror"
-	"github.com/connet-dev/connet/proto/pbrelay"
-	"github.com/quic-go/quic-go"
-	"golang.org/x/crypto/nacl/box"
-	protobuf "google.golang.org/protobuf/proto"
 )
 
 type RelayAuthenticateRequest struct {
@@ -148,8 +149,8 @@ func (s *relayServer) cachedRelays() (map[RelayID]cachedRelay, int64) {
 }
 
 func (s *relayServer) Relays(ctx context.Context, endpoint model.Endpoint, role model.Role, cert *x509.Certificate, auth ClientAuthentication,
-	notify func(map[RelayID]*pbclient.Relay) error) error {
-
+	notify func(map[RelayID]*pbclient.Relay) error,
+) error {
 	authenticationData, err := protobuf.Marshal(&pbrelay.ClientAuthentication{
 		Endpoint:       endpoint.PB(),
 		Role:           role.PB(),
@@ -486,7 +487,7 @@ func (c *relayConn) authenticate(ctx context.Context) (*relayConnAuth, error) {
 		return nil, fmt.Errorf("auth write response: %w", err)
 	}
 
-	var relayPk = [32]byte(req.RelayAuthenticationKey)
+	relayPk := [32]byte(req.RelayAuthenticationKey)
 	sharedKey := new([32]byte)
 	box.Precompute(sharedKey, &relayPk, controlSk)
 

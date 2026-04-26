@@ -9,8 +9,10 @@ import (
 	"golang.org/x/crypto/nacl/secretbox"
 )
 
-var errEncryptedDataMissing = errors.New("encrypted data missing")
-var errSecretboxOpen = errors.New("secretbox open failed")
+var (
+	errEncryptedDataMissing = errors.New("encrypted data missing")
+	errSecretboxOpen        = errors.New("secretbox open failed")
+)
 
 type reconnectToken struct {
 	secretKey [32]byte

@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"io"
 
-	"github.com/connet-dev/connet/proto"
+	"github.com/connet-dev/connet/pkg/proto"
 )
 
 func ReadRequest(r io.Reader) (*Request, error) {

@@ -2,8 +2,8 @@ package selfhosted
 
 import (
 	"github.com/connet-dev/connet/model"
+	"github.com/connet-dev/connet/pkg/proto/pberror"
 	"github.com/connet-dev/connet/pkg/restr"
-	"github.com/connet-dev/connet/proto/pberror"
 	"github.com/connet-dev/connet/server/control"
 )
 

@@ -10,7 +10,7 @@ import (
 
 	"github.com/connet-dev/connet/model"
 	"github.com/connet-dev/connet/pkg/logc"
-	"github.com/connet-dev/connet/proto/pbclient"
+	"github.com/connet-dev/connet/pkg/proto/pbclient"
 )
 
 type Stores interface {

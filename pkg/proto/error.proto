@@ -1,7 +1,7 @@
 syntax = "proto3";
 package error;
 
-option go_package = "github.com/connet-dev/connet/proto/pberror";
+option go_package = "github.com/connet-dev/connet/pkg/proto/pberror";
 
 enum Code {
   // Generic

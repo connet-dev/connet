@@ -12,15 +12,18 @@ import (
 	"sync"
 	"time"
 
+	"github.com/jackpal/gateway"
+	"github.com/quic-go/quic-go"
+
 	"github.com/connet-dev/connet/pkg/notify"
 	"github.com/connet-dev/connet/pkg/reliable"
 	"github.com/connet-dev/connet/pkg/slogc"
-	"github.com/jackpal/gateway"
-	"github.com/quic-go/quic-go"
 )
 
-type LocalIPResolver func(context.Context) (net.IP, error)
-type GatewayIPResolver func(context.Context, net.IP) (net.IP, error)
+type (
+	LocalIPResolver   func(context.Context) (net.IP, error)
+	GatewayIPResolver func(context.Context, net.IP) (net.IP, error)
+)
 
 type PMPConfig struct {
 	Disabled        bool
@@ -28,9 +31,11 @@ type PMPConfig struct {
 	GatewayResolver GatewayIPResolver
 }
 
-const pmpBroadcastAddr = "224.0.0.1:5350"
-const pmpCommandPort = 5351
-const pmpLifetime = 10 * 60 // 10 minutes
+const (
+	pmpBroadcastAddr = "224.0.0.1:5350"
+	pmpCommandPort   = 5351
+	pmpLifetime      = 10 * 60 // 10 minutes
+)
 
 type PMP struct {
 	PMPConfig
@@ -286,7 +291,7 @@ func (s *PMP) pmpListenAddressChange(ctx context.Context) error {
 		}
 	}()
 
-	var readResponse = func(ctx context.Context, buff []byte) (int, net.Addr, error) {
+	readResponse := func(ctx context.Context, buff []byte) (int, net.Addr, error) {
 		if err := conn.SetReadDeadline(time.Now().Add(100 * time.Millisecond)); err != nil {
 			return 0, nil, err
 		}
@@ -441,12 +446,14 @@ func (s *PMP) readResponse(ctx context.Context, expectedSize int, expectedOpcode
 	return resp, nil
 }
 
-var errPMPUnsupportedVersion = errors.New("nat-pmp - unsupported version")
-var errPMPNotAuthorized = errors.New("nat-pmp - not authorized")
-var errPMPNetworkFailure = errors.New("nat-pmp - network failure")
-var errPMPOutOfResource = errors.New("nat-pmp - out of resource")
-var errPMPUnsupportedOpcode = errors.New("nat-pmp - unsupported opcode")
-var errPMPUnknownError = errors.New("nat-pmp - unknown error")
+var (
+	errPMPUnsupportedVersion = errors.New("nat-pmp - unsupported version")
+	errPMPNotAuthorized      = errors.New("nat-pmp - not authorized")
+	errPMPNetworkFailure     = errors.New("nat-pmp - network failure")
+	errPMPOutOfResource      = errors.New("nat-pmp - out of resource")
+	errPMPUnsupportedOpcode  = errors.New("nat-pmp - unsupported opcode")
+	errPMPUnknownError       = errors.New("nat-pmp - unknown error")
+)
 
 func checkResponseHeader(resp []byte, opcode byte) error {
 	if resp[0] != 0 {

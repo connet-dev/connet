@@ -5,8 +5,9 @@ import (
 	"fmt"
 	"io"
 
-	"github.com/connet-dev/connet/proto/pberror"
 	"google.golang.org/protobuf/proto"
+
+	"github.com/connet-dev/connet/pkg/proto/pberror"
 )
 
 // maxMessageSize is the maximum allowed protobuf message size (16 MB).

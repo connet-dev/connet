@@ -14,17 +14,18 @@ import (
 	"sync"
 	"time"
 
+	"github.com/quic-go/quic-go"
+
 	"github.com/connet-dev/connet/model"
 	"github.com/connet-dev/connet/pkg/iterc"
 	"github.com/connet-dev/connet/pkg/logc"
+	"github.com/connet-dev/connet/pkg/proto"
+	"github.com/connet-dev/connet/pkg/proto/pbclient"
+	"github.com/connet-dev/connet/pkg/proto/pberror"
+	"github.com/connet-dev/connet/pkg/proto/pbmodel"
 	"github.com/connet-dev/connet/pkg/quicc"
 	"github.com/connet-dev/connet/pkg/reliable"
 	"github.com/connet-dev/connet/pkg/slogc"
-	"github.com/connet-dev/connet/proto"
-	"github.com/connet-dev/connet/proto/pbclient"
-	"github.com/connet-dev/connet/proto/pberror"
-	"github.com/connet-dev/connet/proto/pbmodel"
-	"github.com/quic-go/quic-go"
 )
 
 type ClientAuthenticateRequest struct {

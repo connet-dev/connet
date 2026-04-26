@@ -10,6 +10,8 @@ import (
 	"net"
 	"time"
 
+	"github.com/quic-go/quic-go"
+
 	"github.com/connet-dev/connet/model"
 	"github.com/connet-dev/connet/pkg/certc"
 	"github.com/connet-dev/connet/pkg/iterc"
@@ -17,7 +19,6 @@ import (
 	"github.com/connet-dev/connet/pkg/notify"
 	"github.com/connet-dev/connet/pkg/reliable"
 	"github.com/connet-dev/connet/pkg/statusc"
-	"github.com/quic-go/quic-go"
 )
 
 type Config struct {

@@ -19,16 +19,14 @@ func (e *Error) Error() string {
 }
 
 func GetError(err error) *Error {
-	var e *Error
-	if errors.As(err, &e) {
+	if e, ok := errors.AsType[*Error](err); ok {
 		return e
 	}
 	return nil
 }
 
 func GetAppError(err error) *quic.ApplicationError {
-	var e *quic.ApplicationError
-	if errors.As(err, &e) {
+	if e, ok := errors.AsType[*quic.ApplicationError](err); ok {
 		return e
 	}
 	return nil

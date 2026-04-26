@@ -12,11 +12,12 @@ import (
 	"net/url"
 	"time"
 
+	"github.com/gorilla/websocket"
+
 	"github.com/connet-dev/connet/model"
 	"github.com/connet-dev/connet/pkg/netc"
 	"github.com/connet-dev/connet/pkg/slogc"
 	"github.com/connet-dev/connet/pkg/websocketc"
-	"github.com/gorilla/websocket"
 )
 
 // SourceTCP creates a new source, and exposes it to a local TCP address to accept incoming traffic
@@ -162,7 +163,7 @@ func NewHTTPSource(src *Source, srcURL *url.URL, cfg *tls.Config) *HTTPSource {
 
 func (s *HTTPSource) Run(ctx context.Context) error {
 	endpoint := s.src.Config().Endpoint.String()
-	var targetURL = *s.srcURL
+	targetURL := *s.srcURL
 	targetURL.Scheme = "http"
 	targetURL.Host = endpoint
 

@@ -13,8 +13,9 @@ import (
 	"strings"
 	"time"
 
-	"github.com/connet-dev/connet/pkg/nat"
 	"github.com/quic-go/quic-go"
+
+	"github.com/connet-dev/connet/pkg/nat"
 )
 
 type config struct {
@@ -212,7 +213,7 @@ func DirectStatelessResetKeyFile(path string) Option {
 // DirectStatelessResetKeyFromEnv reads stateless reset key file from the env and configures it for the direct server
 func DirectStatelessResetKeyFromEnv() Option {
 	return func(cfg *config) error {
-		var name = fmt.Sprintf("stateless-reset-%s.key",
+		name := fmt.Sprintf("stateless-reset-%s.key",
 			strings.TrimPrefix(strings.ReplaceAll(cfg.directAddr.String(), ":", "-"), "-"))
 
 		var path string
@@ -239,7 +240,7 @@ func DirectStatelessResetKeyFromEnv() Option {
 			case err == nil:
 				// the directory is already there, nothing to do
 			case errors.Is(err, os.ErrNotExist):
-				if err := os.Mkdir(dir, 0700); err != nil {
+				if err := os.Mkdir(dir, 0o700); err != nil {
 					return fmt.Errorf("mkdir cache dir: %w", err)
 				}
 			default:
@@ -267,7 +268,7 @@ func DirectStatelessResetKeyFromEnv() Option {
 			if _, err := io.ReadFull(rand.Reader, key[:]); err != nil {
 				return fmt.Errorf("generate stateless reset key: %w", err)
 			}
-			if err := os.WriteFile(path, key[:], 0600); err != nil {
+			if err := os.WriteFile(path, key[:], 0o600); err != nil {
 				return fmt.Errorf("write stateless reset key: %w", err)
 			}
 			cfg.directResetKey = &key

@@ -1,7 +1,7 @@
 package model
 
 import (
-	"github.com/connet-dev/connet/proto/pbmodel"
+	"github.com/connet-dev/connet/pkg/proto/pbmodel"
 )
 
 type Endpoint struct{ string }
@@ -32,7 +32,7 @@ func (f *Endpoint) UnmarshalText(b []byte) error {
 }
 
 func EndpointNames(eps []Endpoint) []string {
-	var strs = make([]string, len(eps))
+	strs := make([]string, len(eps))
 	for i, ep := range eps {
 		strs[i] = ep.string
 	}

@@ -3,7 +3,7 @@ package client_relay;
 
 import "error.proto";
 
-option go_package = "github.com/connet-dev/connet/proto/pbclientrelay";
+option go_package = "github.com/connet-dev/connet/pkg/proto/pbclientrelay";
 
 message AuthenticateReq {
   bytes authentication = 1;

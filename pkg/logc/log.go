@@ -9,8 +9,9 @@ import (
 	"slices"
 	"time"
 
-	"github.com/connet-dev/connet/pkg/reliable"
 	"github.com/klev-dev/klevdb"
+
+	"github.com/connet-dev/connet/pkg/reliable"
 )
 
 const (

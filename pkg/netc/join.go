@@ -5,8 +5,9 @@ import (
 	"io"
 	"net"
 
-	"github.com/connet-dev/connet/pkg/slogc"
 	"golang.org/x/sync/errgroup"
+
+	"github.com/connet-dev/connet/pkg/slogc"
 )
 
 func Join(l io.ReadWriteCloser, r io.ReadWriteCloser) error {

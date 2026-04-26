@@ -8,15 +8,16 @@ import (
 	"sync"
 	"sync/atomic"
 
+	"github.com/quic-go/quic-go"
+
 	"github.com/connet-dev/connet/model"
 	"github.com/connet-dev/connet/pkg/iterc"
+	"github.com/connet-dev/connet/pkg/proto"
+	"github.com/connet-dev/connet/pkg/proto/pbclient"
 	"github.com/connet-dev/connet/pkg/quicc"
 	"github.com/connet-dev/connet/pkg/reliable"
 	"github.com/connet-dev/connet/pkg/slogc"
 	"github.com/connet-dev/connet/pkg/statusc"
-	"github.com/connet-dev/connet/proto"
-	"github.com/connet-dev/connet/proto/pbclient"
-	"github.com/quic-go/quic-go"
 )
 
 var errEndpointClosed = fmt.Errorf("endpoint closed")

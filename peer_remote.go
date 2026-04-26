@@ -11,21 +11,24 @@ import (
 	"net/netip"
 	"time"
 
+	"github.com/quic-go/quic-go"
+
 	"github.com/connet-dev/connet/model"
 	"github.com/connet-dev/connet/pkg/iterc"
 	"github.com/connet-dev/connet/pkg/notify"
+	"github.com/connet-dev/connet/pkg/proto"
+	"github.com/connet-dev/connet/pkg/proto/pbclient"
+	"github.com/connet-dev/connet/pkg/proto/pbconnect"
+	"github.com/connet-dev/connet/pkg/proto/pberror"
 	"github.com/connet-dev/connet/pkg/quicc"
 	"github.com/connet-dev/connet/pkg/reliable"
 	"github.com/connet-dev/connet/pkg/slogc"
-	"github.com/connet-dev/connet/proto"
-	"github.com/connet-dev/connet/proto/pbclient"
-	"github.com/connet-dev/connet/proto/pbconnect"
-	"github.com/connet-dev/connet/proto/pberror"
-	"github.com/quic-go/quic-go"
 )
 
-var errRemotePeerRemoved = errors.New("remote peer removed")
-var errRemotePeerPathRemoved = errors.New("remote peer path removed")
+var (
+	errRemotePeerRemoved     = errors.New("remote peer removed")
+	errRemotePeerPathRemoved = errors.New("remote peer path removed")
+)
 
 func isPeerTerminalError(err error) bool {
 	switch {

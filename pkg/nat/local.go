@@ -32,7 +32,6 @@ func (s *Local) Get() []netip.AddrPort {
 		localAddrPorts[i] = netip.AddrPortFrom(addr, s.localPort)
 	}
 	return localAddrPorts
-
 }
 
 func (s *Local) Listen(ctx context.Context, fn func([]netip.AddrPort) error) error {

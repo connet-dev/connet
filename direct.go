@@ -10,12 +10,13 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/quic-go/quic-go"
+
 	"github.com/connet-dev/connet/model"
 	"github.com/connet-dev/connet/pkg/iterc"
+	"github.com/connet-dev/connet/pkg/proto/pberror"
 	"github.com/connet-dev/connet/pkg/quicc"
 	"github.com/connet-dev/connet/pkg/slogc"
-	"github.com/connet-dev/connet/proto/pberror"
-	"github.com/quic-go/quic-go"
 )
 
 type directServer struct {

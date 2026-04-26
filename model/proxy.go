@@ -4,8 +4,9 @@ import (
 	"fmt"
 	"net"
 
-	"github.com/connet-dev/connet/proto/pbconnect"
 	"github.com/pires/go-proxyproto"
+
+	"github.com/connet-dev/connet/pkg/proto/pbconnect"
 )
 
 type ProxyVersion struct{ string }

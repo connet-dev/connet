@@ -8,9 +8,10 @@ import (
 	"net"
 	"os"
 
+	"github.com/spf13/cobra"
+
 	"github.com/connet-dev/connet/server"
 	"github.com/connet-dev/connet/server/relay"
-	"github.com/spf13/cobra"
 )
 
 type RelayConfig struct {

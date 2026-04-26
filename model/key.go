@@ -3,8 +3,9 @@ package model
 import (
 	"crypto/x509"
 
-	"github.com/connet-dev/connet/pkg/netc"
 	"golang.org/x/crypto/blake2s"
+
+	"github.com/connet-dev/connet/pkg/netc"
 )
 
 type Key struct{ string }

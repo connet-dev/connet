@@ -12,21 +12,22 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/quic-go/quic-go"
+	"golang.org/x/crypto/nacl/box"
+	protobuf "google.golang.org/protobuf/proto"
+
 	"github.com/connet-dev/connet/model"
 	"github.com/connet-dev/connet/pkg/certc"
 	"github.com/connet-dev/connet/pkg/iterc"
 	"github.com/connet-dev/connet/pkg/logc"
+	"github.com/connet-dev/connet/pkg/proto"
+	"github.com/connet-dev/connet/pkg/proto/pbclientrelay"
+	"github.com/connet-dev/connet/pkg/proto/pberror"
+	"github.com/connet-dev/connet/pkg/proto/pbrelay"
 	"github.com/connet-dev/connet/pkg/quicc"
 	"github.com/connet-dev/connet/pkg/reliable"
 	"github.com/connet-dev/connet/pkg/slogc"
 	"github.com/connet-dev/connet/pkg/statusc"
-	"github.com/connet-dev/connet/proto"
-	"github.com/connet-dev/connet/proto/pbclientrelay"
-	"github.com/connet-dev/connet/proto/pberror"
-	"github.com/connet-dev/connet/proto/pbrelay"
-	"github.com/quic-go/quic-go"
-	"golang.org/x/crypto/nacl/box"
-	protobuf "google.golang.org/protobuf/proto"
 )
 
 type controlClient struct {

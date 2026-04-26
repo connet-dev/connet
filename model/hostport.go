@@ -4,7 +4,7 @@ import (
 	"fmt"
 
 	"github.com/connet-dev/connet/pkg/iterc"
-	"github.com/connet-dev/connet/proto/pbmodel"
+	"github.com/connet-dev/connet/pkg/proto/pbmodel"
 )
 
 type HostPort struct {

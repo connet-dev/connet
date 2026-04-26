@@ -1,7 +1,7 @@
 syntax = "proto3";
 package model;
 
-option go_package = "github.com/connet-dev/connet/proto/pbmodel";
+option go_package = "github.com/connet-dev/connet/pkg/proto/pbmodel";
 
 message Addr {
   bytes v4 = 1;

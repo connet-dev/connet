@@ -17,19 +17,22 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/quic-go/quic-go"
+
 	"github.com/connet-dev/connet/model"
 	"github.com/connet-dev/connet/pkg/cryptoc"
+	"github.com/connet-dev/connet/pkg/proto"
+	"github.com/connet-dev/connet/pkg/proto/pbconnect"
 	"github.com/connet-dev/connet/pkg/quicc"
 	"github.com/connet-dev/connet/pkg/statusc"
-	"github.com/connet-dev/connet/proto"
-	"github.com/connet-dev/connet/proto/pbconnect"
-	"github.com/quic-go/quic-go"
 )
 
-var ErrSourceClosed = fmt.Errorf("source closed: %w", errEndpointClosed)
-var ErrSourceConnect = errors.New("cannot connect destination")
-var ErrSourceConnectDestinations = fmt.Errorf("%w: all peer connections were unreachable", ErrSourceConnect)
-var ErrSourceNoActiveDestinations = fmt.Errorf("%w: no active peer connections", ErrSourceConnect)
+var (
+	ErrSourceClosed               = fmt.Errorf("source closed: %w", errEndpointClosed)
+	ErrSourceConnect              = errors.New("cannot connect destination")
+	ErrSourceConnectDestinations  = fmt.Errorf("%w: all peer connections were unreachable", ErrSourceConnect)
+	ErrSourceNoActiveDestinations = fmt.Errorf("%w: no active peer connections", ErrSourceConnect)
+)
 
 // Source represents an endpoint that can connect to remote destinations.
 // It is compatible with [net.Dialer] on top of connet infrastructure
@@ -157,7 +160,7 @@ func (s *Source) runActiveErr(ctx context.Context) error {
 	return s.ep.peer.activeConnsListen(ctx, func(active map[peerConnKey]*quic.Conn) error {
 		s.logger.Debug("active conns", "len", len(active))
 
-		var conns = make([]sourceConn, 0, len(active))
+		conns := make([]sourceConn, 0, len(active))
 		for peer, conn := range active {
 			conns = append(conns, sourceConn{peer, conn})
 		}
@@ -411,7 +414,7 @@ func (s *Source) dialStream(ctx context.Context, dest sourceConn, stream *quic.S
 		return nil, fmt.Errorf("source connect read response: %w", err)
 	}
 
-	var encStream = quicc.StreamConn(stream, dest.conn)
+	encStream := quicc.StreamConn(stream, dest.conn)
 	if dest.peer.style.isRelay() {
 		destinationEncryption, err := model.EncryptionFromPB(resp.Connect.DestinationEncryption)
 		switch {

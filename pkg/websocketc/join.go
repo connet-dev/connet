@@ -4,9 +4,10 @@ import (
 	"fmt"
 	"net"
 
-	"github.com/connet-dev/connet/pkg/slogc"
 	"github.com/gorilla/websocket"
 	"golang.org/x/sync/errgroup"
+
+	"github.com/connet-dev/connet/pkg/slogc"
 )
 
 func Join(nc net.Conn, wc *websocket.Conn) error {
@@ -35,7 +36,7 @@ func Join(nc net.Conn, wc *websocket.Conn) error {
 				slogc.FineDefault("error closing websocket connection", "err", err)
 			}
 		}()
-		var buf = make([]byte, 4096)
+		buf := make([]byte, 4096)
 		for {
 			n, err := nc.Read(buf)
 			if err != nil {

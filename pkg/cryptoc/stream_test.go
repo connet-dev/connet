@@ -16,14 +16,14 @@ func TestStream(t *testing.T) {
 	serverReader, clientWriter := io.Pipe()
 	clientReader, serverWriter := io.Pipe()
 
-	var client = &rwc{clientReader, clientWriter}
-	var server = &rwc{serverReader, serverWriter}
+	client := &rwc{clientReader, clientWriter}
+	server := &rwc{serverReader, serverWriter}
 
-	var clientAEAD = newAEAD(t)
-	var serverAEAD = newAEAD(t)
+	clientAEAD := newAEAD(t)
+	serverAEAD := newAEAD(t)
 
-	var clientStream = NewStream(client, serverAEAD, clientAEAD)
-	var serverStream = NewStream(server, clientAEAD, serverAEAD)
+	clientStream := NewStream(client, serverAEAD, clientAEAD)
+	serverStream := NewStream(server, clientAEAD, serverAEAD)
 
 	go func() {
 		_, err := io.Copy(serverStream, serverStream)
@@ -33,16 +33,16 @@ func TestStream(t *testing.T) {
 	t.Run("small", func(t *testing.T) {
 		go func() {
 			for i := range 1024 {
-				var out = []byte(fmt.Sprintf("hello world %d", i))
+				out := []byte(fmt.Sprintf("hello world %d", i))
 				_, err := clientStream.Write(out)
 				require.NoError(t, err)
 			}
 		}()
 
 		for i := range 1024 {
-			var out = []byte(fmt.Sprintf("hello world %d", i))
+			out := []byte(fmt.Sprintf("hello world %d", i))
 
-			var in = make([]byte, len(out))
+			in := make([]byte, len(out))
 			n, err := clientStream.Read(in)
 			require.NoError(t, err)
 			require.Equal(t, len(out), n)
@@ -51,7 +51,7 @@ func TestStream(t *testing.T) {
 	})
 
 	t.Run("big", func(t *testing.T) {
-		var out = make([]byte, 1024*1024)
+		out := make([]byte, 1024*1024)
 		_, err := io.ReadFull(rand.Reader, out)
 		require.NoError(t, err)
 
@@ -60,7 +60,7 @@ func TestStream(t *testing.T) {
 			require.NoError(t, err)
 		}()
 
-		var in = make([]byte, len(out))
+		in := make([]byte, len(out))
 		n, err := io.ReadFull(clientStream, in)
 		require.NoError(t, err)
 		require.Equal(t, len(out), n)

@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"slices"
 
-	"github.com/connet-dev/connet/proto/pbconnect"
+	"github.com/connet-dev/connet/pkg/proto/pbconnect"
 )
 
 type EncryptionScheme struct{ string }

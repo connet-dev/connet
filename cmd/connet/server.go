@@ -6,8 +6,9 @@ import (
 	"log/slog"
 	"net"
 
-	"github.com/connet-dev/connet/server"
 	"github.com/spf13/cobra"
+
+	"github.com/connet-dev/connet/server"
 )
 
 type ServerConfig struct {

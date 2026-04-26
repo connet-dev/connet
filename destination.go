@@ -9,19 +9,22 @@ import (
 	"log/slog"
 	"net"
 
+	"github.com/quic-go/quic-go"
+
 	"github.com/connet-dev/connet/model"
 	"github.com/connet-dev/connet/pkg/cryptoc"
+	"github.com/connet-dev/connet/pkg/proto"
+	"github.com/connet-dev/connet/pkg/proto/pbconnect"
+	"github.com/connet-dev/connet/pkg/proto/pberror"
 	"github.com/connet-dev/connet/pkg/quicc"
 	"github.com/connet-dev/connet/pkg/statusc"
-	"github.com/connet-dev/connet/proto"
-	"github.com/connet-dev/connet/proto/pbconnect"
-	"github.com/connet-dev/connet/proto/pberror"
-	"github.com/quic-go/quic-go"
 )
 
-var ErrDestinationClosed = fmt.Errorf("destination closed: %w", errEndpointClosed)
-var errDestinationConnUpdated = errors.New("destination connection updated")
-var errDestinationConnRemoved = errors.New("destination connection removed")
+var (
+	ErrDestinationClosed      = fmt.Errorf("destination closed: %w", errEndpointClosed)
+	errDestinationConnUpdated = errors.New("destination connection updated")
+	errDestinationConnRemoved = errors.New("destination connection removed")
+)
 
 // Destination represents an endpoint that accepts connections from remote endpoints
 // It implements [net.Listener] on top of connet infrastructure
@@ -120,7 +123,7 @@ func (d *Destination) runActive(ctx context.Context) {
 }
 
 func (d *Destination) runActiveErr(ctx context.Context) error {
-	var conns = map[peerConnKey]*destinationConn{}
+	conns := map[peerConnKey]*destinationConn{}
 	defer func() {
 		for peer, conn := range conns {
 			conn.cancel(ErrDestinationClosed)
@@ -303,7 +306,7 @@ func (d *destinationConn) runConnect(ctx context.Context, stream *quic.Stream, r
 		return fmt.Errorf("destination connect write response: %w", err)
 	}
 
-	var encStream = quicc.StreamConn(stream, d.conn)
+	encStream := quicc.StreamConn(stream, d.conn)
 	if d.peer.style.isRelay() {
 		switch connect.DestinationEncryption {
 		case pbconnect.RelayEncryptionScheme_TLS:

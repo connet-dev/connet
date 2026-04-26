@@ -20,6 +20,10 @@ import (
 	"testing"
 	"time"
 
+	"github.com/gorilla/websocket"
+	"github.com/pires/go-proxyproto"
+	"github.com/stretchr/testify/require"
+
 	"github.com/connet-dev/connet/model"
 	"github.com/connet-dev/connet/pkg/certc"
 	"github.com/connet-dev/connet/pkg/netc"
@@ -30,9 +34,6 @@ import (
 	"github.com/connet-dev/connet/server/control"
 	relaysrv "github.com/connet-dev/connet/server/relay"
 	"github.com/connet-dev/connet/server/selfhosted"
-	"github.com/gorilla/websocket"
-	"github.com/pires/go-proxyproto"
-	"github.com/stretchr/testify/require"
 )
 
 type connectedTestCase struct {
@@ -293,7 +294,7 @@ func TestE2E(t *testing.T) {
 
 		var acceptConn, dialConn net.Conn
 		var acceptErr, dialErr error
-		var acceptCh, dialCh = make(chan struct{}), make(chan struct{})
+		acceptCh, dialCh := make(chan struct{}), make(chan struct{})
 		go func() {
 			acceptConn, acceptErr = dst.Accept()
 			close(acceptCh)
@@ -345,7 +346,7 @@ func TestE2E(t *testing.T) {
 
 		var acceptConn, dialConn net.Conn
 		var acceptErr, dialErr error
-		var acceptCh, dialCh = make(chan struct{}), make(chan struct{})
+		acceptCh, dialCh := make(chan struct{}), make(chan struct{})
 		go func() {
 			acceptConn, acceptErr = dst.Accept()
 			close(acceptCh)
@@ -582,7 +583,7 @@ func TestE2E(t *testing.T) {
 						require.NoError(t, err)
 						defer conn.Close()
 
-						var pingData = []byte(fmt.Sprintf("xxx-%d", rand.Uint64()))
+						pingData := []byte(fmt.Sprintf("xxx-%d", rand.Uint64()))
 						err = conn.WriteMessage(websocket.BinaryMessage, pingData)
 						require.NoError(t, err)
 
