@@ -24,7 +24,8 @@ func GetClientControlNextProto(conn *quic.Conn) ClientControlNextProto {
 var (
 	ClientControlUnknown = ClientControlNextProto{}
 	ClientControlV03     = ClientControlNextProto{"connet-client/0.3"} // 0.13.0
-	ClientControlLatest  = ClientControlV03
+	ClientControlV04     = ClientControlNextProto{"connet-client/0.4"} // 0.15.0
+	ClientControlLatest  = ClientControlV04
 	// Update GetClientControlNextProto when adding a new one
 )
 
@@ -84,6 +85,7 @@ func GetRelayControlNextProto(conn *quic.Conn) RelayControlNextProto {
 var (
 	RelayControlUnknown = RelayControlNextProto{}
 	RelayControlV03     = RelayControlNextProto{"connet-relay/0.3"} // 0.13.0
-	RelayControlLatest  = RelayControlV03
+	RelayControlV04     = RelayControlNextProto{"connet-relay/0.4"} // 0.15.0
+	RelayControlLatest  = RelayControlV04
 	// Update GetRelayControlNextProto when adding a new one
 )

@@ -396,7 +396,7 @@ func (x *RemotePeer) GetPeer() *Peer {
 type Relay struct {
 	state             protoimpl.MessageState `protogen:"open.v1"`
 	Id                string                 `protobuf:"bytes,1,opt,name=id,proto3" json:"id,omitempty"`                                         // relay id as assigned by the control server
-	AddressesHps      []*pbmodel.HostPort    `protobuf:"bytes,2,rep,name=addresses_hps,json=addressesHps,proto3" json:"addresses_hps,omitempty"` // deprecated
+	AddressesHps      []*pbmodel.HostPort    `protobuf:"bytes,2,rep,name=addresses_hps,json=addressesHps,proto3" json:"addresses_hps,omitempty"` // TODO remove in 0.16.0
 	Addresses         []string               `protobuf:"bytes,6,rep,name=addresses,proto3" json:"addresses,omitempty"`
 	ServerCertificate []byte                 `protobuf:"bytes,3,opt,name=server_certificate,json=serverCertificate,proto3" json:"server_certificate,omitempty"` // generic certificate used by this relay
 	Authentication    []byte                 `protobuf:"bytes,4,opt,name=authentication,proto3" json:"authentication,omitempty"`                                // endpoint/role specific auth to use at the relay

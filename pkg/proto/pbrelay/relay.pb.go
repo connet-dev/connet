@@ -26,7 +26,7 @@ const (
 type AuthenticateReq struct {
 	state                  protoimpl.MessageState `protogen:"open.v1"`
 	Token                  string                 `protobuf:"bytes,1,opt,name=token,proto3" json:"token,omitempty"`
-	AddressesHps           []*pbmodel.HostPort    `protobuf:"bytes,5,rep,name=addresses_hps,json=addressesHps,proto3" json:"addresses_hps,omitempty"` // deprecated
+	AddressesHps           []*pbmodel.HostPort    `protobuf:"bytes,5,rep,name=addresses_hps,json=addressesHps,proto3" json:"addresses_hps,omitempty"` // TODO remove in 0.16.0 deprecated
 	Addresses              []string               `protobuf:"bytes,9,rep,name=addresses,proto3" json:"addresses,omitempty"`
 	ReconnectToken         []byte                 `protobuf:"bytes,3,opt,name=reconnect_token,json=reconnectToken,proto3" json:"reconnect_token,omitempty"`
 	BuildVersion           string                 `protobuf:"bytes,4,opt,name=build_version,json=buildVersion,proto3" json:"build_version,omitempty"`

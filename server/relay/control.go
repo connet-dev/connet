@@ -76,7 +76,7 @@ func newControlClient(cfg Config, clientsCert *certc.Cert, configStore logc.KV[C
 		controlTLSConf: &tls.Config{
 			ServerName: cfg.ControlHost,
 			RootCAs:    cfg.ControlCAs,
-			NextProtos: iterc.MapVarStrings(proto.RelayControlV03),
+			NextProtos: iterc.MapVarStrings(proto.RelayControlV03, proto.RelayControlV04),
 		},
 		handshakeIdleTimeout: cfg.HandshakeIdleTimeout,
 

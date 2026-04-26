@@ -260,7 +260,7 @@ func (s *relayServer) runListener(ctx context.Context, ingress Ingress) error {
 
 	tlsConf := ingress.ListenTLS.Clone()
 	if len(tlsConf.NextProtos) == 0 {
-		tlsConf.NextProtos = iterc.MapVarStrings(proto.RelayControlV03)
+		tlsConf.NextProtos = iterc.MapVarStrings(proto.RelayControlV03, proto.RelayControlV04)
 	}
 
 	quicConf := quicc.ServerConfig()
@@ -426,7 +426,7 @@ func (c *relayConn) authenticate(ctx context.Context) (*relayConnAuth, error) {
 		return nil, fmt.Errorf("auth read request: %w", err)
 	}
 
-	protocol := proto.RelayControlV03
+	protocol := proto.GetRelayControlNextProto(c.conn)
 	cert, err := x509.ParseCertificate(req.ServerCertificate)
 	if err != nil {
 		perr := pberror.GetError(err)
