@@ -62,7 +62,7 @@ func newSource(ctx context.Context, cl *Client, cfg SourceConfig) (*Source, erro
 	}
 
 	var connsTracking map[peerID]*atomic.Int32
-	if cfg.DestinationPolicy == model.LeastConnsPolicy {
+	if cfg.DestinationPolicy == LeastConnsPolicy {
 		connsTracking = map[peerID]*atomic.Int32{}
 	}
 
@@ -88,7 +88,7 @@ func (s *Source) Dial(network, address string) (net.Conn, error) {
 // DialContext dials into any available destination. Both network and address are ignored.
 // Blocks until connection can be established.
 func (s *Source) DialContext(ctx context.Context, network, address string) (net.Conn, error) {
-	if s.cfg.DestinationPolicy == model.NoPolicy {
+	if s.cfg.DestinationPolicy == NoPolicy {
 		conns, err := s.findActive()
 		if err != nil {
 			return nil, fmt.Errorf("find active conns: %w", err)
@@ -106,12 +106,12 @@ func (s *Source) DialContext(ctx context.Context, network, address string) (net.
 	}
 
 	switch s.cfg.DestinationRetry {
-	case model.NeverRetry:
+	case NeverRetry:
 		conns = conns[0:1]
-	case model.CountRetry:
+	case CountRetry:
 		maxLen := min(len(conns), s.cfg.DestinationRetryMax)
 		conns = conns[0:maxLen]
-	case model.TimedRetry:
+	case TimedRetry:
 		cancelCtx, cancel := context.WithTimeout(ctx, time.Duration(s.cfg.DestinationRetryMax)*time.Millisecond)
 		defer cancel()
 		ctx = cancelCtx
@@ -252,13 +252,13 @@ func (s *Source) findActiveByPeer() ([]peerSourceConn, error) {
 	}
 
 	switch s.cfg.DestinationPolicy {
-	case model.LeastLatencyPolicy:
+	case LeastLatencyPolicy:
 		return s.leastLatencySorted(peerConns), nil
-	case model.LeastConnsPolicy:
+	case LeastConnsPolicy:
 		return s.leastConnsSortedByPeer(peerConns), nil
-	case model.RoundRobinPolicy:
+	case RoundRobinPolicy:
 		return s.roundRobinSorted(peerConns), nil
-	case model.RandomPolicy:
+	case RandomPolicy:
 		return s.randomSorted(peerConns), nil
 	default:
 		return peerConns, nil
@@ -352,7 +352,7 @@ func (s *Source) dial(ctx context.Context, dest sourceConn) (net.Conn, error) {
 		return nil, err
 	}
 
-	if s.cfg.DestinationPolicy == model.LeastConnsPolicy {
+	if s.cfg.DestinationPolicy == LeastConnsPolicy {
 		s.connsTrackingMu.RLock()
 		counter, ok := s.connsTracking[dest.peer.id]
 		if ok {
@@ -459,6 +459,6 @@ func (s *Source) dialStream(ctx context.Context, dest sourceConn, stream *quic.S
 	}
 
 	s.logger.Debug("dialed conn", "style", dest.peer.style)
-	proxyProto := model.ProxyVersionFromPB(resp.GetConnect().GetProxyProto())
+	proxyProto := ProxyVersionFromPB(resp.GetConnect().GetProxyProto())
 	return proxyProto.Wrap(encStream), nil
 }

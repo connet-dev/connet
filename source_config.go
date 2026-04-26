@@ -1,6 +1,7 @@
 package connet
 
 import (
+	"fmt"
 	"time"
 
 	"github.com/connet-dev/connet/model"
@@ -13,8 +14,8 @@ type SourceConfig struct {
 	RelayEncryptions []model.EncryptionScheme
 	DialTimeout      time.Duration
 
-	DestinationPolicy   model.LoadBalancePolicy
-	DestinationRetry    model.LoadBalanceRetry
+	DestinationPolicy   LoadBalancePolicy
+	DestinationRetry    LoadBalanceRetry
 	DestinationRetryMax int
 }
 
@@ -24,8 +25,8 @@ func NewSourceConfig(name string) SourceConfig {
 		Endpoint:          NewEndpoint(name),
 		Route:             RouteAny,
 		RelayEncryptions:  []model.EncryptionScheme{model.NoEncryption},
-		DestinationPolicy: model.NoPolicy,
-		DestinationRetry:  model.NeverRetry,
+		DestinationPolicy: NoPolicy,
+		DestinationRetry:  NeverRetry,
 	}
 }
 
@@ -48,15 +49,15 @@ func (cfg SourceConfig) WithDialTimeout(timeout time.Duration) SourceConfig {
 }
 
 // WithLoadBalance sets the load balancing behavior for this source
-func (cfg SourceConfig) WithLoadBalance(policy model.LoadBalancePolicy, retry model.LoadBalanceRetry, max int) SourceConfig {
+func (cfg SourceConfig) WithLoadBalance(policy LoadBalancePolicy, retry LoadBalanceRetry, max int) SourceConfig {
 	cfg.DestinationPolicy = policy
 	cfg.DestinationRetry = retry
 	cfg.DestinationRetryMax = max
 
 	switch {
-	case cfg.DestinationRetry == model.CountRetry && cfg.DestinationRetryMax == 0:
+	case cfg.DestinationRetry == CountRetry && cfg.DestinationRetryMax == 0:
 		cfg.DestinationRetryMax = 2
-	case cfg.DestinationRetry == model.TimedRetry && cfg.DestinationRetryMax == 0:
+	case cfg.DestinationRetry == TimedRetry && cfg.DestinationRetryMax == 0:
 		cfg.DestinationRetryMax = 1000
 	}
 
@@ -69,4 +70,53 @@ func (cfg SourceConfig) endpointConfig() endpointConfig {
 		role:     RoleSource,
 		route:    cfg.Route,
 	}
+}
+
+type LoadBalancePolicy struct{ string }
+
+var (
+	NoPolicy           = LoadBalancePolicy{}
+	LeastLatencyPolicy = LoadBalancePolicy{"least-latency"}
+	LeastConnsPolicy   = LoadBalancePolicy{"least-conns"}
+	RoundRobinPolicy   = LoadBalancePolicy{"round-robin"}
+	RandomPolicy       = LoadBalancePolicy{"random"}
+)
+
+func ParseLBPolicy(s string) (LoadBalancePolicy, error) {
+	switch s {
+	case NoPolicy.string:
+		return NoPolicy, nil
+	case LeastLatencyPolicy.string:
+		return LeastLatencyPolicy, nil
+	case LeastConnsPolicy.string:
+		return LeastConnsPolicy, nil
+	case RoundRobinPolicy.string:
+		return RoundRobinPolicy, nil
+	case RandomPolicy.string:
+		return RandomPolicy, nil
+	}
+	return NoPolicy, fmt.Errorf("invalid load balance policy '%s'", s)
+}
+
+type LoadBalanceRetry struct{ string }
+
+var (
+	NeverRetry = LoadBalanceRetry{}
+	CountRetry = LoadBalanceRetry{"count"}
+	TimedRetry = LoadBalanceRetry{"timed"}
+	AllRetry   = LoadBalanceRetry{"all"}
+)
+
+func ParseLBRetry(s string) (LoadBalanceRetry, error) {
+	switch s {
+	case NeverRetry.string:
+		return NeverRetry, nil
+	case CountRetry.string:
+		return CountRetry, nil
+	case TimedRetry.string:
+		return TimedRetry, nil
+	case AllRetry.string:
+		return AllRetry, nil
+	}
+	return NeverRetry, fmt.Errorf("invalid load balance retry '%s'", s)
 }

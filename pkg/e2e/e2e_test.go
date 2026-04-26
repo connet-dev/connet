@@ -107,12 +107,12 @@ var connectedTests = map[string]connectedTestCase{
 	},
 	// 101xx expose proxy proto server
 	"dst-direct-proxy-proto": {
-		connet.NewDestinationConfig("dst-direct-proxy-proto").WithRoute(connet.RouteDirect).WithProxy(model.ProxyV1),
+		connet.NewDestinationConfig("dst-direct-proxy-proto").WithRoute(connet.RouteDirect).WithProxy(connet.ProxyV1),
 		connet.NewSourceConfig("dst-direct-proxy-proto").WithRoute(connet.RouteAny),
 		10100,
 	},
 	"dst-relay-proxy-proto": {
-		connet.NewDestinationConfig("dst-relay-proxy-proto").WithRoute(connet.RouteRelay).WithProxy(model.ProxyV2),
+		connet.NewDestinationConfig("dst-relay-proxy-proto").WithRoute(connet.RouteRelay).WithProxy(connet.ProxyV2),
 		connet.NewSourceConfig("dst-relay-proxy-proto").WithRoute(connet.RouteAny),
 		10101,
 	},

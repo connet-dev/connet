@@ -423,11 +423,11 @@ func (fc SourceConfig) parse(name string, defaultRelayEncryptions []model.Encryp
 		relayEncryptions = res
 	}
 
-	lbPolicy, err := model.ParseLBPolicy(fc.LBPolicy)
+	lbPolicy, err := connet.ParseLBPolicy(fc.LBPolicy)
 	if err != nil {
 		return retErr(fmt.Errorf("parse lb policy: %w", err))
 	}
-	lbRetry, err := model.ParseLBRetry(fc.LBRetry)
+	lbRetry, err := connet.ParseLBRetry(fc.LBRetry)
 	if err != nil {
 		return retErr(fmt.Errorf("parse lb retry: %w", err))
 	}
@@ -522,11 +522,11 @@ func parseRouteOption(s string) (connet.RouteOption, error) {
 	return connet.ParseRouteOption(s)
 }
 
-func parseProxyVersion(s string) (model.ProxyVersion, error) {
+func parseProxyVersion(s string) (connet.ProxyVersion, error) {
 	if s == "" {
-		return model.ProxyNone, nil
+		return connet.ProxyNone, nil
 	}
-	return model.ParseProxyVersion(s)
+	return connet.ParseProxyVersion(s)
 }
 
 func parseRole(s string) (connet.Role, error) {

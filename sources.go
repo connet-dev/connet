@@ -14,7 +14,6 @@ import (
 
 	"github.com/gorilla/websocket"
 
-	"github.com/connet-dev/connet/model"
 	"github.com/connet-dev/connet/pkg/netc"
 	"github.com/connet-dev/connet/pkg/slogc"
 	"github.com/connet-dev/connet/pkg/websocketc"
@@ -138,7 +137,7 @@ func (s *TCPSource) Run(ctx context.Context) error {
 			return conn, err
 		},
 		Join: func(ctx context.Context, acceptConn, dialConn net.Conn) {
-			if proxyConn, ok := dialConn.(model.ProxyProtoConn); ok {
+			if proxyConn, ok := dialConn.(ProxyProtoConn); ok {
 				if err := proxyConn.WriteProxyHeader(acceptConn.RemoteAddr(), acceptConn.LocalAddr()); err != nil {
 					s.logger.Debug("source write proxy header", "err", err)
 					return
