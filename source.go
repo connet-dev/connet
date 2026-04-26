@@ -19,7 +19,6 @@ import (
 
 	"github.com/quic-go/quic-go"
 
-	"github.com/connet-dev/connet/model"
 	"github.com/connet-dev/connet/pkg/cryptoc"
 	"github.com/connet-dev/connet/pkg/proto"
 	"github.com/connet-dev/connet/pkg/proto/pbconnect"
@@ -384,15 +383,15 @@ func (s *Source) dialStream(ctx context.Context, dest sourceConn, stream *quic.S
 
 	connect := &pbconnect.Request_Connect{}
 	if dest.peer.style.isRelay() {
-		connect.SourceEncryption = model.PBFromEncryptions(s.cfg.RelayEncryptions)
+		connect.SourceEncryption = PBFromEncryptions(s.cfg.RelayEncryptions)
 
-		if slices.Contains(s.cfg.RelayEncryptions, model.TLSEncryption) {
+		if slices.Contains(s.cfg.RelayEncryptions, TLSEncryption) {
 			connect.SourceTls = &pbconnect.TLSConfiguration{
 				ClientName: s.ep.peer.serverCert.Leaf.DNSNames[0],
 			}
 		}
 
-		if slices.Contains(s.cfg.RelayEncryptions, model.DHXCPEncryption) {
+		if slices.Contains(s.cfg.RelayEncryptions, DHXCPEncryption) {
 			secret, cfg, err := s.ep.peer.newECDHConfig()
 			if err != nil {
 				return nil, fmt.Errorf("new ecdh config: %w", err)
@@ -416,7 +415,7 @@ func (s *Source) dialStream(ctx context.Context, dest sourceConn, stream *quic.S
 
 	encStream := quicc.StreamConn(stream, dest.conn)
 	if dest.peer.style.isRelay() {
-		destinationEncryption, err := model.EncryptionFromPB(resp.Connect.DestinationEncryption)
+		destinationEncryption, err := EncryptionFromPB(resp.Connect.DestinationEncryption)
 		switch {
 		case err != nil:
 			return nil, fmt.Errorf("source failed to negotiate encryption scheme: %w", err)
@@ -425,7 +424,7 @@ func (s *Source) dialStream(ctx context.Context, dest sourceConn, stream *quic.S
 		}
 
 		switch destinationEncryption {
-		case model.TLSEncryption:
+		case TLSEncryption:
 			s.logger.Debug("upgrading relay connection to TLS", "peer", dest.peer.id)
 			dstConfig, err := s.getDestinationTLS(resp.Connect.DestinationTls.ClientName)
 			if err != nil {
@@ -438,7 +437,7 @@ func (s *Source) dialStream(ctx context.Context, dest sourceConn, stream *quic.S
 			}
 
 			encStream = tlsConn
-		case model.DHXCPEncryption:
+		case DHXCPEncryption:
 			s.logger.Debug("upgrading relay connection to DHXCP", "peer", dest.peer.id)
 			dstPublic, err := s.ep.peer.getECDHPublicKey(resp.Connect.DestinationDhX25519)
 			if err != nil {
@@ -451,7 +450,7 @@ func (s *Source) dialStream(ctx context.Context, dest sourceConn, stream *quic.S
 			}
 
 			encStream = streamer(stream)
-		case model.NoEncryption:
+		case NoEncryption:
 			// nothing to do
 		default:
 			return nil, fmt.Errorf("source returned unknown encryption: %s", destinationEncryption)

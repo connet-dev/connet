@@ -11,7 +11,6 @@ import (
 
 	"github.com/quic-go/quic-go"
 
-	"github.com/connet-dev/connet/model"
 	"github.com/connet-dev/connet/pkg/cryptoc"
 	"github.com/connet-dev/connet/pkg/proto"
 	"github.com/connet-dev/connet/pkg/proto/pbconnect"
@@ -249,20 +248,20 @@ func (d *destinationConn) runConnect(ctx context.Context, stream *quic.Stream, r
 	}
 
 	if d.peer.style.isRelay() {
-		srcEncryptions, err := model.EncryptionsFromPB(req.Connect.SourceEncryption)
+		srcEncryptions, err := EncryptionsFromPB(req.Connect.SourceEncryption)
 		switch {
 		case err != nil:
 			return pbconnect.WriteError(stream, pberror.Code_DestinationRelayEncryptionError, "failed to negotiate encryption: %v", err)
 		case len(srcEncryptions) == 0:
 			// source doesn't include encryption logic, none is the only possible choice
-			srcEncryptions = []model.EncryptionScheme{model.NoEncryption}
+			srcEncryptions = []EncryptionScheme{NoEncryption}
 		}
 
-		encryption, err := model.SelectEncryptionScheme(d.dst.cfg.RelayEncryptions, srcEncryptions)
+		encryption, err := SelectEncryptionScheme(d.dst.cfg.RelayEncryptions, srcEncryptions)
 		switch {
 		case err != nil:
 			return pbconnect.WriteError(stream, pberror.Code_DestinationRelayEncryptionError, "select encryption scheme: %v", err)
-		case encryption == model.TLSEncryption:
+		case encryption == TLSEncryption:
 			scfg, err := d.dst.getSourceTLS(req.Connect.SourceTls.GetClientName())
 			if err != nil {
 				return pbconnect.WriteError(stream, pberror.Code_DestinationRelayEncryptionError, "destination tls: %v", err)
@@ -273,7 +272,7 @@ func (d *destinationConn) runConnect(ctx context.Context, stream *quic.Stream, r
 			connect.DestinationTls = &pbconnect.TLSConfiguration{
 				ClientName: d.dst.ep.peer.serverCert.Leaf.DNSNames[0],
 			}
-		case encryption == model.DHXCPEncryption:
+		case encryption == DHXCPEncryption:
 			// get check peer public key
 			srcPublic, err := d.dst.ep.peer.getECDHPublicKey(req.Connect.SourceDhX25519)
 			if err != nil {
@@ -293,7 +292,7 @@ func (d *destinationConn) runConnect(ctx context.Context, stream *quic.Stream, r
 				return pbconnect.WriteError(stream, pberror.Code_DestinationRelayEncryptionError, "new streamer: %v", err)
 			}
 			srcStreamer = streamer
-		case encryption == model.NoEncryption:
+		case encryption == NoEncryption:
 			// do nothing
 		default:
 			return pbconnect.WriteError(stream, pberror.Code_DestinationRelayEncryptionError, "unknown encryption scheme: %s", encryption)

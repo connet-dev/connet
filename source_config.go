@@ -3,15 +3,13 @@ package connet
 import (
 	"fmt"
 	"time"
-
-	"github.com/connet-dev/connet/model"
 )
 
 // SourceConfig structure represents source configuration.
 type SourceConfig struct {
 	Endpoint         Endpoint
 	Route            RouteOption
-	RelayEncryptions []model.EncryptionScheme
+	RelayEncryptions []EncryptionScheme
 	DialTimeout      time.Duration
 
 	DestinationPolicy   LoadBalancePolicy
@@ -24,7 +22,7 @@ func NewSourceConfig(name string) SourceConfig {
 	return SourceConfig{
 		Endpoint:          NewEndpoint(name),
 		Route:             RouteAny,
-		RelayEncryptions:  []model.EncryptionScheme{model.NoEncryption},
+		RelayEncryptions:  []EncryptionScheme{NoEncryption},
 		DestinationPolicy: NoPolicy,
 		DestinationRetry:  NeverRetry,
 	}
@@ -37,7 +35,7 @@ func (cfg SourceConfig) WithRoute(route RouteOption) SourceConfig {
 }
 
 // WithRelayEncryptions sets the relay encryptions option for this configuration.
-func (cfg SourceConfig) WithRelayEncryptions(schemes ...model.EncryptionScheme) SourceConfig {
+func (cfg SourceConfig) WithRelayEncryptions(schemes ...EncryptionScheme) SourceConfig {
 	cfg.RelayEncryptions = schemes
 	return cfg
 }

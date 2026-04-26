@@ -15,7 +15,6 @@ import (
 	"github.com/spf13/cobra"
 
 	"github.com/connet-dev/connet"
-	"github.com/connet-dev/connet/model"
 	"github.com/connet-dev/connet/pkg/nat"
 	"github.com/connet-dev/connet/pkg/netc"
 	"github.com/connet-dev/connet/pkg/reliable"
@@ -223,7 +222,7 @@ func clientRun(ctx context.Context, cfg ClientConfig, logger *slog.Logger) error
 		opts = append(opts, connet.HandshakeIdleTimeout(cfg.HandshakeIdleTimeout.get()))
 	}
 
-	defaultRelayEncryptions := []model.EncryptionScheme{model.NoEncryption}
+	defaultRelayEncryptions := []connet.EncryptionScheme{connet.NoEncryption}
 	if len(cfg.RelayEncryptions) > 0 {
 		res, err := parseEncryptionSchemes(cfg.RelayEncryptions)
 		if err != nil {
@@ -299,7 +298,7 @@ func clientRun(ctx context.Context, cfg ClientConfig, logger *slog.Logger) error
 	return g.Wait()
 }
 
-func (fc DestinationConfig) parse(name string, defaultRelayEncryptions []model.EncryptionScheme, logger *slog.Logger) (connet.DestinationConfig, newrunnable[*connet.Destination], error) {
+func (fc DestinationConfig) parse(name string, defaultRelayEncryptions []connet.EncryptionScheme, logger *slog.Logger) (connet.DestinationConfig, newrunnable[*connet.Destination], error) {
 	retErr := func(err error) (connet.DestinationConfig, newrunnable[*connet.Destination], error) {
 		return connet.DestinationConfig{}, nil, err
 	}
@@ -405,7 +404,7 @@ func (fc DestinationConfig) parse(name string, defaultRelayEncryptions []model.E
 	return dstCfg, handler, nil
 }
 
-func (fc SourceConfig) parse(name string, defaultRelayEncryptions []model.EncryptionScheme, logger *slog.Logger) (connet.SourceConfig, newrunnable[*connet.Source], error) {
+func (fc SourceConfig) parse(name string, defaultRelayEncryptions []connet.EncryptionScheme, logger *slog.Logger) (connet.SourceConfig, newrunnable[*connet.Source], error) {
 	retErr := func(err error) (connet.SourceConfig, newrunnable[*connet.Source], error) {
 		return connet.SourceConfig{}, nil, err
 	}
@@ -536,10 +535,10 @@ func parseRole(s string) (connet.Role, error) {
 	return connet.ParseRole(s)
 }
 
-func parseEncryptionSchemes(s []string) ([]model.EncryptionScheme, error) {
-	encs := make([]model.EncryptionScheme, len(s))
+func parseEncryptionSchemes(s []string) ([]connet.EncryptionScheme, error) {
+	encs := make([]connet.EncryptionScheme, len(s))
 	for i, si := range s {
-		enc, err := model.ParseEncryptionScheme(si)
+		enc, err := connet.ParseEncryptionScheme(si)
 		if err != nil {
 			return nil, err
 		}

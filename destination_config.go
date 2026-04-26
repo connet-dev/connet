@@ -7,7 +7,6 @@ import (
 
 	"github.com/pires/go-proxyproto"
 
-	"github.com/connet-dev/connet/model"
 	"github.com/connet-dev/connet/pkg/proto/pbconnect"
 )
 
@@ -16,7 +15,7 @@ type DestinationConfig struct {
 	Endpoint         Endpoint
 	Route            RouteOption
 	Proxy            ProxyVersion
-	RelayEncryptions []model.EncryptionScheme
+	RelayEncryptions []EncryptionScheme
 	DialTimeout      time.Duration
 }
 
@@ -26,7 +25,7 @@ func NewDestinationConfig(name string) DestinationConfig {
 		Endpoint:         NewEndpoint(name),
 		Route:            RouteAny,
 		Proxy:            ProxyNone,
-		RelayEncryptions: []model.EncryptionScheme{model.NoEncryption},
+		RelayEncryptions: []EncryptionScheme{NoEncryption},
 	}
 }
 
@@ -43,7 +42,7 @@ func (cfg DestinationConfig) WithProxy(proxy ProxyVersion) DestinationConfig {
 }
 
 // WithRelayEncryptions sets the relay encryptions option for this configuration.
-func (cfg DestinationConfig) WithRelayEncryptions(schemes ...model.EncryptionScheme) DestinationConfig {
+func (cfg DestinationConfig) WithRelayEncryptions(schemes ...EncryptionScheme) DestinationConfig {
 	cfg.RelayEncryptions = schemes
 	return cfg
 }

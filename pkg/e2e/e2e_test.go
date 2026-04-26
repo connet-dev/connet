@@ -25,7 +25,6 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/connet-dev/connet"
-	"github.com/connet-dev/connet/model"
 	"github.com/connet-dev/connet/pkg/certc"
 	"github.com/connet-dev/connet/pkg/netc"
 	"github.com/connet-dev/connet/pkg/reliable"
@@ -96,13 +95,13 @@ var connectedTests = map[string]connectedTestCase{
 		10005,
 	},
 	"relay-tls-encrypted": {
-		connet.NewDestinationConfig("relay-tls-encrypted").WithRoute(connet.RouteRelay).WithRelayEncryptions(model.TLSEncryption),
-		connet.NewSourceConfig("relay-tls-encrypted").WithRoute(connet.RouteRelay).WithRelayEncryptions(model.TLSEncryption),
+		connet.NewDestinationConfig("relay-tls-encrypted").WithRoute(connet.RouteRelay).WithRelayEncryptions(connet.TLSEncryption),
+		connet.NewSourceConfig("relay-tls-encrypted").WithRoute(connet.RouteRelay).WithRelayEncryptions(connet.TLSEncryption),
 		10006,
 	},
 	"relay-dhxcp-encrypted": {
-		connet.NewDestinationConfig("relay-dhxcp-encrypted").WithRoute(connet.RouteRelay).WithRelayEncryptions(model.DHXCPEncryption),
-		connet.NewSourceConfig("relay-dhxcp-encrypted").WithRoute(connet.RouteRelay).WithRelayEncryptions(model.DHXCPEncryption),
+		connet.NewDestinationConfig("relay-dhxcp-encrypted").WithRoute(connet.RouteRelay).WithRelayEncryptions(connet.DHXCPEncryption),
+		connet.NewSourceConfig("relay-dhxcp-encrypted").WithRoute(connet.RouteRelay).WithRelayEncryptions(connet.DHXCPEncryption),
 		10007,
 	},
 	// 101xx expose proxy proto server
@@ -145,13 +144,13 @@ var connectedTests = map[string]connectedTestCase{
 		11001,
 	},
 	"relay-dst-none-tls-src": {
-		connet.NewDestinationConfig("relay-dst-none-tls-src").WithRoute(connet.RouteRelay).WithRelayEncryptions(model.NoEncryption),
-		connet.NewSourceConfig("relay-dst-none-tls-src").WithRoute(connet.RouteRelay).WithRelayEncryptions(model.TLSEncryption),
+		connet.NewDestinationConfig("relay-dst-none-tls-src").WithRoute(connet.RouteRelay).WithRelayEncryptions(connet.NoEncryption),
+		connet.NewSourceConfig("relay-dst-none-tls-src").WithRoute(connet.RouteRelay).WithRelayEncryptions(connet.TLSEncryption),
 		11002,
 	},
 	"relay-dst-tls-none-src": {
-		connet.NewDestinationConfig("relay-dst-tls-none-src").WithRoute(connet.RouteRelay).WithRelayEncryptions(model.TLSEncryption),
-		connet.NewSourceConfig("relay-dst-tls-none-src").WithRoute(connet.RouteRelay).WithRelayEncryptions(model.NoEncryption),
+		connet.NewDestinationConfig("relay-dst-tls-none-src").WithRoute(connet.RouteRelay).WithRelayEncryptions(connet.TLSEncryption),
+		connet.NewSourceConfig("relay-dst-tls-none-src").WithRoute(connet.RouteRelay).WithRelayEncryptions(connet.NoEncryption),
 		11003,
 	},
 }
