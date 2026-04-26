@@ -12,7 +12,6 @@ import (
 
 	"github.com/quic-go/quic-go"
 
-	"github.com/connet-dev/connet/model"
 	"github.com/connet-dev/connet/pkg/build"
 	"github.com/connet-dev/connet/pkg/iterc"
 	"github.com/connet-dev/connet/pkg/proto"
@@ -30,9 +29,9 @@ type relayID string
 type relay struct {
 	local *peer
 
-	serverID        relayID
-	serverHostports []model.HostPort
-	serverConf      atomic.Pointer[relayConfig]
+	serverID    relayID
+	serverAddrs []string
+	serverConf  atomic.Pointer[relayConfig]
 
 	cancel context.CancelCauseFunc
 	logger *slog.Logger
@@ -43,16 +42,16 @@ type relayConfig struct {
 	auth []byte
 }
 
-func runRelay(ctx context.Context, local *peer, id relayID, hps []model.HostPort, cfg *relayConfig, logger *slog.Logger) *relay {
+func runRelay(ctx context.Context, local *peer, id relayID, addrs []string, cfg *relayConfig, logger *slog.Logger) *relay {
 	ctx, cancel := context.WithCancelCause(ctx)
 	r := &relay{
 		local: local,
 
-		serverID:        id,
-		serverHostports: hps,
+		serverID:    id,
+		serverAddrs: addrs,
 
 		cancel: cancel,
-		logger: logger.With("relay", id, "addrs", hps),
+		logger: logger.With("relay", id, "addrs", addrs),
 	}
 	r.serverConf.Store(cfg)
 	go r.run(ctx)
@@ -92,9 +91,9 @@ func (r *relay) runErr(ctx context.Context) error {
 }
 
 func (r *relay) connectAny(ctx context.Context) (*quic.Conn, error) {
-	for _, hp := range r.serverHostports {
-		if conn, err := r.connect(ctx, hp); err != nil {
-			r.logger.Debug("cannot connect relay", "hostport", hp, "err", err)
+	for _, addr := range r.serverAddrs {
+		if conn, err := r.connect(ctx, addr); err != nil {
+			r.logger.Debug("cannot connect relay", "address", addr, "err", err)
 		} else {
 			return conn, nil
 		}
@@ -102,8 +101,8 @@ func (r *relay) connectAny(ctx context.Context) (*quic.Conn, error) {
 	return nil, fmt.Errorf("cannot connect to relay: %s", r.serverID)
 }
 
-func (r *relay) connect(ctx context.Context, hp model.HostPort) (*quic.Conn, error) {
-	addr, err := net.ResolveUDPAddr("udp", hp.String())
+func (r *relay) connect(ctx context.Context, address string) (*quic.Conn, error) {
+	addr, err := net.ResolveUDPAddr("udp", address)
 	if err != nil {
 		return nil, err
 	}

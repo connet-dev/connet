@@ -9,9 +9,10 @@ import (
 	"time"
 
 	"github.com/connet-dev/connet"
-	"github.com/connet-dev/connet/model"
+	"github.com/connet-dev/connet/pkg/iterc"
 	"github.com/connet-dev/connet/pkg/logc"
 	"github.com/connet-dev/connet/pkg/proto/pbclient"
+	"github.com/connet-dev/connet/pkg/proto/pbmodel"
 )
 
 type Stores interface {
@@ -105,15 +106,43 @@ type RelayConnKey struct {
 
 type RelayConnValue struct {
 	Authentication        RelayAuthentication `json:"authentication"`
-	Hostports             []model.HostPort    `json:"hostports"`
+	Hostports             []RelayHostPort     `json:"hostports"`
 	Metadata              string              `json:"metadata"`
 	Certificate           *x509.Certificate   `json:"certificate"`
 	AuthenticationSealKey *[32]byte           `json:"authentication-seal-key"`
 }
 
+// TODO remove
+type RelayHostPort struct {
+	Host string `json:"host"`
+	Port uint16 `json:"port"`
+}
+
+func HostPortFromPB(h *pbmodel.HostPort) RelayHostPort {
+	return RelayHostPort{
+		Host: h.Host,
+		Port: uint16(h.Port),
+	}
+}
+
+func HostPortFromPBs(hs []*pbmodel.HostPort) []RelayHostPort {
+	return iterc.MapSlice(hs, HostPortFromPB)
+}
+
+func PBsFromHostPorts(hps []RelayHostPort) []*pbmodel.HostPort {
+	return iterc.MapSlice(hps, RelayHostPort.PB)
+}
+
+func (h RelayHostPort) PB() *pbmodel.HostPort {
+	return &pbmodel.HostPort{
+		Host: h.Host,
+		Port: uint32(h.Port),
+	}
+}
+
 type jsonRelayConnValue struct {
 	Authentication        RelayAuthentication `json:"authentication"`
-	Hostports             []model.HostPort    `json:"hostports"`
+	Hostports             []RelayHostPort     `json:"hostports"`
 	Metadata              string              `json:"metadata"`
 	Certificate           []byte              `json:"certificate"`
 	AuthenticationSealKey []byte              `json:"authentication-seal-key"`

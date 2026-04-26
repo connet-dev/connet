@@ -17,7 +17,6 @@ import (
 	protobuf "google.golang.org/protobuf/proto"
 
 	"github.com/connet-dev/connet"
-	"github.com/connet-dev/connet/model"
 	"github.com/connet-dev/connet/pkg/build"
 	"github.com/connet-dev/connet/pkg/certc"
 	"github.com/connet-dev/connet/pkg/iterc"
@@ -25,6 +24,7 @@ import (
 	"github.com/connet-dev/connet/pkg/proto"
 	"github.com/connet-dev/connet/pkg/proto/pbclientrelay"
 	"github.com/connet-dev/connet/pkg/proto/pberror"
+	"github.com/connet-dev/connet/pkg/proto/pbmodel"
 	"github.com/connet-dev/connet/pkg/proto/pbrelay"
 	"github.com/connet-dev/connet/pkg/quicc"
 	"github.com/connet-dev/connet/pkg/reliable"
@@ -33,7 +33,7 @@ import (
 )
 
 type controlClient struct {
-	hostports   []model.HostPort
+	hostports   []*pbmodel.HostPort
 	clientsCert *certc.Cert
 	metadata    string
 
@@ -51,9 +51,16 @@ type controlClient struct {
 }
 
 func newControlClient(cfg Config, clientsCert *certc.Cert, configStore logc.KV[ConfigKey, ConfigValue]) (*controlClient, error) {
-	hostports := iterc.FlattenSlice(iterc.MapSlice(cfg.Ingress, func(in Ingress) []model.HostPort {
-		return in.Hostports
-	}))
+	var hostports []*pbmodel.HostPort
+	for _, ing := range cfg.Ingress {
+		for _, addr := range ing.AdvertiseAddresses {
+			if hp, err := pbmodel.ParseHostPort(addr); err != nil {
+				return nil, fmt.Errorf("parse addr %s: %w", addr, err)
+			} else {
+				hostports = append(hostports, hp)
+			}
+		}
+	}
 
 	c := &controlClient{
 		hostports:   hostports,
@@ -199,7 +206,7 @@ func (s *controlClient) authenticate(ctx context.Context, conn *quic.Conn, recon
 
 	if err := proto.Write(authStream, &pbrelay.AuthenticateReq{
 		Token:                  s.controlToken,
-		Addresses:              model.PBsFromHostPorts(s.hostports),
+		Addresses:              s.hostports,
 		ReconnectToken:         reconnConfig.Bytes,
 		BuildVersion:           build.GetVersion(),
 		Metadata:               s.metadata,

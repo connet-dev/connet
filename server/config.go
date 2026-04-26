@@ -7,7 +7,6 @@ import (
 	"os"
 	"time"
 
-	"github.com/connet-dev/connet/model"
 	"github.com/connet-dev/connet/server/control"
 	"github.com/connet-dev/connet/server/relay"
 	"github.com/connet-dev/connet/server/selfhosted"
@@ -40,7 +39,7 @@ func newServerConfig(opts []Option) (*serverConfig, error) {
 		if err != nil {
 			return nil, fmt.Errorf("resolve clients address: %w", err)
 		}
-		if err := ClientsIngress(control.Ingress{Addr: addr})(cfg); err != nil {
+		if err := ClientsIngress(control.Ingress{ListenAddress: addr})(cfg); err != nil {
 			return nil, fmt.Errorf("default clients address: %w", err)
 		}
 	}
@@ -56,8 +55,8 @@ func newServerConfig(opts []Option) (*serverConfig, error) {
 		if err != nil {
 			return nil, fmt.Errorf("resolve clients relay address: %w", err)
 		}
-		hps := []model.HostPort{{Host: "localhost", Port: 19191}}
-		if err := RelayIngress(relay.Ingress{Addr: addr, Hostports: hps})(cfg); err != nil {
+		ring := relay.Ingress{ListenAddress: addr, AdvertiseAddresses: []string{"localhost:19191"}}
+		if err := RelayIngress(ring)(cfg); err != nil {
 			return nil, fmt.Errorf("default clients relay address: %w", err)
 		}
 	}

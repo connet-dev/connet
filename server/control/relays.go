@@ -17,7 +17,6 @@ import (
 	protobuf "google.golang.org/protobuf/proto"
 
 	"github.com/connet-dev/connet"
-	"github.com/connet-dev/connet/model"
 	"github.com/connet-dev/connet/pkg/certc"
 	"github.com/connet-dev/connet/pkg/iterc"
 	"github.com/connet-dev/connet/pkg/logc"
@@ -25,6 +24,7 @@ import (
 	"github.com/connet-dev/connet/pkg/proto"
 	"github.com/connet-dev/connet/pkg/proto/pbclient"
 	"github.com/connet-dev/connet/pkg/proto/pberror"
+	"github.com/connet-dev/connet/pkg/proto/pbmodel"
 	"github.com/connet-dev/connet/pkg/proto/pbrelay"
 	"github.com/connet-dev/connet/pkg/quicc"
 	"github.com/connet-dev/connet/pkg/reliable"
@@ -68,7 +68,7 @@ func newRelayServer(
 			authSealKey: msg.Value.AuthenticationSealKey,
 			template: &pbclient.Relay{
 				Id:                msg.Key.ID.string,
-				Addresses:         model.PBsFromHostPorts(msg.Value.Hostports),
+				Addresses:         PBsFromHostPorts(msg.Value.Hostports),
 				ServerCertificate: msg.Value.Certificate.Raw,
 			},
 		}
@@ -204,7 +204,7 @@ func (s *relayServer) Relays(ctx context.Context, endpoint connet.Endpoint, role
 			} else if ok {
 				localRelays[msg.Key.ID] = &pbclient.Relay{
 					Id:                msg.Key.ID.string,
-					Addresses:         model.PBsFromHostPorts(msg.Value.Hostports),
+					Addresses:         PBsFromHostPorts(msg.Value.Hostports),
 					ServerCertificate: msg.Value.Certificate.Raw,
 					Authentication:    seal(msg.Value.AuthenticationSealKey),
 					Metadata:          msg.Value.Metadata,
@@ -237,8 +237,8 @@ func (s *relayServer) run(ctx context.Context) error {
 }
 
 func (s *relayServer) runListener(ctx context.Context, ingress Ingress) error {
-	s.logger.Debug("start udp listener", "addr", ingress.Addr)
-	udpConn, err := net.ListenUDP("udp", ingress.Addr)
+	s.logger.Debug("start udp listener", "addr", ingress.ListenAddress)
+	udpConn, err := net.ListenUDP("udp", ingress.ListenAddress)
 	if err != nil {
 		return fmt.Errorf("relay server udp listen: %w", err)
 	}
@@ -248,7 +248,7 @@ func (s *relayServer) runListener(ctx context.Context, ingress Ingress) error {
 		}
 	}()
 
-	s.logger.Debug("start quic listener", "addr", ingress.Addr)
+	s.logger.Debug("start quic listener", "addr", ingress.ListenAddress)
 	transport := quicc.ServerTransport(udpConn, s.statelessResetKey)
 	defer func() {
 		if err := transport.Close(); err != nil {
@@ -312,7 +312,7 @@ func (s *relayServer) runConnsCache(ctx context.Context) error {
 				authSealKey: msg.Value.AuthenticationSealKey,
 				template: &pbclient.Relay{
 					Id:                msg.Key.ID.string,
-					Addresses:         model.PBsFromHostPorts(msg.Value.Hostports),
+					Addresses:         PBsFromHostPorts(msg.Value.Hostports),
 					ServerCertificate: msg.Value.Certificate.Raw,
 					Metadata:          msg.Value.Metadata,
 				},
@@ -353,7 +353,7 @@ type relayConn struct {
 type relayConnAuth struct {
 	id          RelayID
 	auth        RelayAuthentication
-	hostports   []model.HostPort
+	hostports   []*pbmodel.HostPort
 	metadata    string
 	protocol    proto.RelayControlNextProto
 	certificate *x509.Certificate
@@ -392,7 +392,7 @@ func (c *relayConn) runErr(ctx context.Context) error {
 	defer c.logger.Info("relay disconnected", "addr", c.conn.RemoteAddr(), "metadata", c.metadata)
 
 	key := RelayConnKey{ID: c.id}
-	value := RelayConnValue{c.auth, c.hostports, c.metadata, c.certificate, c.authSignKey}
+	value := RelayConnValue{c.auth, HostPortFromPBs(c.hostports), c.metadata, c.certificate, c.authSignKey}
 	if err := c.server.conns.Put(key, value); err != nil {
 		return err
 	}
@@ -494,6 +494,5 @@ func (c *relayConn) authenticate(ctx context.Context) (*relayConnAuth, error) {
 	box.Precompute(sharedKey, &relayPk, controlSk)
 
 	c.logger.Debug("authentication completed", "local", c.conn.LocalAddr(), "remote", c.conn.RemoteAddr(), "proto", protocol, "build", req.BuildVersion)
-	hostports := model.HostPortFromPBs(req.Addresses)
-	return &relayConnAuth{id, auth, hostports, req.Metadata, protocol, cert, sharedKey}, nil
+	return &relayConnAuth{id, auth, req.Addresses, req.Metadata, protocol, cert, sharedKey}, nil
 }

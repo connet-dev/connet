@@ -62,7 +62,7 @@ func New(opts ...Option) (*Server, error) {
 		ClientsEndpointExpiry: cfg.clientsEndpointExpiry,
 
 		RelaysIngress: []control.Ingress{{
-			Addr: relaysAddr,
+			ListenAddress: relaysAddr,
 			TLS: &tls.Config{
 				Certificates: []tls.Certificate{relaysTLSCert},
 			},

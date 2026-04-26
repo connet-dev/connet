@@ -201,10 +201,10 @@ func TestE2E(t *testing.T) {
 	)
 
 	clientsIngress, err := control.NewIngressBuilder().
-		WithAddrFrom(":20000").WithTLSCert(cert).Ingress()
+		WithListenAddress(":20000").WithTLSCert(cert).Ingress()
 	require.NoError(t, err)
 	relayIngress, err := relaysrv.NewIngressBuilder().
-		WithAddrFrom(":20001").WithHostportFrom("localhost").Ingress()
+		WithListenAddress(":20001").WithAdvertiseAddress("localhost").Ingress()
 	require.NoError(t, err)
 	srv, err := server.New(
 		server.ClientsAuthenticator(clientAuth),

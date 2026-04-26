@@ -295,8 +295,8 @@ func (s *clientServer) run(ctx context.Context) error {
 }
 
 func (s *clientServer) runListener(ctx context.Context, ingress Ingress) error {
-	s.logger.Debug("start udp listener", "addr", ingress.Addr)
-	udpConn, err := net.ListenUDP("udp", ingress.Addr)
+	s.logger.Debug("start udp listener", "addr", ingress.ListenAddress)
+	udpConn, err := net.ListenUDP("udp", ingress.ListenAddress)
 	if err != nil {
 		return fmt.Errorf("client server udp listen: %w", err)
 	}
@@ -306,7 +306,7 @@ func (s *clientServer) runListener(ctx context.Context, ingress Ingress) error {
 		}
 	}()
 
-	s.logger.Debug("start quic listener", "addr", ingress.Addr)
+	s.logger.Debug("start quic listener", "addr", ingress.ListenAddress)
 	transport := quicc.ServerTransport(udpConn, s.statelessResetKey)
 	defer func() {
 		if err := transport.Close(); err != nil {

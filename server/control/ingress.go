@@ -9,9 +9,9 @@ import (
 )
 
 type Ingress struct {
-	Addr  *net.UDPAddr
-	TLS   *tls.Config
-	Restr restr.IP
+	ListenAddress *net.UDPAddr
+	TLS           *tls.Config
+	Restr         restr.IP
 }
 
 type IngressBuilder struct {
@@ -21,15 +21,7 @@ type IngressBuilder struct {
 
 func NewIngressBuilder() *IngressBuilder { return &IngressBuilder{} }
 
-func (b *IngressBuilder) WithAddr(addr *net.UDPAddr) *IngressBuilder {
-	if b.err != nil {
-		return b
-	}
-	b.ingress.Addr = addr
-	return b
-}
-
-func (b *IngressBuilder) WithAddrFrom(addrStr string) *IngressBuilder {
+func (b *IngressBuilder) WithListenAddress(addrStr string) *IngressBuilder {
 	if b.err != nil {
 		return b
 	}
@@ -39,7 +31,15 @@ func (b *IngressBuilder) WithAddrFrom(addrStr string) *IngressBuilder {
 		b.err = fmt.Errorf("resolve udp address: %w", err)
 		return b
 	}
-	return b.WithAddr(addr)
+	return b.WithListenAddressResolved(addr)
+}
+
+func (b *IngressBuilder) WithListenAddressResolved(addr *net.UDPAddr) *IngressBuilder {
+	if b.err != nil {
+		return b
+	}
+	b.ingress.ListenAddress = addr
+	return b
 }
 
 func (b *IngressBuilder) WithTLS(cfg *tls.Config) *IngressBuilder {

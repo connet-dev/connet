@@ -191,8 +191,8 @@ type clientsServerCfg struct {
 }
 
 func (s *clientsServer) run(ctx context.Context, cfg clientsServerCfg) error {
-	s.logger.Debug("start udp listener", "addr", cfg.ingress.Addr)
-	udpConn, err := net.ListenUDP("udp", cfg.ingress.Addr)
+	s.logger.Debug("start udp listener", "addr", cfg.ingress.ListenAddress)
+	udpConn, err := net.ListenUDP("udp", cfg.ingress.ListenAddress)
 	if err != nil {
 		return fmt.Errorf("relay server listen: %w", err)
 	}
@@ -202,7 +202,7 @@ func (s *clientsServer) run(ctx context.Context, cfg clientsServerCfg) error {
 		}
 	}()
 
-	s.logger.Debug("start quic listener", "addr", cfg.ingress.Addr)
+	s.logger.Debug("start quic listener", "addr", cfg.ingress.ListenAddress)
 	transport := quicc.ServerTransport(udpConn, cfg.statelessResetKey)
 	defer func() {
 		if err := transport.Close(); err != nil {

@@ -3,17 +3,15 @@ package relay
 import (
 	"fmt"
 	"net"
-	"strconv"
-	"strings"
 
-	"github.com/connet-dev/connet/model"
+	"github.com/connet-dev/connet/pkg/proto/pbmodel"
 	"github.com/connet-dev/connet/pkg/restr"
 )
 
 type Ingress struct {
-	Addr      *net.UDPAddr
-	Hostports []model.HostPort
-	Restr     restr.IP
+	ListenAddress      *net.UDPAddr
+	AdvertiseAddresses []string
+	Restr              restr.IP
 }
 
 type IngressBuilder struct {
@@ -23,15 +21,7 @@ type IngressBuilder struct {
 
 func NewIngressBuilder() *IngressBuilder { return &IngressBuilder{} }
 
-func (b *IngressBuilder) WithAddr(addr *net.UDPAddr) *IngressBuilder {
-	if b.err != nil {
-		return b
-	}
-	b.ingress.Addr = addr
-	return b
-}
-
-func (b *IngressBuilder) WithAddrFrom(addrStr string) *IngressBuilder {
+func (b *IngressBuilder) WithListenAddress(addrStr string) *IngressBuilder {
 	if b.err != nil {
 		return b
 	}
@@ -41,69 +31,27 @@ func (b *IngressBuilder) WithAddrFrom(addrStr string) *IngressBuilder {
 		b.err = fmt.Errorf("resolve udp address: %w", err)
 		return b
 	}
-	return b.WithAddr(addr)
+	return b.WithListenAddressResolved(addr)
 }
 
-func (b *IngressBuilder) WithHostports(hps []model.HostPort) *IngressBuilder {
+func (b *IngressBuilder) WithListenAddressResolved(addr *net.UDPAddr) *IngressBuilder {
 	if b.err != nil {
 		return b
 	}
-	b.ingress.Hostports = hps
+	b.ingress.ListenAddress = addr
 	return b
 }
 
-func (b *IngressBuilder) WithHostport(hp model.HostPort) *IngressBuilder {
+func (b *IngressBuilder) WithAdvertiseAddress(addr string) *IngressBuilder {
 	if b.err != nil {
 		return b
 	}
-	b.ingress.Hostports = append(b.ingress.Hostports, hp)
+	if _, err := pbmodel.ParseHostPort(addr); err != nil {
+		b.err = err
+		return b
+	}
+	b.ingress.AdvertiseAddresses = append(b.ingress.AdvertiseAddresses, addr)
 	return b
-}
-
-func (b *IngressBuilder) WithHostportFrom(hostport string) *IngressBuilder {
-	if b.err != nil {
-		return b
-	}
-
-	if strings.HasPrefix(hostport, "[") {
-		closeBracket := strings.LastIndex(hostport, "]")
-		if closeBracket < 0 {
-			b.err = fmt.Errorf("cannot parse hostport, missing ]")
-			return b
-		}
-		colonPort := hostport[closeBracket+1:]
-		if len(colonPort) > 0 {
-			if colonPort[0] != ':' {
-				b.err = fmt.Errorf("cannot parse hostport, missing ':'")
-				return b
-			}
-			portStr := colonPort[1:]
-			if len(portStr) == 0 {
-				b.err = fmt.Errorf("cannot parse hostport, missing port")
-				return b
-			}
-			port, err := strconv.ParseUint(portStr, 10, 16)
-			if err != nil {
-				b.err = fmt.Errorf("cannot parse port: %w", err)
-				return b
-			}
-			return b.WithHostport(model.HostPort{Host: hostport[:closeBracket+1], Port: uint16(port)})
-		}
-	} else if colonIndex := strings.LastIndex(hostport, ":"); colonIndex != -1 {
-		portStr := hostport[colonIndex+1:]
-		if len(portStr) == 0 {
-			b.err = fmt.Errorf("cannot parse hostport, missing port")
-			return b
-		}
-		port, err := strconv.ParseUint(portStr, 10, 16)
-		if err != nil {
-			b.err = fmt.Errorf("cannot parse port: %w", err)
-			return b
-		}
-		return b.WithHostport(model.HostPort{Host: hostport[:colonIndex], Port: uint16(port)})
-	}
-
-	return b.WithHostport(model.HostPort{Host: hostport})
 }
 
 func (b *IngressBuilder) WithRestr(iprestr restr.IP) *IngressBuilder {
@@ -137,29 +85,33 @@ func (b *IngressBuilder) Ingress() (Ingress, error) {
 		return b.ingress, b.err
 	}
 
-	for i, hp := range b.ingress.Hostports {
+	for i, addr := range b.ingress.AdvertiseAddresses {
+		hp, err := pbmodel.ParseHostPort(addr)
+		if err != nil {
+			return b.ingress, err
+		}
 		if hp.Host == "" {
 			switch {
-			case b.ingress.Addr == nil:
+			case b.ingress.ListenAddress == nil:
 				hp.Host = "localhost"
-			case len(b.ingress.Addr.IP) == 0:
+			case len(b.ingress.ListenAddress.IP) == 0:
 				hp.Host = "localhost"
 			default:
-				hp.Host = b.ingress.Addr.IP.String()
+				hp.Host = b.ingress.ListenAddress.IP.String()
 			}
 		}
 		if hp.Port == 0 {
 			switch {
-			case b.ingress.Addr == nil:
+			case b.ingress.ListenAddress == nil:
 				hp.Port = 19191
-			case b.ingress.Addr.Port == 0:
+			case b.ingress.ListenAddress.Port == 0:
 				hp.Port = 19191 // TODO maybe an error, it might be a random port
 			default:
-				hp.Port = uint16(b.ingress.Addr.Port)
+				hp.Port = uint32(b.ingress.ListenAddress.Port)
 			}
 		}
 
-		b.ingress.Hostports[i] = hp
+		b.ingress.AdvertiseAddresses[i] = pbmodel.AddressFromPB(hp)
 	}
 
 	return b.ingress, b.err

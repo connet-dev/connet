@@ -16,7 +16,6 @@ import (
 
 	"github.com/quic-go/quic-go"
 
-	"github.com/connet-dev/connet/model"
 	"github.com/connet-dev/connet/pkg/certc"
 	"github.com/connet-dev/connet/pkg/iterc"
 	"github.com/connet-dev/connet/pkg/netc"
@@ -179,7 +178,7 @@ func (p *peer) runRelays(ctx context.Context) error {
 		activeRelays := map[relayID]struct{}{}
 		for _, relay := range relays {
 			id := relayID(relay.Id)
-			hps := model.HostPortFromPBs(relay.Addresses)
+			addrs := pbmodel.AddressesFromPBs(relay.Addresses)
 
 			activeRelays[id] = struct{}{}
 
@@ -194,7 +193,7 @@ func (p *peer) runRelays(ctx context.Context) error {
 				rlg.serverConf.Store(cfg)
 			} else {
 				p.logger.Debug("starting relay", "id", id)
-				runningRelays[id] = runRelay(ctx, p, id, hps, cfg, p.logger)
+				runningRelays[id] = runRelay(ctx, p, id, addrs, cfg, p.logger)
 			}
 		}
 
@@ -438,7 +437,7 @@ func (p *peer) status() (StatusPeer, error) {
 			stat.Relays[relay.Id] = StatusRelay{
 				ID:        relay.Id,
 				Metadata:  relay.Metadata,
-				Hostports: iterc.MapSliceStrings(model.HostPortFromPBs(relay.Addresses)),
+				Hostports: pbmodel.AddressesFromPBs(relay.Addresses),
 			}
 		}
 	}

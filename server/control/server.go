@@ -7,10 +7,10 @@ import (
 	"time"
 
 	"github.com/connet-dev/connet"
-	"github.com/connet-dev/connet/model"
 	"github.com/connet-dev/connet/pkg/build"
 	"github.com/connet-dev/connet/pkg/iterc"
 	"github.com/connet-dev/connet/pkg/logc"
+	"github.com/connet-dev/connet/pkg/proto/pbmodel"
 	"github.com/connet-dev/connet/pkg/reliable"
 	"github.com/connet-dev/connet/pkg/restr"
 )
@@ -155,7 +155,7 @@ func (s *Server) getRelays() (map[string]StatusRelay, error) {
 	for _, msg := range msgs {
 		relays[msg.Key.ID.string] = StatusRelay{
 			ID:        msg.Key.ID,
-			Hostports: iterc.MapSlice(msg.Value.Hostports, model.HostPort.String),
+			Hostports: pbmodel.AddressesFromPBs(PBsFromHostPorts(msg.Value.Hostports)),
 			Metadata:  msg.Value.Metadata,
 		}
 	}
@@ -206,7 +206,7 @@ type StatusRelay struct {
 
 func StatusIngressFn(ing Ingress) StatusIngress {
 	return StatusIngress{
-		Address:      ing.Addr.String(),
+		Address:      ing.ListenAddress.String(),
 		Restrictions: ing.Restr,
 	}
 }
