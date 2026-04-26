@@ -1,11 +1,11 @@
-package model
+package build
 
 import "runtime/debug"
 
 // Injected by ldflags
 var Version string
 
-func BuildVersion() string {
+func GetVersion() string {
 	if Version != "" {
 		return Version
 	}

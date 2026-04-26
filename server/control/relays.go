@@ -18,6 +18,7 @@ import (
 
 	"github.com/connet-dev/connet"
 	"github.com/connet-dev/connet/model"
+	"github.com/connet-dev/connet/pkg/certc"
 	"github.com/connet-dev/connet/pkg/iterc"
 	"github.com/connet-dev/connet/pkg/logc"
 	"github.com/connet-dev/connet/pkg/netc"
@@ -155,7 +156,7 @@ func (s *relayServer) Relays(ctx context.Context, endpoint connet.Endpoint, role
 	authenticationData, err := protobuf.Marshal(&pbrelay.ClientAuthentication{
 		Endpoint:       endpoint.PB(),
 		Role:           role.PB(),
-		CertificateKey: model.NewKey(cert).String(),
+		CertificateKey: certc.NewKey(cert).String(),
 	})
 	if err != nil {
 		return fmt.Errorf("signature data error: %w", err)

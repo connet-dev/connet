@@ -1,4 +1,4 @@
-package model
+package certc
 
 import (
 	"crypto/x509"

@@ -15,7 +15,7 @@ import (
 
 	"github.com/quic-go/quic-go"
 
-	"github.com/connet-dev/connet/model"
+	"github.com/connet-dev/connet/pkg/build"
 	"github.com/connet-dev/connet/pkg/iterc"
 	"github.com/connet-dev/connet/pkg/nat"
 	"github.com/connet-dev/connet/pkg/notify"
@@ -338,7 +338,7 @@ func (c *Client) authenticate(ctx context.Context, conn *quic.Conn, retoken []by
 	if err := proto.Write(authStream, &pbclient.AuthenticateReq{
 		Token:          c.token,
 		ReconnectToken: retoken,
-		BuildVersion:   model.BuildVersion(),
+		BuildVersion:   build.GetVersion(),
 		Metadata:       c.metadata,
 	}); err != nil {
 		return nil, fmt.Errorf("write authentication: %w", err)
@@ -472,7 +472,7 @@ func (c *Client) Status(ctx context.Context) (ClientStatus, error) {
 
 	return ClientStatus{
 		Status:       stat,
-		BuildVersion: model.BuildVersion(),
+		BuildVersion: build.GetVersion(),
 		Metadata:     c.metadata,
 		ServerAddr:   c.controlAddr.String(),
 		DirectAddr:   c.directAddr.String(),

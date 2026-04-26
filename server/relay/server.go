@@ -13,7 +13,7 @@ import (
 	"github.com/quic-go/quic-go"
 
 	"github.com/connet-dev/connet"
-	"github.com/connet-dev/connet/model"
+	"github.com/connet-dev/connet/pkg/build"
 	"github.com/connet-dev/connet/pkg/certc"
 	"github.com/connet-dev/connet/pkg/iterc"
 	"github.com/connet-dev/connet/pkg/netc"
@@ -144,12 +144,12 @@ type Status struct {
 
 type EndpointStatus struct {
 	Endpoint     connet.Endpoint                  `json:"endpoint"`
-	Destinations map[model.Key]EndpointPeerStatus `json:"destinations"`
-	Sources      map[model.Key]EndpointPeerStatus `json:"sources"`
+	Destinations map[certc.Key]EndpointPeerStatus `json:"destinations"`
+	Sources      map[certc.Key]EndpointPeerStatus `json:"sources"`
 }
 
 type EndpointPeerStatus struct {
-	Key      model.Key `json:"key"`
+	Key      certc.Key `json:"key"`
 	Metadata string    `json:"metadata"`
 }
 
@@ -165,7 +165,7 @@ func (s *Server) Status(ctx context.Context) (Status, error) {
 
 	return Status{
 		Status:       stat,
-		BuildVersion: model.BuildVersion(),
+		BuildVersion: build.GetVersion(),
 		Hostports:    iterc.MapSliceStrings(s.control.hostports),
 		ServerAddr:   s.control.controlAddr.String(),
 		ServerID:     controlID,
@@ -196,8 +196,8 @@ func (s *Server) getEndpoints() map[string]EndpointStatus {
 	return endpoints
 }
 
-func (s *Server) getDestinations(cls *endpointClients) map[model.Key]EndpointPeerStatus {
-	result := map[model.Key]EndpointPeerStatus{}
+func (s *Server) getDestinations(cls *endpointClients) map[certc.Key]EndpointPeerStatus {
+	result := map[certc.Key]EndpointPeerStatus{}
 
 	cls.mu.RLock()
 	defer cls.mu.RUnlock()
@@ -212,8 +212,8 @@ func (s *Server) getDestinations(cls *endpointClients) map[model.Key]EndpointPee
 	return result
 }
 
-func (s *Server) getSources(cls *endpointClients) map[model.Key]EndpointPeerStatus {
-	result := map[model.Key]EndpointPeerStatus{}
+func (s *Server) getSources(cls *endpointClients) map[certc.Key]EndpointPeerStatus {
+	result := map[certc.Key]EndpointPeerStatus{}
 
 	cls.mu.RLock()
 	defer cls.mu.RUnlock()

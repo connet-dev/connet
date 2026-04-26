@@ -49,7 +49,7 @@ release-clean:
 	rm -rf dist/
 
 CONNET_VERSION ?= $(shell git describe --exact-match --tags 2> /dev/null || git rev-parse --short HEAD)
-LDFLAGS := "-X 'github.com/connet-dev/connet/model.Version=${CONNET_VERSION}'"
+LDFLAGS := "-X 'github.com/connet-dev/connet/pkg/build.Version=${CONNET_VERSION}'"
 
 release-build:
 	GOOS=darwin GOARCH=amd64 go build -v -ldflags ${LDFLAGS} -o dist/build/darwin-amd64/connet github.com/connet-dev/connet/cmd/connet

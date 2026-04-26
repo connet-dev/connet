@@ -16,7 +16,6 @@ import (
 	"github.com/quic-go/quic-go"
 
 	"github.com/connet-dev/connet"
-	"github.com/connet-dev/connet/model"
 	"github.com/connet-dev/connet/pkg/certc"
 	"github.com/connet-dev/connet/pkg/iterc"
 	"github.com/connet-dev/connet/pkg/netc"
@@ -32,7 +31,7 @@ import (
 type clientAuth struct {
 	endpoint connet.Endpoint
 	role     connet.Role
-	key      model.Key
+	key      certc.Key
 	protocol proto.ConnectRelayNextProto
 	metadata string
 }
@@ -74,8 +73,8 @@ func newClientsServer(cfg Config, cert *certc.Cert, auth ClientAuthenticator) (*
 
 type endpointClients struct {
 	endpoint     connet.Endpoint
-	destinations map[model.Key]*clientConn
-	sources      map[model.Key]*clientConn
+	destinations map[certc.Key]*clientConn
+	sources      map[certc.Key]*clientConn
 	mu           sync.RWMutex
 }
 
@@ -131,8 +130,8 @@ func (s *clientsServer) getByEndpoint(endpoint connet.Endpoint) *endpointClients
 
 	dst = &endpointClients{
 		endpoint:     endpoint,
-		destinations: map[model.Key]*clientConn{},
-		sources:      map[model.Key]*clientConn{},
+		destinations: map[certc.Key]*clientConn{},
+		sources:      map[certc.Key]*clientConn{},
 	}
 	s.endpoints[endpoint] = dst
 	return dst

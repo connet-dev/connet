@@ -8,6 +8,7 @@ import (
 
 	"github.com/connet-dev/connet"
 	"github.com/connet-dev/connet/model"
+	"github.com/connet-dev/connet/pkg/build"
 	"github.com/connet-dev/connet/pkg/iterc"
 	"github.com/connet-dev/connet/pkg/logc"
 	"github.com/connet-dev/connet/pkg/reliable"
@@ -87,7 +88,7 @@ func (s *Server) Status(ctx context.Context) (Status, error) {
 	}
 
 	return Status{
-		BuildVersion: model.BuildVersion(),
+		BuildVersion: build.GetVersion(),
 
 		ClientIngresses: iterc.MapSlice(s.clients.ingresses, StatusIngressFn),
 		Clients:         clients,

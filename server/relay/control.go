@@ -18,6 +18,7 @@ import (
 
 	"github.com/connet-dev/connet"
 	"github.com/connet-dev/connet/model"
+	"github.com/connet-dev/connet/pkg/build"
 	"github.com/connet-dev/connet/pkg/certc"
 	"github.com/connet-dev/connet/pkg/iterc"
 	"github.com/connet-dev/connet/pkg/logc"
@@ -94,7 +95,7 @@ func (s *controlClient) Authenticate(authReq *pbclientrelay.AuthenticateReq, cer
 	if err := protobuf.Unmarshal(authData, &auth); err != nil {
 		return nil, pberror.NewError(pberror.Code_AuthenticationFailed, "invalid authentication data")
 	}
-	certKey := model.NewKey(cert)
+	certKey := certc.NewKey(cert)
 	if auth.CertificateKey != certKey.String() {
 		return nil, pberror.NewError(pberror.Code_AuthenticationFailed, "invalid certificate")
 	}
@@ -200,7 +201,7 @@ func (s *controlClient) authenticate(ctx context.Context, conn *quic.Conn, recon
 		Token:                  s.controlToken,
 		Addresses:              model.PBsFromHostPorts(s.hostports),
 		ReconnectToken:         reconnConfig.Bytes,
-		BuildVersion:           model.BuildVersion(),
+		BuildVersion:           build.GetVersion(),
 		Metadata:               s.metadata,
 		ServerCertificate:      s.clientsCert.Raw(),
 		RelayAuthenticationKey: relayPk[:],

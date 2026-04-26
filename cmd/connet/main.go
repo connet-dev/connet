@@ -19,7 +19,7 @@ import (
 	"github.com/pelletier/go-toml/v2"
 	"github.com/spf13/cobra"
 
-	"github.com/connet-dev/connet/model"
+	"github.com/connet-dev/connet/pkg/build"
 	"github.com/connet-dev/connet/pkg/netc"
 	"github.com/connet-dev/connet/pkg/reliable"
 	"github.com/connet-dev/connet/pkg/slogc"
@@ -141,7 +141,7 @@ func versionCmd() *cobra.Command {
 	}
 
 	cmd.RunE = wrapErr("print version", func(_ *cobra.Command, args []string) error {
-		fmt.Println(model.BuildVersion())
+		fmt.Println(build.GetVersion())
 		return nil
 	})
 

@@ -13,6 +13,7 @@ import (
 	"github.com/quic-go/quic-go"
 
 	"github.com/connet-dev/connet/model"
+	"github.com/connet-dev/connet/pkg/build"
 	"github.com/connet-dev/connet/pkg/iterc"
 	"github.com/connet-dev/connet/pkg/proto"
 	"github.com/connet-dev/connet/pkg/proto/pbclientrelay"
@@ -145,7 +146,7 @@ func (r *relay) authenticate(ctx context.Context, conn *quic.Conn, auth []byte) 
 	if err := proto.Write(stream, &pbclientrelay.AuthenticateReq{
 		Authentication: auth,
 		Metadata:       r.local.metadata,
-		BuildVersion:   model.BuildVersion(),
+		BuildVersion:   build.GetVersion(),
 	}); err != nil {
 		return fmt.Errorf("cannot write auth request: %w", err)
 	}
