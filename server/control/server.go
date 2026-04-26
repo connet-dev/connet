@@ -155,7 +155,7 @@ func (s *Server) getRelays() (map[string]StatusRelay, error) {
 	for _, msg := range msgs {
 		relays[msg.Key.ID.string] = StatusRelay{
 			ID:        msg.Key.ID,
-			Hostports: pbmodel.AddressesFromPBs(PBsFromHostPorts(msg.Value.Hostports)),
+			Hostports: pbmodel.AddressesFromPBs(pbsFromHostPorts(msg.Value.Hostports)),
 			Metadata:  msg.Value.Metadata,
 		}
 	}

@@ -68,7 +68,7 @@ func newRelayServer(
 			authSealKey: msg.Value.AuthenticationSealKey,
 			template: &pbclient.Relay{
 				Id:                msg.Key.ID.string,
-				Addresses:         PBsFromHostPorts(msg.Value.Hostports),
+				Addresses:         pbsFromHostPorts(msg.Value.Hostports),
 				ServerCertificate: msg.Value.Certificate.Raw,
 			},
 		}
@@ -204,7 +204,7 @@ func (s *relayServer) Relays(ctx context.Context, endpoint connet.Endpoint, role
 			} else if ok {
 				localRelays[msg.Key.ID] = &pbclient.Relay{
 					Id:                msg.Key.ID.string,
-					Addresses:         PBsFromHostPorts(msg.Value.Hostports),
+					Addresses:         pbsFromHostPorts(msg.Value.Hostports),
 					ServerCertificate: msg.Value.Certificate.Raw,
 					Authentication:    seal(msg.Value.AuthenticationSealKey),
 					Metadata:          msg.Value.Metadata,
@@ -312,7 +312,7 @@ func (s *relayServer) runConnsCache(ctx context.Context) error {
 				authSealKey: msg.Value.AuthenticationSealKey,
 				template: &pbclient.Relay{
 					Id:                msg.Key.ID.string,
-					Addresses:         PBsFromHostPorts(msg.Value.Hostports),
+					Addresses:         pbsFromHostPorts(msg.Value.Hostports),
 					ServerCertificate: msg.Value.Certificate.Raw,
 					Metadata:          msg.Value.Metadata,
 				},
@@ -392,7 +392,7 @@ func (c *relayConn) runErr(ctx context.Context) error {
 	defer c.logger.Info("relay disconnected", "addr", c.conn.RemoteAddr(), "metadata", c.metadata)
 
 	key := RelayConnKey{ID: c.id}
-	value := RelayConnValue{c.auth, HostPortFromPBs(c.hostports), c.metadata, c.certificate, c.authSignKey}
+	value := RelayConnValue{c.auth, hostPortFromPBs(c.hostports), c.metadata, c.certificate, c.authSignKey}
 	if err := c.server.conns.Put(key, value); err != nil {
 		return err
 	}
