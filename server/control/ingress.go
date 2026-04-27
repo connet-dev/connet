@@ -21,7 +21,15 @@ type IngressBuilder struct {
 
 func NewIngressBuilder() *IngressBuilder { return &IngressBuilder{} }
 
-func (b *IngressBuilder) WithListenAddress(addrStr string) *IngressBuilder {
+func (b *IngressBuilder) WithListenAddress(addr *net.UDPAddr) *IngressBuilder {
+	if b.err != nil {
+		return b
+	}
+	b.ingress.ListenAddress = addr
+	return b
+}
+
+func (b *IngressBuilder) WithListenAddressFrom(addrStr string) *IngressBuilder {
 	if b.err != nil {
 		return b
 	}
@@ -31,15 +39,7 @@ func (b *IngressBuilder) WithListenAddress(addrStr string) *IngressBuilder {
 		b.err = fmt.Errorf("resolve udp address: %w", err)
 		return b
 	}
-	return b.WithListenAddressResolved(addr)
-}
-
-func (b *IngressBuilder) WithListenAddressResolved(addr *net.UDPAddr) *IngressBuilder {
-	if b.err != nil {
-		return b
-	}
-	b.ingress.ListenAddress = addr
-	return b
+	return b.WithListenAddress(addr)
 }
 
 func (b *IngressBuilder) WithListenTLS(cfg *tls.Config) *IngressBuilder {

@@ -177,7 +177,7 @@ func (x *AddrPort) GetPort() uint32 {
 type HostPort struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Host          string                 `protobuf:"bytes,1,opt,name=host,proto3" json:"host,omitempty"`
-	Port          uint32                 `protobuf:"varint,2,opt,name=port,proto3" json:"port,omitempty"`
+	Port          uint32                 `protobuf:"varint,2,opt,name=port,proto3" json:"port,omitempty"` // really uint16, but not a thing in protobuf
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }

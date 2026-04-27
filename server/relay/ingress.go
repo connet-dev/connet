@@ -3,6 +3,8 @@ package relay
 import (
 	"fmt"
 	"net"
+	"strconv"
+	"strings"
 
 	"github.com/connet-dev/connet/pkg/proto/pbmodel"
 	"github.com/connet-dev/connet/pkg/restr"
@@ -10,8 +12,13 @@ import (
 
 type Ingress struct {
 	ListenAddress      *net.UDPAddr
-	AdvertiseAddresses []string
+	AdvertiseAddresses []HostPort
 	Restr              restr.IP
+}
+
+type HostPort struct {
+	Host string
+	Port uint16
 }
 
 type IngressBuilder struct {
@@ -21,7 +28,15 @@ type IngressBuilder struct {
 
 func NewIngressBuilder() *IngressBuilder { return &IngressBuilder{} }
 
-func (b *IngressBuilder) WithListenAddress(addrStr string) *IngressBuilder {
+func (b *IngressBuilder) WithListenAddress(addr *net.UDPAddr) *IngressBuilder {
+	if b.err != nil {
+		return b
+	}
+	b.ingress.ListenAddress = addr
+	return b
+}
+
+func (b *IngressBuilder) WithListenAddressFrom(addrStr string) *IngressBuilder {
 	if b.err != nil {
 		return b
 	}
@@ -31,27 +46,27 @@ func (b *IngressBuilder) WithListenAddress(addrStr string) *IngressBuilder {
 		b.err = fmt.Errorf("resolve udp address: %w", err)
 		return b
 	}
-	return b.WithListenAddressResolved(addr)
+	return b.WithListenAddress(addr)
 }
 
-func (b *IngressBuilder) WithListenAddressResolved(addr *net.UDPAddr) *IngressBuilder {
+func (b *IngressBuilder) WithAdvertiseAddress(hp HostPort) *IngressBuilder {
 	if b.err != nil {
 		return b
 	}
-	b.ingress.ListenAddress = addr
+	b.ingress.AdvertiseAddresses = append(b.ingress.AdvertiseAddresses, hp)
 	return b
 }
 
-func (b *IngressBuilder) WithAdvertiseAddress(addr string) *IngressBuilder {
+func (b *IngressBuilder) WithAdvertiseAddressFrom(addr string) *IngressBuilder {
 	if b.err != nil {
 		return b
 	}
-	if _, err := pbmodel.ParseHostPort(addr); err != nil {
+	hp, err := parseHostPort(addr)
+	if err != nil {
 		b.err = err
 		return b
 	}
-	b.ingress.AdvertiseAddresses = append(b.ingress.AdvertiseAddresses, addr)
-	return b
+	return b.WithAdvertiseAddress(hp)
 }
 
 func (b *IngressBuilder) WithRestr(iprestr restr.IP) *IngressBuilder {
@@ -85,11 +100,7 @@ func (b *IngressBuilder) Ingress() (Ingress, error) {
 		return b.ingress, b.err
 	}
 
-	for i, addr := range b.ingress.AdvertiseAddresses {
-		hp, err := pbmodel.ParseHostPort(addr)
-		if err != nil {
-			return b.ingress, err
-		}
+	for i, hp := range b.ingress.AdvertiseAddresses {
 		if hp.Host == "" {
 			switch {
 			case b.ingress.ListenAddress == nil:
@@ -107,12 +118,52 @@ func (b *IngressBuilder) Ingress() (Ingress, error) {
 			case b.ingress.ListenAddress.Port == 0:
 				hp.Port = 19191 // TODO maybe an error, it might be a random port
 			default:
-				hp.Port = uint32(b.ingress.ListenAddress.Port)
+				hp.Port = uint16(b.ingress.ListenAddress.Port)
 			}
 		}
 
-		b.ingress.AdvertiseAddresses[i] = pbmodel.AddressFromPB(hp)
+		b.ingress.AdvertiseAddresses[i] = hp
 	}
 
 	return b.ingress, b.err
+}
+
+func parseHostPort(addr string) (HostPort, error) {
+	if strings.HasPrefix(addr, "[") {
+		closeBracket := strings.LastIndex(addr, "]")
+		if closeBracket < 0 {
+			return HostPort{}, fmt.Errorf("cannot parse hostport, missing ]")
+		}
+		colonPort := addr[closeBracket+1:]
+		if len(colonPort) > 0 {
+			if colonPort[0] != ':' {
+				return HostPort{}, fmt.Errorf("cannot parse hostport, missing ':'")
+			}
+			portStr := colonPort[1:]
+			if len(portStr) == 0 {
+				return HostPort{}, fmt.Errorf("cannot parse hostport, missing port")
+			}
+			port, err := strconv.ParseUint(portStr, 10, 16)
+			if err != nil {
+				return HostPort{}, fmt.Errorf("cannot parse port: %w", err)
+			}
+			return HostPort{Host: addr[:closeBracket+1], Port: uint16(port)}, nil
+		}
+	} else if colonIndex := strings.LastIndex(addr, ":"); colonIndex != -1 {
+		portStr := addr[colonIndex+1:]
+		if len(portStr) == 0 {
+			return HostPort{}, fmt.Errorf("cannot parse hostport, missing port")
+		}
+		port, err := strconv.ParseUint(portStr, 10, 16)
+		if err != nil {
+			return HostPort{}, fmt.Errorf("cannot parse port: %w", err)
+		}
+		return HostPort{Host: addr[:colonIndex], Port: uint16(port)}, nil
+	}
+
+	return HostPort{Host: addr}, nil
+}
+
+func (hp HostPort) pb() *pbmodel.HostPort {
+	return &pbmodel.HostPort{Host: hp.Host, Port: uint32(hp.Port)}
 }

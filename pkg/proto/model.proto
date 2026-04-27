@@ -15,7 +15,7 @@ message AddrPort {
 
 message HostPort {
   string host = 1;
-  uint32 port = 2;
+  uint32 port = 2; // really uint16, but not a thing in protobuf
 }
 
 message Endpoint {

@@ -55,7 +55,7 @@ func newServerConfig(opts []Option) (*serverConfig, error) {
 		if err != nil {
 			return nil, fmt.Errorf("resolve clients relay address: %w", err)
 		}
-		ring := relay.Ingress{ListenAddress: addr, AdvertiseAddresses: []string{"localhost:19191"}}
+		ring := relay.Ingress{ListenAddress: addr, AdvertiseAddresses: []relay.HostPort{{Host: "localhost", Port: 19191}}}
 		if err := RelayIngress(ring)(cfg); err != nil {
 			return nil, fmt.Errorf("default clients relay address: %w", err)
 		}

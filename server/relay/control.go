@@ -51,16 +51,9 @@ type controlClient struct {
 }
 
 func newControlClient(cfg Config, clientsCert *certc.Cert, configStore logc.KV[ConfigKey, ConfigValue]) (*controlClient, error) {
-	var hostports []*pbmodel.HostPort
-	for _, ing := range cfg.Ingress {
-		for _, addr := range ing.AdvertiseAddresses {
-			if hp, err := pbmodel.ParseHostPort(addr); err != nil {
-				return nil, fmt.Errorf("parse addr %s: %w", addr, err)
-			} else {
-				hostports = append(hostports, hp)
-			}
-		}
-	}
+	hostports := iterc.FlattenSlice(iterc.MapSlice(cfg.Ingress, func(ing Ingress) []*pbmodel.HostPort {
+		return iterc.MapSlice(ing.AdvertiseAddresses, HostPort.pb)
+	}))
 
 	c := &controlClient{
 		hostports:   hostports,

@@ -191,11 +191,11 @@ func relayRun(ctx context.Context, cfg RelayConfig, logger *slog.Logger) error {
 
 func (cfg RelayIngress) parse() (relay.Ingress, error) {
 	bldr := relay.NewIngressBuilder().
-		WithListenAddress(cfg.Addr).
+		WithListenAddressFrom(cfg.Addr).
 		WithRestrFrom(cfg.AllowCIDRs, cfg.DenyCIDRs)
 
 	for ix, hp := range cfg.Hostports {
-		bldr = bldr.WithAdvertiseAddress(hp)
+		bldr = bldr.WithAdvertiseAddressFrom(hp)
 		if bldr.Error() != nil {
 			return relay.Ingress{}, fmt.Errorf("parse hostport at %d: %w", ix, bldr.Error())
 		}

@@ -106,43 +106,20 @@ type RelayConnKey struct {
 
 type RelayConnValue struct {
 	Authentication        RelayAuthentication `json:"authentication"`
-	Hostports             []RelayHostPort     `json:"hostports"`
+	Hostports             []relayHostPort     `json:"hostports"`
 	Metadata              string              `json:"metadata"`
 	Certificate           *x509.Certificate   `json:"certificate"`
 	AuthenticationSealKey *[32]byte           `json:"authentication-seal-key"`
 }
 
-// TODO remove
-type RelayHostPort struct {
+type relayHostPort struct {
 	Host string `json:"host"`
 	Port uint16 `json:"port"`
 }
 
-func hostPortFromPB(h *pbmodel.HostPort) RelayHostPort {
-	return RelayHostPort{
-		Host: h.Host,
-		Port: uint16(h.Port),
-	}
-}
-
-func hostPortFromPBs(hs []*pbmodel.HostPort) []RelayHostPort {
-	return iterc.MapSlice(hs, hostPortFromPB)
-}
-
-func pbsFromHostPorts(hps []RelayHostPort) []*pbmodel.HostPort {
-	return iterc.MapSlice(hps, RelayHostPort.pb)
-}
-
-func (h RelayHostPort) pb() *pbmodel.HostPort {
-	return &pbmodel.HostPort{
-		Host: h.Host,
-		Port: uint32(h.Port),
-	}
-}
-
 type jsonRelayConnValue struct {
 	Authentication        RelayAuthentication `json:"authentication"`
-	Hostports             []RelayHostPort     `json:"hostports"`
+	Hostports             []relayHostPort     `json:"hostports"`
 	Metadata              string              `json:"metadata"`
 	Certificate           []byte              `json:"certificate"`
 	AuthenticationSealKey []byte              `json:"authentication-seal-key"`
@@ -173,4 +150,26 @@ func (v *RelayConnValue) UnmarshalJSON(b []byte) error {
 	copy(authKey[:], s.AuthenticationSealKey)
 	*v = RelayConnValue{s.Authentication, s.Hostports, s.Metadata, cert, &authKey}
 	return nil
+}
+
+func hostPortFromPB(h *pbmodel.HostPort) relayHostPort {
+	return relayHostPort{
+		Host: h.Host,
+		Port: uint16(h.Port),
+	}
+}
+
+func hostPortFromPBs(hs []*pbmodel.HostPort) []relayHostPort {
+	return iterc.MapSlice(hs, hostPortFromPB)
+}
+
+func pbsFromHostPorts(hps []relayHostPort) []*pbmodel.HostPort {
+	return iterc.MapSlice(hps, relayHostPort.pb)
+}
+
+func (h relayHostPort) pb() *pbmodel.HostPort {
+	return &pbmodel.HostPort{
+		Host: h.Host,
+		Port: uint32(h.Port),
+	}
 }
