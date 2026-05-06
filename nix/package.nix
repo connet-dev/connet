@@ -27,7 +27,7 @@ pkgs.buildGoModule
 
   vendorHash = "sha256-IzsJg8+IRznR5MGcRdfxo202ZhG1KV98Kr9AOodN9jc=";
   subPackages = [ "cmd/connet" ];
-  ldflags = [ "-X 'github.com/connet-dev/connet/model.Version=${lib.strings.fileContents ../VERSION}'" ];
+  ldflags = [ "-X 'github.com/connet-dev/connet/pkg/build.Version=${lib.strings.fileContents ../VERSION}'" ];
 
   nativeBuildInputs = [ pkgs.installShellFiles ];
   postInstall = lib.optionalString (pkgs.stdenv.buildPlatform.canExecute pkgs.stdenv.hostPlatform) ''
