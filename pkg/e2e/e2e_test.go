@@ -292,24 +292,12 @@ func TestE2E(t *testing.T) {
 		require.Empty(t, cl.Destinations())
 		require.Empty(t, cl.Sources())
 
-		var acceptConn, dialConn net.Conn
-		var acceptErr, dialErr error
-		acceptCh, dialCh := make(chan struct{}), make(chan struct{})
-		go func() {
-			acceptConn, acceptErr = dst.Accept()
-			close(acceptCh)
-		}()
-		go func() {
-			dialConn, dialErr = src.Dial("", "")
-			close(dialCh)
-		}()
-
-		<-acceptCh
-		<-dialCh
-
+		acceptConn, acceptErr := dst.Accept()
 		require.ErrorIs(t, acceptErr, net.ErrClosed)
-		require.ErrorIs(t, dialErr, connet.ErrSourceNoActiveDestinations)
 		require.Nil(t, acceptConn)
+
+		dialConn, dialErr := src.Dial("", "")
+		require.ErrorIs(t, dialErr, connet.ErrSourceNoActiveDestinations)
 		require.Nil(t, dialConn)
 	})
 	t.Run("cancel-client", func(t *testing.T) {
@@ -344,24 +332,12 @@ func TestE2E(t *testing.T) {
 		require.Empty(t, cl.Destinations())
 		require.Empty(t, cl.Sources())
 
-		var acceptConn, dialConn net.Conn
-		var acceptErr, dialErr error
-		acceptCh, dialCh := make(chan struct{}), make(chan struct{})
-		go func() {
-			acceptConn, acceptErr = dst.Accept()
-			close(acceptCh)
-		}()
-		go func() {
-			dialConn, dialErr = src.Dial("", "")
-			close(dialCh)
-		}()
-
-		<-acceptCh
-		<-dialCh
-
+		acceptConn, acceptErr := dst.Accept()
 		require.ErrorIs(t, acceptErr, net.ErrClosed)
-		require.ErrorIs(t, dialErr, connet.ErrSourceNoActiveDestinations)
 		require.Nil(t, acceptConn)
+
+		dialConn, dialErr := src.Dial("", "")
+		require.ErrorIs(t, dialErr, connet.ErrSourceNoActiveDestinations)
 		require.Nil(t, dialConn)
 	})
 	t.Run("close-dst", func(t *testing.T) {
