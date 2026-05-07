@@ -4,8 +4,10 @@ import (
 	"crypto/x509"
 	"encoding/json"
 	"errors"
+	"net"
 	"os"
 	"path/filepath"
+	"strconv"
 	"time"
 
 	"github.com/connet-dev/connet"
@@ -106,20 +108,20 @@ type RelayConnKey struct {
 
 type RelayConnValue struct {
 	Authentication        RelayAuthentication `json:"authentication"`
-	Hostports             []relayHostPort     `json:"hostports"`
+	Hostports             []RelayHostPort     `json:"hostports"`
 	Metadata              string              `json:"metadata"`
 	Certificate           *x509.Certificate   `json:"certificate"`
 	AuthenticationSealKey *[32]byte           `json:"authentication-seal-key"`
 }
 
-type relayHostPort struct {
+type RelayHostPort struct {
 	Host string `json:"host"`
 	Port uint16 `json:"port"`
 }
 
 type jsonRelayConnValue struct {
 	Authentication        RelayAuthentication `json:"authentication"`
-	Hostports             []relayHostPort     `json:"hostports"`
+	Hostports             []RelayHostPort     `json:"hostports"`
 	Metadata              string              `json:"metadata"`
 	Certificate           []byte              `json:"certificate"`
 	AuthenticationSealKey []byte              `json:"authentication-seal-key"`
@@ -152,24 +154,28 @@ func (v *RelayConnValue) UnmarshalJSON(b []byte) error {
 	return nil
 }
 
-func hostPortFromPB(h *pbmodel.HostPort) relayHostPort {
-	return relayHostPort{
+func hostPortFromPB(h *pbmodel.HostPort) RelayHostPort {
+	return RelayHostPort{
 		Host: h.Host,
 		Port: uint16(h.Port),
 	}
 }
 
-func hostPortFromPBs(hs []*pbmodel.HostPort) []relayHostPort {
+func hostPortFromPBs(hs []*pbmodel.HostPort) []RelayHostPort {
 	return iterc.MapSlice(hs, hostPortFromPB)
 }
 
-func pbsFromHostPorts(hps []relayHostPort) []*pbmodel.HostPort {
-	return iterc.MapSlice(hps, relayHostPort.pb)
+func pbsFromHostPorts(hps []RelayHostPort) []*pbmodel.HostPort {
+	return iterc.MapSlice(hps, RelayHostPort.pb)
 }
 
-func (h relayHostPort) pb() *pbmodel.HostPort {
+func (h RelayHostPort) pb() *pbmodel.HostPort {
 	return &pbmodel.HostPort{
 		Host: h.Host,
 		Port: uint32(h.Port),
 	}
+}
+
+func (h RelayHostPort) String() string {
+	return net.JoinHostPort(h.Host, strconv.Itoa(int(h.Port)))
 }
