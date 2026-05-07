@@ -12,12 +12,11 @@ jobs:
     name: Binaries
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: DeterminateSystems/nix-installer-action@main
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      - uses: DeterminateSystems/determinate-nix-action@7c4cc317e802185875512bfcb68259257279d767 # v3.19.1
         with:
-          determinate: true
           github-token: ${{ secrets.GITHUB_TOKEN }}
-      - uses: DeterminateSystems/flakehub-cache-action@main
+      - uses: DeterminateSystems/flakehub-cache-action@7085070a1431418586d7e5f65ffa0379d6dc5e9a # v3.19.1
       - name: Build release
         run: nix develop --command make release
 
@@ -25,16 +24,14 @@ jobs:
     name: Build x86 image
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: DeterminateSystems/nix-installer-action@main
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      - uses: DeterminateSystems/determinate-nix-action@7c4cc317e802185875512bfcb68259257279d767 # v3.19.1
         with:
-          determinate: true
           github-token: ${{ secrets.GITHUB_TOKEN }}
-      - uses: DeterminateSystems/flakehub-cache-action@main
+      - uses: DeterminateSystems/flakehub-cache-action@7085070a1431418586d7e5f65ffa0379d6dc5e9a # v3.19.1
       - name: Docker build
         run: nix build .#docker
-      - name: Docker login
-        uses: docker/login-action@v3
+      - uses: docker/login-action@4907a6ddec9925e35a0a9e82d7399ccc52663121 # v4.1.0
         with:
           registry: ghcr.io
           username: ${{ github.actor }}
@@ -46,18 +43,16 @@ jobs:
     name: Build arm image
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
       - uses: docker/setup-qemu-action@v3
-      - uses: DeterminateSystems/nix-installer-action@main
+      - uses: DeterminateSystems/determinate-nix-action@7c4cc317e802185875512bfcb68259257279d767 # v3.19.1
         with:
-          determinate: true
           github-token: ${{ secrets.GITHUB_TOKEN }}
           extra-conf: system = aarch64-linux
-      - uses: DeterminateSystems/flakehub-cache-action@main
+      - uses: DeterminateSystems/flakehub-cache-action@7085070a1431418586d7e5f65ffa0379d6dc5e9a # v3.19.1
       - name: Docker build
         run: nix build .#docker
-      - name: Docker login
-        uses: docker/login-action@v3
+      - uses: docker/login-action@4907a6ddec9925e35a0a9e82d7399ccc52663121 # v4.1.0
         with:
           registry: ghcr.io
           username: ${{ github.actor }}
@@ -70,14 +65,12 @@ jobs:
     runs-on: ubuntu-latest
     needs: [docker-build-x86, docker-build-arm]
     steps:
-      - uses: actions/checkout@v4
-      - uses: DeterminateSystems/nix-installer-action@main
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      - uses: DeterminateSystems/determinate-nix-action@7c4cc317e802185875512bfcb68259257279d767 # v3.19.1
         with:
-          determinate: true
           github-token: ${{ secrets.GITHUB_TOKEN }}
-      - uses: DeterminateSystems/flakehub-cache-action@main
-      - name: Docker login
-        uses: docker/login-action@v3
+      - uses: DeterminateSystems/flakehub-cache-action@7085070a1431418586d7e5f65ffa0379d6dc5e9a # v3.19.1
+      - uses: docker/login-action@4907a6ddec9925e35a0a9e82d7399ccc52663121 # v4.1.0
         with:
           registry: ghcr.io
           username: ${{ github.actor }}

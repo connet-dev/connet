@@ -13,11 +13,10 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
-      - uses: DeterminateSystems/nix-installer-action@main
+      - uses: DeterminateSystems/determinate-nix-action@7c4cc317e802185875512bfcb68259257279d767 # v3.19.1
         with:
-          determinate: true
           github-token: ${{ secrets.GITHUB_TOKEN }}
-      - uses: DeterminateSystems/flakehub-cache-action@main
+      - uses: DeterminateSystems/flakehub-cache-action@7085070a1431418586d7e5f65ffa0379d6dc5e9a # v3.19.1
       - name: Build connet
         run: nix develop --command make build
 
@@ -27,11 +26,10 @@ jobs:
     needs: [build]
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
-      - uses: DeterminateSystems/nix-installer-action@main
+      - uses: DeterminateSystems/determinate-nix-action@7c4cc317e802185875512bfcb68259257279d767 # v3.19.1
         with:
-          determinate: true
           github-token: ${{ secrets.GITHUB_TOKEN }}
-      - uses: DeterminateSystems/flakehub-cache-action@main
+      - uses: DeterminateSystems/flakehub-cache-action@7085070a1431418586d7e5f65ffa0379d6dc5e9a # v3.19.1
       - name: Run tests
         run: nix develop --command make test
       - name: Run lint
@@ -49,12 +47,11 @@ jobs:
     needs: [build]
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
-      - uses: DeterminateSystems/nix-installer-action@main
+      - uses: DeterminateSystems/determinate-nix-action@7c4cc317e802185875512bfcb68259257279d767 # v3.19.1
         with:
-          determinate: true
           github-token: ${{ secrets.GITHUB_TOKEN }}
-      - uses: DeterminateSystems/flakehub-cache-action@main
-      - uses: DeterminateSystems/flake-checker-action@main
+      - uses: DeterminateSystems/flakehub-cache-action@7085070a1431418586d7e5f65ffa0379d6dc5e9a # v3.19.1
+      - uses: DeterminateSystems/flake-checker-action@3164002371bc90729c68af0e24d5aacf20d7c9f6 # v12
       - name: Build default
         run: nix build .
       - name: Build docker

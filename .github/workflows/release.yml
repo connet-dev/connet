@@ -19,8 +19,6 @@ jobs:
   version-change:
     name: Detect version change
     runs-on: ubuntu-latest
-    permissions:
-      contents: read
     outputs:
       version-changed: ${{ steps.filter.outputs.version }}
       version: ${{ steps.extract-version.outputs.version }}
@@ -41,26 +39,23 @@ jobs:
   release:
     name: Release
     runs-on: ubuntu-latest
-    permissions:
-      contents: write
     needs: [version-change]
     if: ${{ needs.version-change.outputs.version-changed == 'true' }}
     env:
       CONNET_VERSION: ${{ needs.version-change.outputs.version }}
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
-      - uses: DeterminateSystems/nix-installer-action@main
+      - uses: DeterminateSystems/determinate-nix-action@7c4cc317e802185875512bfcb68259257279d767 # v3.19.1
         with:
-          determinate: true
           github-token: ${{ secrets.GITHUB_TOKEN }}
-      - uses: DeterminateSystems/flakehub-cache-action@main
+      - uses: DeterminateSystems/flakehub-cache-action@7085070a1431418586d7e5f65ffa0379d6dc5e9a # v3.19.1
       - name: Build release
         run: nix develop --command make release
-      - name: Upload release
+      - name: Publish release
         uses: softprops/action-gh-release@b4309332981a82ec1c5618f44dd2e27cc8bfbfda # v3.0.0
-        if: ${{ needs.setup.outputs.publish }}
         with:
           tag_name: v${{ env.CONNET_VERSION }}
+          generate_release_notes: true
           files: |
             dist/archive/connet-${{ env.CONNET_VERSION }}-*.tar.gz
             dist/archive/connet-${{ env.CONNET_VERSION }}-*.zip
@@ -74,11 +69,10 @@ jobs:
       CONNET_VERSION: ${{ needs.version-change.outputs.version }}
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
-      - uses: DeterminateSystems/nix-installer-action@main
+      - uses: DeterminateSystems/determinate-nix-action@7c4cc317e802185875512bfcb68259257279d767 # v3.19.1
         with:
-          determinate: true
           github-token: ${{ secrets.GITHUB_TOKEN }}
-      - uses: DeterminateSystems/flakehub-cache-action@main
+      - uses: DeterminateSystems/flakehub-cache-action@7085070a1431418586d7e5f65ffa0379d6dc5e9a # v3.19.1
       - name: Docker build
         run: nix build .#docker
       - name: Docker login
@@ -88,7 +82,6 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
       - name: Docker push
-        if: ${{ needs.setup.outputs.publish }}
         run: nix develop --command skopeo copy "docker-archive:result" "docker://ghcr.io/connet-dev/connet:${CONNET_VERSION}-amd64"
 
   docker-arm:
@@ -101,12 +94,11 @@ jobs:
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
       - uses: docker/setup-qemu-action@ce360397dd3f832beb865e1373c09c0e9f86d70a # v4.0.0
-      - uses: DeterminateSystems/nix-installer-action@main
+      - uses: DeterminateSystems/determinate-nix-action@7c4cc317e802185875512bfcb68259257279d767 # v3.19.1
         with:
-          determinate: true
           github-token: ${{ secrets.GITHUB_TOKEN }}
           extra-conf: system = aarch64-linux
-      - uses: DeterminateSystems/flakehub-cache-action@main
+      - uses: DeterminateSystems/flakehub-cache-action@7085070a1431418586d7e5f65ffa0379d6dc5e9a # v3.19.1
       - name: Docker build
         run: nix build .#docker
       - name: Docker login
@@ -116,7 +108,6 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
       - name: Docker push
-        if: ${{ needs.setup.outputs.publish }}
         run: nix develop --command skopeo copy "docker-archive:result" "docker://ghcr.io/connet-dev/connet:${CONNET_VERSION}-arm64"
 
   docker-multiarch:
@@ -128,11 +119,10 @@ jobs:
       CONNET_VERSION: ${{ needs.version-change.outputs.version }}
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
-      - uses: DeterminateSystems/nix-installer-action@main
+      - uses: DeterminateSystems/determinate-nix-action@7c4cc317e802185875512bfcb68259257279d767 # v3.19.1
         with:
-          determinate: true
           github-token: ${{ secrets.GITHUB_TOKEN }}
-      - uses: DeterminateSystems/flakehub-cache-action@main
+      - uses: DeterminateSystems/flakehub-cache-action@7085070a1431418586d7e5f65ffa0379d6dc5e9a # v3.19.1
       - name: Docker login
         uses: docker/login-action@4907a6ddec9925e35a0a9e82d7399ccc52663121 # v4.1.0
         with:
@@ -140,5 +130,4 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
       - name: Docker tag
-        if: ${{ needs.setup.outputs.publish }}
         run: nix develop --command manifest-tool push from-args --platforms linux/amd64,linux/arm64 --template ghcr.io/connet-dev/connet:${CONNET_VERSION}-ARCHVARIANT --target ghcr.io/connet-dev/connet:${CONNET_VERSION}
