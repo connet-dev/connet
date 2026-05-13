@@ -273,8 +273,15 @@ func runWithStatus[T any](ctx context.Context, srv withStatus[T], statusAddr *ne
 		return srv.Run(ctx)
 	}
 
+	ctx, cancel := context.WithCancel(ctx)
+	defer cancel()
+
 	g := reliable.NewGroup(ctx)
-	g.Go(srv.Run)
+	g.Go(func(ctx context.Context) error {
+		err := srv.Run(ctx)
+		cancel()
+		return err
+	})
 	g.Go(func(ctx context.Context) error {
 		logger.Debug("running status server", "addr", statusAddr)
 		return statusc.Run(ctx, statusAddr, srv.Status)

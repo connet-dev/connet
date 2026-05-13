@@ -39,5 +39,9 @@ func Run[T any](ctx context.Context, addr *net.TCPAddr, f func(ctx context.Conte
 		}
 	}()
 
-	return srv.ListenAndServe()
+	err := srv.ListenAndServe()
+	if err == http.ErrServerClosed {
+		return nil
+	}
+	return err
 }

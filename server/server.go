@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"net"
 	"path/filepath"
+	"sync"
 
 	"github.com/connet-dev/connet/pkg/certc"
 	"github.com/connet-dev/connet/pkg/netc"
@@ -20,6 +21,9 @@ type Server struct {
 
 	control *control.Server
 	relay   *relay.Server
+
+	shutdownMu sync.Mutex
+	shutdown   context.CancelFunc
 }
 
 func New(opts ...Option) (*Server, error) {
@@ -102,10 +106,28 @@ func New(opts ...Option) (*Server, error) {
 }
 
 func (s *Server) Run(ctx context.Context) error {
+	ctx, cancel := context.WithCancel(ctx)
+	s.shutdownMu.Lock()
+	s.shutdown = cancel
+	s.shutdownMu.Unlock()
+	defer func() {
+		s.shutdownMu.Lock()
+		s.shutdown = nil
+		s.shutdownMu.Unlock()
+	}()
+
 	g := reliable.NewGroup(ctx)
 	g.Go(s.control.Run)
 	g.Go(s.relay.Run)
 	return g.Wait()
+}
+
+func (s *Server) Shutdown() {
+	s.shutdownMu.Lock()
+	defer s.shutdownMu.Unlock()
+	if s.shutdown != nil {
+		s.shutdown()
+	}
 }
 
 func (s *Server) Status(ctx context.Context) (ServerStatus, error) {
