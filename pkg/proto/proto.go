@@ -13,10 +13,10 @@ import (
 // maxMessageSize is the maximum allowed protobuf message size (16 MB).
 const maxMessageSize = 16 * 1024 * 1024
 
-type WireVersion struct{ int } // TODO remove in 0.18
+type WireVersion struct{ int } // TODO remove in 0.17
 
 var (
-	WireVersion1 = WireVersion{8} // TODO remove in 0.18
+	WireVersion1 = WireVersion{8} // TODO remove in 0.17
 	WireVersion2 = WireVersion{4}
 )
 
@@ -25,11 +25,16 @@ func Write(w io.Writer, msg proto.Message, v WireVersion) error {
 	if err != nil {
 		return err
 	}
+
+	sz := len(msgBytes)
+	if sz > maxMessageSize {
+		return fmt.Errorf("message size %d exceeds maximum %d", sz, maxMessageSize)
+	}
 	szBytes := make([]byte, 0, v.int)
 	if v == WireVersion1 {
-		szBytes = binary.BigEndian.AppendUint64(szBytes, uint64(len(msgBytes)))
+		szBytes = binary.BigEndian.AppendUint64(szBytes, uint64(sz))
 	} else {
-		szBytes = binary.BigEndian.AppendUint32(szBytes, uint32(len(msgBytes)))
+		szBytes = binary.BigEndian.AppendUint32(szBytes, uint32(sz))
 	}
 	if _, err := w.Write(szBytes); err != nil {
 		if aperr := pberror.GetAppError(err); aperr != nil {
@@ -40,6 +45,7 @@ func Write(w io.Writer, msg proto.Message, v WireVersion) error {
 		}
 		return err
 	}
+
 	_, err = w.Write(msgBytes)
 	if err != nil {
 		if aperr := pberror.GetAppError(err); aperr != nil {
@@ -54,7 +60,6 @@ func Write(w io.Writer, msg proto.Message, v WireVersion) error {
 
 func Read(r io.Reader, msg proto.Message, v WireVersion) error {
 	szBytes := make([]byte, v.int)
-
 	_, err := io.ReadFull(r, szBytes)
 	if err != nil {
 		if aperr := pberror.GetAppError(err); aperr != nil {
@@ -65,7 +70,6 @@ func Read(r io.Reader, msg proto.Message, v WireVersion) error {
 		}
 		return err
 	}
-
 	var sz int
 	if v == WireVersion1 {
 		sz = int(binary.BigEndian.Uint64(szBytes))
