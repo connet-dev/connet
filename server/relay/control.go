@@ -22,7 +22,7 @@ import (
 	"github.com/connet-dev/connet/pkg/iterc"
 	"github.com/connet-dev/connet/pkg/logc"
 	"github.com/connet-dev/connet/pkg/proto"
-	"github.com/connet-dev/connet/pkg/proto/pbclientrelay"
+	"github.com/connet-dev/connet/pkg/proto/pbcontrolrelays"
 	"github.com/connet-dev/connet/pkg/proto/pberror"
 	"github.com/connet-dev/connet/pkg/proto/pbmodel"
 	"github.com/connet-dev/connet/pkg/proto/pbrelay"
@@ -77,7 +77,7 @@ func newControlClient(cfg Config, clientsCert *certc.Cert, configStore logc.KV[C
 	return c, nil
 }
 
-func (s *controlClient) Authenticate(authReq *pbclientrelay.AuthenticateReq, cert *x509.Certificate) (*clientAuth, error) {
+func (s *controlClient) Authenticate(authReq *pbrelay.AuthenticateReq, cert *x509.Certificate) (*clientAuth, error) {
 	authUnsealKey := s.authUnsealKey.Load()
 	if authUnsealKey == nil {
 		return nil, fmt.Errorf("no control verification key")
@@ -91,7 +91,7 @@ func (s *controlClient) Authenticate(authReq *pbclientrelay.AuthenticateReq, cer
 	if !ok {
 		return nil, pberror.NewError(pberror.Code_AuthenticationFailed, "invalid authentication")
 	}
-	var auth pbrelay.ClientAuthentication
+	var auth pbcontrolrelays.ClientAuthentication
 	if err := protobuf.Unmarshal(authData, &auth); err != nil {
 		return nil, pberror.NewError(pberror.Code_AuthenticationFailed, "invalid authentication data")
 	}
@@ -199,7 +199,7 @@ func (s *controlClient) authenticate(ctx context.Context, conn *quic.Conn, recon
 		return fmt.Errorf("could not create keys: %w", err)
 	}
 
-	if err := proto.Write(authStream, &pbrelay.AuthenticateReq{
+	if err := proto.Write(authStream, &pbcontrolrelays.AuthenticateReq{
 		Token:                  s.controlToken,
 		Addresses:              s.hostports,
 		ReconnectToken:         reconnConfig.Bytes,
@@ -211,7 +211,7 @@ func (s *controlClient) authenticate(ctx context.Context, conn *quic.Conn, recon
 		return fmt.Errorf("auth write error: %w", err)
 	}
 
-	resp := &pbrelay.AuthenticateResp{}
+	resp := &pbcontrolrelays.AuthenticateResp{}
 	if err := proto.Read(authStream, resp, wv); err != nil {
 		return fmt.Errorf("auth read error: %w", err)
 	}

@@ -16,9 +16,9 @@ import (
 	"github.com/connet-dev/connet/pkg/iterc"
 	"github.com/connet-dev/connet/pkg/notify"
 	"github.com/connet-dev/connet/pkg/proto"
-	"github.com/connet-dev/connet/pkg/proto/pbclient"
-	"github.com/connet-dev/connet/pkg/proto/pbconnect"
+	"github.com/connet-dev/connet/pkg/proto/pbcontrol"
 	"github.com/connet-dev/connet/pkg/proto/pberror"
+	"github.com/connet-dev/connet/pkg/proto/pbpeer"
 	"github.com/connet-dev/connet/pkg/quicc"
 	"github.com/connet-dev/connet/pkg/reliable"
 	"github.com/connet-dev/connet/pkg/slogc"
@@ -45,7 +45,7 @@ type remotePeer struct {
 	local *peer
 
 	remoteID peerID
-	remote   *notify.V[*pbclient.RemotePeer]
+	remote   *notify.V[*pbcontrol.RemotePeer]
 	incoming *remotePeerIncoming
 	outgoing *remotePeerOutgoing
 	relays   *remotePeerRelays
@@ -54,7 +54,7 @@ type remotePeer struct {
 	logger *slog.Logger
 }
 
-func runRemotePeer(ctx context.Context, local *peer, remote *pbclient.RemotePeer, logger *slog.Logger) *remotePeer {
+func runRemotePeer(ctx context.Context, local *peer, remote *pbcontrol.RemotePeer, logger *slog.Logger) *remotePeer {
 	ctx, cancel := context.WithCancelCause(ctx)
 	r := &remotePeer{
 		local: local,
@@ -80,7 +80,7 @@ func (p *remotePeer) run(ctx context.Context) {
 }
 
 func (p *remotePeer) runErr(ctx context.Context) error {
-	return p.remote.Listen(ctx, func(remote *pbclient.RemotePeer) error {
+	return p.remote.Listen(ctx, func(remote *pbcontrol.RemotePeer) error {
 		if len(remote.Peer.Directs) > 0 {
 			if p.incoming == nil {
 				remoteClientCert, err := x509.ParseCertificate(remote.Peer.ClientCertificate)
@@ -217,9 +217,9 @@ func (p *remotePeerIncoming) check(ctx context.Context, conn *quic.Conn) error {
 		}
 	}()
 
-	if _, err := pbconnect.ReadRequest(stream, wv); err != nil {
+	if _, err := pbpeer.ReadRequest(stream, wv); err != nil {
 		return err
-	} else if err := proto.Write(stream, &pbconnect.Response{}, wv); err != nil {
+	} else if err := proto.Write(stream, &pbpeer.Response{}, wv); err != nil {
 		return err
 	}
 
@@ -338,10 +338,10 @@ func (p *remotePeerOutgoing) check(ctx context.Context, conn *quic.Conn) error {
 		}
 	}()
 
-	if err := proto.Write(stream, &pbconnect.Request{}, wv); err != nil {
+	if err := proto.Write(stream, &pbpeer.Request{}, wv); err != nil {
 		return err
 	}
-	if _, err := pbconnect.ReadResponse(stream, wv); err != nil {
+	if _, err := pbpeer.ReadResponse(stream, wv); err != nil {
 		return err
 	}
 

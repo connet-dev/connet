@@ -3,7 +3,7 @@ package connect;
 
 import "error.proto";
 
-option go_package = "github.com/connet-dev/connet/pkg/proto/pbconnect";
+option go_package = "github.com/connet-dev/connet/pkg/proto/pbpeer";
 
 message Request {
   // Soft one-of

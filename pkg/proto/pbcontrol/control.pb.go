@@ -4,7 +4,7 @@
 // 	protoc        v7.34.1
 // source: control.proto
 
-package pbclient
+package pbcontrol
 
 import (
 	pberror "github.com/connet-dev/connet/pkg/proto/pberror"
@@ -725,7 +725,7 @@ const file_control_proto_rawDesc = "" +
 	"\taddresses\x18\x02 \x03(\v2\x0f.model.HostPortR\taddresses\x12-\n" +
 	"\x12server_certificate\x18\x03 \x01(\fR\x11serverCertificate\x12&\n" +
 	"\x0eauthentication\x18\x04 \x01(\fR\x0eauthentication\x12\x1a\n" +
-	"\bmetadata\x18\x05 \x01(\tR\bmetadataB1Z/github.com/connet-dev/connet/pkg/proto/pbclientb\x06proto3"
+	"\bmetadata\x18\x05 \x01(\tR\bmetadataB2Z0github.com/connet-dev/connet/pkg/proto/pbcontrolb\x06proto3"
 
 var (
 	file_control_proto_rawDescOnce sync.Once

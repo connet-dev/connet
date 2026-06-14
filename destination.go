@@ -13,8 +13,8 @@ import (
 
 	"github.com/connet-dev/connet/pkg/cryptoc"
 	"github.com/connet-dev/connet/pkg/proto"
-	"github.com/connet-dev/connet/pkg/proto/pbconnect"
 	"github.com/connet-dev/connet/pkg/proto/pberror"
+	"github.com/connet-dev/connet/pkg/proto/pbpeer"
 	"github.com/connet-dev/connet/pkg/quicc"
 	"github.com/connet-dev/connet/pkg/statusc"
 )
@@ -228,7 +228,7 @@ func (d *destinationConn) runDestination(ctx context.Context, stream *quic.Strea
 }
 
 func (d *destinationConn) runDestinationErr(ctx context.Context, stream *quic.Stream) error {
-	req, err := pbconnect.ReadRequest(stream, d.wv)
+	req, err := pbpeer.ReadRequest(stream, d.wv)
 	if err != nil {
 		return fmt.Errorf("destination read request: %w", err)
 	}
@@ -237,15 +237,15 @@ func (d *destinationConn) runDestinationErr(ctx context.Context, stream *quic.St
 	case req.Connect != nil:
 		return d.runConnect(ctx, stream, req)
 	default:
-		return pbconnect.WriteError(stream, d.wv, pberror.Code_RequestUnknown, "unknown request: %v", req)
+		return pbpeer.WriteError(stream, d.wv, pberror.Code_RequestUnknown, "unknown request: %v", req)
 	}
 }
 
-func (d *destinationConn) runConnect(ctx context.Context, stream *quic.Stream, req *pbconnect.Request) error {
+func (d *destinationConn) runConnect(ctx context.Context, stream *quic.Stream, req *pbpeer.Request) error {
 	var srcConfig *tls.Config
 	var srcStreamer cryptoc.Streamer
 
-	connect := &pbconnect.Response_Connect{
+	connect := &pbpeer.Response_Connect{
 		ProxyProto: d.dst.cfg.Proxy.PB(),
 	}
 
@@ -253,7 +253,7 @@ func (d *destinationConn) runConnect(ctx context.Context, stream *quic.Stream, r
 		srcEncryptions, err := EncryptionsFromPB(req.Connect.SourceEncryption)
 		switch {
 		case err != nil:
-			return pbconnect.WriteError(stream, d.wv, pberror.Code_DestinationRelayEncryptionError, "failed to negotiate encryption: %v", err)
+			return pbpeer.WriteError(stream, d.wv, pberror.Code_DestinationRelayEncryptionError, "failed to negotiate encryption: %v", err)
 		case len(srcEncryptions) == 0:
 			// source doesn't include encryption logic, none is the only possible choice
 			srcEncryptions = []EncryptionScheme{NoEncryption}
@@ -262,46 +262,46 @@ func (d *destinationConn) runConnect(ctx context.Context, stream *quic.Stream, r
 		encryption, err := SelectEncryptionScheme(d.dst.cfg.RelayEncryptions, srcEncryptions)
 		switch {
 		case err != nil:
-			return pbconnect.WriteError(stream, d.wv, pberror.Code_DestinationRelayEncryptionError, "select encryption scheme: %v", err)
+			return pbpeer.WriteError(stream, d.wv, pberror.Code_DestinationRelayEncryptionError, "select encryption scheme: %v", err)
 		case encryption == TLSEncryption:
 			scfg, err := d.dst.getSourceTLS(req.Connect.SourceTls.GetClientName())
 			if err != nil {
-				return pbconnect.WriteError(stream, d.wv, pberror.Code_DestinationRelayEncryptionError, "destination tls: %v", err)
+				return pbpeer.WriteError(stream, d.wv, pberror.Code_DestinationRelayEncryptionError, "destination tls: %v", err)
 			}
 			srcConfig = scfg
 
-			connect.DestinationEncryption = pbconnect.RelayEncryptionScheme_TLS
-			connect.DestinationTls = &pbconnect.TLSConfiguration{
+			connect.DestinationEncryption = pbpeer.RelayEncryptionScheme_TLS
+			connect.DestinationTls = &pbpeer.TLSConfiguration{
 				ClientName: d.dst.ep.peer.serverCert.Leaf.DNSNames[0],
 			}
 		case encryption == DHXCPEncryption:
 			// get check peer public key
 			srcPublic, err := d.dst.ep.peer.getECDHPublicKey(req.Connect.SourceDhX25519)
 			if err != nil {
-				return pbconnect.WriteError(stream, d.wv, pberror.Code_DestinationRelayEncryptionError, "destination public key: %v", err)
+				return pbpeer.WriteError(stream, d.wv, pberror.Code_DestinationRelayEncryptionError, "destination public key: %v", err)
 			}
 
 			dstSecret, ecdhCfg, err := d.dst.ep.peer.newECDHConfig()
 			if err != nil {
-				return pbconnect.WriteError(stream, d.wv, pberror.Code_DestinationRelayEncryptionError, "new ecdh config: %v", err)
+				return pbpeer.WriteError(stream, d.wv, pberror.Code_DestinationRelayEncryptionError, "new ecdh config: %v", err)
 			}
 
-			connect.DestinationEncryption = pbconnect.RelayEncryptionScheme_DHX25519_CHACHAPOLY
+			connect.DestinationEncryption = pbpeer.RelayEncryptionScheme_DHX25519_CHACHAPOLY
 			connect.DestinationDhX25519 = ecdhCfg
 
 			streamer, err := cryptoc.NewStreamer(dstSecret, srcPublic, false)
 			if err != nil {
-				return pbconnect.WriteError(stream, d.wv, pberror.Code_DestinationRelayEncryptionError, "new streamer: %v", err)
+				return pbpeer.WriteError(stream, d.wv, pberror.Code_DestinationRelayEncryptionError, "new streamer: %v", err)
 			}
 			srcStreamer = streamer
 		case encryption == NoEncryption:
 			// do nothing
 		default:
-			return pbconnect.WriteError(stream, d.wv, pberror.Code_DestinationRelayEncryptionError, "unknown encryption scheme: %s", encryption)
+			return pbpeer.WriteError(stream, d.wv, pberror.Code_DestinationRelayEncryptionError, "unknown encryption scheme: %s", encryption)
 		}
 	}
 
-	if err := proto.Write(stream, &pbconnect.Response{
+	if err := proto.Write(stream, &pbpeer.Response{
 		Connect: connect,
 	}, d.wv); err != nil {
 		return fmt.Errorf("destination connect write response: %w", err)
@@ -310,7 +310,7 @@ func (d *destinationConn) runConnect(ctx context.Context, stream *quic.Stream, r
 	encStream := quicc.StreamConn(stream, d.conn)
 	if d.peer.style.isRelay() {
 		switch connect.DestinationEncryption {
-		case pbconnect.RelayEncryptionScheme_TLS:
+		case pbpeer.RelayEncryptionScheme_TLS:
 			d.logger.Debug("upgrading relay connection to TLS")
 			tlsConn := tls.Server(quicc.StreamConn(stream, d.conn), srcConfig)
 			if err := tlsConn.HandshakeContext(ctx); err != nil {
@@ -318,10 +318,10 @@ func (d *destinationConn) runConnect(ctx context.Context, stream *quic.Stream, r
 			}
 
 			encStream = tlsConn
-		case pbconnect.RelayEncryptionScheme_DHX25519_CHACHAPOLY:
+		case pbpeer.RelayEncryptionScheme_DHX25519_CHACHAPOLY:
 			d.logger.Debug("upgrading relay connection to DHXCP")
 			encStream = srcStreamer(encStream)
-		case pbconnect.RelayEncryptionScheme_EncryptionNone:
+		case pbpeer.RelayEncryptionScheme_EncryptionNone:
 			// do nothing
 		default:
 		}

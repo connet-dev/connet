@@ -12,7 +12,7 @@ import (
 
 	"github.com/connet-dev/connet/pkg/iterc"
 	"github.com/connet-dev/connet/pkg/proto"
-	"github.com/connet-dev/connet/pkg/proto/pbclient"
+	"github.com/connet-dev/connet/pkg/proto/pbcontrol"
 	"github.com/connet-dev/connet/pkg/quicc"
 	"github.com/connet-dev/connet/pkg/reliable"
 	"github.com/connet-dev/connet/pkg/slogc"
@@ -181,8 +181,8 @@ func (ep *endpoint) runAnnounce(ctx context.Context, conn *quic.Conn, wv proto.W
 
 	g.Go(func(ctx context.Context) error {
 		defer ep.logger.Debug("completed announce notify")
-		return ep.peer.selfListen(ctx, func(rawPeer *pbclient.Peer) error {
-			peer := &pbclient.Peer{
+		return ep.peer.selfListen(ctx, func(rawPeer *pbcontrol.Peer) error {
+			peer := &pbcontrol.Peer{
 				ServerCertificate: rawPeer.ServerCertificate,
 				ClientCertificate: rawPeer.ClientCertificate,
 			}
@@ -194,8 +194,8 @@ func (ep *endpoint) runAnnounce(ctx context.Context, conn *quic.Conn, wv proto.W
 			}
 
 			ep.logger.Debug("updated announce", "direct", len(peer.Directs), "relays", len(peer.RelayIds))
-			return proto.Write(stream, &pbclient.Request{
-				Announce: &pbclient.Request_Announce{
+			return proto.Write(stream, &pbcontrol.Request{
+				Announce: &pbcontrol.Request_Announce{
 					Endpoint: ep.cfg.endpoint.PB(),
 					Role:     ep.cfg.role.PB(),
 					Peer:     peer,
@@ -206,7 +206,7 @@ func (ep *endpoint) runAnnounce(ctx context.Context, conn *quic.Conn, wv proto.W
 
 	g.Go(func(ctx context.Context) error {
 		for {
-			resp, err := pbclient.ReadResponse(stream, wv)
+			resp, err := pbcontrol.ReadResponse(stream, wv)
 			ep.onlineReport(err)
 			if err != nil {
 				return err
@@ -217,11 +217,11 @@ func (ep *endpoint) runAnnounce(ctx context.Context, conn *quic.Conn, wv proto.W
 
 			// TODO on server restart peers is reset and client loses active peers
 			// only for them to come back at the next tick, with different ID
-			ep.peer.setPeers(iterc.MapSlice(resp.Announce.Peers, func(rawPeer *pbclient.RemotePeer) *pbclient.RemotePeer {
-				peer := &pbclient.RemotePeer{
+			ep.peer.setPeers(iterc.MapSlice(resp.Announce.Peers, func(rawPeer *pbcontrol.RemotePeer) *pbcontrol.RemotePeer {
+				peer := &pbcontrol.RemotePeer{
 					Id:       rawPeer.Id,
 					Metadata: rawPeer.Metadata,
-					Peer: &pbclient.Peer{
+					Peer: &pbcontrol.Peer{
 						ServerCertificate: rawPeer.Peer.ServerCertificate,
 						ClientCertificate: rawPeer.Peer.ClientCertificate,
 					},
@@ -253,8 +253,8 @@ func (ep *endpoint) runRelay(ctx context.Context, conn *quic.Conn, wv proto.Wire
 		}
 	}()
 
-	if err := proto.Write(stream, &pbclient.Request{
-		Relay: &pbclient.Request_Relay{
+	if err := proto.Write(stream, &pbcontrol.Request{
+		Relay: &pbcontrol.Request_Relay{
 			Endpoint:          ep.cfg.endpoint.PB(),
 			Role:              ep.cfg.role.PB(),
 			ClientCertificate: ep.peer.clientCert.Leaf.Raw,
@@ -268,7 +268,7 @@ func (ep *endpoint) runRelay(ctx context.Context, conn *quic.Conn, wv proto.Wire
 
 	g.Go(func(ctx context.Context) error {
 		for {
-			resp, err := pbclient.ReadResponse(stream, wv)
+			resp, err := pbcontrol.ReadResponse(stream, wv)
 			if err != nil {
 				ep.onlineReport(err)
 				return err

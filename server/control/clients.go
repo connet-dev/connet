@@ -20,7 +20,7 @@ import (
 	"github.com/connet-dev/connet/pkg/iterc"
 	"github.com/connet-dev/connet/pkg/logc"
 	"github.com/connet-dev/connet/pkg/proto"
-	"github.com/connet-dev/connet/pkg/proto/pbclient"
+	"github.com/connet-dev/connet/pkg/proto/pbcontrol"
 	"github.com/connet-dev/connet/pkg/proto/pberror"
 	"github.com/connet-dev/connet/pkg/proto/pbmodel"
 	"github.com/connet-dev/connet/pkg/quicc"
@@ -44,7 +44,7 @@ type ClientAuthentication []byte
 
 type ClientRelays interface {
 	Relays(ctx context.Context, endpoint connet.Endpoint, role connet.Role, cert *x509.Certificate, auth ClientAuthentication,
-		notify func(map[RelayID]*pbclient.Relay) error) error
+		notify func(map[RelayID]*pbcontrol.Relay) error) error
 }
 
 func newClientServer(
@@ -95,7 +95,7 @@ func newClientServer(
 
 		// Add ALL peers to cache (they remain visible during grace period)
 		key := peerKey{msg.Key.Endpoint, msg.Key.Role}
-		peersCache[key] = append(peersCache[key], peerValue{msg.Key.ConnID, &pbclient.RemotePeer{
+		peersCache[key] = append(peersCache[key], peerValue{msg.Key.ConnID, &pbcontrol.RemotePeer{
 			Id:       msg.Key.ID.string,
 			Metadata: msg.Value.Metadata,
 			Peer:     msg.Value.Peer,
@@ -182,7 +182,7 @@ type peerKey struct {
 
 type peerValue struct {
 	connID ConnID
-	peer   *pbclient.RemotePeer
+	peer   *pbcontrol.RemotePeer
 }
 
 func (s *clientServer) connected(id ClientID, connID ConnID, auth ClientAuthentication, remote net.Addr, metadata string) error {
@@ -193,7 +193,7 @@ func (s *clientServer) disconnected(id ClientID, connID ConnID) error {
 	return s.conns.Del(ClientConnKey{id, connID})
 }
 
-func (s *clientServer) announce(endpoint connet.Endpoint, role connet.Role, id ClientID, connID ConnID, metadata string, peer *pbclient.Peer) error {
+func (s *clientServer) announce(endpoint connet.Endpoint, role connet.Role, id ClientID, connID ConnID, metadata string, peer *pbcontrol.Peer) error {
 	return s.peers.Put(ClientPeerKey{endpoint, role, id, connID}, ClientPeerValue{Peer: peer, Metadata: metadata})
 }
 
@@ -219,10 +219,10 @@ func (s *clientServer) cachedPeers(endpoint connet.Endpoint, role connet.Role) (
 	return slices.Clone(s.peersCache[peerKey{endpoint, role}]), s.peersOffset
 }
 
-func (s *clientServer) listen(ctx context.Context, endpoint connet.Endpoint, role connet.Role, notify func(peers []*pbclient.RemotePeer) error) error {
+func (s *clientServer) listen(ctx context.Context, endpoint connet.Endpoint, role connet.Role, notify func(peers []*pbcontrol.RemotePeer) error) error {
 	peers, offset := s.cachedPeers(endpoint, role)
 	doNotify := func() error {
-		uniquePeers := map[string]*pbclient.RemotePeer{}
+		uniquePeers := map[string]*pbcontrol.RemotePeer{}
 		for _, peer := range peers {
 			uniquePeers[peer.peer.Id] = peer.peer
 		}
@@ -250,7 +250,7 @@ func (s *clientServer) listen(ctx context.Context, endpoint connet.Endpoint, rol
 					return peer.peer.Id == msg.Key.ID.string && peer.connID == msg.Key.ConnID
 				})
 			} else {
-				npeer := peerValue{msg.Key.ConnID, &pbclient.RemotePeer{
+				npeer := peerValue{msg.Key.ConnID, &pbcontrol.RemotePeer{
 					Id:       msg.Key.ID.string,
 					Metadata: msg.Value.Metadata,
 					Peer:     msg.Value.Peer,
@@ -374,7 +374,7 @@ func (s *clientServer) runPeerCache(ctx context.Context) error {
 				s.peersCache[key] = peers
 			}
 		} else {
-			npeer := peerValue{msg.Key.ConnID, &pbclient.RemotePeer{
+			npeer := peerValue{msg.Key.ConnID, &pbcontrol.RemotePeer{
 				Id:       msg.Key.ID.string,
 				Metadata: msg.Value.Metadata,
 				Peer:     msg.Value.Peer,
@@ -547,7 +547,7 @@ func (c *clientConn) authenticate(ctx context.Context) (*clientConnAuth, error) 
 		}
 	}()
 
-	req := &pbclient.AuthenticateReq{}
+	req := &pbcontrol.AuthenticateReq{}
 	if err := proto.Read(authStream, req, c.wv); err != nil {
 		return nil, fmt.Errorf("client auth read: %w", err)
 	}
@@ -564,7 +564,7 @@ func (c *clientConn) authenticate(ctx context.Context) (*clientConnAuth, error) 
 		if perr == nil {
 			perr = pberror.NewError(pberror.Code_AuthenticationFailed, "authentication failed: %v", err)
 		}
-		if err := proto.Write(authStream, &pbclient.AuthenticateResp{Error: perr}, c.wv); err != nil {
+		if err := proto.Write(authStream, &pbcontrol.AuthenticateResp{Error: perr}, c.wv); err != nil {
 			return nil, fmt.Errorf("client auth err write: %w", err)
 		}
 		return nil, fmt.Errorf("auth failed: %w", perr)
@@ -581,7 +581,7 @@ func (c *clientConn) authenticate(ctx context.Context) (*clientConnAuth, error) 
 	origin, err := pbmodel.AddrPortFromNet(c.conn.RemoteAddr())
 	if err != nil {
 		err := pberror.NewError(pberror.Code_AuthenticationFailed, "cannot resolve origin: %v", err)
-		if err := proto.Write(authStream, &pbclient.AuthenticateResp{Error: err}, c.wv); err != nil {
+		if err := proto.Write(authStream, &pbcontrol.AuthenticateResp{Error: err}, c.wv); err != nil {
 			return nil, fmt.Errorf("client auth err write: %w", err)
 		}
 		return nil, fmt.Errorf("client addr port from net: %w", err)
@@ -592,7 +592,7 @@ func (c *clientConn) authenticate(ctx context.Context) (*clientConnAuth, error) 
 		c.logger.Debug("encrypting failed", "err", err)
 		retoken = nil
 	}
-	if err := proto.Write(authStream, &pbclient.AuthenticateResp{
+	if err := proto.Write(authStream, &pbcontrol.AuthenticateResp{
 		Public:         origin,
 		ReconnectToken: retoken,
 	}, c.wv); err != nil {
@@ -621,7 +621,7 @@ func (s *clientStream) run(ctx context.Context) {
 }
 
 func (s *clientStream) runErr(ctx context.Context) error {
-	req, err := pbclient.ReadRequest(s.stream, s.conn.wv)
+	req, err := pbcontrol.ReadRequest(s.stream, s.conn.wv)
 	if err != nil {
 		return err
 	}
@@ -636,7 +636,7 @@ func (s *clientStream) runErr(ctx context.Context) error {
 	}
 }
 
-func validatePeerCert(endpoint connet.Endpoint, peer *pbclient.Peer) *pberror.Error {
+func validatePeerCert(endpoint connet.Endpoint, peer *pbcontrol.Peer) *pberror.Error {
 	if _, err := x509.ParseCertificate(peer.ClientCertificate); err != nil {
 		return pberror.NewError(pberror.Code_AnnounceInvalidClientCertificate, "'%s' client cert is invalid", endpoint)
 	}
@@ -646,7 +646,7 @@ func validatePeerCert(endpoint connet.Endpoint, peer *pbclient.Peer) *pberror.Er
 	return nil
 }
 
-func (s *clientStream) announce(ctx context.Context, req *pbclient.Request_Announce) error {
+func (s *clientStream) announce(ctx context.Context, req *pbcontrol.Request_Announce) error {
 	endpoint := connet.EndpointFromPB(req.Endpoint)
 	role := connet.RoleFromPB(req.Role)
 	if newEp, err := s.conn.server.auth.Validate(s.conn.auth, endpoint, role); err != nil {
@@ -654,7 +654,7 @@ func (s *clientStream) announce(ctx context.Context, req *pbclient.Request_Annou
 		if perr == nil {
 			perr = pberror.NewError(pberror.Code_AnnounceValidationFailed, "failed to validate endpoint '%s': %v", endpoint, err)
 		}
-		if err := proto.Write(s.stream, &pbclient.Response{Error: perr}, s.conn.wv); err != nil {
+		if err := proto.Write(s.stream, &pbcontrol.Response{Error: perr}, s.conn.wv); err != nil {
 			return fmt.Errorf("client write auth err: %w", err)
 		}
 		return perr
@@ -663,7 +663,7 @@ func (s *clientStream) announce(ctx context.Context, req *pbclient.Request_Annou
 	}
 
 	if err := validatePeerCert(endpoint, req.Peer); err != nil {
-		if err := proto.Write(s.stream, &pbclient.Response{Error: err}, s.conn.wv); err != nil {
+		if err := proto.Write(s.stream, &pbcontrol.Response{Error: err}, s.conn.wv); err != nil {
 			return fmt.Errorf("client write cert err: %w", err)
 		}
 		return err
@@ -691,20 +691,20 @@ func (s *clientStream) announce(ctx context.Context, req *pbclient.Request_Annou
 
 	g.Go(func(ctx context.Context) error {
 		for {
-			req, err := pbclient.ReadRequest(s.stream, s.conn.wv)
+			req, err := pbcontrol.ReadRequest(s.stream, s.conn.wv)
 			if err != nil {
 				return err
 			}
 			if req.Announce == nil {
 				respErr := pberror.NewError(pberror.Code_RequestUnknown, "unexpected request")
-				if err := proto.Write(s.stream, &pbclient.Response{Error: respErr}, s.conn.wv); err != nil {
+				if err := proto.Write(s.stream, &pbcontrol.Response{Error: respErr}, s.conn.wv); err != nil {
 					return fmt.Errorf("client write protocol err: %w", err)
 				}
 				return err
 			}
 
 			if err := validatePeerCert(endpoint, req.Announce.Peer); err != nil {
-				if err := proto.Write(s.stream, &pbclient.Response{Error: err}, s.conn.wv); err != nil {
+				if err := proto.Write(s.stream, &pbcontrol.Response{Error: err}, s.conn.wv); err != nil {
 					return fmt.Errorf("client write cert err: %w", err)
 				}
 				return err
@@ -718,11 +718,11 @@ func (s *clientStream) announce(ctx context.Context, req *pbclient.Request_Annou
 
 	g.Go(func(ctx context.Context) error {
 		defer s.conn.logger.Debug("completed sources notify")
-		return s.conn.server.listen(ctx, endpoint, role.Invert(), func(peers []*pbclient.RemotePeer) error {
+		return s.conn.server.listen(ctx, endpoint, role.Invert(), func(peers []*pbcontrol.RemotePeer) error {
 			s.conn.logger.Debug("updated sources list", "peers", len(peers))
 
-			if err := proto.Write(s.stream, &pbclient.Response{
-				Announce: &pbclient.Response_Announce{
+			if err := proto.Write(s.stream, &pbcontrol.Response{
+				Announce: &pbcontrol.Response_Announce{
 					Peers: peers,
 				},
 			}, s.conn.wv); err != nil {
@@ -736,7 +736,7 @@ func (s *clientStream) announce(ctx context.Context, req *pbclient.Request_Annou
 	return g.Wait()
 }
 
-func (s *clientStream) relay(ctx context.Context, req *pbclient.Request_Relay) error {
+func (s *clientStream) relay(ctx context.Context, req *pbcontrol.Request_Relay) error {
 	endpoint := connet.EndpointFromPB(req.Endpoint)
 	role := connet.RoleFromPB(req.Role)
 	if newEp, err := s.conn.server.auth.Validate(s.conn.auth, endpoint, role); err != nil {
@@ -744,7 +744,7 @@ func (s *clientStream) relay(ctx context.Context, req *pbclient.Request_Relay) e
 		if perr == nil {
 			perr = pberror.NewError(pberror.Code_RelayValidationFailed, "failed to validate destination '%s': %v", endpoint, err)
 		}
-		if err := proto.Write(s.stream, &pbclient.Response{Error: perr}, s.conn.wv); err != nil {
+		if err := proto.Write(s.stream, &pbcontrol.Response{Error: perr}, s.conn.wv); err != nil {
 			return fmt.Errorf("client relay auth err response: %w", err)
 		}
 		return perr
@@ -755,7 +755,7 @@ func (s *clientStream) relay(ctx context.Context, req *pbclient.Request_Relay) e
 	clientCert, err := x509.ParseCertificate(req.ClientCertificate)
 	if err != nil {
 		err := pberror.NewError(pberror.Code_RelayInvalidCertificate, "invalid certificate: %v", err)
-		if err := proto.Write(s.stream, &pbclient.Response{Error: err}, s.conn.wv); err != nil {
+		if err := proto.Write(s.stream, &pbcontrol.Response{Error: err}, s.conn.wv); err != nil {
 			return fmt.Errorf("client relay cert err response: %w", err)
 		}
 		return err
@@ -766,10 +766,10 @@ func (s *clientStream) relay(ctx context.Context, req *pbclient.Request_Relay) e
 
 	g.Go(func(ctx context.Context) error {
 		defer s.conn.logger.Debug("completed relay notify")
-		return s.conn.server.relays.Relays(ctx, endpoint, role, clientCert, s.conn.auth, func(relays map[RelayID]*pbclient.Relay) error {
+		return s.conn.server.relays.Relays(ctx, endpoint, role, clientCert, s.conn.auth, func(relays map[RelayID]*pbcontrol.Relay) error {
 			s.conn.logger.Debug("updated relay list", "relays", len(relays))
-			if err := proto.Write(s.stream, &pbclient.Response{
-				Relay: &pbclient.Response_Relays{
+			if err := proto.Write(s.stream, &pbcontrol.Response{
+				Relay: &pbcontrol.Response_Relays{
 					Relays: slices.Collect(maps.Values(relays)),
 				},
 			}, s.conn.wv); err != nil {
@@ -782,8 +782,8 @@ func (s *clientStream) relay(ctx context.Context, req *pbclient.Request_Relay) e
 	return g.Wait()
 }
 
-func (s *clientStream) unknown(_ context.Context, req *pbclient.Request) error {
+func (s *clientStream) unknown(_ context.Context, req *pbcontrol.Request) error {
 	s.conn.logger.Error("unknown request", "req", req)
 	err := pberror.NewError(pberror.Code_RequestUnknown, "unknown request: %v", req)
-	return proto.Write(s.stream, &pbclient.Response{Error: err}, s.conn.wv)
+	return proto.Write(s.stream, &pbcontrol.Response{Error: err}, s.conn.wv)
 }

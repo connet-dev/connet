@@ -4,7 +4,7 @@ package client;
 import "error.proto";
 import "model.proto";
 
-option go_package = "github.com/connet-dev/connet/pkg/proto/pbclient";
+option go_package = "github.com/connet-dev/connet/pkg/proto/pbcontrol";
 
 message AuthenticateReq {
   string token = 1;

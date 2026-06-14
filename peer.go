@@ -20,19 +20,19 @@ import (
 	"github.com/connet-dev/connet/pkg/iterc"
 	"github.com/connet-dev/connet/pkg/netc"
 	"github.com/connet-dev/connet/pkg/notify"
-	"github.com/connet-dev/connet/pkg/proto/pbclient"
-	"github.com/connet-dev/connet/pkg/proto/pbconnect"
+	"github.com/connet-dev/connet/pkg/proto/pbcontrol"
 	"github.com/connet-dev/connet/pkg/proto/pbmodel"
+	"github.com/connet-dev/connet/pkg/proto/pbpeer"
 	"github.com/connet-dev/connet/pkg/reliable"
 )
 
 type peer struct {
-	self *notify.V[*pbclient.Peer]
+	self *notify.V[*pbcontrol.Peer]
 
-	relays     *notify.V[[]*pbclient.Relay]
+	relays     *notify.V[[]*pbcontrol.Relay]
 	relayConns *notify.V[map[relayID]*quic.Conn]
 
-	peers     *notify.V[[]*pbclient.RemotePeer]
+	peers     *notify.V[[]*pbcontrol.RemotePeer]
 	peerConns *notify.V[map[peerConnKey]*quic.Conn]
 
 	direct   *directServer
@@ -114,15 +114,15 @@ func newPeer(direct *directServer, addrs *notify.V[advertiseAddrs], metadata str
 	direct.addServerCert(serverTLSCert)
 
 	return &peer{
-		self: notify.New(&pbclient.Peer{
+		self: notify.New(&pbcontrol.Peer{
 			ServerCertificate: serverTLSCert.Leaf.Raw,
 			ClientCertificate: clientTLSCert.Leaf.Raw,
 		}),
 
-		relays:     notify.NewEmpty[[]*pbclient.Relay](),
+		relays:     notify.NewEmpty[[]*pbcontrol.Relay](),
 		relayConns: notify.NewEmpty[map[relayID]*quic.Conn](),
 
-		peers:     notify.NewEmpty[[]*pbclient.RemotePeer](),
+		peers:     notify.NewEmpty[[]*pbcontrol.RemotePeer](),
 		peerConns: notify.NewEmpty[map[peerConnKey]*quic.Conn](),
 
 		direct:   direct,
@@ -135,15 +135,15 @@ func newPeer(direct *directServer, addrs *notify.V[advertiseAddrs], metadata str
 	}, nil
 }
 
-func (p *peer) setRelays(relays []*pbclient.Relay) {
+func (p *peer) setRelays(relays []*pbcontrol.Relay) {
 	p.relays.Set(relays)
 }
 
-func (p *peer) selfListen(ctx context.Context, f func(self *pbclient.Peer) error) error {
+func (p *peer) selfListen(ctx context.Context, f func(self *pbcontrol.Peer) error) error {
 	return p.self.Listen(ctx, f)
 }
 
-func (p *peer) setPeers(peers []*pbclient.RemotePeer) {
+func (p *peer) setPeers(peers []*pbcontrol.RemotePeer) {
 	p.peers.Set(peers)
 }
 
@@ -158,8 +158,8 @@ func (p *peer) run(ctx context.Context) error {
 
 func (p *peer) runDirectAddrs(ctx context.Context) error {
 	return p.addrs.Listen(ctx, func(t advertiseAddrs) error {
-		p.self.Update(func(cp *pbclient.Peer) *pbclient.Peer {
-			return &pbclient.Peer{
+		p.self.Update(func(cp *pbcontrol.Peer) *pbcontrol.Peer {
+			return &pbcontrol.Peer{
 				Directs:           pbmodel.AsAddrPorts(t.all()),
 				RelayIds:          cp.RelayIds,
 				ServerCertificate: cp.ServerCertificate,
@@ -172,7 +172,7 @@ func (p *peer) runDirectAddrs(ctx context.Context) error {
 
 func (p *peer) runRelays(ctx context.Context) error {
 	runningRelays := map[relayID]*relay{}
-	return p.relays.Listen(ctx, func(relays []*pbclient.Relay) error {
+	return p.relays.Listen(ctx, func(relays []*pbcontrol.Relay) error {
 		p.logger.Debug("relays updated", "len", len(relays))
 
 		activeRelays := map[relayID]struct{}{}
@@ -216,8 +216,8 @@ func (p *peer) runShareRelays(ctx context.Context) error {
 		for id := range conns {
 			ids = append(ids, string(id))
 		}
-		p.self.Update(func(cp *pbclient.Peer) *pbclient.Peer {
-			return &pbclient.Peer{
+		p.self.Update(func(cp *pbcontrol.Peer) *pbcontrol.Peer {
+			return &pbcontrol.Peer{
 				Directs:           cp.Directs,
 				RelayIds:          ids,
 				ServerCertificate: cp.ServerCertificate,
@@ -230,11 +230,11 @@ func (p *peer) runShareRelays(ctx context.Context) error {
 
 func (p *peer) runPeers(ctx context.Context) error {
 	runningPeers := map[string]*remotePeer{}
-	return p.peers.Listen(ctx, func(peers []*pbclient.RemotePeer) error {
+	return p.peers.Listen(ctx, func(peers []*pbcontrol.RemotePeer) error {
 		p.logger.Debug("peers updated", "len", len(peers))
 
 		activePeers := map[string]struct{}{}
-		var toAdd []*pbclient.RemotePeer
+		var toAdd []*pbcontrol.RemotePeer
 		for _, sp := range peers {
 			activePeers[sp.Id] = struct{}{}
 			if prg := runningPeers[sp.Id]; prg != nil {
@@ -320,7 +320,7 @@ func newServerTLSConfig(serverCert []byte) (*serverTLSConfig, error) {
 	}, nil
 }
 
-func (p *peer) newECDHConfig() (*ecdh.PrivateKey, *pbconnect.ECDHConfiguration, error) {
+func (p *peer) newECDHConfig() (*ecdh.PrivateKey, *pbpeer.ECDHConfiguration, error) {
 	sk, err := ecdh.X25519().GenerateKey(rand.Reader)
 	if err != nil {
 		return nil, nil, fmt.Errorf("peer generate key: %w", err)
@@ -336,14 +336,14 @@ func (p *peer) newECDHConfig() (*ecdh.PrivateKey, *pbconnect.ECDHConfiguration, 
 		return nil, nil, fmt.Errorf("peer sign: %w", err)
 	}
 
-	return sk, &pbconnect.ECDHConfiguration{
+	return sk, &pbpeer.ECDHConfiguration{
 		ClientName: p.serverCert.Leaf.DNSNames[0],
 		KeyTime:    keyTime,
 		Signature:  signature,
 	}, nil
 }
 
-func (p *peer) getECDHPublicKey(cfg *pbconnect.ECDHConfiguration) (*ecdh.PublicKey, error) {
+func (p *peer) getECDHPublicKey(cfg *pbpeer.ECDHConfiguration) (*ecdh.PublicKey, error) {
 	if cfg == nil {
 		return nil, fmt.Errorf("missing ecdh configuration")
 	}

@@ -21,7 +21,7 @@ import (
 
 	"github.com/connet-dev/connet/pkg/cryptoc"
 	"github.com/connet-dev/connet/pkg/proto"
-	"github.com/connet-dev/connet/pkg/proto/pbconnect"
+	"github.com/connet-dev/connet/pkg/proto/pbpeer"
 	"github.com/connet-dev/connet/pkg/quicc"
 	"github.com/connet-dev/connet/pkg/statusc"
 )
@@ -382,12 +382,12 @@ func (s *Source) dial(ctx context.Context, dest sourceConn) (net.Conn, error) {
 func (s *Source) dialStream(ctx context.Context, dest sourceConn, stream *quic.Stream) (net.Conn, error) {
 	var srcSecret *ecdh.PrivateKey
 
-	connect := &pbconnect.Request_Connect{}
+	connect := &pbpeer.Request_Connect{}
 	if dest.peer.style.isRelay() {
 		connect.SourceEncryption = PBFromEncryptions(s.cfg.RelayEncryptions)
 
 		if slices.Contains(s.cfg.RelayEncryptions, TLSEncryption) {
-			connect.SourceTls = &pbconnect.TLSConfiguration{
+			connect.SourceTls = &pbpeer.TLSConfiguration{
 				ClientName: s.ep.peer.serverCert.Leaf.DNSNames[0],
 			}
 		}
@@ -403,13 +403,13 @@ func (s *Source) dialStream(ctx context.Context, dest sourceConn, stream *quic.S
 		}
 	}
 
-	if err := proto.Write(stream, &pbconnect.Request{
+	if err := proto.Write(stream, &pbpeer.Request{
 		Connect: connect,
 	}, dest.wv); err != nil {
 		return nil, fmt.Errorf("source connect write request: %w", err)
 	}
 
-	resp, err := pbconnect.ReadResponse(stream, dest.wv)
+	resp, err := pbpeer.ReadResponse(stream, dest.wv)
 	if err != nil {
 		return nil, fmt.Errorf("source connect read response: %w", err)
 	}

@@ -15,8 +15,8 @@ import (
 	"github.com/connet-dev/connet/pkg/build"
 	"github.com/connet-dev/connet/pkg/iterc"
 	"github.com/connet-dev/connet/pkg/proto"
-	"github.com/connet-dev/connet/pkg/proto/pbclientrelay"
 	"github.com/connet-dev/connet/pkg/proto/pberror"
+	"github.com/connet-dev/connet/pkg/proto/pbrelay"
 	"github.com/connet-dev/connet/pkg/quicc"
 	"github.com/connet-dev/connet/pkg/reliable"
 	"github.com/connet-dev/connet/pkg/slogc"
@@ -144,7 +144,7 @@ func (r *relay) authenticate(ctx context.Context, conn *quic.Conn, auth []byte) 
 		}
 	}()
 
-	if err := proto.Write(stream, &pbclientrelay.AuthenticateReq{
+	if err := proto.Write(stream, &pbrelay.AuthenticateReq{
 		Authentication: auth,
 		Metadata:       r.local.metadata,
 		BuildVersion:   build.GetVersion(),
@@ -152,7 +152,7 @@ func (r *relay) authenticate(ctx context.Context, conn *quic.Conn, auth []byte) 
 		return fmt.Errorf("cannot write auth request: %w", err)
 	}
 
-	resp := &pbclientrelay.AuthenticateResp{}
+	resp := &pbrelay.AuthenticateResp{}
 	if err := proto.Read(stream, resp, wv); err != nil {
 		return fmt.Errorf("cannot read auth response: %w", err)
 	}

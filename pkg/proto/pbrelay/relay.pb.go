@@ -4,7 +4,7 @@
 // 	protoc        v7.34.1
 // source: relay.proto
 
-package pbclientrelay
+package pbrelay
 
 import (
 	pberror "github.com/connet-dev/connet/pkg/proto/pberror"
@@ -136,7 +136,7 @@ const file_relay_proto_rawDesc = "" +
 	"\bmetadata\x18\x02 \x01(\tR\bmetadata\x12#\n" +
 	"\rbuild_version\x18\x03 \x01(\tR\fbuildVersion\"6\n" +
 	"\x10AuthenticateResp\x12\"\n" +
-	"\x05error\x18\x01 \x01(\v2\f.error.ErrorR\x05errorB6Z4github.com/connet-dev/connet/pkg/proto/pbclientrelayb\x06proto3"
+	"\x05error\x18\x01 \x01(\v2\f.error.ErrorR\x05errorB0Z.github.com/connet-dev/connet/pkg/proto/pbrelayb\x06proto3"
 
 var (
 	file_relay_proto_rawDescOnce sync.Once

@@ -4,7 +4,7 @@
 // 	protoc        v7.34.1
 // source: control_relays.proto
 
-package pbrelay
+package pbcontrolrelays
 
 import (
 	pberror "github.com/connet-dev/connet/pkg/proto/pberror"
@@ -265,7 +265,7 @@ const file_control_relays_proto_rawDesc = "" +
 	"\x14ClientAuthentication\x12+\n" +
 	"\bendpoint\x18\x01 \x01(\v2\x0f.model.EndpointR\bendpoint\x12\x1f\n" +
 	"\x04role\x18\x02 \x01(\x0e2\v.model.RoleR\x04role\x12'\n" +
-	"\x0fcertificate_key\x18\x03 \x01(\tR\x0ecertificateKeyB0Z.github.com/connet-dev/connet/pkg/proto/pbrelayb\x06proto3"
+	"\x0fcertificate_key\x18\x03 \x01(\tR\x0ecertificateKeyB8Z6github.com/connet-dev/connet/pkg/proto/pbcontrolrelaysb\x06proto3"
 
 var (
 	file_control_relays_proto_rawDescOnce sync.Once

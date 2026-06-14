@@ -13,7 +13,7 @@ import (
 	"github.com/connet-dev/connet"
 	"github.com/connet-dev/connet/pkg/iterc"
 	"github.com/connet-dev/connet/pkg/logc"
-	"github.com/connet-dev/connet/pkg/proto/pbclient"
+	"github.com/connet-dev/connet/pkg/proto/pbcontrol"
 	"github.com/connet-dev/connet/pkg/proto/pbmodel"
 )
 
@@ -97,9 +97,9 @@ type ClientPeerKey struct {
 }
 
 type ClientPeerValue struct {
-	Peer      *pbclient.Peer `json:"peer"`
-	Metadata  string         `json:"metadata"`
-	ExpiredAt *time.Time     `json:"expired_at,omitempty"`
+	Peer      *pbcontrol.Peer `json:"peer"`
+	Metadata  string          `json:"metadata"`
+	ExpiredAt *time.Time      `json:"expired_at,omitempty"`
 }
 
 type RelayConnKey struct {

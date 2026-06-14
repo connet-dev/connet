@@ -4,7 +4,7 @@
 // 	protoc        v7.34.1
 // source: peer.proto
 
-package pbconnect
+package pbpeer
 
 import (
 	pberror "github.com/connet-dev/connet/pkg/proto/pberror"
@@ -486,7 +486,7 @@ const file_peer_proto_rawDesc = "" +
 	"\x15RelayEncryptionScheme\x12\x12\n" +
 	"\x0eEncryptionNone\x10\x00\x12\a\n" +
 	"\x03TLS\x10\x01\x12\x17\n" +
-	"\x13DHX25519_CHACHAPOLY\x10\x02B2Z0github.com/connet-dev/connet/pkg/proto/pbconnectb\x06proto3"
+	"\x13DHX25519_CHACHAPOLY\x10\x02B/Z-github.com/connet-dev/connet/pkg/proto/pbpeerb\x06proto3"
 
 var (
 	file_peer_proto_rawDescOnce sync.Once

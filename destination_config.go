@@ -7,7 +7,7 @@ import (
 
 	"github.com/pires/go-proxyproto"
 
-	"github.com/connet-dev/connet/pkg/proto/pbconnect"
+	"github.com/connet-dev/connet/pkg/proto/pbpeer"
 )
 
 // DestinationConfig structure represents destination configuration.
@@ -69,11 +69,11 @@ var (
 	ProxyV2   = ProxyVersion{"v2"}
 )
 
-func ProxyVersionFromPB(r pbconnect.ProxyProtoVersion) ProxyVersion {
+func ProxyVersionFromPB(r pbpeer.ProxyProtoVersion) ProxyVersion {
 	switch r {
-	case pbconnect.ProxyProtoVersion_V1:
+	case pbpeer.ProxyProtoVersion_V1:
 		return ProxyV1
-	case pbconnect.ProxyProtoVersion_V2:
+	case pbpeer.ProxyProtoVersion_V2:
 		return ProxyV2
 	default:
 		return ProxyNone
@@ -90,14 +90,14 @@ func ParseProxyVersion(s string) (ProxyVersion, error) {
 	return ProxyNone, fmt.Errorf("invalid proxy proto version: %s", s)
 }
 
-func (v ProxyVersion) PB() pbconnect.ProxyProtoVersion {
+func (v ProxyVersion) PB() pbpeer.ProxyProtoVersion {
 	switch v {
 	case ProxyV1:
-		return pbconnect.ProxyProtoVersion_V1
+		return pbpeer.ProxyProtoVersion_V1
 	case ProxyV2:
-		return pbconnect.ProxyProtoVersion_V2
+		return pbpeer.ProxyProtoVersion_V2
 	default:
-		return pbconnect.ProxyProtoVersion_ProxyProtoNone
+		return pbpeer.ProxyProtoVersion_ProxyProtoNone
 	}
 }
 

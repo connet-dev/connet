@@ -22,10 +22,10 @@ import (
 	"github.com/connet-dev/connet/pkg/logc"
 	"github.com/connet-dev/connet/pkg/netc"
 	"github.com/connet-dev/connet/pkg/proto"
-	"github.com/connet-dev/connet/pkg/proto/pbclient"
+	"github.com/connet-dev/connet/pkg/proto/pbcontrol"
+	"github.com/connet-dev/connet/pkg/proto/pbcontrolrelays"
 	"github.com/connet-dev/connet/pkg/proto/pberror"
 	"github.com/connet-dev/connet/pkg/proto/pbmodel"
-	"github.com/connet-dev/connet/pkg/proto/pbrelay"
 	"github.com/connet-dev/connet/pkg/quicc"
 	"github.com/connet-dev/connet/pkg/reliable"
 	"github.com/connet-dev/connet/pkg/slogc"
@@ -66,7 +66,7 @@ func newRelayServer(
 		connsCache[msg.Key.ID] = cachedRelay{
 			auth:        msg.Value.Authentication,
 			authSealKey: msg.Value.AuthenticationSealKey,
-			template: &pbclient.Relay{
+			template: &pbcontrol.Relay{
 				Id:                msg.Key.ID.string,
 				Addresses:         pbsFromHostPorts(msg.Value.Hostports),
 				ServerCertificate: msg.Value.Certificate.Raw,
@@ -140,7 +140,7 @@ type relayServer struct {
 type cachedRelay struct {
 	auth        RelayAuthentication
 	authSealKey *[32]byte
-	template    *pbclient.Relay
+	template    *pbcontrol.Relay
 }
 
 func (s *relayServer) cachedRelays() (map[RelayID]cachedRelay, int64) {
@@ -151,9 +151,9 @@ func (s *relayServer) cachedRelays() (map[RelayID]cachedRelay, int64) {
 }
 
 func (s *relayServer) Relays(ctx context.Context, endpoint connet.Endpoint, role connet.Role, cert *x509.Certificate, auth ClientAuthentication,
-	notify func(map[RelayID]*pbclient.Relay) error,
+	notify func(map[RelayID]*pbcontrol.Relay) error,
 ) error {
-	authenticationData, err := protobuf.Marshal(&pbrelay.ClientAuthentication{
+	authenticationData, err := protobuf.Marshal(&pbcontrolrelays.ClientAuthentication{
 		Endpoint:       endpoint.PB(),
 		Role:           role.PB(),
 		CertificateKey: certc.NewKey(cert).String(),
@@ -167,7 +167,7 @@ func (s *relayServer) Relays(ctx context.Context, endpoint connet.Endpoint, role
 		return box.SealAfterPrecomputation(nonce[:], authenticationData, &nonce, key)
 	}
 
-	localRelays := map[RelayID]*pbclient.Relay{}
+	localRelays := map[RelayID]*pbcontrol.Relay{}
 
 	// load initial state
 	globalRelays, offset := s.cachedRelays()
@@ -175,7 +175,7 @@ func (s *relayServer) Relays(ctx context.Context, endpoint connet.Endpoint, role
 		if ok, err := s.auth.Allow(relay.auth, auth, endpoint); err != nil {
 			return fmt.Errorf("auth allow error: %w", err)
 		} else if ok {
-			localRelays[id] = &pbclient.Relay{
+			localRelays[id] = &pbcontrol.Relay{
 				Id:                relay.template.Id,
 				Addresses:         relay.template.Addresses,
 				ServerCertificate: relay.template.ServerCertificate,
@@ -202,7 +202,7 @@ func (s *relayServer) Relays(ctx context.Context, endpoint connet.Endpoint, role
 			} else if ok, err := s.auth.Allow(msg.Value.Authentication, auth, endpoint); err != nil {
 				return fmt.Errorf("auth allow error: %w", err)
 			} else if ok {
-				localRelays[msg.Key.ID] = &pbclient.Relay{
+				localRelays[msg.Key.ID] = &pbcontrol.Relay{
 					Id:                msg.Key.ID.string,
 					Addresses:         pbsFromHostPorts(msg.Value.Hostports),
 					ServerCertificate: msg.Value.Certificate.Raw,
@@ -310,7 +310,7 @@ func (s *relayServer) runConnsCache(ctx context.Context) error {
 			s.connsCache[msg.Key.ID] = cachedRelay{
 				auth:        msg.Value.Authentication,
 				authSealKey: msg.Value.AuthenticationSealKey,
-				template: &pbclient.Relay{
+				template: &pbcontrol.Relay{
 					Id:                msg.Key.ID.string,
 					Addresses:         pbsFromHostPorts(msg.Value.Hostports),
 					ServerCertificate: msg.Value.Certificate.Raw,
@@ -420,7 +420,7 @@ func (c *relayConn) authenticate(ctx context.Context) (*relayConnAuth, error) {
 		}
 	}()
 
-	req := &pbrelay.AuthenticateReq{}
+	req := &pbcontrolrelays.AuthenticateReq{}
 	if err := proto.Read(authStream, req, c.wv); err != nil {
 		return nil, fmt.Errorf("auth read request: %w", err)
 	}
@@ -432,7 +432,7 @@ func (c *relayConn) authenticate(ctx context.Context) (*relayConnAuth, error) {
 		if perr == nil {
 			perr = pberror.NewError(pberror.Code_AuthenticationFailed, "authentication failed: %v", err)
 		}
-		if err := proto.Write(authStream, &pbrelay.AuthenticateResp{Error: perr}, c.wv); err != nil {
+		if err := proto.Write(authStream, &pbcontrolrelays.AuthenticateResp{Error: perr}, c.wv); err != nil {
 			return nil, fmt.Errorf("relay auth err write: %w", err)
 		}
 		return nil, fmt.Errorf("auth failed: %w", perr)
@@ -449,7 +449,7 @@ func (c *relayConn) authenticate(ctx context.Context) (*relayConnAuth, error) {
 		if perr == nil {
 			perr = pberror.NewError(pberror.Code_AuthenticationFailed, "authentication failed: %v", err)
 		}
-		if err := proto.Write(authStream, &pbrelay.AuthenticateResp{Error: perr}, c.wv); err != nil {
+		if err := proto.Write(authStream, &pbcontrolrelays.AuthenticateResp{Error: perr}, c.wv); err != nil {
 			return nil, fmt.Errorf("relay auth err write: %w", err)
 		}
 		return nil, fmt.Errorf("auth failed: %w", perr)
@@ -466,14 +466,14 @@ func (c *relayConn) authenticate(ctx context.Context) (*relayConnAuth, error) {
 	controlPk, controlSk, err := box.GenerateKey(rand.Reader)
 	if err != nil {
 		perr := pberror.NewError(pberror.Code_AuthenticationFailed, "authentication failed: %v", err)
-		if err := proto.Write(authStream, &pbrelay.AuthenticateResp{Error: perr}, c.wv); err != nil {
+		if err := proto.Write(authStream, &pbcontrolrelays.AuthenticateResp{Error: perr}, c.wv); err != nil {
 			return nil, fmt.Errorf("relay auth err write: %w", err)
 		}
 		return nil, fmt.Errorf("auth failed: %w", perr)
 	}
 	if len(req.RelayAuthenticationKey) != 32 {
 		perr := pberror.NewError(pberror.Code_AuthenticationFailed, "authentication failed: invalid key")
-		if err := proto.Write(authStream, &pbrelay.AuthenticateResp{Error: perr}, c.wv); err != nil {
+		if err := proto.Write(authStream, &pbcontrolrelays.AuthenticateResp{Error: perr}, c.wv); err != nil {
 			return nil, fmt.Errorf("relay auth err write: %w", err)
 		}
 		return nil, fmt.Errorf("auth failed: %w", perr)
@@ -484,7 +484,7 @@ func (c *relayConn) authenticate(ctx context.Context) (*relayConnAuth, error) {
 		c.logger.Debug("encrypting failed", "err", err)
 		retoken = nil
 	}
-	if err := proto.Write(authStream, &pbrelay.AuthenticateResp{
+	if err := proto.Write(authStream, &pbcontrolrelays.AuthenticateResp{
 		ControlId:                c.server.id,
 		ReconnectToken:           retoken,
 		ControlAuthenticationKey: controlPk[:],

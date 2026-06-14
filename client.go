@@ -20,7 +20,7 @@ import (
 	"github.com/connet-dev/connet/pkg/nat"
 	"github.com/connet-dev/connet/pkg/notify"
 	"github.com/connet-dev/connet/pkg/proto"
-	"github.com/connet-dev/connet/pkg/proto/pbclient"
+	"github.com/connet-dev/connet/pkg/proto/pbcontrol"
 	"github.com/connet-dev/connet/pkg/proto/pberror"
 	"github.com/connet-dev/connet/pkg/quicc"
 	"github.com/connet-dev/connet/pkg/reliable"
@@ -338,7 +338,7 @@ func (c *Client) authenticate(ctx context.Context, conn *quic.Conn, retoken []by
 		}
 	}()
 
-	if err := proto.Write(authStream, &pbclient.AuthenticateReq{
+	if err := proto.Write(authStream, &pbcontrol.AuthenticateReq{
 		Token:          c.token,
 		ReconnectToken: retoken,
 		BuildVersion:   build.GetVersion(),
@@ -347,7 +347,7 @@ func (c *Client) authenticate(ctx context.Context, conn *quic.Conn, retoken []by
 		return nil, fmt.Errorf("write authentication: %w", err)
 	}
 
-	resp := &pbclient.AuthenticateResp{}
+	resp := &pbcontrol.AuthenticateResp{}
 	if err := proto.Read(authStream, resp, wv); err != nil {
 		return nil, fmt.Errorf("authentication read failed: %w", err)
 	}
