@@ -38,6 +38,8 @@ jobs:
           password: ${{ secrets.GITHUB_TOKEN }}
       - name: Docker push
         run: nix develop --command skopeo copy "docker-archive:result" "docker://ghcr.io/connet-dev/connet:latest-amd64"
+        env:
+          CONTAINERS_REGISTRIES_CONF: /dev/null
 
   docker-build-arm:
     name: Build arm image
@@ -59,6 +61,8 @@ jobs:
           password: ${{ secrets.GITHUB_TOKEN }}
       - name: Docker push
         run: nix develop --command skopeo copy "docker-archive:result" "docker://ghcr.io/connet-dev/connet:latest-arm64"
+        env:
+          CONTAINERS_REGISTRIES_CONF: /dev/null
 
   docker-multiarch:
     name: Tag multi-arch
@@ -77,4 +81,6 @@ jobs:
           password: ${{ secrets.GITHUB_TOKEN }}
       - name: Docker tag
         run: nix develop --command manifest-tool push from-args --platforms linux/amd64,linux/arm64 --template ghcr.io/connet-dev/connet:latest-ARCHVARIANT --target ghcr.io/connet-dev/connet:latest
+        env:
+          CONTAINERS_REGISTRIES_CONF: /dev/null
     
