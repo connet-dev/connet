@@ -162,7 +162,7 @@ func (s *Source) runActiveErr(ctx context.Context) error {
 
 		conns := make([]sourceConn, 0, len(active))
 		for peer, conn := range active {
-			conns = append(conns, sourceConn{peer, conn, proto.GetPeerWireVersion(conn)})
+			conns = append(conns, sourceConn{peer, conn, proto.GetPeerPeerWireVersion(conn)})
 		}
 		s.conns.Store(&conns)
 
