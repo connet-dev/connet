@@ -2,7 +2,7 @@
 // versions:
 // 	protoc-gen-go v1.36.11
 // 	protoc        v7.34.1
-// source: client_relay.proto
+// source: peer_relay.proto
 
 package pbclientrelay
 
@@ -33,7 +33,7 @@ type AuthenticateReq struct {
 
 func (x *AuthenticateReq) Reset() {
 	*x = AuthenticateReq{}
-	mi := &file_client_relay_proto_msgTypes[0]
+	mi := &file_peer_relay_proto_msgTypes[0]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -45,7 +45,7 @@ func (x *AuthenticateReq) String() string {
 func (*AuthenticateReq) ProtoMessage() {}
 
 func (x *AuthenticateReq) ProtoReflect() protoreflect.Message {
-	mi := &file_client_relay_proto_msgTypes[0]
+	mi := &file_peer_relay_proto_msgTypes[0]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -58,7 +58,7 @@ func (x *AuthenticateReq) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use AuthenticateReq.ProtoReflect.Descriptor instead.
 func (*AuthenticateReq) Descriptor() ([]byte, []int) {
-	return file_client_relay_proto_rawDescGZIP(), []int{0}
+	return file_peer_relay_proto_rawDescGZIP(), []int{0}
 }
 
 func (x *AuthenticateReq) GetAuthentication() []byte {
@@ -91,7 +91,7 @@ type AuthenticateResp struct {
 
 func (x *AuthenticateResp) Reset() {
 	*x = AuthenticateResp{}
-	mi := &file_client_relay_proto_msgTypes[1]
+	mi := &file_peer_relay_proto_msgTypes[1]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -103,7 +103,7 @@ func (x *AuthenticateResp) String() string {
 func (*AuthenticateResp) ProtoMessage() {}
 
 func (x *AuthenticateResp) ProtoReflect() protoreflect.Message {
-	mi := &file_client_relay_proto_msgTypes[1]
+	mi := &file_peer_relay_proto_msgTypes[1]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -116,7 +116,7 @@ func (x *AuthenticateResp) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use AuthenticateResp.ProtoReflect.Descriptor instead.
 func (*AuthenticateResp) Descriptor() ([]byte, []int) {
-	return file_client_relay_proto_rawDescGZIP(), []int{1}
+	return file_peer_relay_proto_rawDescGZIP(), []int{1}
 }
 
 func (x *AuthenticateResp) GetError() *pberror.Error {
@@ -126,11 +126,11 @@ func (x *AuthenticateResp) GetError() *pberror.Error {
 	return nil
 }
 
-var File_client_relay_proto protoreflect.FileDescriptor
+var File_peer_relay_proto protoreflect.FileDescriptor
 
-const file_client_relay_proto_rawDesc = "" +
+const file_peer_relay_proto_rawDesc = "" +
 	"\n" +
-	"\x12client_relay.proto\x12\fclient_relay\x1a\verror.proto\"z\n" +
+	"\x10peer_relay.proto\x12\fclient_relay\x1a\verror.proto\"z\n" +
 	"\x0fAuthenticateReq\x12&\n" +
 	"\x0eauthentication\x18\x01 \x01(\fR\x0eauthentication\x12\x1a\n" +
 	"\bmetadata\x18\x02 \x01(\tR\bmetadata\x12#\n" +
@@ -139,24 +139,24 @@ const file_client_relay_proto_rawDesc = "" +
 	"\x05error\x18\x01 \x01(\v2\f.error.ErrorR\x05errorB6Z4github.com/connet-dev/connet/pkg/proto/pbclientrelayb\x06proto3"
 
 var (
-	file_client_relay_proto_rawDescOnce sync.Once
-	file_client_relay_proto_rawDescData []byte
+	file_peer_relay_proto_rawDescOnce sync.Once
+	file_peer_relay_proto_rawDescData []byte
 )
 
-func file_client_relay_proto_rawDescGZIP() []byte {
-	file_client_relay_proto_rawDescOnce.Do(func() {
-		file_client_relay_proto_rawDescData = protoimpl.X.CompressGZIP(unsafe.Slice(unsafe.StringData(file_client_relay_proto_rawDesc), len(file_client_relay_proto_rawDesc)))
+func file_peer_relay_proto_rawDescGZIP() []byte {
+	file_peer_relay_proto_rawDescOnce.Do(func() {
+		file_peer_relay_proto_rawDescData = protoimpl.X.CompressGZIP(unsafe.Slice(unsafe.StringData(file_peer_relay_proto_rawDesc), len(file_peer_relay_proto_rawDesc)))
 	})
-	return file_client_relay_proto_rawDescData
+	return file_peer_relay_proto_rawDescData
 }
 
-var file_client_relay_proto_msgTypes = make([]protoimpl.MessageInfo, 2)
-var file_client_relay_proto_goTypes = []any{
+var file_peer_relay_proto_msgTypes = make([]protoimpl.MessageInfo, 2)
+var file_peer_relay_proto_goTypes = []any{
 	(*AuthenticateReq)(nil),  // 0: client_relay.AuthenticateReq
 	(*AuthenticateResp)(nil), // 1: client_relay.AuthenticateResp
 	(*pberror.Error)(nil),    // 2: error.Error
 }
-var file_client_relay_proto_depIdxs = []int32{
+var file_peer_relay_proto_depIdxs = []int32{
 	2, // 0: client_relay.AuthenticateResp.error:type_name -> error.Error
 	1, // [1:1] is the sub-list for method output_type
 	1, // [1:1] is the sub-list for method input_type
@@ -165,26 +165,26 @@ var file_client_relay_proto_depIdxs = []int32{
 	0, // [0:1] is the sub-list for field type_name
 }
 
-func init() { file_client_relay_proto_init() }
-func file_client_relay_proto_init() {
-	if File_client_relay_proto != nil {
+func init() { file_peer_relay_proto_init() }
+func file_peer_relay_proto_init() {
+	if File_peer_relay_proto != nil {
 		return
 	}
 	type x struct{}
 	out := protoimpl.TypeBuilder{
 		File: protoimpl.DescBuilder{
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
-			RawDescriptor: unsafe.Slice(unsafe.StringData(file_client_relay_proto_rawDesc), len(file_client_relay_proto_rawDesc)),
+			RawDescriptor: unsafe.Slice(unsafe.StringData(file_peer_relay_proto_rawDesc), len(file_peer_relay_proto_rawDesc)),
 			NumEnums:      0,
 			NumMessages:   2,
 			NumExtensions: 0,
 			NumServices:   0,
 		},
-		GoTypes:           file_client_relay_proto_goTypes,
-		DependencyIndexes: file_client_relay_proto_depIdxs,
-		MessageInfos:      file_client_relay_proto_msgTypes,
+		GoTypes:           file_peer_relay_proto_goTypes,
+		DependencyIndexes: file_peer_relay_proto_depIdxs,
+		MessageInfos:      file_peer_relay_proto_msgTypes,
 	}.Build()
-	File_client_relay_proto = out.File
-	file_client_relay_proto_goTypes = nil
-	file_client_relay_proto_depIdxs = nil
+	File_peer_relay_proto = out.File
+	file_peer_relay_proto_goTypes = nil
+	file_peer_relay_proto_depIdxs = nil
 }

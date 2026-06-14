@@ -2,7 +2,7 @@
 // versions:
 // 	protoc-gen-go v1.36.11
 // 	protoc        v7.34.1
-// source: connect.proto
+// source: peer_peer.proto
 
 package pbconnect
 
@@ -55,11 +55,11 @@ func (x ProxyProtoVersion) String() string {
 }
 
 func (ProxyProtoVersion) Descriptor() protoreflect.EnumDescriptor {
-	return file_connect_proto_enumTypes[0].Descriptor()
+	return file_peer_peer_proto_enumTypes[0].Descriptor()
 }
 
 func (ProxyProtoVersion) Type() protoreflect.EnumType {
-	return &file_connect_proto_enumTypes[0]
+	return &file_peer_peer_proto_enumTypes[0]
 }
 
 func (x ProxyProtoVersion) Number() protoreflect.EnumNumber {
@@ -68,7 +68,7 @@ func (x ProxyProtoVersion) Number() protoreflect.EnumNumber {
 
 // Deprecated: Use ProxyProtoVersion.Descriptor instead.
 func (ProxyProtoVersion) EnumDescriptor() ([]byte, []int) {
-	return file_connect_proto_rawDescGZIP(), []int{0}
+	return file_peer_peer_proto_rawDescGZIP(), []int{0}
 }
 
 type RelayEncryptionScheme int32
@@ -104,11 +104,11 @@ func (x RelayEncryptionScheme) String() string {
 }
 
 func (RelayEncryptionScheme) Descriptor() protoreflect.EnumDescriptor {
-	return file_connect_proto_enumTypes[1].Descriptor()
+	return file_peer_peer_proto_enumTypes[1].Descriptor()
 }
 
 func (RelayEncryptionScheme) Type() protoreflect.EnumType {
-	return &file_connect_proto_enumTypes[1]
+	return &file_peer_peer_proto_enumTypes[1]
 }
 
 func (x RelayEncryptionScheme) Number() protoreflect.EnumNumber {
@@ -117,7 +117,7 @@ func (x RelayEncryptionScheme) Number() protoreflect.EnumNumber {
 
 // Deprecated: Use RelayEncryptionScheme.Descriptor instead.
 func (RelayEncryptionScheme) EnumDescriptor() ([]byte, []int) {
-	return file_connect_proto_rawDescGZIP(), []int{1}
+	return file_peer_peer_proto_rawDescGZIP(), []int{1}
 }
 
 type Request struct {
@@ -130,7 +130,7 @@ type Request struct {
 
 func (x *Request) Reset() {
 	*x = Request{}
-	mi := &file_connect_proto_msgTypes[0]
+	mi := &file_peer_peer_proto_msgTypes[0]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -142,7 +142,7 @@ func (x *Request) String() string {
 func (*Request) ProtoMessage() {}
 
 func (x *Request) ProtoReflect() protoreflect.Message {
-	mi := &file_connect_proto_msgTypes[0]
+	mi := &file_peer_peer_proto_msgTypes[0]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -155,7 +155,7 @@ func (x *Request) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use Request.ProtoReflect.Descriptor instead.
 func (*Request) Descriptor() ([]byte, []int) {
-	return file_connect_proto_rawDescGZIP(), []int{0}
+	return file_peer_peer_proto_rawDescGZIP(), []int{0}
 }
 
 func (x *Request) GetConnect() *Request_Connect {
@@ -175,7 +175,7 @@ type Response struct {
 
 func (x *Response) Reset() {
 	*x = Response{}
-	mi := &file_connect_proto_msgTypes[1]
+	mi := &file_peer_peer_proto_msgTypes[1]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -187,7 +187,7 @@ func (x *Response) String() string {
 func (*Response) ProtoMessage() {}
 
 func (x *Response) ProtoReflect() protoreflect.Message {
-	mi := &file_connect_proto_msgTypes[1]
+	mi := &file_peer_peer_proto_msgTypes[1]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -200,7 +200,7 @@ func (x *Response) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use Response.ProtoReflect.Descriptor instead.
 func (*Response) Descriptor() ([]byte, []int) {
-	return file_connect_proto_rawDescGZIP(), []int{1}
+	return file_peer_peer_proto_rawDescGZIP(), []int{1}
 }
 
 func (x *Response) GetError() *pberror.Error {
@@ -226,7 +226,7 @@ type TLSConfiguration struct {
 
 func (x *TLSConfiguration) Reset() {
 	*x = TLSConfiguration{}
-	mi := &file_connect_proto_msgTypes[2]
+	mi := &file_peer_peer_proto_msgTypes[2]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -238,7 +238,7 @@ func (x *TLSConfiguration) String() string {
 func (*TLSConfiguration) ProtoMessage() {}
 
 func (x *TLSConfiguration) ProtoReflect() protoreflect.Message {
-	mi := &file_connect_proto_msgTypes[2]
+	mi := &file_peer_peer_proto_msgTypes[2]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -251,7 +251,7 @@ func (x *TLSConfiguration) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use TLSConfiguration.ProtoReflect.Descriptor instead.
 func (*TLSConfiguration) Descriptor() ([]byte, []int) {
-	return file_connect_proto_rawDescGZIP(), []int{2}
+	return file_peer_peer_proto_rawDescGZIP(), []int{2}
 }
 
 func (x *TLSConfiguration) GetClientName() string {
@@ -272,7 +272,7 @@ type ECDHConfiguration struct {
 
 func (x *ECDHConfiguration) Reset() {
 	*x = ECDHConfiguration{}
-	mi := &file_connect_proto_msgTypes[3]
+	mi := &file_peer_peer_proto_msgTypes[3]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -284,7 +284,7 @@ func (x *ECDHConfiguration) String() string {
 func (*ECDHConfiguration) ProtoMessage() {}
 
 func (x *ECDHConfiguration) ProtoReflect() protoreflect.Message {
-	mi := &file_connect_proto_msgTypes[3]
+	mi := &file_peer_peer_proto_msgTypes[3]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -297,7 +297,7 @@ func (x *ECDHConfiguration) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ECDHConfiguration.ProtoReflect.Descriptor instead.
 func (*ECDHConfiguration) Descriptor() ([]byte, []int) {
-	return file_connect_proto_rawDescGZIP(), []int{3}
+	return file_peer_peer_proto_rawDescGZIP(), []int{3}
 }
 
 func (x *ECDHConfiguration) GetClientName() string {
@@ -332,7 +332,7 @@ type Request_Connect struct {
 
 func (x *Request_Connect) Reset() {
 	*x = Request_Connect{}
-	mi := &file_connect_proto_msgTypes[4]
+	mi := &file_peer_peer_proto_msgTypes[4]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -344,7 +344,7 @@ func (x *Request_Connect) String() string {
 func (*Request_Connect) ProtoMessage() {}
 
 func (x *Request_Connect) ProtoReflect() protoreflect.Message {
-	mi := &file_connect_proto_msgTypes[4]
+	mi := &file_peer_peer_proto_msgTypes[4]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -357,7 +357,7 @@ func (x *Request_Connect) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use Request_Connect.ProtoReflect.Descriptor instead.
 func (*Request_Connect) Descriptor() ([]byte, []int) {
-	return file_connect_proto_rawDescGZIP(), []int{0, 0}
+	return file_peer_peer_proto_rawDescGZIP(), []int{0, 0}
 }
 
 func (x *Request_Connect) GetSourceEncryption() []RelayEncryptionScheme {
@@ -393,7 +393,7 @@ type Response_Connect struct {
 
 func (x *Response_Connect) Reset() {
 	*x = Response_Connect{}
-	mi := &file_connect_proto_msgTypes[5]
+	mi := &file_peer_peer_proto_msgTypes[5]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -405,7 +405,7 @@ func (x *Response_Connect) String() string {
 func (*Response_Connect) ProtoMessage() {}
 
 func (x *Response_Connect) ProtoReflect() protoreflect.Message {
-	mi := &file_connect_proto_msgTypes[5]
+	mi := &file_peer_peer_proto_msgTypes[5]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -418,7 +418,7 @@ func (x *Response_Connect) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use Response_Connect.ProtoReflect.Descriptor instead.
 func (*Response_Connect) Descriptor() ([]byte, []int) {
-	return file_connect_proto_rawDescGZIP(), []int{1, 0}
+	return file_peer_peer_proto_rawDescGZIP(), []int{1, 0}
 }
 
 func (x *Response_Connect) GetProxyProto() ProxyProtoVersion {
@@ -449,11 +449,11 @@ func (x *Response_Connect) GetDestinationDhX25519() *ECDHConfiguration {
 	return nil
 }
 
-var File_connect_proto protoreflect.FileDescriptor
+var File_peer_peer_proto protoreflect.FileDescriptor
 
-const file_connect_proto_rawDesc = "" +
+const file_peer_peer_proto_rawDesc = "" +
 	"\n" +
-	"\rconnect.proto\x12\aconnect\x1a\verror.proto\"\x96\x02\n" +
+	"\x0fpeer_peer.proto\x12\aconnect\x1a\verror.proto\"\x96\x02\n" +
 	"\aRequest\x122\n" +
 	"\aconnect\x18\x01 \x01(\v2\x18.connect.Request.ConnectR\aconnect\x1a\xd6\x01\n" +
 	"\aConnect\x12K\n" +
@@ -488,20 +488,20 @@ const file_connect_proto_rawDesc = "" +
 	"\x13DHX25519_CHACHAPOLY\x10\x02B2Z0github.com/connet-dev/connet/pkg/proto/pbconnectb\x06proto3"
 
 var (
-	file_connect_proto_rawDescOnce sync.Once
-	file_connect_proto_rawDescData []byte
+	file_peer_peer_proto_rawDescOnce sync.Once
+	file_peer_peer_proto_rawDescData []byte
 )
 
-func file_connect_proto_rawDescGZIP() []byte {
-	file_connect_proto_rawDescOnce.Do(func() {
-		file_connect_proto_rawDescData = protoimpl.X.CompressGZIP(unsafe.Slice(unsafe.StringData(file_connect_proto_rawDesc), len(file_connect_proto_rawDesc)))
+func file_peer_peer_proto_rawDescGZIP() []byte {
+	file_peer_peer_proto_rawDescOnce.Do(func() {
+		file_peer_peer_proto_rawDescData = protoimpl.X.CompressGZIP(unsafe.Slice(unsafe.StringData(file_peer_peer_proto_rawDesc), len(file_peer_peer_proto_rawDesc)))
 	})
-	return file_connect_proto_rawDescData
+	return file_peer_peer_proto_rawDescData
 }
 
-var file_connect_proto_enumTypes = make([]protoimpl.EnumInfo, 2)
-var file_connect_proto_msgTypes = make([]protoimpl.MessageInfo, 6)
-var file_connect_proto_goTypes = []any{
+var file_peer_peer_proto_enumTypes = make([]protoimpl.EnumInfo, 2)
+var file_peer_peer_proto_msgTypes = make([]protoimpl.MessageInfo, 6)
+var file_peer_peer_proto_goTypes = []any{
 	(ProxyProtoVersion)(0),     // 0: connect.ProxyProtoVersion
 	(RelayEncryptionScheme)(0), // 1: connect.RelayEncryptionScheme
 	(*Request)(nil),            // 2: connect.Request
@@ -512,7 +512,7 @@ var file_connect_proto_goTypes = []any{
 	(*Response_Connect)(nil),   // 7: connect.Response.Connect
 	(*pberror.Error)(nil),      // 8: error.Error
 }
-var file_connect_proto_depIdxs = []int32{
+var file_peer_peer_proto_depIdxs = []int32{
 	6,  // 0: connect.Request.connect:type_name -> connect.Request.Connect
 	8,  // 1: connect.Response.error:type_name -> error.Error
 	7,  // 2: connect.Response.connect:type_name -> connect.Response.Connect
@@ -530,27 +530,27 @@ var file_connect_proto_depIdxs = []int32{
 	0,  // [0:10] is the sub-list for field type_name
 }
 
-func init() { file_connect_proto_init() }
-func file_connect_proto_init() {
-	if File_connect_proto != nil {
+func init() { file_peer_peer_proto_init() }
+func file_peer_peer_proto_init() {
+	if File_peer_peer_proto != nil {
 		return
 	}
 	type x struct{}
 	out := protoimpl.TypeBuilder{
 		File: protoimpl.DescBuilder{
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
-			RawDescriptor: unsafe.Slice(unsafe.StringData(file_connect_proto_rawDesc), len(file_connect_proto_rawDesc)),
+			RawDescriptor: unsafe.Slice(unsafe.StringData(file_peer_peer_proto_rawDesc), len(file_peer_peer_proto_rawDesc)),
 			NumEnums:      2,
 			NumMessages:   6,
 			NumExtensions: 0,
 			NumServices:   0,
 		},
-		GoTypes:           file_connect_proto_goTypes,
-		DependencyIndexes: file_connect_proto_depIdxs,
-		EnumInfos:         file_connect_proto_enumTypes,
-		MessageInfos:      file_connect_proto_msgTypes,
+		GoTypes:           file_peer_peer_proto_goTypes,
+		DependencyIndexes: file_peer_peer_proto_depIdxs,
+		EnumInfos:         file_peer_peer_proto_enumTypes,
+		MessageInfos:      file_peer_peer_proto_msgTypes,
 	}.Build()
-	File_connect_proto = out.File
-	file_connect_proto_goTypes = nil
-	file_connect_proto_depIdxs = nil
+	File_peer_peer_proto = out.File
+	file_peer_peer_proto_goTypes = nil
+	file_peer_peer_proto_depIdxs = nil
 }
