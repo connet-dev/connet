@@ -60,7 +60,7 @@ func newClientsServer(cfg Config, cert *certc.Cert, auth ClientAuthenticator) (*
 			ServerName:   tlsCert.Leaf.DNSNames[0],
 			Certificates: []tls.Certificate{tlsCert},
 			ClientAuth:   tls.RequireAnyClientCert,
-			NextProtos:   iterc.MapVarStrings(proto.PeerRelayV03, proto.PeerRelayV02),
+			NextProtos:   iterc.MapVarStrings(proto.RelayV03, proto.RelayV02),
 		},
 		auth: auth,
 
@@ -260,7 +260,7 @@ type clientConn struct {
 }
 
 func (c *clientConn) run(ctx context.Context) {
-	c.wv = proto.GetPeerRelayWireVersion(c.conn)
+	c.wv = proto.GetRelayWireVersion(c.conn)
 
 	c.logger.Debug("new client connection", "proto", c.conn.ConnectionState().TLS.NegotiatedProtocol, "remote", c.conn.RemoteAddr())
 	defer func() {

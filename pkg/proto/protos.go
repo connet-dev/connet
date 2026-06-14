@@ -4,35 +4,35 @@ import (
 	"github.com/quic-go/quic-go"
 )
 
-// PeerControlNextProto describes TLS NextProtos for clients connecting to control servers
-type PeerControlNextProto struct{ string }
+// ControlNextProto describes TLS NextProtos for clients connecting to control servers
+type ControlNextProto struct{ string }
 
-func (v PeerControlNextProto) String() string {
+func (v ControlNextProto) String() string {
 	return v.string
 }
 
-func GetPeerControlNextProto(conn *quic.Conn) PeerControlNextProto {
+func GetControlNextProto(conn *quic.Conn) ControlNextProto {
 	proto := conn.ConnectionState().TLS.NegotiatedProtocol
-	for _, v := range []PeerControlNextProto{PeerControlV04, PeerControlV03} {
+	for _, v := range []ControlNextProto{ControlV04, ControlV03} {
 		if v.string == proto {
 			return v
 		}
 	}
-	return PeerControlUnknown
+	return ControlUnknown
 }
 
-func GetPeerControlWireVersion(conn *quic.Conn) WireVersion {
-	if pv := GetPeerControlNextProto(conn); pv == PeerControlV03 {
+func GetControlWireVersion(conn *quic.Conn) WireVersion {
+	if pv := GetControlNextProto(conn); pv == ControlV03 {
 		return WireVersion1
 	}
 	return WireVersion2
 }
 
 var (
-	PeerControlUnknown = PeerControlNextProto{}
-	PeerControlV03     = PeerControlNextProto{"connet-client/0.3"}       // 0.13.0
-	PeerControlV04     = PeerControlNextProto{"connet-peer-control/0.4"} // 0.16.0
-	PeerControlLatest  = PeerControlV04
+	ControlUnknown = ControlNextProto{}
+	ControlV03     = ControlNextProto{"connet-client/0.3"}  // 0.13.0
+	ControlV04     = ControlNextProto{"connet-control/0.4"} // 0.16.0
+	ControlLatest  = ControlV04
 	// Update GetClientControlNextProto when adding a new one
 )
 
@@ -67,66 +67,66 @@ var (
 	PeerLatest  = PeerV02
 )
 
-// PeerRelayNextProto describes TLS NextProtos for peers connecting to relays
-type PeerRelayNextProto struct{ string }
+// RelayNextProto describes TLS NextProtos for peers connecting to relays
+type RelayNextProto struct{ string }
 
-func (v PeerRelayNextProto) String() string {
+func (v RelayNextProto) String() string {
 	return v.string
 }
 
-func GetPeerRelayNextProto(conn *quic.Conn) PeerRelayNextProto {
+func GetRelayNextProto(conn *quic.Conn) RelayNextProto {
 	proto := conn.ConnectionState().TLS.NegotiatedProtocol
-	for _, v := range []PeerRelayNextProto{PeerRelayV03, PeerRelayV02} {
+	for _, v := range []RelayNextProto{RelayV03, RelayV02} {
 		if v.string == proto {
 			return v
 		}
 	}
-	return PeerRelayUnknown
+	return RelayUnknown
 }
 
-func GetPeerRelayWireVersion(conn *quic.Conn) WireVersion {
-	if pv := GetPeerRelayNextProto(conn); pv == PeerRelayV02 {
+func GetRelayWireVersion(conn *quic.Conn) WireVersion {
+	if pv := GetRelayNextProto(conn); pv == RelayV02 {
 		return WireVersion1
 	}
 	return WireVersion2
 }
 
 var (
-	PeerRelayUnknown = PeerRelayNextProto{}
-	PeerRelayV02     = PeerRelayNextProto{"connet-peer-relay/0.2"} // 0.13.0
-	PeerRelayV03     = PeerRelayNextProto{"connet-peer-relay/0.3"} // 0.16.0
-	PeerRelayLatest  = PeerRelayV03
+	RelayUnknown = RelayNextProto{}
+	RelayV02     = RelayNextProto{"connet-peer-relay/0.2"} // 0.13.0
+	RelayV03     = RelayNextProto{"connet-relay/0.3"}      // 0.16.0
+	RelayLatest  = RelayV03
 	// Update GetConnectRelayNextProto when adding a new one
 )
 
-// RelayControlNextProto describes TLS NextProtos for relays connecting to control servers
-type RelayControlNextProto struct{ string }
+// ControlRelaysNextProto describes TLS NextProtos for relays connecting to control servers
+type ControlRelaysNextProto struct{ string }
 
-func (v RelayControlNextProto) String() string {
+func (v ControlRelaysNextProto) String() string {
 	return v.string
 }
 
-func GetRelayControlNextProto(conn *quic.Conn) RelayControlNextProto {
+func GetControlRelaysNextProto(conn *quic.Conn) ControlRelaysNextProto {
 	proto := conn.ConnectionState().TLS.NegotiatedProtocol
-	for _, v := range []RelayControlNextProto{RelayControlV04, RelayControlV03} {
+	for _, v := range []ControlRelaysNextProto{ControlRelaysV04, ControlRelaysV03} {
 		if v.string == proto {
 			return v
 		}
 	}
-	return RelayControlUnknown
+	return ControlRelaysUnknown
 }
 
-func GetRelayControlWireVersion(conn *quic.Conn) WireVersion {
-	if pv := GetRelayControlNextProto(conn); pv == RelayControlV03 {
+func GetControlRelaysWireVersion(conn *quic.Conn) WireVersion {
+	if pv := GetControlRelaysNextProto(conn); pv == ControlRelaysV03 {
 		return WireVersion1
 	}
 	return WireVersion2
 }
 
 var (
-	RelayControlUnknown = RelayControlNextProto{}
-	RelayControlV03     = RelayControlNextProto{"connet-relay/0.3"}         // 0.13.0
-	RelayControlV04     = RelayControlNextProto{"connet-relay-control/0.4"} // 0.16.0
-	RelayControlLatest  = RelayControlV04
+	ControlRelaysUnknown = ControlRelaysNextProto{}
+	ControlRelaysV03     = ControlRelaysNextProto{"connet-relay/0.3"}          // 0.13.0
+	ControlRelaysV04     = ControlRelaysNextProto{"connet-control-relays/0.4"} // 0.16.0
+	ControlRelaysLatest  = ControlRelaysV04
 	// Update GetRelayControlNextProto when adding a new one
 )

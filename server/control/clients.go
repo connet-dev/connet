@@ -29,7 +29,7 @@ import (
 )
 
 type ClientAuthenticateRequest struct {
-	Proto        proto.PeerControlNextProto
+	Proto        proto.ControlNextProto
 	Token        string
 	Addr         net.Addr
 	BuildVersion string
@@ -316,7 +316,7 @@ func (s *clientServer) runListener(ctx context.Context, ingress Ingress) error {
 
 	tlsConf := ingress.ListenTLS.Clone()
 	if len(tlsConf.NextProtos) == 0 {
-		tlsConf.NextProtos = iterc.MapVarStrings(proto.PeerControlV04, proto.PeerControlV03)
+		tlsConf.NextProtos = iterc.MapVarStrings(proto.ControlV04, proto.ControlV03)
 	}
 
 	quicConf := quicc.ServerConfig()
@@ -474,12 +474,12 @@ type clientConn struct {
 type clientConnAuth struct {
 	id       ClientID
 	auth     ClientAuthentication
-	protocol proto.PeerControlNextProto
+	protocol proto.ControlNextProto
 	metadata string
 }
 
 func (c *clientConn) run(ctx context.Context) {
-	c.wv = proto.GetPeerControlWireVersion(c.conn)
+	c.wv = proto.GetControlWireVersion(c.conn)
 
 	c.logger.Debug("new client connection", "proto", c.conn.ConnectionState().TLS.NegotiatedProtocol, "remote", c.conn.RemoteAddr())
 	defer func() {
@@ -552,7 +552,7 @@ func (c *clientConn) authenticate(ctx context.Context) (*clientConnAuth, error) 
 		return nil, fmt.Errorf("client auth read: %w", err)
 	}
 
-	protocol := proto.GetPeerControlNextProto(c.conn)
+	protocol := proto.GetControlNextProto(c.conn)
 	auth, err := c.server.auth.Authenticate(ClientAuthenticateRequest{
 		Proto:        protocol,
 		Token:        req.Token,

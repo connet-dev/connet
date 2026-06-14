@@ -65,7 +65,7 @@ func newControlClient(cfg Config, clientsCert *certc.Cert, configStore logc.KV[C
 		controlTLSConf: &tls.Config{
 			ServerName: cfg.ControlHost,
 			RootCAs:    cfg.ControlCAs,
-			NextProtos: iterc.MapVarStrings(proto.RelayControlV04, proto.RelayControlV03),
+			NextProtos: iterc.MapVarStrings(proto.ControlRelaysV04, proto.ControlRelaysV03),
 		},
 		handshakeIdleTimeout: cfg.HandshakeIdleTimeout,
 
@@ -182,7 +182,7 @@ func (s *controlClient) connectSingle(ctx context.Context, transport *quic.Trans
 }
 
 func (s *controlClient) authenticate(ctx context.Context, conn *quic.Conn, reconnConfig ConfigValue) error {
-	wv := proto.GetRelayControlWireVersion(conn)
+	wv := proto.GetControlRelaysWireVersion(conn)
 
 	authStream, err := conn.OpenStreamSync(ctx)
 	if err != nil {

@@ -32,7 +32,7 @@ import (
 )
 
 type RelayAuthenticateRequest struct {
-	Proto        proto.RelayControlNextProto
+	Proto        proto.ControlRelaysNextProto
 	Token        string
 	Addr         net.Addr
 	BuildVersion string
@@ -258,7 +258,7 @@ func (s *relayServer) runListener(ctx context.Context, ingress Ingress) error {
 
 	tlsConf := ingress.ListenTLS.Clone()
 	if len(tlsConf.NextProtos) == 0 {
-		tlsConf.NextProtos = iterc.MapVarStrings(proto.RelayControlV04, proto.RelayControlV03)
+		tlsConf.NextProtos = iterc.MapVarStrings(proto.ControlRelaysV04, proto.ControlRelaysV03)
 	}
 
 	quicConf := quicc.ServerConfig()
@@ -356,13 +356,13 @@ type relayConnAuth struct {
 	auth        RelayAuthentication
 	hostports   []*pbmodel.HostPort
 	metadata    string
-	protocol    proto.RelayControlNextProto
+	protocol    proto.ControlRelaysNextProto
 	certificate *x509.Certificate
 	authSignKey *[32]byte
 }
 
 func (c *relayConn) run(ctx context.Context) {
-	c.wv = proto.GetRelayControlWireVersion(c.conn)
+	c.wv = proto.GetControlRelaysWireVersion(c.conn)
 
 	c.logger.Debug("new relay connection", "proto", c.conn.ConnectionState().TLS.NegotiatedProtocol, "remote", c.conn.RemoteAddr())
 	defer func() {
@@ -425,7 +425,7 @@ func (c *relayConn) authenticate(ctx context.Context) (*relayConnAuth, error) {
 		return nil, fmt.Errorf("auth read request: %w", err)
 	}
 
-	protocol := proto.GetRelayControlNextProto(c.conn)
+	protocol := proto.GetControlRelaysNextProto(c.conn)
 	cert, err := x509.ParseCertificate(req.ServerCertificate)
 	if err != nil {
 		perr := pberror.GetError(err)

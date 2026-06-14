@@ -114,7 +114,7 @@ func (r *relay) connect(ctx context.Context, address string) (*quic.Conn, error)
 		Certificates: []tls.Certificate{r.local.clientCert},
 		RootCAs:      cfg.tls.cas,
 		ServerName:   cfg.tls.name,
-		NextProtos:   iterc.MapVarStrings(proto.PeerRelayV03, proto.PeerRelayV02),
+		NextProtos:   iterc.MapVarStrings(proto.RelayV03, proto.RelayV02),
 	}, quicc.ClientConfig(r.local.direct.handshakeIdleTimeout))
 	if err != nil {
 		return nil, err
@@ -132,7 +132,7 @@ func (r *relay) connect(ctx context.Context, address string) (*quic.Conn, error)
 }
 
 func (r *relay) authenticate(ctx context.Context, conn *quic.Conn, auth []byte) error {
-	wv := proto.GetPeerRelayWireVersion(conn)
+	wv := proto.GetRelayWireVersion(conn)
 
 	stream, err := conn.OpenStreamSync(ctx)
 	if err != nil {
