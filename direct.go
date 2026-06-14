@@ -140,7 +140,7 @@ func (s *directServer) expect(serverCert tls.Certificate, cert *x509.Certificate
 func (s *directServer) Run(ctx context.Context) error {
 	tlsConf := &tls.Config{
 		ClientAuth: tls.RequireAndVerifyClientCert,
-		NextProtos: iterc.MapVarStrings(proto.PeerPeerV02, proto.PeerPeerV01),
+		NextProtos: iterc.MapVarStrings(proto.PeerV02, proto.PeerV01),
 	}
 	tlsConf.GetConfigForClient = func(chi *tls.ClientHelloInfo) (*tls.Config, error) {
 		srv := s.getServer(chi.ServerName)

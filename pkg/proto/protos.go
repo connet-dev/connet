@@ -36,35 +36,35 @@ var (
 	// Update GetClientControlNextProto when adding a new one
 )
 
-// PeerPeerNextProto describes TLS NextProtos for peers connecting to each other
-type PeerPeerNextProto struct{ string }
+// PeerNextProto describes TLS NextProtos for peers connecting to each other
+type PeerNextProto struct{ string }
 
-func (v PeerPeerNextProto) String() string {
+func (v PeerNextProto) String() string {
 	return v.string
 }
 
-func GetPeerPeerNextProto(conn *quic.Conn) PeerPeerNextProto {
+func GetPeerNextProto(conn *quic.Conn) PeerNextProto {
 	proto := conn.ConnectionState().TLS.NegotiatedProtocol
-	for _, v := range []PeerPeerNextProto{PeerPeerV02, PeerPeerV01} {
+	for _, v := range []PeerNextProto{PeerV02, PeerV01} {
 		if v.string == proto {
 			return v
 		}
 	}
-	return PeerPeerUnknown
+	return PeerUnknown
 }
 
-func GetPeerPeerWireVersion(conn *quic.Conn) WireVersion {
-	if pv := GetPeerPeerNextProto(conn); pv == PeerPeerV01 {
+func GetPeerWireVersion(conn *quic.Conn) WireVersion {
+	if pv := GetPeerNextProto(conn); pv == PeerV01 {
 		return WireVersion1
 	}
 	return WireVersion2
 }
 
 var (
-	PeerPeerUnknown = PeerPeerNextProto{}
-	PeerPeerV01     = PeerPeerNextProto{"connet-peer/0.1"}      // 0.7.0
-	PeerPeerV02     = PeerPeerNextProto{"connet-peer-peer/0.2"} // 0.16.0
-	PeerPeerLatest  = PeerPeerV02
+	PeerUnknown = PeerNextProto{}
+	PeerV01     = PeerNextProto{"connet-peer/0.1"} // 0.7.0
+	PeerV02     = PeerNextProto{"connet-peer/0.2"} // 0.16.0
+	PeerLatest  = PeerV02
 )
 
 // PeerRelayNextProto describes TLS NextProtos for peers connecting to relays

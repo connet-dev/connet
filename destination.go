@@ -193,7 +193,7 @@ type destinationConn struct {
 }
 
 func runDestinationConn(ctx context.Context, dst *Destination, peer peerConnKey, conn *quic.Conn, logger *slog.Logger) *destinationConn {
-	wv := proto.GetPeerPeerWireVersion(conn)
+	wv := proto.GetPeerWireVersion(conn)
 	ctx, cancel := context.WithCancelCause(ctx)
 	c := &destinationConn{dst, peer, conn, wv, logger.With("peer", peer.id, "style", peer.style), cancel}
 	go c.run(ctx)
