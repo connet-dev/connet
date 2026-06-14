@@ -50,6 +50,7 @@ type Source struct {
 type sourceConn struct {
 	peer peerConnKey
 	conn *quic.Conn
+	wv   proto.WireVersion
 }
 
 func newSource(ctx context.Context, cl *Client, cfg SourceConfig) (*Source, error) {
@@ -161,7 +162,7 @@ func (s *Source) runActiveErr(ctx context.Context) error {
 
 		conns := make([]sourceConn, 0, len(active))
 		for peer, conn := range active {
-			conns = append(conns, sourceConn{peer, conn})
+			conns = append(conns, sourceConn{peer, conn, proto.GetPeerWireVersion(conn)})
 		}
 		s.conns.Store(&conns)
 
@@ -404,11 +405,11 @@ func (s *Source) dialStream(ctx context.Context, dest sourceConn, stream *quic.S
 
 	if err := proto.Write(stream, &pbconnect.Request{
 		Connect: connect,
-	}); err != nil {
+	}, dest.wv); err != nil {
 		return nil, fmt.Errorf("source connect write request: %w", err)
 	}
 
-	resp, err := pbconnect.ReadResponse(stream)
+	resp, err := pbconnect.ReadResponse(stream, dest.wv)
 	if err != nil {
 		return nil, fmt.Errorf("source connect read response: %w", err)
 	}

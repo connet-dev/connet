@@ -157,15 +157,15 @@ func (ep *endpoint) runSessionAnnounce(ctx context.Context, sess *session) {
 func (ep *endpoint) runSessionAnnounceErr(ctx context.Context, sess *session) error {
 	if ep.cfg.route.AllowRelay() {
 		g := reliable.NewGroup(ctx)
-		g.Go(reliable.Bind(sess.conn, ep.runAnnounce))
-		g.Go(reliable.Bind(sess.conn, ep.runRelay))
+		g.Go(reliable.Bind2(sess.conn, sess.wv, ep.runAnnounce))
+		g.Go(reliable.Bind2(sess.conn, sess.wv, ep.runRelay))
 		return g.Wait()
 	}
 
-	return ep.runAnnounce(ctx, sess.conn)
+	return ep.runAnnounce(ctx, sess.conn, sess.wv)
 }
 
-func (ep *endpoint) runAnnounce(ctx context.Context, conn *quic.Conn) error {
+func (ep *endpoint) runAnnounce(ctx context.Context, conn *quic.Conn, wv proto.WireVersion) error {
 	stream, err := conn.OpenStreamSync(ctx)
 	if err != nil {
 		return fmt.Errorf("announce open stream: %w", err)
@@ -200,13 +200,13 @@ func (ep *endpoint) runAnnounce(ctx context.Context, conn *quic.Conn) error {
 					Role:     ep.cfg.role.PB(),
 					Peer:     peer,
 				},
-			})
+			}, wv)
 		})
 	})
 
 	g.Go(func(ctx context.Context) error {
 		for {
-			resp, err := pbclient.ReadResponse(stream)
+			resp, err := pbclient.ReadResponse(stream, wv)
 			ep.onlineReport(err)
 			if err != nil {
 				return err
@@ -242,7 +242,7 @@ func (ep *endpoint) runAnnounce(ctx context.Context, conn *quic.Conn) error {
 	return g.Wait()
 }
 
-func (ep *endpoint) runRelay(ctx context.Context, conn *quic.Conn) error {
+func (ep *endpoint) runRelay(ctx context.Context, conn *quic.Conn, wv proto.WireVersion) error {
 	stream, err := conn.OpenStreamSync(ctx)
 	if err != nil {
 		return fmt.Errorf("relay open stream: %w", err)
@@ -259,7 +259,7 @@ func (ep *endpoint) runRelay(ctx context.Context, conn *quic.Conn) error {
 			Role:              ep.cfg.role.PB(),
 			ClientCertificate: ep.peer.clientCert.Leaf.Raw,
 		},
-	}); err != nil {
+	}, wv); err != nil {
 		return err
 	}
 
@@ -268,7 +268,7 @@ func (ep *endpoint) runRelay(ctx context.Context, conn *quic.Conn) error {
 
 	g.Go(func(ctx context.Context) error {
 		for {
-			resp, err := pbclient.ReadResponse(stream)
+			resp, err := pbclient.ReadResponse(stream, wv)
 			if err != nil {
 				ep.onlineReport(err)
 				return err

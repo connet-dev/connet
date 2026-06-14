@@ -32,7 +32,6 @@ type clientAuth struct {
 	endpoint connet.Endpoint
 	role     connet.Role
 	key      certc.Key
-	protocol proto.ConnectRelayNextProto
 	metadata string
 }
 
@@ -61,7 +60,7 @@ func newClientsServer(cfg Config, cert *certc.Cert, auth ClientAuthenticator) (*
 			ServerName:   tlsCert.Leaf.DNSNames[0],
 			Certificates: []tls.Certificate{tlsCert},
 			ClientAuth:   tls.RequireAnyClientCert,
-			NextProtos:   iterc.MapVarStrings(proto.ConnectRelayV02),
+			NextProtos:   iterc.MapVarStrings(proto.PeerRelayV03, proto.PeerRelayV02),
 		},
 		auth: auth,
 
@@ -256,10 +255,13 @@ type clientConn struct {
 	conn   *quic.Conn
 	logger *slog.Logger
 
+	wv   proto.WireVersion
 	auth *clientAuth
 }
 
 func (c *clientConn) run(ctx context.Context) {
+	c.wv = proto.GetPeerRelayWireVersion(c.conn)
+
 	c.logger.Debug("new client connection", "proto", c.conn.ConnectionState().TLS.NegotiatedProtocol, "remote", c.conn.RemoteAddr())
 	defer func() {
 		if err := c.conn.CloseWithError(quic.ApplicationErrorCode(pberror.Code_Unknown), "connection closed"); err != nil {
@@ -312,7 +314,7 @@ func (c *clientConn) authenticate(ctx context.Context) (*clientAuth, error) {
 	}()
 
 	req := &pbclientrelay.AuthenticateReq{}
-	if err := proto.Read(authStream, req); err != nil {
+	if err := proto.Read(authStream, req, c.wv); err != nil {
 		return nil, fmt.Errorf("client auth read: %w", err)
 	}
 
@@ -322,13 +324,13 @@ func (c *clientConn) authenticate(ctx context.Context) (*clientAuth, error) {
 		if perr == nil {
 			perr = pberror.NewError(pberror.Code_AuthenticationFailed, "authentication failed: %v", err)
 		}
-		if err := proto.Write(authStream, &pbclientrelay.AuthenticateResp{Error: perr}); err != nil {
+		if err := proto.Write(authStream, &pbclientrelay.AuthenticateResp{Error: perr}, c.wv); err != nil {
 			return nil, fmt.Errorf("client auth err write: %w", err)
 		}
 		return nil, fmt.Errorf("auth failed: %w", err)
 	}
 
-	if err := proto.Write(authStream, &pbclientrelay.AuthenticateResp{}); err != nil {
+	if err := proto.Write(authStream, &pbclientrelay.AuthenticateResp{}, c.wv); err != nil {
 		return nil, fmt.Errorf("client auth write: %w", err)
 	}
 
@@ -379,7 +381,7 @@ func (c *clientConn) runSourceStream(ctx context.Context, stream *quic.Stream, f
 }
 
 func (c *clientConn) runSourceStreamErr(ctx context.Context, stream *quic.Stream, fcs *endpointClients) error {
-	req, err := pbconnect.ReadRequest(stream)
+	req, err := pbconnect.ReadRequest(stream, c.wv)
 	if err != nil {
 		return fmt.Errorf("source stream read: %w", err)
 	}
@@ -396,7 +398,7 @@ func (c *clientConn) connect(ctx context.Context, stream *quic.Stream, fcs *endp
 	dests := fcs.getDestinations()
 	if len(dests) == 0 {
 		err := pberror.NewError(pberror.Code_DestinationNotFound, "could not find destination")
-		return proto.Write(stream, &pbconnect.Response{Error: err})
+		return proto.Write(stream, &pbconnect.Response{Error: err}, c.wv)
 	}
 
 	var pberrs []string
@@ -413,7 +415,7 @@ func (c *clientConn) connect(ctx context.Context, stream *quic.Stream, fcs *endp
 	}
 
 	err := pberror.NewError(pberror.Code_DestinationDialFailed, "could not dial destinations: %v", pberrs)
-	return proto.Write(stream, &pbconnect.Response{Error: err})
+	return proto.Write(stream, &pbconnect.Response{Error: err}, c.wv)
 }
 
 func (c *clientConn) connectDestination(ctx context.Context, srcStream *quic.Stream, dest *clientConn, req *pbconnect.Request) error {
@@ -427,16 +429,16 @@ func (c *clientConn) connectDestination(ctx context.Context, srcStream *quic.Str
 		}
 	}()
 
-	if err := proto.Write(dstStream, req); err != nil {
+	if err := proto.Write(dstStream, req, c.wv); err != nil {
 		return fmt.Errorf("destination write request: %w", err)
 	}
 
-	resp, err := pbconnect.ReadResponse(dstStream)
+	resp, err := pbconnect.ReadResponse(dstStream, c.wv)
 	if err != nil {
 		return fmt.Errorf("destination read response: %w", err)
 	}
 
-	if err := proto.Write(srcStream, resp); err != nil {
+	if err := proto.Write(srcStream, resp, c.wv); err != nil {
 		return fmt.Errorf("source write response: %w", err)
 	}
 
@@ -449,5 +451,5 @@ func (c *clientConn) connectDestination(ctx context.Context, srcStream *quic.Str
 func (c *clientConn) unknown(_ context.Context, stream *quic.Stream, req *pbconnect.Request) error {
 	c.logger.Error("unknown request", "req", req)
 	err := pberror.NewError(pberror.Code_RequestUnknown, "unknown request: %v", req)
-	return proto.Write(stream, &pbconnect.Response{Error: err})
+	return proto.Write(stream, &pbconnect.Response{Error: err}, c.wv)
 }

@@ -114,7 +114,7 @@ func (r *relay) connect(ctx context.Context, address string) (*quic.Conn, error)
 		Certificates: []tls.Certificate{r.local.clientCert},
 		RootCAs:      cfg.tls.cas,
 		ServerName:   cfg.tls.name,
-		NextProtos:   iterc.MapVarStrings(proto.ConnectRelayV02),
+		NextProtos:   iterc.MapVarStrings(proto.PeerRelayV03, proto.PeerRelayV02),
 	}, quicc.ClientConfig(r.local.direct.handshakeIdleTimeout))
 	if err != nil {
 		return nil, err
@@ -132,6 +132,8 @@ func (r *relay) connect(ctx context.Context, address string) (*quic.Conn, error)
 }
 
 func (r *relay) authenticate(ctx context.Context, conn *quic.Conn, auth []byte) error {
+	wv := proto.GetPeerRelayWireVersion(conn)
+
 	stream, err := conn.OpenStreamSync(ctx)
 	if err != nil {
 		return err
@@ -146,12 +148,12 @@ func (r *relay) authenticate(ctx context.Context, conn *quic.Conn, auth []byte) 
 		Authentication: auth,
 		Metadata:       r.local.metadata,
 		BuildVersion:   build.GetVersion(),
-	}); err != nil {
+	}, wv); err != nil {
 		return fmt.Errorf("cannot write auth request: %w", err)
 	}
 
 	resp := &pbclientrelay.AuthenticateResp{}
-	if err := proto.Read(stream, resp); err != nil {
+	if err := proto.Read(stream, resp, wv); err != nil {
 		return fmt.Errorf("cannot read auth response: %w", err)
 	}
 	if resp.Error != nil {

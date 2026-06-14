@@ -15,6 +15,12 @@ func Bind[T any](t T, fn func(context.Context, T) error) RunFn {
 	}
 }
 
+func Bind2[T any, U any](t T, u U, fn func(context.Context, T, U) error) RunFn {
+	return func(ctx context.Context) error {
+		return fn(ctx, t, u)
+	}
+}
+
 func Schedule(d time.Duration, fn RunFn) RunFn {
 	return ScheduleDelayed(d, d, fn)
 }

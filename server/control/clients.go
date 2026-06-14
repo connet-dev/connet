@@ -316,7 +316,7 @@ func (s *clientServer) runListener(ctx context.Context, ingress Ingress) error {
 
 	tlsConf := ingress.ListenTLS.Clone()
 	if len(tlsConf.NextProtos) == 0 {
-		tlsConf.NextProtos = iterc.MapVarStrings(proto.ClientControlV03)
+		tlsConf.NextProtos = iterc.MapVarStrings(proto.ClientControlV04, proto.ClientControlV03)
 	}
 
 	quicConf := quicc.ServerConfig()
@@ -467,6 +467,7 @@ type clientConn struct {
 	logger *slog.Logger
 	connID ConnID
 
+	wv proto.WireVersion
 	clientConnAuth
 }
 
@@ -478,6 +479,8 @@ type clientConnAuth struct {
 }
 
 func (c *clientConn) run(ctx context.Context) {
+	c.wv = proto.GetClientControlWireVersion(c.conn)
+
 	c.logger.Debug("new client connection", "proto", c.conn.ConnectionState().TLS.NegotiatedProtocol, "remote", c.conn.RemoteAddr())
 	defer func() {
 		if err := c.conn.CloseWithError(quic.ApplicationErrorCode(pberror.Code_Unknown), "connection closed"); err != nil {
@@ -545,7 +548,7 @@ func (c *clientConn) authenticate(ctx context.Context) (*clientConnAuth, error) 
 	}()
 
 	req := &pbclient.AuthenticateReq{}
-	if err := proto.Read(authStream, req); err != nil {
+	if err := proto.Read(authStream, req, c.wv); err != nil {
 		return nil, fmt.Errorf("client auth read: %w", err)
 	}
 
@@ -561,7 +564,7 @@ func (c *clientConn) authenticate(ctx context.Context) (*clientConnAuth, error) 
 		if perr == nil {
 			perr = pberror.NewError(pberror.Code_AuthenticationFailed, "authentication failed: %v", err)
 		}
-		if err := proto.Write(authStream, &pbclient.AuthenticateResp{Error: perr}); err != nil {
+		if err := proto.Write(authStream, &pbclient.AuthenticateResp{Error: perr}, c.wv); err != nil {
 			return nil, fmt.Errorf("client auth err write: %w", err)
 		}
 		return nil, fmt.Errorf("auth failed: %w", perr)
@@ -578,7 +581,7 @@ func (c *clientConn) authenticate(ctx context.Context) (*clientConnAuth, error) 
 	origin, err := pbmodel.AddrPortFromNet(c.conn.RemoteAddr())
 	if err != nil {
 		err := pberror.NewError(pberror.Code_AuthenticationFailed, "cannot resolve origin: %v", err)
-		if err := proto.Write(authStream, &pbclient.AuthenticateResp{Error: err}); err != nil {
+		if err := proto.Write(authStream, &pbclient.AuthenticateResp{Error: err}, c.wv); err != nil {
 			return nil, fmt.Errorf("client auth err write: %w", err)
 		}
 		return nil, fmt.Errorf("client addr port from net: %w", err)
@@ -592,7 +595,7 @@ func (c *clientConn) authenticate(ctx context.Context) (*clientConnAuth, error) 
 	if err := proto.Write(authStream, &pbclient.AuthenticateResp{
 		Public:         origin,
 		ReconnectToken: retoken,
-	}); err != nil {
+	}, c.wv); err != nil {
 		return nil, fmt.Errorf("client auth write: %w", err)
 	}
 
@@ -618,7 +621,7 @@ func (s *clientStream) run(ctx context.Context) {
 }
 
 func (s *clientStream) runErr(ctx context.Context) error {
-	req, err := pbclient.ReadRequest(s.stream)
+	req, err := pbclient.ReadRequest(s.stream, s.conn.wv)
 	if err != nil {
 		return err
 	}
@@ -651,7 +654,7 @@ func (s *clientStream) announce(ctx context.Context, req *pbclient.Request_Annou
 		if perr == nil {
 			perr = pberror.NewError(pberror.Code_AnnounceValidationFailed, "failed to validate endpoint '%s': %v", endpoint, err)
 		}
-		if err := proto.Write(s.stream, &pbclient.Response{Error: perr}); err != nil {
+		if err := proto.Write(s.stream, &pbclient.Response{Error: perr}, s.conn.wv); err != nil {
 			return fmt.Errorf("client write auth err: %w", err)
 		}
 		return perr
@@ -660,7 +663,7 @@ func (s *clientStream) announce(ctx context.Context, req *pbclient.Request_Annou
 	}
 
 	if err := validatePeerCert(endpoint, req.Peer); err != nil {
-		if err := proto.Write(s.stream, &pbclient.Response{Error: err}); err != nil {
+		if err := proto.Write(s.stream, &pbclient.Response{Error: err}, s.conn.wv); err != nil {
 			return fmt.Errorf("client write cert err: %w", err)
 		}
 		return err
@@ -688,20 +691,20 @@ func (s *clientStream) announce(ctx context.Context, req *pbclient.Request_Annou
 
 	g.Go(func(ctx context.Context) error {
 		for {
-			req, err := pbclient.ReadRequest(s.stream)
+			req, err := pbclient.ReadRequest(s.stream, s.conn.wv)
 			if err != nil {
 				return err
 			}
 			if req.Announce == nil {
 				respErr := pberror.NewError(pberror.Code_RequestUnknown, "unexpected request")
-				if err := proto.Write(s.stream, &pbclient.Response{Error: respErr}); err != nil {
+				if err := proto.Write(s.stream, &pbclient.Response{Error: respErr}, s.conn.wv); err != nil {
 					return fmt.Errorf("client write protocol err: %w", err)
 				}
 				return err
 			}
 
 			if err := validatePeerCert(endpoint, req.Announce.Peer); err != nil {
-				if err := proto.Write(s.stream, &pbclient.Response{Error: err}); err != nil {
+				if err := proto.Write(s.stream, &pbclient.Response{Error: err}, s.conn.wv); err != nil {
 					return fmt.Errorf("client write cert err: %w", err)
 				}
 				return err
@@ -722,7 +725,7 @@ func (s *clientStream) announce(ctx context.Context, req *pbclient.Request_Annou
 				Announce: &pbclient.Response_Announce{
 					Peers: peers,
 				},
-			}); err != nil {
+			}, s.conn.wv); err != nil {
 				return fmt.Errorf("client announce write: %w", err)
 			}
 
@@ -741,7 +744,7 @@ func (s *clientStream) relay(ctx context.Context, req *pbclient.Request_Relay) e
 		if perr == nil {
 			perr = pberror.NewError(pberror.Code_RelayValidationFailed, "failed to validate destination '%s': %v", endpoint, err)
 		}
-		if err := proto.Write(s.stream, &pbclient.Response{Error: perr}); err != nil {
+		if err := proto.Write(s.stream, &pbclient.Response{Error: perr}, s.conn.wv); err != nil {
 			return fmt.Errorf("client relay auth err response: %w", err)
 		}
 		return perr
@@ -752,7 +755,7 @@ func (s *clientStream) relay(ctx context.Context, req *pbclient.Request_Relay) e
 	clientCert, err := x509.ParseCertificate(req.ClientCertificate)
 	if err != nil {
 		err := pberror.NewError(pberror.Code_RelayInvalidCertificate, "invalid certificate: %v", err)
-		if err := proto.Write(s.stream, &pbclient.Response{Error: err}); err != nil {
+		if err := proto.Write(s.stream, &pbclient.Response{Error: err}, s.conn.wv); err != nil {
 			return fmt.Errorf("client relay cert err response: %w", err)
 		}
 		return err
@@ -769,7 +772,7 @@ func (s *clientStream) relay(ctx context.Context, req *pbclient.Request_Relay) e
 				Relay: &pbclient.Response_Relays{
 					Relays: slices.Collect(maps.Values(relays)),
 				},
-			}); err != nil {
+			}, s.conn.wv); err != nil {
 				return fmt.Errorf("client relay response: %w", err)
 			}
 			return nil
@@ -782,5 +785,5 @@ func (s *clientStream) relay(ctx context.Context, req *pbclient.Request_Relay) e
 func (s *clientStream) unknown(_ context.Context, req *pbclient.Request) error {
 	s.conn.logger.Error("unknown request", "req", req)
 	err := pberror.NewError(pberror.Code_RequestUnknown, "unknown request: %v", req)
-	return proto.Write(s.stream, &pbclient.Response{Error: err})
+	return proto.Write(s.stream, &pbclient.Response{Error: err}, s.conn.wv)
 }

@@ -187,13 +187,15 @@ type destinationConn struct {
 	dst    *Destination
 	peer   peerConnKey
 	conn   *quic.Conn
+	wv     proto.WireVersion
 	logger *slog.Logger
 	cancel context.CancelCauseFunc
 }
 
 func runDestinationConn(ctx context.Context, dst *Destination, peer peerConnKey, conn *quic.Conn, logger *slog.Logger) *destinationConn {
+	wv := proto.GetPeerWireVersion(conn)
 	ctx, cancel := context.WithCancelCause(ctx)
-	c := &destinationConn{dst, peer, conn, logger.With("peer", peer.id, "style", peer.style), cancel}
+	c := &destinationConn{dst, peer, conn, wv, logger.With("peer", peer.id, "style", peer.style), cancel}
 	go c.run(ctx)
 	return c
 }
@@ -226,7 +228,7 @@ func (d *destinationConn) runDestination(ctx context.Context, stream *quic.Strea
 }
 
 func (d *destinationConn) runDestinationErr(ctx context.Context, stream *quic.Stream) error {
-	req, err := pbconnect.ReadRequest(stream)
+	req, err := pbconnect.ReadRequest(stream, d.wv)
 	if err != nil {
 		return fmt.Errorf("destination read request: %w", err)
 	}
@@ -235,7 +237,7 @@ func (d *destinationConn) runDestinationErr(ctx context.Context, stream *quic.St
 	case req.Connect != nil:
 		return d.runConnect(ctx, stream, req)
 	default:
-		return pbconnect.WriteError(stream, pberror.Code_RequestUnknown, "unknown request: %v", req)
+		return pbconnect.WriteError(stream, d.wv, pberror.Code_RequestUnknown, "unknown request: %v", req)
 	}
 }
 
@@ -251,7 +253,7 @@ func (d *destinationConn) runConnect(ctx context.Context, stream *quic.Stream, r
 		srcEncryptions, err := EncryptionsFromPB(req.Connect.SourceEncryption)
 		switch {
 		case err != nil:
-			return pbconnect.WriteError(stream, pberror.Code_DestinationRelayEncryptionError, "failed to negotiate encryption: %v", err)
+			return pbconnect.WriteError(stream, d.wv, pberror.Code_DestinationRelayEncryptionError, "failed to negotiate encryption: %v", err)
 		case len(srcEncryptions) == 0:
 			// source doesn't include encryption logic, none is the only possible choice
 			srcEncryptions = []EncryptionScheme{NoEncryption}
@@ -260,11 +262,11 @@ func (d *destinationConn) runConnect(ctx context.Context, stream *quic.Stream, r
 		encryption, err := SelectEncryptionScheme(d.dst.cfg.RelayEncryptions, srcEncryptions)
 		switch {
 		case err != nil:
-			return pbconnect.WriteError(stream, pberror.Code_DestinationRelayEncryptionError, "select encryption scheme: %v", err)
+			return pbconnect.WriteError(stream, d.wv, pberror.Code_DestinationRelayEncryptionError, "select encryption scheme: %v", err)
 		case encryption == TLSEncryption:
 			scfg, err := d.dst.getSourceTLS(req.Connect.SourceTls.GetClientName())
 			if err != nil {
-				return pbconnect.WriteError(stream, pberror.Code_DestinationRelayEncryptionError, "destination tls: %v", err)
+				return pbconnect.WriteError(stream, d.wv, pberror.Code_DestinationRelayEncryptionError, "destination tls: %v", err)
 			}
 			srcConfig = scfg
 
@@ -276,12 +278,12 @@ func (d *destinationConn) runConnect(ctx context.Context, stream *quic.Stream, r
 			// get check peer public key
 			srcPublic, err := d.dst.ep.peer.getECDHPublicKey(req.Connect.SourceDhX25519)
 			if err != nil {
-				return pbconnect.WriteError(stream, pberror.Code_DestinationRelayEncryptionError, "destination public key: %v", err)
+				return pbconnect.WriteError(stream, d.wv, pberror.Code_DestinationRelayEncryptionError, "destination public key: %v", err)
 			}
 
 			dstSecret, ecdhCfg, err := d.dst.ep.peer.newECDHConfig()
 			if err != nil {
-				return pbconnect.WriteError(stream, pberror.Code_DestinationRelayEncryptionError, "new ecdh config: %v", err)
+				return pbconnect.WriteError(stream, d.wv, pberror.Code_DestinationRelayEncryptionError, "new ecdh config: %v", err)
 			}
 
 			connect.DestinationEncryption = pbconnect.RelayEncryptionScheme_DHX25519_CHACHAPOLY
@@ -289,19 +291,19 @@ func (d *destinationConn) runConnect(ctx context.Context, stream *quic.Stream, r
 
 			streamer, err := cryptoc.NewStreamer(dstSecret, srcPublic, false)
 			if err != nil {
-				return pbconnect.WriteError(stream, pberror.Code_DestinationRelayEncryptionError, "new streamer: %v", err)
+				return pbconnect.WriteError(stream, d.wv, pberror.Code_DestinationRelayEncryptionError, "new streamer: %v", err)
 			}
 			srcStreamer = streamer
 		case encryption == NoEncryption:
 			// do nothing
 		default:
-			return pbconnect.WriteError(stream, pberror.Code_DestinationRelayEncryptionError, "unknown encryption scheme: %s", encryption)
+			return pbconnect.WriteError(stream, d.wv, pberror.Code_DestinationRelayEncryptionError, "unknown encryption scheme: %s", encryption)
 		}
 	}
 
 	if err := proto.Write(stream, &pbconnect.Response{
 		Connect: connect,
-	}); err != nil {
+	}, d.wv); err != nil {
 		return fmt.Errorf("destination connect write response: %w", err)
 	}
 

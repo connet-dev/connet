@@ -65,7 +65,7 @@ func newControlClient(cfg Config, clientsCert *certc.Cert, configStore logc.KV[C
 		controlTLSConf: &tls.Config{
 			ServerName: cfg.ControlHost,
 			RootCAs:    cfg.ControlCAs,
-			NextProtos: iterc.MapVarStrings(proto.RelayControlV03),
+			NextProtos: iterc.MapVarStrings(proto.RelayControlV04, proto.RelayControlV03),
 		},
 		handshakeIdleTimeout: cfg.HandshakeIdleTimeout,
 
@@ -100,7 +100,7 @@ func (s *controlClient) Authenticate(authReq *pbclientrelay.AuthenticateReq, cer
 		return nil, pberror.NewError(pberror.Code_AuthenticationFailed, "invalid certificate")
 	}
 
-	return &clientAuth{connet.EndpointFromPB(auth.Endpoint), connet.RoleFromPB(auth.Role), certKey, proto.ConnectRelayV02, authReq.Metadata}, nil
+	return &clientAuth{connet.EndpointFromPB(auth.Endpoint), connet.RoleFromPB(auth.Role), certKey, authReq.Metadata}, nil
 }
 
 type TransportsFn func(ctx context.Context) ([]*quic.Transport, error)
@@ -182,6 +182,8 @@ func (s *controlClient) connectSingle(ctx context.Context, transport *quic.Trans
 }
 
 func (s *controlClient) authenticate(ctx context.Context, conn *quic.Conn, reconnConfig ConfigValue) error {
+	wv := proto.GetRelayControlWireVersion(conn)
+
 	authStream, err := conn.OpenStreamSync(ctx)
 	if err != nil {
 		return fmt.Errorf("open stream: %w", err)
@@ -205,12 +207,12 @@ func (s *controlClient) authenticate(ctx context.Context, conn *quic.Conn, recon
 		Metadata:               s.metadata,
 		ServerCertificate:      s.clientsCert.Raw(),
 		RelayAuthenticationKey: relayPk[:],
-	}); err != nil {
+	}, wv); err != nil {
 		return fmt.Errorf("auth write error: %w", err)
 	}
 
 	resp := &pbrelay.AuthenticateResp{}
-	if err := proto.Read(authStream, resp); err != nil {
+	if err := proto.Read(authStream, resp, wv); err != nil {
 		return fmt.Errorf("auth read error: %w", err)
 	}
 	if resp.Error != nil {

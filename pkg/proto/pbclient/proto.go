@@ -7,17 +7,17 @@ import (
 	"github.com/connet-dev/connet/pkg/proto"
 )
 
-func ReadRequest(r io.Reader) (*Request, error) {
+func ReadRequest(r io.Reader, v proto.WireVersion) (*Request, error) {
 	req := &Request{}
-	if err := proto.Read(r, req); err != nil {
+	if err := proto.Read(r, req, v); err != nil {
 		return nil, fmt.Errorf("server request read: %w", err)
 	}
 	return req, nil
 }
 
-func ReadResponse(r io.Reader) (*Response, error) {
+func ReadResponse(r io.Reader, v proto.WireVersion) (*Response, error) {
 	resp := &Response{}
-	if err := proto.Read(r, resp); err != nil {
+	if err := proto.Read(r, resp, v); err != nil {
 		return nil, fmt.Errorf("server response read: %w", err)
 	}
 	if resp.Error != nil {

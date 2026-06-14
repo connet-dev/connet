@@ -300,6 +300,7 @@ func (c *Client) run(ctx context.Context, transport *quic.Transport, errCh chan 
 
 type session struct {
 	conn    *quic.Conn
+	wv      proto.WireVersion
 	retoken []byte
 }
 
@@ -308,7 +309,7 @@ func (c *Client) connect(ctx context.Context, transport *quic.Transport, retoken
 	conn, err := transport.Dial(ctx, c.controlAddr, &tls.Config{
 		ServerName: c.controlHost,
 		RootCAs:    c.controlCAs,
-		NextProtos: iterc.MapVarStrings(proto.ClientControlV03),
+		NextProtos: iterc.MapVarStrings(proto.ClientControlV04, proto.ClientControlV03),
 	}, quicc.ClientConfig(c.handshakeIdleTimeout))
 	if err != nil {
 		return nil, fmt.Errorf("dial server %s: %w", c.controlAddr, err)
@@ -325,6 +326,8 @@ func (c *Client) connect(ctx context.Context, transport *quic.Transport, retoken
 func (c *Client) authenticate(ctx context.Context, conn *quic.Conn, retoken []byte) (*session, error) {
 	c.logger.Debug("authenticating", "addr", c.controlAddr)
 
+	wv := proto.GetClientControlWireVersion(conn)
+
 	authStream, err := conn.OpenStreamSync(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("open authentication stream: %w", err)
@@ -340,12 +343,12 @@ func (c *Client) authenticate(ctx context.Context, conn *quic.Conn, retoken []by
 		ReconnectToken: retoken,
 		BuildVersion:   build.GetVersion(),
 		Metadata:       c.metadata,
-	}); err != nil {
+	}, wv); err != nil {
 		return nil, fmt.Errorf("write authentication: %w", err)
 	}
 
 	resp := &pbclient.AuthenticateResp{}
-	if err := proto.Read(authStream, resp); err != nil {
+	if err := proto.Read(authStream, resp, wv); err != nil {
 		return nil, fmt.Errorf("authentication read failed: %w", err)
 	}
 	if resp.Error != nil {
@@ -364,7 +367,7 @@ func (c *Client) authenticate(ctx context.Context, conn *quic.Conn, retoken []by
 	})
 
 	c.logger.Info("authenticated to server", "addr", c.controlAddr, "direct", publicAddr)
-	return &session{conn, resp.ReconnectToken}, nil
+	return &session{conn, wv, resp.ReconnectToken}, nil
 }
 
 func (c *Client) reconnect(ctx context.Context, transport *quic.Transport, retoken []byte) (*session, error) {

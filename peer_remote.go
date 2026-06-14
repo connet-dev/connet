@@ -205,6 +205,8 @@ func (p *remotePeerIncoming) connect(ctx context.Context) (*quic.Conn, error) {
 }
 
 func (p *remotePeerIncoming) check(ctx context.Context, conn *quic.Conn) error {
+	wv := proto.GetPeerWireVersion(conn)
+
 	stream, err := conn.AcceptStream(ctx)
 	if err != nil {
 		return err
@@ -215,9 +217,9 @@ func (p *remotePeerIncoming) check(ctx context.Context, conn *quic.Conn) error {
 		}
 	}()
 
-	if _, err := pbconnect.ReadRequest(stream); err != nil {
+	if _, err := pbconnect.ReadRequest(stream, wv); err != nil {
 		return err
-	} else if err := proto.Write(stream, &pbconnect.Response{}); err != nil {
+	} else if err := proto.Write(stream, &pbconnect.Response{}, wv); err != nil {
 		return err
 	}
 
@@ -298,7 +300,7 @@ func (p *remotePeerOutgoing) connect(ctx context.Context) (*quic.Conn, error) {
 			Certificates: []tls.Certificate{p.parent.local.clientCert},
 			RootCAs:      p.serverConf.cas,
 			ServerName:   p.serverConf.name,
-			NextProtos:   iterc.MapVarStrings(proto.ConnectClientV01),
+			NextProtos:   iterc.MapVarStrings(proto.PeerV02, proto.PeerV01),
 		}, quicc.ClientConfig(p.parent.local.direct.handshakeIdleTimeout))
 		switch {
 		case isPeerTerminalError(err):
@@ -324,6 +326,8 @@ func (p *remotePeerOutgoing) connect(ctx context.Context) (*quic.Conn, error) {
 }
 
 func (p *remotePeerOutgoing) check(ctx context.Context, conn *quic.Conn) error {
+	wv := proto.GetPeerWireVersion(conn)
+
 	stream, err := conn.OpenStreamSync(ctx)
 	if err != nil {
 		return err
@@ -334,10 +338,10 @@ func (p *remotePeerOutgoing) check(ctx context.Context, conn *quic.Conn) error {
 		}
 	}()
 
-	if err := proto.Write(stream, &pbconnect.Request{}); err != nil {
+	if err := proto.Write(stream, &pbconnect.Request{}, wv); err != nil {
 		return err
 	}
-	if _, err := pbconnect.ReadResponse(stream); err != nil {
+	if _, err := pbconnect.ReadResponse(stream, wv); err != nil {
 		return err
 	}
 

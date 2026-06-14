@@ -8,17 +8,17 @@ import (
 	"github.com/connet-dev/connet/pkg/proto/pberror"
 )
 
-func ReadRequest(r io.Reader) (*Request, error) {
+func ReadRequest(r io.Reader, v proto.WireVersion) (*Request, error) {
 	req := &Request{}
-	if err := proto.Read(r, req); err != nil {
+	if err := proto.Read(r, req, v); err != nil {
 		return nil, err
 	}
 	return req, nil
 }
 
-func ReadResponse(r io.Reader) (*Response, error) {
+func ReadResponse(r io.Reader, v proto.WireVersion) (*Response, error) {
 	resp := &Response{}
-	if err := proto.Read(r, resp); err != nil {
+	if err := proto.Read(r, resp, v); err != nil {
 		return nil, err
 	}
 	if resp.Error != nil {
@@ -27,9 +27,9 @@ func ReadResponse(r io.Reader) (*Response, error) {
 	return resp, nil
 }
 
-func WriteError(w io.Writer, code pberror.Code, msg string, args ...any) error {
+func WriteError(w io.Writer, v proto.WireVersion, code pberror.Code, msg string, args ...any) error {
 	pbErr := pberror.NewError(code, msg, args...)
-	if err := proto.Write(w, &Response{Error: pbErr}); err != nil {
+	if err := proto.Write(w, &Response{Error: pbErr}, v); err != nil {
 		return fmt.Errorf("write err response '%w': %w", pbErr, err)
 	}
 	return pbErr

@@ -258,7 +258,7 @@ func (s *relayServer) runListener(ctx context.Context, ingress Ingress) error {
 
 	tlsConf := ingress.ListenTLS.Clone()
 	if len(tlsConf.NextProtos) == 0 {
-		tlsConf.NextProtos = iterc.MapVarStrings(proto.RelayControlV03)
+		tlsConf.NextProtos = iterc.MapVarStrings(proto.RelayControlV04, proto.RelayControlV03)
 	}
 
 	quicConf := quicc.ServerConfig()
@@ -347,6 +347,7 @@ type relayConn struct {
 	conn   *quic.Conn
 	logger *slog.Logger
 
+	wv proto.WireVersion
 	relayConnAuth
 }
 
@@ -361,12 +362,14 @@ type relayConnAuth struct {
 }
 
 func (c *relayConn) run(ctx context.Context) {
+	c.wv = proto.GetRelayControlWireVersion(c.conn)
+
+	c.logger.Debug("new relay connection", "proto", c.conn.ConnectionState().TLS.NegotiatedProtocol, "remote", c.conn.RemoteAddr())
 	defer func() {
 		if err := c.conn.CloseWithError(quic.ApplicationErrorCode(pberror.Code_Unknown), "connection closed"); err != nil {
 			slogc.Fine(c.logger, "error closing connection", "err", err)
 		}
 	}()
-	c.logger.Debug("new relay connection", "proto", c.conn.ConnectionState().TLS.NegotiatedProtocol, "remote", c.conn.RemoteAddr())
 
 	if err := c.runErr(ctx); err != nil {
 		c.logger.Debug("error while running relay conn", "err", err)
@@ -418,18 +421,18 @@ func (c *relayConn) authenticate(ctx context.Context) (*relayConnAuth, error) {
 	}()
 
 	req := &pbrelay.AuthenticateReq{}
-	if err := proto.Read(authStream, req); err != nil {
+	if err := proto.Read(authStream, req, c.wv); err != nil {
 		return nil, fmt.Errorf("auth read request: %w", err)
 	}
 
-	protocol := proto.RelayControlV03
+	protocol := proto.GetRelayControlNextProto(c.conn)
 	cert, err := x509.ParseCertificate(req.ServerCertificate)
 	if err != nil {
 		perr := pberror.GetError(err)
 		if perr == nil {
 			perr = pberror.NewError(pberror.Code_AuthenticationFailed, "authentication failed: %v", err)
 		}
-		if err := proto.Write(authStream, &pbrelay.AuthenticateResp{Error: perr}); err != nil {
+		if err := proto.Write(authStream, &pbrelay.AuthenticateResp{Error: perr}, c.wv); err != nil {
 			return nil, fmt.Errorf("relay auth err write: %w", err)
 		}
 		return nil, fmt.Errorf("auth failed: %w", perr)
@@ -446,7 +449,7 @@ func (c *relayConn) authenticate(ctx context.Context) (*relayConnAuth, error) {
 		if perr == nil {
 			perr = pberror.NewError(pberror.Code_AuthenticationFailed, "authentication failed: %v", err)
 		}
-		if err := proto.Write(authStream, &pbrelay.AuthenticateResp{Error: perr}); err != nil {
+		if err := proto.Write(authStream, &pbrelay.AuthenticateResp{Error: perr}, c.wv); err != nil {
 			return nil, fmt.Errorf("relay auth err write: %w", err)
 		}
 		return nil, fmt.Errorf("auth failed: %w", perr)
@@ -463,14 +466,14 @@ func (c *relayConn) authenticate(ctx context.Context) (*relayConnAuth, error) {
 	controlPk, controlSk, err := box.GenerateKey(rand.Reader)
 	if err != nil {
 		perr := pberror.NewError(pberror.Code_AuthenticationFailed, "authentication failed: %v", err)
-		if err := proto.Write(authStream, &pbrelay.AuthenticateResp{Error: perr}); err != nil {
+		if err := proto.Write(authStream, &pbrelay.AuthenticateResp{Error: perr}, c.wv); err != nil {
 			return nil, fmt.Errorf("relay auth err write: %w", err)
 		}
 		return nil, fmt.Errorf("auth failed: %w", perr)
 	}
 	if len(req.RelayAuthenticationKey) != 32 {
 		perr := pberror.NewError(pberror.Code_AuthenticationFailed, "authentication failed: invalid key")
-		if err := proto.Write(authStream, &pbrelay.AuthenticateResp{Error: perr}); err != nil {
+		if err := proto.Write(authStream, &pbrelay.AuthenticateResp{Error: perr}, c.wv); err != nil {
 			return nil, fmt.Errorf("relay auth err write: %w", err)
 		}
 		return nil, fmt.Errorf("auth failed: %w", perr)
@@ -485,7 +488,7 @@ func (c *relayConn) authenticate(ctx context.Context) (*relayConnAuth, error) {
 		ControlId:                c.server.id,
 		ReconnectToken:           retoken,
 		ControlAuthenticationKey: controlPk[:],
-	}); err != nil {
+	}, c.wv); err != nil {
 		return nil, fmt.Errorf("auth write response: %w", err)
 	}
 
