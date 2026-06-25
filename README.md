@@ -130,7 +130,7 @@ To run a client, use `connet --config client.toml` command.
 Here is the full client `client.toml` configuration specification:
 ```toml
 [client]
-token-file = "path/to/relay/token" # file that contains the auth token for the control server
+token-file = "path/to/client/token" # file that contains the auth token for the control server
 token = "client-token-1" # auth token for the control server (fallback when 'token-file' is not specified)
 # if both 'token-file' and 'token' are empty, will read 'CONNET_TOKEN' environment variable
 metadata = "home" # metadata sent when authenticating to help identify this client
@@ -179,7 +179,7 @@ url = "tls://:8003" # runs a TLS source server
 url = "http://:8080/path" # runs an HTTP reverse proxy source server, path rewrite
 url = "https://:8443" # runs an HTTPS reverse proxy source server
 url = "ws://127.0.0.1:8080" # runs websocket tcp converter that exposes the destinations conn as a websocket
-url = "wss://127.0.0.1:8083" # same as above, but exposes it on HTTPS
+url = "wss://127.0.0.1:8083" # same as above, but exposes it on WSS (secure WebSocket)
 cert-file = "/path/to/cert/file" # the TLS/HTTPS server certificate to use
 key-file = "/path/to/key/file" # the TLS/HTTPS server certificate private key to use
 cas-file = "/path/to/cas/file" # the TLS/HTTPS client certificates to trust (mutual TLS)
@@ -197,9 +197,9 @@ url = "tcp://:8001" # again, multiple sources can be defined
 
 The client uses the following environment variables, in case the associated fields in the config file are empty:
  - `CONNET_TOKEN` - pass the client's token from as env variable, used when `token-file` and `token` are empty
- - `CONNET_CACHE_DIR` - specifies the location of the stateless reset token, used when `direct-stateless-reset-key`
+ - `CONNET_CACHE_DIR` - specifies the location of the stateless reset key, used when `direct-stateless-reset-key`
    and `direct-stateless-reset-key-file` are empty
- - `CACHE_DIRECTORY` - used after trying to use `CONNET_CACHE_DIR`, another location for the stateless reset token. This
+ - `CACHE_DIRECTORY` - used after trying to use `CONNET_CACHE_DIR`, another location for the stateless reset key. This
    variable is usually specified by systemd
  - `XDG_CACHE_HOME` - the cache directory, as specified by XDG, used if both `CONNET_CACHE_DIR` and `CACHE_DIRECTORY` are empty
 
@@ -248,14 +248,14 @@ Here is the full control server `control.toml` configuration specification:
 [control]
 clients-tokens-file = "path/to/client/tokens" # file containing a list of client auth tokens, one token per line
 clients-tokens = ["client-token-1", "client-token-n"] # list of recognized client auth tokens
-# one of client-tokens-file or client-tokens is required
+# one of clients-tokens-file or clients-tokens is required
 
 endpoint-expiry-disable = false # disable keeping endpoint registrations alive after client disconnect (default false)
 endpoint-expiry-timeout = "30s" # how long to keep endpoint registrations after client disconnect (default '30s')
 
 relays-tokens-file = "path/to/relay/token" # file containing a list of relay auth tokens, one token per line
 relays-tokens = ["relay-token-1", "relay-token-n"] # list of recognized relay auth tokens
-# one of relay-tokens or relay-tokens-file is required if connecting relays
+# one of relays-tokens or relays-tokens-file is required if connecting relays
 
 status-addr = "127.0.0.1:19180" # address to listen for incoming status connections (TCP/HTTP, [host]:port) (disabled by default)
 store-dir = "path/to/control-store" # directory for this control server to persist runtime information, see Storage section for more info
@@ -298,9 +298,9 @@ metadata = "home" # metadata sent when authenticating to help identify this rela
 
 control-addr = "localhost:19189" # the control server address to connect to, defaults to localhost:19189
 control-cas-file = "path/to/ca/file.pem" # the public certificate root of the control server, no default, required when using self-signed certs
-control-name = "localhost" # control server name (UDP/QUIC, host), when connecting via IP and certificate includes only domains (defaults to the host in 'server-addr')
+control-name = "localhost" # control server name (UDP/QUIC, host), when connecting via IP and certificate includes only domains (defaults to the host in 'control-addr')
 
-handshake-timeout = "1m" # handshake idle timeout (QUIC, duration), when there is a high latency to connect (defaults to 5s)
+handshake-idle-timeout = "1m" # handshake idle timeout (QUIC, duration), when there is a high latency to connect (defaults to 5s)
 
 status-addr = "127.0.0.1:19181" # address to listen for incoming status connections (TCP/HTTP, [host]:port) (disabled by default)
 store-dir = "path/to/relay-store" # directory for this relay server to persist runtime information, see Storage section for more info
@@ -327,7 +327,7 @@ the config file are empty:
  - NAT-PMP (rfc6886), controlled by `nat-pmp` option. By default, the option is configured as `system`
 (e.g. using the local system to detect local IP and router). You can use `disabled` to completely disable nat-pmp. On
 some systems (for example android), access to IP/router information is restricted, in which case you can try the `dial` option
-which will try to dynamically determine this information by dialing in the control server.
+which will try to dynamically determine this information by dialing out to the control server.
 
 ### IP Restrictions
 
@@ -374,8 +374,8 @@ require same encryption at both clients (e.g. source and destination).
 ### Source load balancer
 
 By default, a peer with a source endpoint will try to connect to any active peer with a destination endpoint, trying them all
-in order of their latency, preferring direct peer-to-peer connections over the ones going through a relay. This effectively
-means that the destination peer with the best latency will receive all connections from the source peer. If you instead need
+in order of their latency, preferring direct peer-to-peer connections over the ones going through a relay. This means the
+destination peer with the best latency is tried first, and if it fails the source falls back to the next peer. If you instead need
 to spread the load between all active peers, you can utilize `lb-policy/lb-retry/lb-retry-max` configuration in the source endpoint. 
 
 To configure load balancing, you start by choosing `lb-policy`, which defines in what order peer connections are attempted.
@@ -386,7 +386,7 @@ To configure load balancing, you start by choosing `lb-policy`, which defines in
  - `random` - peers are randomly ordered each time
 
 Next, you need to choose how many of the ordered peers will be tried, via `lb-retry` (and `lb-retry-max`):
- - ` ` - never by default, e.g. the first peer will be attempted and if it fails, the connection will fail
+ - `""` (empty / never) - never by default, e.g. the first peer will be attempted and if it fails, the connection will fail
  - `count` - try as many as `lb-retry-max` peers, before giving up. If `lb-retry-max` is empty, `2` is the default
  - `timed` - try for as long as `lb-retry-max` milliseconds, before giving up. If `lb-retry-max` is empty, `1000` milliseconds is the default
  - `all` - try all available peers
@@ -491,7 +491,7 @@ To configure the client as a service:
 {
   inputs = {
     # ...
-    connet.url = "github.com/connet-dev/connet";
+    connet.url = "github:connet-dev/connet";
   };
   outputs = { connet, ... }: {
     nixosConfigurations.example = nixpkgs.lib.nixosSystem {
@@ -524,7 +524,7 @@ docker pull ghcr.io/connet-dev/connet:latest
 
 To run the client you can use something like:
 ```bash
-docker run -p 19192:19192 -p 9000:9000 connet \
+docker run -p 19192:19192 -p 9000:9000 ghcr.io/connet-dev/connet:latest \
   --server-addr "localhost:19190" --token "CLIENT_TOKEN" \
   --src-name "example" --src-url "tcp://:9000"
 ```
@@ -533,7 +533,7 @@ Or if you are using a config file on your system:
 ```bash
 docker run -p 19192:19192 -p 9000:9000 \
   --mount "type=bind,source=/path/to/connet.toml,target=/config/connet.toml" \
-  connet --config "/config/connet.toml"
+  ghcr.io/connet-dev/connet:latest --config "/config/connet.toml"
 ```
 
 ## Embedding

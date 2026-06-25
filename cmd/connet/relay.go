@@ -60,9 +60,9 @@ func relayCmd() *cobra.Command {
 	cmd.Flags().StringArrayVar(&ingress.AllowCIDRs, "allow-cidr", nil, "list of allowed networks for client connections (CIDR format) ")
 	cmd.Flags().StringArrayVar(&ingress.DenyCIDRs, "deny-cidr", nil, "list of denied networks for client connections (CIDR format) ")
 
-	cmd.Flags().StringVar(&flagsConfig.Relay.ControlAddr, "control-addr", "", "control server address (UDP/QUIC, host:port) (defaults to '127.0.0.1:19189')")
+	cmd.Flags().StringVar(&flagsConfig.Relay.ControlAddr, "control-addr", "", "control server address (UDP/QUIC, host:port) (defaults to 'localhost:19189')")
 	cmd.Flags().StringVar(&flagsConfig.Relay.ControlCAsFile, "control-cas-file", "", "control server TLS certificate authorities file, when not using public CAs")
-	cmd.Flags().StringVar(&flagsConfig.Relay.ControlName, "control-name", "", "control server name (UDP/QUIC, host), when connecting via IP and certificate includes only domains (defaults to the host in 'server-addr')")
+	cmd.Flags().StringVar(&flagsConfig.Relay.ControlName, "control-name", "", "control server name (UDP/QUIC, host), when connecting via IP and certificate includes only domains (defaults to the host in 'control-addr')")
 
 	cmd.Flags().Var(&flagsConfig.Relay.HandshakeIdleTimeout, "handshake-idle-timeout", "default handshake idle timeout, use when there is a high latency to connect to the server (defaults to 5s)")
 

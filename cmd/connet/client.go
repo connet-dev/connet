@@ -112,7 +112,7 @@ func clientCmd() *cobra.Command {
 	var srcName string
 	var srcCfg SourceConfig
 	cmd.Flags().StringVar(&srcName, "src-name", "", "source name")
-	cmd.Flags().StringVar(&srcCfg.Route, "src-route", "", "source route, one of [any, direct, relay] (default to 'any')")
+	cmd.Flags().StringVar(&srcCfg.Route, "src-route", "", "source route, one of [any, direct, relay] (defaults to 'any')")
 	cmd.Flags().StringSliceVar(&srcCfg.RelayEncryptions, "src-relay-encryption", nil, "source relay encryptions, one of [none, tls, dhxcp] (defaults to 'none')")
 	cmd.Flags().StringVar(&srcCfg.URL, "src-url", "", "source url (scheme describes server type)")
 	cmd.Flags().StringVar(&srcCfg.CertFile, "src-cert-file", "", "source server TLS certificate file (when using tls or https scheme)")

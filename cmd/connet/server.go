@@ -40,7 +40,7 @@ func serverCmd() *cobra.Command {
 	flagsConfig.addLogFlags(cmd)
 
 	cmd.Flags().StringVar(&flagsConfig.Server.TokensFile, "tokens-file", "", "file containing list of client auth tokens (token per line)")
-	cmd.Flags().StringArrayVar(&flagsConfig.Server.Tokens, "tokens", nil, "list of client auth tokens (fallback 'tokens-file' is not specified)")
+	cmd.Flags().StringArrayVar(&flagsConfig.Server.Tokens, "tokens", nil, "list of client auth tokens (fallback when 'tokens-file' is not specified)")
 
 	var clientIngress ControlIngress
 	cmd.Flags().StringVar(&clientIngress.Addr, "addr", "", "clients server address to listen for connection (UDP/QUIC, [host]:port) (defaults to ':19190')")

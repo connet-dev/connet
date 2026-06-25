@@ -66,7 +66,7 @@ func controlCmd() *cobra.Command {
 	cmd.Flags().StringVar(&commonIngress.Key, "key-file", "", "default servers' TLS certificate private key file (pem format)")
 
 	cmd.Flags().StringVar(&flagsConfig.Control.ClientsTokensFile, "clients-tokens-file", "", "file containing a list of client auth tokens (token per line)")
-	cmd.Flags().StringArrayVar(&flagsConfig.Control.ClientsTokens, "clients-tokens", nil, "list of client auth tokens (fallback when 'client-tokens-file' is not specified)")
+	cmd.Flags().StringArrayVar(&flagsConfig.Control.ClientsTokens, "clients-tokens", nil, "list of client auth tokens (fallback when 'clients-tokens-file' is not specified)")
 
 	var clientIngress ControlIngress
 	cmd.Flags().StringVar(&clientIngress.Addr, "clients-addr", "", "clients server address to listen for connections (UDP/QUIC, [host]:port) (defaults to ':19190')")
@@ -79,7 +79,7 @@ func controlCmd() *cobra.Command {
 	cmd.Flags().Var(&flagsConfig.Control.EndpointExpiryTimeout, "endpoint-expiry-timeout", "how long to keep endpoint registrations after client disconnect (default '30s')")
 
 	cmd.Flags().StringVar(&flagsConfig.Control.RelaysTokensFile, "relays-tokens-file", "", "file containing a list of relay auth tokens (token per line)")
-	cmd.Flags().StringArrayVar(&flagsConfig.Control.RelaysTokens, "relays-tokens", nil, "list of relay auth tokens (fallback when 'relay-tokens-file' is not specified)")
+	cmd.Flags().StringArrayVar(&flagsConfig.Control.RelaysTokens, "relays-tokens", nil, "list of relay auth tokens (fallback when 'relays-tokens-file' is not specified)")
 
 	var relayIngress ControlIngress
 	cmd.Flags().StringVar(&relayIngress.Addr, "relays-addr", "", "relays server address to listen for connections (UDP/QUIC, [host]:port) (defaults to ':19189')")
