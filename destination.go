@@ -20,7 +20,7 @@ import (
 )
 
 var (
-	ErrDestinationClosed      = fmt.Errorf("destination closed: %w", errEndpointClosed)
+	ErrDestinationClosed      = fmt.Errorf("destination closed: %w: %w", errEndpointClosed, net.ErrClosed)
 	errDestinationConnUpdated = errors.New("destination connection updated")
 	errDestinationConnRemoved = errors.New("destination connection removed")
 )
@@ -71,7 +71,7 @@ func (d *Destination) AcceptContext(ctx context.Context) (net.Conn, error) {
 		return nil, ctx.Err()
 	case conn, ok := <-d.acceptCh:
 		if !ok {
-			return nil, fmt.Errorf("destination %s is closed: %w", d.cfg.Endpoint, net.ErrClosed)
+			return nil, fmt.Errorf("destination %s is closed: %w", d.cfg.Endpoint, ErrDestinationClosed)
 		}
 		return conn, nil
 	}

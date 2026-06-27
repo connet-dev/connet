@@ -27,7 +27,7 @@ import (
 )
 
 var (
-	ErrSourceClosed               = fmt.Errorf("source closed: %w", errEndpointClosed)
+	ErrSourceClosed               = fmt.Errorf("source closed: %w: %w", errEndpointClosed, net.ErrClosed)
 	ErrSourceConnect              = errors.New("cannot connect destination")
 	ErrSourceConnectDestinations  = fmt.Errorf("%w: all peer connections were unreachable", ErrSourceConnect)
 	ErrSourceNoActiveDestinations = fmt.Errorf("%w: no active peer connections", ErrSourceConnect)
@@ -88,6 +88,10 @@ func (s *Source) Dial(network, address string) (net.Conn, error) {
 // DialContext dials into any available destination. Both network and address are ignored.
 // Blocks until connection can be established.
 func (s *Source) DialContext(ctx context.Context, network, address string) (net.Conn, error) {
+	if err := s.ep.ctx.Err(); err != nil {
+		return nil, fmt.Errorf("dial context: %w", context.Cause(s.ep.ctx))
+	}
+
 	if s.cfg.DestinationPolicy == NoPolicy {
 		conns, err := s.findActive()
 		if err != nil {
@@ -157,6 +161,20 @@ func (s *Source) runActive(ctx context.Context) {
 }
 
 func (s *Source) runActiveErr(ctx context.Context) error {
+	defer func() {
+		s.conns.Store(new([]sourceConn))
+	}()
+
+	isConnsTracking := s.cfg.DestinationPolicy == LeastConnsPolicy
+	if isConnsTracking {
+		defer func() {
+			s.connsTrackingMu.Lock()
+			defer s.connsTrackingMu.Unlock()
+
+			s.connsTracking = map[peerID]*atomic.Int32{}
+		}()
+	}
+
 	return s.ep.peer.activeConnsListen(ctx, func(active map[peerConnKey]*quic.Conn) error {
 		s.logger.Debug("active conns", "len", len(active))
 
@@ -166,7 +184,7 @@ func (s *Source) runActiveErr(ctx context.Context) error {
 		}
 		s.conns.Store(&conns)
 
-		if s.connsTracking != nil {
+		if isConnsTracking {
 			activePeers := map[peerID]struct{}{}
 			for peer := range active {
 				activePeers[peer.id] = struct{}{}

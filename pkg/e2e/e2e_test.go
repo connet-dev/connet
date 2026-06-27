@@ -293,11 +293,11 @@ func TestE2E(t *testing.T) {
 		require.Empty(t, cl.Sources())
 
 		acceptConn, acceptErr := dst.Accept()
-		require.ErrorIs(t, acceptErr, net.ErrClosed)
+		require.ErrorIs(t, acceptErr, connet.ErrDestinationClosed)
 		require.Nil(t, acceptConn)
 
 		dialConn, dialErr := src.Dial("", "")
-		require.ErrorIs(t, dialErr, connet.ErrSourceNoActiveDestinations)
+		require.ErrorIs(t, dialErr, connet.ErrSourceClosed)
 		require.Nil(t, dialConn)
 	})
 	t.Run("cancel-client", func(t *testing.T) {
@@ -333,11 +333,11 @@ func TestE2E(t *testing.T) {
 		require.Empty(t, cl.Sources())
 
 		acceptConn, acceptErr := dst.Accept()
-		require.ErrorIs(t, acceptErr, net.ErrClosed)
+		require.ErrorIs(t, acceptErr, connet.ErrDestinationClosed)
 		require.Nil(t, acceptConn)
 
 		dialConn, dialErr := src.Dial("", "")
-		require.ErrorIs(t, dialErr, connet.ErrSourceNoActiveDestinations)
+		require.ErrorIs(t, dialErr, connet.ErrSourceClosed)
 		require.Nil(t, dialConn)
 	})
 	t.Run("close-dst", func(t *testing.T) {
