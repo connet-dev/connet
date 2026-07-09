@@ -34,10 +34,15 @@ func Run[T any](ctx context.Context, addr *net.TCPAddr, f func(ctx context.Conte
 
 	go func() {
 		<-ctx.Done()
-		if err := srv.Close(); err != nil {
-			slogc.FineDefault("error closing status server", "err", err)
+
+		shutdownCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+
+		if err := srv.Shutdown(shutdownCtx); err != nil {
+			slogc.FineDefault("error shutting down status server", "err", err)
 		}
 	}()
 
+	// TODO return no error on server shutdown?
 	return srv.ListenAndServe()
 }
