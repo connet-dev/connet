@@ -548,7 +548,7 @@ to the control server. Any error that happens while connecting will be reported 
 reconnecting until the client is `Close`ed. Here is a minimal example of creating new client:
 
 ```go
-cl, err := connet.Connect(ctx, connet.Token("CLIENT_TOKEN"), connet.ServerAddress("connet.dev:19190"))
+cl, err := connet.Connect(ctx, connet.Token("CLIENT_TOKEN"), connet.ServerAddress("localhost:19190"))
 if err != nil {
   return err
 }
@@ -583,12 +583,6 @@ TBD
 ## Examples
 
 TBD
-
-## Hosting
-
-If you want to use `connet`, but you don't want to run the server yourself, we have also built a hosted service 
-at [connet.dev](https://connet.dev). It is free when clients connect directly, builds upon the open source components 
-by adding account management and it is one of the easiest ways to start. 
 
 ## Planlog
 
